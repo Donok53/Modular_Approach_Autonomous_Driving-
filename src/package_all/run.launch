@@ -1,0 +1,46 @@
+<launch>
+  <!-- 1) Localization -->
+  <include file="$(find lio_localizer)/launch/run-robot.launch" />
+
+  <!-- 2) Global path (A*) -->
+  <include file="$(find astar_map)/launch/astar_map.launch" />
+
+  <!-- 3) DWA: /cmd_vel → /cmd_vel_nav (remap은 include '밖'에서 적용해야 유효) -->
+  <group>
+    <!-- 절대/상대 토픽 모두 잡기 -->
+    <remap from="/cmd_vel" to="/cmd_vel_nav"/>
+    <remap from="cmd_vel"  to="/cmd_vel_nav"/>
+    <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch"/>
+  </group>
+
+  <!-- 4) 주차 슬롯 점유 판단 -->
+  <include file="$(find parking_occupancy)/launch/parking_occupancy.launch"/>
+  <!-- include 이후 오버라이드 -->
+  <rosparam ns="parking_occupancy">
+    single_slot_force_free: true
+  </rosparam>
+
+  <!-- 5) 도착 판정(외부 단일 노드) -->
+  <node pkg="parking_executor" type="arrive_monitor.py" name="arrive_monitor_main" output="screen">
+    <param name="path_topic"    value="/astar/path"/>
+    <param name="frame_id"      value="map"/>
+    <param name="pos_tol"       value="0.6"/>
+    <param name="yaw_tol_deg"   value="20"/>
+    <param name="hold_s"        value="0.5"/>
+    <!-- arrive_monitor가 rosout 기반 Goal 감지를 지원한다면 필요시 사용
+    <param name="rosout_goal_regex" value="Goal reached!"/>
+    -->
+  </node>
+
+  <!-- 6) AutoPark: twist_mux + parking_controller만 실행
+         (DWA/점유/도착모니터는 여기서 중복 실행하지 않음)
+         핵심: twist_mux 출력 /cmd_vel_out → 베이스 입력 /cmd_vel 로 remap -->
+  <group>
+    <remap from="/cmd_vel_out" to="/cmd_vel"/>
+    <include file="$(find parking_executor)/launch/parking_autopark.launch">
+      <arg name="start_dwa"            value="false"/>
+      <arg name="start_occupancy"      value="false"/>
+      <arg name="start_arrive_monitor" value="false"/>
+    </include>
+  </group>
+</launch>

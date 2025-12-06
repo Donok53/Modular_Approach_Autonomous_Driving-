@@ -1,0 +1,6 @@
+rm -rf build devel devel_isolated install
+source /opt/ros/noetic/setup.bash
+catkin_make -DCMAKE_BUILD_TYPE=Release   # 또는 RelWithDebInfo
+
+echo 'export CATKIN_EXTRA_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release"' >> ~/.bashrc
+

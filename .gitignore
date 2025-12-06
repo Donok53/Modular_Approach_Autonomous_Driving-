@@ -1,0 +1,34 @@
+# catkin workspace 빌드 산출물
+build/
+devel/
+install/
+
+# catkin, CMake 생성물
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+catkin_generated/
+
+# 로그
+log/
+logs/
+
+# 편집기/IDE 설정
+.vscode/
+.idea/
+*.iml
+
+# 파이썬/기타
+__pycache__/
+*.pyc
+*.pyo
+*.swp
+*~
+.venv/
+venv/
+
+# 기타 바이너리 / 임시파일
+*.o
+*.so
+*.out
