@@ -55,112 +55,131 @@ def world_to_slot_local(px, py, sx, sy, syaw):
 class BackInParking:
     ROTATE_FOR_PREPOSE = "ROTATE_FOR_PREPOSE"
     REVERSE_TO_PREPOSE = "REVERSE_TO_PREPOSE"
-    ROTATE_TO_SLOT     = "ROTATE_TO_SLOT"
-    REVERSE_TO_SLOT    = "REVERSE_TO_SLOT"
-    DONE               = "DONE"
-    WAIT               = "WAIT"
+    ROTATE_TO_SLOT = "ROTATE_TO_SLOT"
+    REVERSE_TO_SLOT = "REVERSE_TO_SLOT"
+    DONE = "DONE"
+    WAIT = "WAIT"
 
     def __init__(self):
         # 프레임/토픽
-        self.frame            = rospy.get_param("~frame_id", "map")
-        self.slot_topic       = rospy.get_param("~slot_topic", "/parking/best_slot")
-        self.nav_twist_topic  = rospy.get_param("~nav_twist_topic", "/cmd_vel_nav")
-        self.arrived_topic    = rospy.get_param("~arrived_topic", "/nav/arrived")
-        self.cmd_out          = rospy.get_param("~cmd_out", "/cmd_vel_park")
+        self.frame = rospy.get_param("~frame_id", "map")
+        self.slot_topic = rospy.get_param("~slot_topic", "/parking/best_slot")
+        self.nav_twist_topic = rospy.get_param(
+            "~nav_twist_topic", "/cmd_vel_nav")
+        self.arrived_topic = rospy.get_param("~arrived_topic", "/nav/arrived")
+        self.cmd_out = rospy.get_param("~cmd_out", "/cmd_vel_park")
 
         # 게인/속도
-        self.k_yaw            = float(rospy.get_param("~k_yaw", 2.2))
-        self.k_y_line         = float(rospy.get_param("~k_y_line", 1.0))
-        self.k_vx             = float(rospy.get_param("~k_vx", 0.8))   # xL→속도 비례계수
-        self.w_max            = float(rospy.get_param("~w_max", 0.6))
-        self.v_back_prepose   = float(rospy.get_param("~v_back_prepose", 0.18))
-        self.v_back_insert    = float(rospy.get_param("~v_back_insert", 0.15))
-        self.v_creep_max      = float(rospy.get_param("~v_creep_max", 0.06))
+        self.k_yaw = float(rospy.get_param("~k_yaw", 2.2))
+        self.k_y_line = float(rospy.get_param("~k_y_line", 1.0))
+        self.k_vx = float(rospy.get_param("~k_vx", 0.8))   # xL→속도 비례계수
+        self.w_max = float(rospy.get_param("~w_max", 0.6))
+        self.v_back_prepose = float(rospy.get_param("~v_back_prepose", 0.18))
+        self.v_back_insert = float(rospy.get_param("~v_back_insert", 0.15))
+        self.v_creep_max = float(rospy.get_param("~v_creep_max", 0.06))
 
         # 기하/공차
-        self.prepose_dist_m   = float(rospy.get_param("~prepose_dist_m", 1.0))
-        self.prepose_tol_m    = float(rospy.get_param("~prepose_tol_m", 0.10))
-        self.tol_x            = float(rospy.get_param("~tol_x", 0.10))
-        self.tol_y            = float(rospy.get_param("~tol_y", 0.08))
-        self.tol_yaw_deg      = float(rospy.get_param("~tol_yaw_deg", 5.0))
-        self.hold_on_done_s   = float(rospy.get_param("~hold_on_done_s", 0.4))
+        self.prepose_dist_m = float(rospy.get_param("~prepose_dist_m", 1.0))
+        self.prepose_tol_m = float(rospy.get_param("~prepose_tol_m", 0.10))
+        self.tol_x = float(rospy.get_param("~tol_x", 0.10))
+        self.tol_y = float(rospy.get_param("~tol_y", 0.08))
+        self.tol_yaw_deg = float(rospy.get_param("~tol_yaw_deg", 5.0))
+        self.hold_on_done_s = float(rospy.get_param("~hold_on_done_s", 0.4))
 
-        self.yaw_tol_prepose_deg = float(rospy.get_param("~yaw_tol_prepose_deg", 6.0))
-        self.yaw_tol_slot_deg    = float(rospy.get_param("~yaw_tol_slot_deg",    4.0))
+        self.yaw_tol_prepose_deg = float(
+            rospy.get_param("~yaw_tol_prepose_deg", 6.0))
+        self.yaw_tol_slot_deg = float(
+            rospy.get_param("~yaw_tol_slot_deg",    4.0))
 
         # 백인 기본: 통로를 바라본 상태에서 후진
-        self.back_in_face_outward = bool(rospy.get_param("~back_in_face_outward", True))
+        self.back_in_face_outward = bool(
+            rospy.get_param("~back_in_face_outward", True))
 
         # 시작/패스스루
-        self.start_on_arrived     = bool(rospy.get_param("~start_on_arrived", True))
-        self.trigger_radius_m     = float(rospy.get_param("~trigger_radius_m", 0.0))
-        self.passthrough_until_active = bool(rospy.get_param("~passthrough_until_arrived", True))
-        self.nav_timeout_s        = float(rospy.get_param("~nav_timeout_s", 1.0))
+        self.start_on_arrived = bool(
+            rospy.get_param("~start_on_arrived", True))
+        self.trigger_radius_m = float(
+            rospy.get_param("~trigger_radius_m", 0.0))
+        self.passthrough_until_active = bool(
+            rospy.get_param("~passthrough_until_arrived", True))
+        self.nav_timeout_s = float(rospy.get_param("~nav_timeout_s", 1.0))
 
         # 슬롯 락 설정
-        self.slot_lock        = bool(rospy.get_param("~slot_lock", True))  # 활성화 시 고정
-        self.slot_lock_phase  = rospy.get_param("~slot_lock_phase", "on_activate")  # on_activate | on_prepose
-        self.unlock_on_done   = bool(rospy.get_param("~unlock_on_done", True))
+        self.slot_lock = bool(rospy.get_param("~slot_lock", True))  # 활성화 시 고정
+        self.slot_lock_phase = rospy.get_param(
+            "~slot_lock_phase", "on_activate")  # on_activate | on_prepose
+        self.unlock_on_done = bool(rospy.get_param("~unlock_on_done", True))
 
         # === 뒤쪽 장애물 감지 (정밀한 로봇 기하학 반영) ===
         # Robot dimensions: length=65cm, width=60cm, height to lidar=58cm
         # Lidar position: 0.5m above ground, center of robot
-        self.cloud_topic      = rospy.get_param("~pointcloud_topic", "/ouster/points")
-        
+        self.cloud_topic = rospy.get_param(
+            "~pointcloud_topic", "/ouster/points")
+
         # Robot geometry (meters)
-        self.robot_length = float(rospy.get_param("~robot_length", 0.65))           # 65cm
-        self.robot_width = float(rospy.get_param("~robot_width", 0.60))             # 60cm
-        self.robot_height_to_lidar = float(rospy.get_param("~robot_height_to_lidar", 0.58))  # 58cm
-        self.lidar_height = float(rospy.get_param("~lidar_height", 0.50))           # 50cm above ground
-        
+        self.robot_length = float(rospy.get_param(
+            "~robot_length", 0.65))           # 65cm
+        self.robot_width = float(rospy.get_param(
+            "~robot_width", 0.60))             # 60cm
+        self.robot_height_to_lidar = float(
+            rospy.get_param("~robot_height_to_lidar", 0.58))  # 58cm
+        self.lidar_height = float(rospy.get_param(
+            "~lidar_height", 0.50))           # 50cm above ground
+
         # Collision detection parameters (rear)
         # stop_distance: rear buffer for reversing (default: 0.4m)
-        self.stop_distance    = float(rospy.get_param("~stop_distance", 0.40))
-        
+        self.stop_distance = float(rospy.get_param("~stop_distance", 0.70))
+
         # stop_width: covers full robot width (60cm)
-        self.stop_width       = float(rospy.get_param("~stop_width", 0.65))
-        
+        self.stop_width = float(rospy.get_param("~stop_width", 0.50))
+
         # Z-axis range: from ground to robot top (for rear collision)
-        self.min_z            = float(rospy.get_param("~min_z", -0.50))   # Ground level (50cm below lidar)
-        self.max_z            = float(rospy.get_param("~max_z", 0.0))     # Lidar height (top of robot detection)
-        
+        # Ground level (50cm below lidar)
+        self.min_z = float(rospy.get_param("~min_z", -0.50))
+        # Lidar height (top of robot detection)
+        self.max_z = float(rospy.get_param("~max_z", 0.0))
+
         self.cloud_downsample = int(rospy.get_param("~cloud_downsample", 4))
-        self.block_on_count   = int(rospy.get_param("~block_on_count", 2))
-        self.block_off_count  = int(rospy.get_param("~block_off_count", 3))
+        self.block_on_count = int(rospy.get_param("~block_on_count", 2))
+        self.block_off_count = int(rospy.get_param("~block_off_count", 3))
 
         self.obstacle_blocked = False
-        self.obstacle_min_d   = None
-        self.obstacle_on_cnt  = 0
+        self.obstacle_min_d = None
+        self.obstacle_on_cnt = 0
         self.obstacle_off_cnt = 0
 
         # 상태
-        self.phase         = self.WAIT
-        self.phase_enter   = rospy.Time.now()
-        self.active        = False
-        self.arrived_flag  = False
+        self.phase = self.WAIT
+        self.phase_enter = rospy.Time.now()
+        self.active = False
+        self.arrived_flag = False
 
-        self.slot_latest   = None   # 최신 수신값
-        self.slot_fixed    = None   # 고정해 쓸 값
-        self.slot_locked   = False
+        self.slot_latest = None   # 최신 수신값
+        self.slot_fixed = None   # 고정해 쓸 값
+        self.slot_locked = False
 
-        self.done_since    = None
-        self.prev_xL       = None
-        self.nav_twist     = Twist()
-        self.nav_last_ts   = rospy.Time(0)
+        self.done_since = None
+        self.prev_xL = None
+        self.nav_twist = Twist()
+        self.nav_last_ts = rospy.Time(0)
 
         # TF
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(20.0))
-        self.tfl   = tf2_ros.TransformListener(self.tfbuf)
+        self.tfl = tf2_ros.TransformListener(self.tfbuf)
 
         # IO
         self.pub = rospy.Publisher(self.cmd_out, Twist, queue_size=1)
-        rospy.Subscriber(self.slot_topic, PoseStamped, self.cb_slot, queue_size=1)
-        rospy.Subscriber(self.nav_twist_topic, Twist, self.cb_nav, queue_size=1)
+        rospy.Subscriber(self.slot_topic, PoseStamped,
+                         self.cb_slot, queue_size=1)
+        rospy.Subscriber(self.nav_twist_topic, Twist,
+                         self.cb_nav, queue_size=1)
         if self.start_on_arrived:
-            rospy.Subscriber(self.arrived_topic, Bool, self.cb_arrived, queue_size=1)
+            rospy.Subscriber(self.arrived_topic, Bool,
+                             self.cb_arrived, queue_size=1)
 
         # 뒤쪽 장애물용 포인트클라우드
-        rospy.Subscriber(self.cloud_topic, PointCloud2, self.cb_cloud, queue_size=1)
+        rospy.Subscriber(self.cloud_topic, PointCloud2,
+                         self.cb_cloud, queue_size=1)
 
         # 타이머
         rate_hz = float(rospy.get_param("~rate_hz", 20.0))
@@ -201,7 +220,7 @@ class BackInParking:
             half_w = 0.5 * self.stop_width  # 30cm
             near = False
             min_d2 = None
-            
+
             # Self-filter zone: robot body envelope in lidar frame
             # Robot extends ~±0.3m (half-width) in y, ~0.33m (half-length) in x
             # Self-filter margin: expand by 5cm safety for sensor noise
@@ -209,12 +228,13 @@ class BackInParking:
             self_filter_radius_x = 0.38  # 0.33m (half-length) + 0.05m margin
 
             for i, (x, y, z) in enumerate(
-                pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True),
+                pc2.read_points(msg, field_names=(
+                    "x", "y", "z"), skip_nans=True),
                 start=1
             ):
                 if self.cloud_downsample > 1 and (i % self.cloud_downsample != 0):
                     continue
-                
+
                 # 1. Filter: points too close to robot center (self-detection avoidance)
                 if abs(x) < self_filter_radius_x and abs(y) < self_filter_radius_y:
                     continue  # Skip points from robot body itself
@@ -222,13 +242,13 @@ class BackInParking:
                 # 2. 뒤쪽만 보기 (센서 x+가 앞이라고 가정)
                 if x >= 0.0:
                     continue
-                
+
                 # 3. Z-axis filtering: from ground to lidar height
                 # min_z = -0.5m (ground, 50cm below lidar)
                 # max_z = 0.0m (lidar height, top of robot)
                 if z < self.min_z or z > self.max_z:
                     continue
-                
+
                 # 4. Width filtering: robot is 60cm wide, centered at y=0
                 if abs(y) > half_w:
                     continue
@@ -253,10 +273,12 @@ class BackInParking:
             # 히스테리시스 on/off
             if not self.obstacle_blocked and self.obstacle_on_cnt >= self.block_on_count:
                 self.obstacle_blocked = True
-                rospy.logwarn(f"[Rear Collision] OBSTACLE DETECTED at {self.stop_distance:.2f}m (robot width: {self.robot_width:.2f}m, height: ground to {self.lidar_height:.2f}m)")
+                rospy.logwarn(
+                    f"[Rear Collision] OBSTACLE DETECTED at {self.stop_distance:.2f}m (robot width: {self.robot_width:.2f}m, height: ground to {self.lidar_height:.2f}m)")
             elif self.obstacle_blocked and self.obstacle_off_cnt >= self.block_off_count:
                 self.obstacle_blocked = False
-                rospy.loginfo("[Rear Collision] Rear obstacle cleared: resuming")
+                rospy.loginfo(
+                    "[Rear Collision] Rear obstacle cleared: resuming")
 
         except Exception as e:
             rospy.logwarn("cb_cloud error: %s", str(e))
@@ -334,7 +356,8 @@ class BackInParking:
         if xL <= 0.0:
             v = 0.0
         else:
-            v_cmd = min(self.v_back_insert, max(self.v_creep_max, self.k_vx * xL))
+            v_cmd = min(self.v_back_insert, max(
+                self.v_creep_max, self.k_vx * xL))
             v = -v_cmd  # 후진
 
         w = self.k_y_line * yL + self.k_yaw * yaw_err
@@ -381,7 +404,6 @@ class BackInParking:
         if not self.active:
             if self.maybe_passthrough():
                 return
-       
 
         # 사용 슬롯(고정본)
         sx = self.slot_fixed.pose.position.x
@@ -393,7 +415,8 @@ class BackInParking:
         yaw_prepose = math.atan2(ry - Ay, rx - Ax)
 
         # 최종 백인 yaw
-        yaw_slot_back = syaw if self.back_in_face_outward else ang_norm(syaw + math.pi)
+        yaw_slot_back = syaw if self.back_in_face_outward else ang_norm(
+            syaw + math.pi)
 
         # FSM
         if self.phase == self.WAIT:
@@ -474,7 +497,7 @@ class BackInParking:
             v = 0.0
             w = 0.0
 
-        twist.linear.x  = v
+        twist.linear.x = v
         twist.angular.z = w
         self.pub.publish(twist)
 

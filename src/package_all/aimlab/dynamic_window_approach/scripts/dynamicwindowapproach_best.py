@@ -29,17 +29,21 @@ from sensor_msgs import point_cloud2
 from dynamic_window_approach.msg import server_to_robot
 
 # ------------------------------------- utils -------------------------------------
+
+
 def angdiff(a, b):
     """Wrap-safe angle diff a-b in [-pi, pi]."""
     d = a - b
     return math.atan2(math.sin(d), math.cos(d))
 
 # ----------------------------------- DWA node -----------------------------------
+
+
 class DWAControl:
     def __init__(self):
         # ===== Dynamics / Sampling =====
         self.max_speed = 0.6
-        self.min_speed = -0.4          
+        self.min_speed = -0.4
         self.low_speed = 0.3
         self.max_yaw_rate = math.radians(180.0)
         self.max_accel = 0.1
@@ -53,17 +57,20 @@ class DWAControl:
         self.to_goal_cost_gain = 0.15
         self.speed_cost_gain = 0.6
         self.progress_cost_gain = rospy.get_param("~progress_cost_gain", 2.0)
-        self.lateral_cost_gain  = rospy.get_param("~lateral_cost_gain", 6.0)
-        self.target_cost_gain   = rospy.get_param("~target_cost_gain", 2.0)
-        self.progress_forward_gain = rospy.get_param("~progress_forward_gain", 0.5)
+        self.lateral_cost_gain = rospy.get_param("~lateral_cost_gain", 6.0)
+        self.target_cost_gain = rospy.get_param("~target_cost_gain", 2.0)
+        self.progress_forward_gain = rospy.get_param(
+            "~progress_forward_gain", 0.5)
         self.robot_stuck_flag_cons = 0.001
 
         self.server_cmd_drive_mode = 0
 
         # ===== Obstacle stop (front ROI) =====
-        self.cloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
-        self.stop_distance = rospy.get_param("~stop_distance", 0.8)
-        self.stop_width = rospy.get_param("~stop_width", 0.3)   # total width (|y|<=width/2)
+        self.cloud_topic = rospy.get_param(
+            "~pointcloud_topic", "/ouster/points")
+        self.stop_distance = rospy.get_param("~stop_distance", 0.7)
+        self.stop_width = rospy.get_param(
+            "~stop_width", 0.5)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
@@ -79,10 +86,11 @@ class DWAControl:
         self.rotate_kp = rospy.get_param("~rotate_kp", 2.0)
         self.rotate_w_max_deg = rospy.get_param("~rotate_w_max_deg", 120.0)
         self.rotate_ok_count = rospy.get_param("~rotate_ok_count", 3)
-        self.rotate_max_spin_deg = rospy.get_param("~rotate_max_spin_deg", 420.0)
+        self.rotate_max_spin_deg = rospy.get_param(
+            "~rotate_max_spin_deg", 420.0)
         self.rotate_max_time_s = rospy.get_param("~rotate_max_time_s", 6.0)
         self._ROT_HIGH = math.radians(self.rotate_only_deg)
-        self._ROT_LOW  = math.radians(self.rotate_exit_deg)
+        self._ROT_LOW = math.radians(self.rotate_exit_deg)
         self._ROT_WMAX = math.radians(self.rotate_w_max_deg)
         self._rot_mode = False
         self._rot_yaw_target = None
@@ -95,11 +103,13 @@ class DWAControl:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.5)
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.1)
-        self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
+        self.final_approach_window_m = rospy.get_param(
+            "~final_approach_window_m", 2.5)
         self.final_speed_k = rospy.get_param("~final_speed_k", 0.6)
         self.final_speed_min = rospy.get_param("~final_speed_min", 0.12)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
-        self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
+        # legacy (kept for /traj_info)
+        self.current_point_search_radius_m = 5.0
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
 
@@ -121,16 +131,24 @@ class DWAControl:
         self.warm_up_flag = False
 
         # ===== ROS I/O =====
-        self.sub_path = rospy.Subscriber('/astar/path', Path, self.path_callback)
-        self.sub_pose = rospy.Subscriber('lio_localizer/odometry/optimization', Odometry, self.pose_callback)
-        self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
-        self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        self.sub_path = rospy.Subscriber(
+            '/astar/path', Path, self.path_callback)
+        self.sub_pose = rospy.Subscriber(
+            'lio_localizer/odometry/optimization', Odometry, self.pose_callback)
+        self.sub_server_cmd = rospy.Subscriber(
+            "server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
+        self.sub_cloud = rospy.Subscriber(
+            self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
-        self.target_pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
-        self.current_pub = rospy.Publisher('visualization_marker_2', Marker, queue_size=10)
-        self.trajectory_pub = rospy.Publisher('predicted_trajectory', Marker, queue_size=10)
-        self.traj_info_pub = rospy.Publisher('/traj_info', Float32MultiArray, queue_size=10)
+        self.target_pub = rospy.Publisher(
+            'visualization_marker', Marker, queue_size=10)
+        self.current_pub = rospy.Publisher(
+            'visualization_marker_2', Marker, queue_size=10)
+        self.trajectory_pub = rospy.Publisher(
+            'predicted_trajectory', Marker, queue_size=10)
+        self.traj_info_pub = rospy.Publisher(
+            '/traj_info', Float32MultiArray, queue_size=10)
 
     # ------------------------------- obstacle stop -------------------------------
     def cloud_callback(self, msg):
@@ -138,7 +156,7 @@ class DWAControl:
             near = False
             half_w = 0.5 * self.stop_width
             i = 0
-            for pt in point_cloud2.read_points(msg, field_names=('x','y','z'), skip_nans=True):
+            for pt in point_cloud2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True):
                 i += 1
                 if self.cloud_downsample > 1 and (i % self.cloud_downsample != 0):
                     continue
@@ -160,7 +178,8 @@ class DWAControl:
                 self._blk_on = 0
             if not self.obstacle_near and self._blk_on >= self.block_on_count:
                 self.obstacle_near = True
-                rospy.logwarn("Obstacle CLOSE: stopping (<= %.2fm)", self.stop_distance)
+                rospy.logwarn(
+                    "Obstacle CLOSE: stopping (<= %.2fm)", self.stop_distance)
             elif self.obstacle_near and self._blk_off >= self.block_off_count:
                 self.obstacle_near = False
                 rospy.loginfo("Obstacle cleared: resuming")
@@ -175,7 +194,8 @@ class DWAControl:
         self._rot_accum = 0.0
         self._rot_ok = 0
         self._rot_start_time = rospy.Time.now()
-        rospy.loginfo("Rotate-only ENTER: target %.1f°", math.degrees(self._rot_yaw_target))
+        rospy.loginfo("Rotate-only ENTER: target %.1f°",
+                      math.degrees(self._rot_yaw_target))
 
     def rotate_only_step(self, cur_yaw):
         dyaw = angdiff(cur_yaw, self._rot_prev_yaw)
@@ -191,7 +211,7 @@ class DWAControl:
         time_in = (rospy.Time.now() - self._rot_start_time).to_sec()
         if (self._rot_ok >= self.rotate_ok_count or
             self._rot_accum > math.radians(self.rotate_max_spin_deg) or
-            time_in > self.rotate_max_time_s):
+                time_in > self.rotate_max_time_s):
             self._rot_mode = False
             rospy.loginfo("Rotate-only EXIT: err=%.1f°, accum=%.1f°, t=%.1fs",
                           math.degrees(err), math.degrees(self._rot_accum), time_in)
@@ -248,7 +268,7 @@ class DWAControl:
         self.server_cmd_drive_mode = msg.Cmd_drive_mode
         if msg.Cmd_use_vel_control:
             if (self.max_speed != msg.Cmd_linear_velocity or
-                self.max_yaw_rate != msg.Cmd_angular_velocity):
+                    self.max_yaw_rate != msg.Cmd_angular_velocity):
                 self.max_speed = msg.Cmd_linear_velocity
                 self.max_yaw_rate = msg.Cmd_angular_velocity
                 rospy.loginfo("Updated limits: max_speed=%.3f, max_yaw_rate=%.1fdeg/s",
@@ -338,7 +358,8 @@ class DWAControl:
         gx, gy = self.path_pts[-1]
         dist_to_goal = math.hypot(gx - pose_x, gy - pose_y)
         arc_rem = max(0.0, self.s_total - self.s_cur)
-        at_goal = (min(arc_rem, dist_to_goal) <= self.goal_thresh_m) and (lat_err <= self.lat_goal_slop)
+        at_goal = (min(arc_rem, dist_to_goal) <= self.goal_thresh_m) and (
+            lat_err <= self.lat_goal_slop)
 
         return (s_proj, lat_err, (tx, ty), t_hat, at_goal, dist_to_goal, arc_rem)
 
@@ -349,7 +370,8 @@ class DWAControl:
         return u, trajectory
 
     def moving(self, x, u):
-        x[2] = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
+        x[2] = self.get_yaw_from_quaternion(
+            self.current_pose.pose.pose.orientation)
         x[0] = self.current_pose.pose.pose.position.x
         x[1] = self.current_pose.pose.pose.position.y
         x[3] = u[0]
@@ -365,7 +387,8 @@ class DWAControl:
         return x
 
     def calc_dynamic_window(self, x):
-        Vs = [self.min_speed, self.max_speed, -self.max_yaw_rate, self.max_yaw_rate]
+        Vs = [self.min_speed, self.max_speed, -
+              self.max_yaw_rate, self.max_yaw_rate]
         Vd = [x[3] - self.max_accel * self.dt,
               x[3] + self.max_accel * self.dt,
               x[4] - self.max_delta_yaw_rate * self.dt,
@@ -414,16 +437,20 @@ class DWAControl:
                 target_cost = self.target_cost_gain * dist_target
 
                 # 3) 속도 cost (빨리 가는 걸 약간 선호)
-                speed_cost = self.speed_cost_gain * (self.max_speed - traj[-1, 3])
+                speed_cost = self.speed_cost_gain * \
+                    (self.max_speed - traj[-1, 3])
 
                 # 4) progress / lateral
                 move_vec = np.array([traj[-1, 0] - x[0], traj[-1, 1] - x[1]])
-                progress = float(np.dot(move_vec, t_hat))    # path tangent 방향으로 얼마나 갔나
+                # path tangent 방향으로 얼마나 갔나
+                progress = float(np.dot(move_vec, t_hat))
 
                 # 뒤로 가는 건 강하게 penalty
-                progress_penalty = self.progress_cost_gain * max(0.0, -progress)
+                progress_penalty = self.progress_cost_gain * \
+                    max(0.0, -progress)
                 # 앞으로 가는 건 약하게 reward (빙글빙글 방지)
-                progress_reward  = self.progress_forward_gain * max(0.0, progress)
+                progress_reward = self.progress_forward_gain * \
+                    max(0.0, progress)
 
                 # lateral (경로 라인에서의 옆으로 벗어남)
                 normal = np.array([-t_hat[1], t_hat[0]])     # path normal
@@ -446,7 +473,7 @@ class DWAControl:
                     best_trajectory = traj
 
                     if (abs(best_u[0]) < self.robot_stuck_flag_cons and
-                        abs(x[3]) < self.robot_stuck_flag_cons):
+                            abs(x[3]) < self.robot_stuck_flag_cons):
                         best_u[1] = -self.max_delta_yaw_rate
 
         return best_u, best_trajectory
@@ -469,7 +496,8 @@ class DWAControl:
 
     def visualize_current_point(self, s_proj):
         # project point on path for viz
-        x, y, _t = self._interp_xy_tangent_at_s(max(0.0, min(self.s_total, s_proj)))
+        x, y, _t = self._interp_xy_tangent_at_s(
+            max(0.0, min(self.s_total, s_proj)))
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = rospy.Time.now()
@@ -508,7 +536,8 @@ class DWAControl:
         if self.path_pts and len(self.cum_len) > 1:
             while cur_idx + 1 < len(self.cum_len) and self.cum_len[cur_idx + 1] < self.s_cur:
                 cur_idx += 1
-        msg.data = [self.s_total, self.s_cur, cur_idx, float(self.reach_goal_flag)]
+        msg.data = [self.s_total, self.s_cur,
+                    cur_idx, float(self.reach_goal_flag)]
         self.traj_info_pub.publish(msg)
 
     def get_yaw_from_quaternion(self, q):
@@ -526,7 +555,8 @@ class DWAControl:
         rospy.loginfo("DWA node (s-tracking) started")
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
-             self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation),
+             self.get_yaw_from_quaternion(
+                 self.current_pose.pose.pose.orientation),
              0.0, 0.0]
         rate = rospy.Rate(1.0 / self.dt)
 
@@ -543,7 +573,8 @@ class DWAControl:
                 continue
 
             # current pose snapshot
-            yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
+            yaw = self.get_yaw_from_quaternion(
+                self.current_pose.pose.pose.orientation)
             px = self.current_pose.pose.pose.position.x
             py = self.current_pose.pose.pose.position.y
 
@@ -615,10 +646,13 @@ class DWAControl:
             rate.sleep()
 
 # -------------------------------- entry point ------------------------------------
+
+
 def main():
     rospy.init_node('dwa_node', anonymous=True)
     dwa = DWAControl()
     dwa.run()
+
 
 if __name__ == "__main__":
     main()
