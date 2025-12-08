@@ -128,10 +128,10 @@ class BackInParking:
 
         # Collision detection parameters (rear)
         # stop_distance: rear buffer for reversing (default: 0.4m)
-        self.stop_distance = float(rospy.get_param("~stop_distance", 0.70))
+        self.stop_distance = float(rospy.get_param("~stop_distance", 0.60))
 
         # stop_width: covers full robot width (60cm)
-        self.stop_width = float(rospy.get_param("~stop_width", 0.50))
+        self.stop_width = float(rospy.get_param("~stop_width", 0.40))
 
         # Z-axis range: from ground to robot top (for rear collision)
         # Ground level (50cm below lidar)

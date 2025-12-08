@@ -42,7 +42,7 @@ def angdiff(a, b):
 class DWAControl:
     def __init__(self):
         # ===== Dynamics / Sampling =====
-        self.max_speed = 0.6
+        self.max_speed = 1.0
         self.min_speed = -0.4
         self.low_speed = 0.3
         self.max_yaw_rate = math.radians(180.0)
@@ -51,7 +51,7 @@ class DWAControl:
         self.v_resolution = 0.00125
         self.yaw_rate_resolution = math.radians(5.0)
         self.dt = 0.1
-        self.predict_time = 3.0
+        self.predict_time = 1.0
 
         # ===== Costs =====
         self.to_goal_cost_gain = 0.15
@@ -68,9 +68,9 @@ class DWAControl:
         # ===== Obstacle stop (front ROI) =====
         self.cloud_topic = rospy.get_param(
             "~pointcloud_topic", "/ouster/points")
-        self.stop_distance = rospy.get_param("~stop_distance", 0.7)
+        self.stop_distance = rospy.get_param("~stop_distance", 0.6)
         self.stop_width = rospy.get_param(
-            "~stop_width", 0.5)   # total width (|y|<=width/2)
+            "~stop_width", 0.4)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
@@ -100,12 +100,12 @@ class DWAControl:
         self._rot_start_time = None
 
         # ===== Path tracking (s-based) =====
-        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.5)
+        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.8)
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.1)
         self.final_approach_window_m = rospy.get_param(
-            "~final_approach_window_m", 2.5)
-        self.final_speed_k = rospy.get_param("~final_speed_k", 0.6)
+            "~final_approach_window_m", 1.2)
+        self.final_speed_k = rospy.get_param("~final_speed_k", 0.8)
         self.final_speed_min = rospy.get_param("~final_speed_min", 0.12)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
         # legacy (kept for /traj_info)
