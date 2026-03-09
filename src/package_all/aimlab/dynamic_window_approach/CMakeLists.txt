@@ -54,8 +54,11 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   DIRECTORY msg
   FILES
+  BehaviorCommand.msg
   robot_to_server.msg
   server_to_robot.msg
+  TrackedObject.msg
+  TrackedObjectArray.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -213,6 +216,9 @@ include_directories(
 # catkin_add_nosetests(test)
 
 catkin_install_python(PROGRAMS 
+  scripts/cloud_cluster_tracker.py
+  scripts/constrained_local_replanner.py
+  scripts/dynamic_risk_manager.py
   scripts/dynamicwindowapproach.py
   scripts/test2.py
   scripts/new2.py

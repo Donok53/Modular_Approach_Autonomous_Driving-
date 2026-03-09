@@ -4,16 +4,55 @@
     <arg name="use_drivable_grid" default="true"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
     <arg name="grid_unknown_is_occupied" default="true"/>
+    <arg name="global_path_topic" default="/astar/path"/>
+    <arg name="local_path_topic" default="/planning/local_path"/>
+    <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
+    <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+    <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
+    <arg name="enable_cloud_tracker" default="true"/>
+    <arg name="enable_dynamic_risk_manager" default="true"/>
+    <arg name="enable_local_replanner" default="true"/>
+    <arg name="use_dynamic_risk_grid" default="true"/>
 
-    <!-- Node -->
-    <!-- <node pkg="dynamic_window_approach" type="new2.py"   name="dynamic_window_approach"    output="screen" 	 respawn="false"/> -->
+    <group if="$(arg enable_cloud_tracker)">
+        <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
+            <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="output_topic" value="$(arg tracked_objects_topic)"/>
+        </node>
+    </group>
+
+    <group if="$(arg enable_dynamic_risk_manager)">
+        <node pkg="dynamic_window_approach" type="dynamic_risk_manager.py" name="dynamic_risk_manager" output="screen" respawn="false">
+            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+            <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+            <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+            <param name="risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+        </node>
+    </group>
+
+    <group if="$(arg enable_local_replanner)">
+        <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
+            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="global_path_topic" value="$(arg global_path_topic)"/>
+            <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+            <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+            <param name="local_path_topic" value="$(arg local_path_topic)"/>
+        </node>
+    </group>
+
     <node pkg="dynamic_window_approach" type="dynamicwindowapproach.py" name="dynamic_window_approach" output="screen" respawn="false">
         <param name="pose_topic" value="$(arg pose_topic)"/>
+        <param name="global_path_topic" value="$(arg global_path_topic)"/>
+        <param name="local_path_topic" value="$(arg local_path_topic)"/>
+        <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
         <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
         <param name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
         <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
         <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+        <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+        <param name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
     </node>
-
 
 </launch>

@@ -8,6 +8,14 @@
   <arg name="use_drivable_grid" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
+  <arg name="enable_cloud_tracker" default="true"/>
+  <arg name="enable_dynamic_risk_manager" default="true"/>
+  <arg name="enable_local_replanner" default="true"/>
+  <arg name="use_dynamic_risk_grid" default="true"/>
+  <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+  <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
+  <arg name="local_path_topic" default="/planning/local_path"/>
+  <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_auto_osm" default="false"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
@@ -51,6 +59,14 @@
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+      <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
+      <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
+      <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+      <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
+      <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+      <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+      <arg name="local_path_topic" value="$(arg local_path_topic)"/>
+      <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
     </include>
   </group>
 

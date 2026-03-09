@@ -1,4 +1,15 @@
 <launch>   
+    <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
+    <arg name="pointcloud_topic" default="/ouster/points"/>
+    <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+    <arg name="grid_unknown_is_occupied" default="true"/>
+    <arg name="enable_drivable_area" default="true"/>
+    <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
+    <arg name="enable_cloud_tracker" default="true"/>
+    <arg name="enable_dynamic_risk_manager" default="true"/>
+    <arg name="enable_local_replanner" default="true"/>
+    <arg name="use_dynamic_risk_grid" default="true"/>
+
     <!-- Parameters -->
     <rosparam file="$(find lio_localizer)/config/params-robot_scout.yaml" command="load" />
 
@@ -7,9 +18,23 @@
     <node pkg="lio_localizer" type="lio_localizer_imageProjection"      name="lio_localizer_imageProjection"        output="screen"     respawn="true"/>
     <node pkg="lio_localizer" type="lio_localizer_featureExtraction"    name="lio_localizer_featureExtraction"      output="screen"     respawn="true"/>
     <node pkg="lio_localizer" type="lio_localizer_mapLocalization"      name="lio_localizer_mapLocalization"        output="screen"     respawn="true"/>
+
+    <include file="$(find lio_sam)/launch/include/module_drivable_area.launch">
+        <arg name="enable" value="$(arg enable_drivable_area)"/>
+        <arg name="config_file" value="$(arg drivable_area_config_file)"/>
+    </include>
     
-    <!-- Local Planner Node -->
-    <include file="$(find local_planner)/launch/global_trajectory_planner.launch" />
+    <!-- Accuracy-first local planning stack -->
+    <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
+        <arg name="pose_topic" value="$(arg pose_topic)"/>
+        <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+        <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+        <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+        <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
+        <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
+        <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+        <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
+    </include>
 
     <!--- Run Rviz-->
     <node pkg="rviz" type="rviz" name="robot_rviz" args="-d $(find lio_localizer)/launch/include/config/rviz_with_local_planner.rviz" />

@@ -26,7 +26,7 @@ from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 
-from dynamic_window_approach.msg import server_to_robot
+from dynamic_window_approach.msg import BehaviorCommand, server_to_robot
 
 # ------------------------------------- utils -------------------------------------
 def angdiff(a, b):
@@ -63,9 +63,17 @@ class DWAControl:
 
         # ===== Inputs =====
         self.pose_topic = rospy.get_param("~pose_topic", "/lio_sam/mapping/odometry")
+        self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
+        self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
+        self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 1.0))
+        self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
         self.use_drivable_grid = bool(rospy.get_param("~use_drivable_grid", True))
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
+        self.dynamic_risk_grid_topic = rospy.get_param("~dynamic_risk_grid_topic", "/planning/dynamic_risk_grid")
+        self.use_dynamic_risk_grid = bool(rospy.get_param("~use_dynamic_risk_grid", True))
+        self.risk_unknown_is_occupied = bool(rospy.get_param("~risk_unknown_is_occupied", False))
+        self.risk_occupied_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
 
         # ===== Obstacle handling (avoid + emergency stop) =====
         self.cloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
@@ -96,6 +104,12 @@ class DWAControl:
         self.grid_origin_x = 0.0
         self.grid_origin_y = 0.0
         self.grid_data = None
+        self.risk_grid_resolution = None
+        self.risk_grid_width = 0
+        self.risk_grid_height = 0
+        self.risk_grid_origin_x = 0.0
+        self.risk_grid_origin_y = 0.0
+        self.risk_grid_data = None
 
         # ===== Rotate-only mode =====
         self.rotate_only_deg = rospy.get_param("~rotate_only_deg", 80.0)
@@ -128,6 +142,12 @@ class DWAControl:
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
 
         # Internal path buffers
+        self.global_path_msg = None
+        self.global_path_sig = None
+        self.local_path_msg = None
+        self.local_path_sig = None
+        self.local_path_stamp = rospy.Time(0)
+        self.active_path_source = "none"
         self.path_msg = None
         self.path_sig = None
         self.path_pts = []          # [(x,y), ...]
@@ -143,15 +163,23 @@ class DWAControl:
         # ===== State =====
         self.current_pose = Odometry()
         self.warm_up_flag = False
+        self.behavior_stop = False
+        self.behavior_speed_limit = self.max_speed
+        self.behavior_reason = "clear"
 
         # ===== ROS I/O =====
-        self.sub_path = rospy.Subscriber('/astar/path', Path, self.path_callback)
+        self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
+        self.sub_path_local = rospy.Subscriber(self.local_path_topic, Path, self.path_callback_local, queue_size=5)
         self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
+        self.sub_behavior = rospy.Subscriber(self.behavior_cmd_topic, BehaviorCommand, self.behavior_cmd_callback, queue_size=10)
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
         self.sub_grid = None
         if self.use_drivable_grid:
             self.sub_grid = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=5)
+        self.sub_risk_grid = None
+        if self.use_dynamic_risk_grid:
+            self.sub_risk_grid = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=5)
 
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.target_pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
@@ -216,6 +244,22 @@ class DWAControl:
         except Exception as e:
             rospy.logwarn("drivable_grid_callback error: %s", str(e))
 
+    def risk_grid_callback(self, msg):
+        try:
+            self.risk_grid_resolution = float(msg.info.resolution)
+            self.risk_grid_width = int(msg.info.width)
+            self.risk_grid_height = int(msg.info.height)
+            self.risk_grid_origin_x = float(msg.info.origin.position.x)
+            self.risk_grid_origin_y = float(msg.info.origin.position.y)
+            self.risk_grid_data = msg.data
+        except Exception as e:
+            rospy.logwarn("risk_grid_callback error: %s", str(e))
+
+    def behavior_cmd_callback(self, msg):
+        self.behavior_stop = bool(msg.stop)
+        self.behavior_speed_limit = max(0.0, float(msg.speed_limit))
+        self.behavior_reason = str(msg.reason)
+
     # ------------------------------- rotate-only --------------------------------
     def rotate_only_enter(self, cur_yaw, desired_yaw):
         self._rot_mode = True
@@ -279,16 +323,47 @@ class DWAControl:
         self.reach_goal_flag = False
         self.prev_goal_flag = False
 
-    def path_callback(self, path_msg):
-        sig = self._path_signature(path_msg)
-        if sig is not None and sig == self.path_sig:
-            # identical path → ignore to avoid re-initialization jitters
-            return
+    def _activate_path(self, path_msg, sig, source):
         self.path_sig = sig
         self.path_msg = path_msg
-        if len(path_msg.poses) < 2:
+        self.active_path_source = source
+        if path_msg is None or len(path_msg.poses) < 2:
+            self.path_pts = []
+            self.seg_lens = []
+            self.cum_len = [0.0]
+            self.s_total = 0.0
+            self.s_cur = 0.0
             return
         self._rebuild_path_geometry()
+
+    def path_callback_global(self, path_msg):
+        self.global_path_msg = path_msg
+        self.global_path_sig = self._path_signature(path_msg)
+
+    def path_callback_local(self, path_msg):
+        self.local_path_msg = path_msg
+        self.local_path_sig = self._path_signature(path_msg)
+        self.local_path_stamp = rospy.Time.now()
+
+    def _refresh_active_path(self):
+        now = rospy.Time.now()
+        use_local = (
+            self.local_path_msg is not None
+            and len(self.local_path_msg.poses) >= 2
+            and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
+        )
+        if use_local:
+            if self.active_path_source != "local" or self.path_sig != self.local_path_sig:
+                self._activate_path(self.local_path_msg, self.local_path_sig, "local")
+            return
+
+        if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
+            if self.active_path_source != "global" or self.path_sig != self.global_path_sig:
+                self._activate_path(self.global_path_msg, self.global_path_sig, "global")
+            return
+
+        if self.path_msg is not None:
+            self._activate_path(None, None, "none")
 
     def pose_callback(self, msg):
         self.current_pose = msg
@@ -435,21 +510,44 @@ class DWAControl:
         return trajectory
 
     def _is_xy_drivable(self, x, y):
-        if not self.use_drivable_grid:
-            return True
-        if self.grid_data is None or self.grid_width <= 0 or self.grid_height <= 0:
-            return True
-
-        gx = int(math.floor((x - self.grid_origin_x) / self.grid_resolution))
-        gy = int(math.floor((y - self.grid_origin_y) / self.grid_resolution))
-        if gx < 0 or gy < 0 or gx >= self.grid_width or gy >= self.grid_height:
+        drivable_ok = True
+        if self.use_drivable_grid:
+            if self.grid_data is None or self.grid_width <= 0 or self.grid_height <= 0:
+                drivable_ok = True
+            else:
+                gx = int(math.floor((x - self.grid_origin_x) / self.grid_resolution))
+                gy = int(math.floor((y - self.grid_origin_y) / self.grid_resolution))
+                if gx < 0 or gy < 0 or gx >= self.grid_width or gy >= self.grid_height:
+                    return False
+                idx = gy * self.grid_width + gx
+                occ = self.grid_data[idx]
+                if occ < 0:
+                    drivable_ok = (not self.grid_unknown_is_occupied)
+                else:
+                    drivable_ok = (occ == 0)
+        if not drivable_ok:
             return False
-        idx = gy * self.grid_width + gx
-        occ = self.grid_data[idx]
-        if occ < 0:
-            return (not self.grid_unknown_is_occupied)
-        # drivable area builder marks drivable as 0
-        return occ == 0
+
+        if (
+            self.use_dynamic_risk_grid
+            and self.risk_grid_data is not None
+            and self.risk_grid_width > 0
+            and self.risk_grid_height > 0
+            and self.risk_grid_resolution is not None
+            and self.risk_grid_resolution > 0.0
+        ):
+            rgx = int(math.floor((x - self.risk_grid_origin_x) / self.risk_grid_resolution))
+            rgy = int(math.floor((y - self.risk_grid_origin_y) / self.risk_grid_resolution))
+            if rgx < 0 or rgy < 0 or rgx >= self.risk_grid_width or rgy >= self.risk_grid_height:
+                return (not self.risk_unknown_is_occupied)
+            ridx = rgy * self.risk_grid_width + rgx
+            rocc = int(self.risk_grid_data[ridx])
+            if rocc < 0:
+                return (not self.risk_unknown_is_occupied)
+            if rocc >= self.risk_occupied_threshold:
+                return False
+
+        return True
 
     def _trajectory_in_drivable_area(self, traj):
         if not self.use_drivable_grid:
@@ -639,9 +737,13 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose_topic=%s, drivable_grid=%s, obstacle_avoid=on, emergency_stop=%.2fm",
+            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm",
             self.pose_topic,
+            self.global_path_topic,
+            self.local_path_topic,
+            self.behavior_cmd_topic,
             "on" if self.use_drivable_grid else "off",
+            "on" if self.use_dynamic_risk_grid else "off",
             self.emergency_stop_distance,
         )
         x = [self.current_pose.pose.pose.position.x,
@@ -651,8 +753,16 @@ class DWAControl:
         rate = rospy.Rate(1.0 / self.dt)
 
         while not rospy.is_shutdown():
+            self._refresh_active_path()
+
             # emergency stop only (avoidance is handled in DWA cost)
             if self.emergency_blocked and not self._rot_mode:
+                self.publish_drive([0.0, 0.0])
+                rate.sleep()
+                continue
+
+            # behavior-layer hard stop
+            if self.behavior_stop and not self._rot_mode:
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -717,6 +827,7 @@ class DWAControl:
                             min(self.max_speed, self.final_speed_k * max(dist_to_goal, 0.0)))
             else:
                 v_cap = self.max_speed
+            v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
 
             # low-speed clamp with cap in direction of chosen v sign
             u_cmd = list(u)
