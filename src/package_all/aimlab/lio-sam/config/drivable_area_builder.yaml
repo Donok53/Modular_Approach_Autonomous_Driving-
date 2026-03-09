@@ -1,0 +1,104 @@
+# LIO-SAM drivable area builder
+# Builds drivable surface online from mapping odometry.
+
+frame_id: map
+odom_topic: /lio_sam/mapping/odometry
+
+grid_resolution_m: 0.20
+auto_seed_from_odom: true
+seed_radius_m: 1.20
+seed_step_m: 0.30
+force_trail_from_odom: true
+force_trail_radius_m: 0.35
+edit_brush_radius_m: 1.00
+height_update_alpha: 0.35
+marker_z_offset: 0.03
+marker_height: 0.08
+marker_color_r: 0.95
+marker_color_g: 0.20
+marker_color_b: 0.20
+marker_color_a: 0.45
+allow_degraded_seeding_when_ref_missing: true
+manual_edit_enforce_ground_filter: false
+
+# Ground-risk aware filtering (drop/curb)
+use_ground_filter: true
+ground_cloud_topic: /lio_sam/mapping/cloud_registered
+ground_cloud_downsample: 4
+ground_min_points_per_cell: 3
+ground_window_radius_m: 0.40
+ground_cell_ttl_s: 3.0
+use_obstacle_rejection: true
+obstacle_height_m: 0.45
+obstacle_min_points_per_cell: 3
+ground_cell_z_alpha: 0.25
+ground_cell_outlier_down_m: 0.40
+ground_cell_outlier_up_m: 0.60
+# z band around reference ground z (not lidar z)
+ground_min_z_offset: -0.35
+ground_max_z_offset: 0.45
+use_adaptive_ground_reference: true
+adaptive_reference_strict: false
+ground_reference_radius_m: 1.2
+ground_reference_percentile: 20.0
+ground_reference_min_points: 30
+ground_reference_alpha: 0.25
+ground_reference_max_jump_m: 0.10
+# LIO-SAM cloud compatible linefit-style local ground tracker
+use_linefit_ground_tracker: true
+linefit_local_radius_m: 8.0
+linefit_seed_percentile: 30.0
+linefit_inlier_threshold_m: 0.18
+linefit_min_points: 120
+linefit_max_tilt_deg: 35.0
+linefit_smooth_alpha: 0.35
+linefit_hold_sec: 2.5
+# Ground slope model from recently tracked ground (helps ramps/downhills)
+use_local_slope_model: true
+slope_model_history_size: 80
+slope_model_min_samples: 12
+slope_model_max_tilt_deg: 30.0
+# Lidar height prior (sensor ~0.46m above ground): reject/clamp wrong-floor candidates
+use_lidar_height_prior: true
+lidar_height_m: 0.46
+lidar_height_tolerance_m: 0.30
+lidar_prior_mode: clamp   # clamp | reject
+max_drop_m: 0.22
+max_step_up_m: 0.24
+max_neighbor_height_diff_m: 0.28
+allow_unknown_ground: false
+risk_require_confirmed_hazard: true
+track_risk_cells: false
+publish_risk_marker: false
+risk_marker_topic: /lio_sam/drivable_area/risk_marker
+risk_max_cells: 20000
+
+# Manual editing topics (PointStamped)
+add_point_topic: /lio_sam/drivable_area/add_point
+erase_point_topic: /lio_sam/drivable_area/erase_point
+clear_topic: /lio_sam/drivable_area/clear
+undo_topic: /lio_sam/drivable_area/undo
+mode_topic: /lio_sam/drivable_area/mode
+save_topic: /lio_sam/drivable_area/save
+load_topic: /lio_sam/drivable_area/load
+max_history: 30
+
+# Optional: use RViz /clicked_point directly.
+# mode=toggle: click once to add, click again to erase.
+use_clicked_point: true
+clicked_point_topic: /clicked_point
+clicked_point_mode: toggle  # add | erase | toggle
+
+marker_topic: /lio_sam/drivable_area/marker
+grid_topic: /lio_sam/drivable_area/grid
+marker_max_cells: 40000
+publish_period_s: 0.5
+
+# Persistence
+state_file_path: ~/.ros/lio_sam_drivable_area_state.json
+auto_load_state: false
+auto_save_state: false
+auto_save_period_s: 2.0
+save_on_shutdown: true
+allow_resolution_mismatch: false
+persist_on_risk_only_changes: false

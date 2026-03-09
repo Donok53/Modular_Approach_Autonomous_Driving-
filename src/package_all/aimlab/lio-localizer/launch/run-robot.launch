@@ -1,5 +1,8 @@
 <launch>
     <arg name="project" default="lio_sam"/>
+    <arg name="enable_drivable_area" default="true"/>
+    <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
+    <arg name="enable_drivable_area_2d_editor" default="false"/>
     
     <!-- Parameters -->
     <!-- <rosparam file="$(find lio_localizer)/config/params-robot_scout.yaml" command="load" /> -->
@@ -10,6 +13,18 @@
     <node pkg="lio_localizer" type="lio_localizer_imageProjection"     name="lio_localizer_imageProjection"      output="screen"     respawn="true"/>
     <node pkg="lio_localizer" type="lio_localizer_featureExtraction"   name="lio_localizer_featureExtraction"    output="screen"     respawn="true"/>
     <node pkg="lio_localizer" type="lio_localizer_mapLocalization"     name="lio_localizer_mapLocalization"      output="screen"     respawn="true"/>
+
+    <!-- Drivable area builder for post-mapping edit on localizer stage -->
+    <include file="$(find lio_sam)/launch/include/module_drivable_area.launch">
+      <arg name="enable" value="$(arg enable_drivable_area)"/>
+      <arg name="config_file" value="$(arg drivable_area_config_file)"/>
+    </include>
+
+    <!-- Optional OpenCV 2D editor window (independent from RViz) -->
+    <include file="$(find lio_sam)/launch/include/module_drivable_area_2d_editor.launch">
+      <arg name="enable" value="$(arg enable_drivable_area_2d_editor)"/>
+      <arg name="odom_topic" value="/lio_localizer/odometry/optimization"/>
+    </include>
     
     <!--- Run Rviz-->
     <include file="$(find lio_localizer)/launch/include/module_rviz.launch" />

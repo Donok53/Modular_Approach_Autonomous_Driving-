@@ -34,7 +34,7 @@ Topics:
   pub  /astar/server_dst_node_list (sensor_msgs/PointCloud2)
 
   sub  /initialpose                                (geometry_msgs/PoseWithCovarianceStamped)
-  sub  lio_localizer/odometry/optimization         (nav_msgs/Odometry)
+  sub  ~pose_topic (default: lio_localizer/odometry/optimization) (nav_msgs/Odometry)
   sub  /move_base_simple/goal                      (geometry_msgs/PoseStamped)
   sub  /server_to_robot_topic                      (astar_map/server_to_robot)
 """
@@ -43,7 +43,7 @@ import rospy, math, sys, time, csv, colorsys, struct, xml.etree.ElementTree as E
 from geometry_msgs.msg import Point, PoseStamped, Quaternion, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, Odometry
 from visualization_msgs.msg import Marker
-from std_msgs.msg import ColorRGBA, Header, Int32MultiArray
+from std_msgs.msg import ColorRGBA, Header, Int32MultiArray, Empty
 from sensor_msgs.msg import PointCloud2, PointField
 from astar_map.msg import server_to_robot
 import utm
@@ -98,6 +98,7 @@ class AStarPlanner:
         self.start_init_flag = False
         self.new_goal_flag = False
         self.server_dst_node_list = []
+        self.pose_topic = rospy.get_param("~pose_topic", "lio_localizer/odometry/optimization")
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -115,6 +116,11 @@ class AStarPlanner:
         self._snap_last_update_s = 0.0
         self._snap_progress_min_step_m = float(rospy.get_param("~snap_progress_min_step_m", 3.0))
         self._snap_back_allow_m = float(rospy.get_param("~snap_back_allow_m", 0.3))
+        self.enable_map_reload = bool(rospy.get_param("~enable_map_reload", True))
+        self.reload_topic = rospy.get_param("~reload_topic", "/astar/reload_map")
+        self._reload_requested = False
+        self._osm_file = ""
+        self._ref_file = ""
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -124,9 +130,44 @@ class AStarPlanner:
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
 
         self.sub_start_from_rviz = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.callback_start)
-        self.sub_start_from_pose = rospy.Subscriber('lio_localizer/odometry/optimization', Odometry, self.pose_callback)
+        self.sub_start_from_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_goal_from_rviz = rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.callback_goal_from_rviz)
         self.sub_goal_from_server = rospy.Subscriber('/server_to_robot_topic', server_to_robot, self.callback_goal_from_server)
+        self.sub_reload = None
+        if self.enable_map_reload:
+            self.sub_reload = rospy.Subscriber(self.reload_topic, Empty, self.callback_reload_map, queue_size=2)
+        rospy.loginfo("[astar] pose topic: %s", self.pose_topic)
+        if self.enable_map_reload:
+            rospy.loginfo("[astar] map reload topic: %s", self.reload_topic)
+
+    def set_map_sources(self, osm_file, ref_file):
+        self._osm_file = osm_file
+        self._ref_file = ref_file
+
+    def callback_reload_map(self, _msg):
+        self._reload_requested = True
+
+    def consume_reload_request(self):
+        if not self._reload_requested:
+            return False
+        self._reload_requested = False
+        return True
+
+    def reload_map(self):
+        if not self._osm_file:
+            rospy.logwarn("[astar] map reload requested but osm_file is empty")
+            return False
+        try:
+            self.bad_edges.clear()
+            self.load_osm_data(self._osm_file, self._ref_file)
+            self.start_init_flag = False
+            self.new_goal_flag = False
+            self._last_path_nodes = None
+            rospy.loginfo("[astar] map reloaded from %s", self._osm_file)
+            return True
+        except Exception as e:
+            rospy.logwarn("[astar] map reload failed: %s", str(e))
+            return False
 
     # ---------- ENU helpers ----------
     _A = 6378137.0
@@ -596,6 +637,7 @@ if __name__ == "__main__":
         a = AStarPlanner()
         osm = rospy.get_param("astar_map_node/osm_file")
         ref = rospy.get_param("astar_map_node/ref_file", "")
+        a.set_map_sources(osm, ref)
         a.load_osm_data(osm, ref)
 
         dst_str = rospy.get_param('~server_dst_node_list', "")
@@ -606,6 +648,9 @@ if __name__ == "__main__":
         path_nodes = []
 
         while not rospy.is_shutdown():
+            if a.consume_reload_request():
+                if a.reload_map():
+                    path_nodes = []
             a.visualize_graph()
             a.show_server_dst_nodes()
 

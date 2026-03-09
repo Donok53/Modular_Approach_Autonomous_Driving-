@@ -385,6 +385,32 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /lio_sam/drivable_area/marker
+          Name: Drivable Area
+          Namespaces:
+            {}
+          Queue Size: 20
+          Value: true
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /lio_sam/drivable_area/risk_marker
+          Name: Drivable Risk
+          Namespaces:
+            {}
+          Queue Size: 20
+          Value: true
+        - Alpha: 0.3499999940395355
+          Class: rviz/Map
+          Color Scheme: map
+          Draw Behind: false
+          Enabled: true
+          Name: Drivable Grid
+          Topic: /lio_sam/drivable_area/grid
+          Unreliable: false
+          Use Timestamp: false
+          Value: true
         - Alpha: 1
           Buffer Length: 1
           Class: rviz/Path

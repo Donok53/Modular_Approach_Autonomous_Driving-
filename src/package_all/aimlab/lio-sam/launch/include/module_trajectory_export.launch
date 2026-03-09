@@ -1,0 +1,30 @@
+<launch>
+  <arg name="enable" default="true"/>
+  <arg name="path_topic" default="/lio_sam/mapping/path_pose_wgs84"/>
+  <arg name="output_csv" default="$(find astar_map)/map/auto_trajectory_wgs84.csv"/>
+  <arg name="output_osm" default="$(find astar_map)/map/auto_trajectory.osm"/>
+  <arg name="auto_write" default="false"/>
+  <arg name="save_on_shutdown" default="true"/>
+  <arg name="publish_reload" default="false"/>
+  <arg name="reload_on_auto_write" default="false"/>
+  <arg name="reload_topic" default="/astar/reload_map"/>
+  <arg name="min_new_points_to_write" default="1500"/>
+  <arg name="min_end_shift_m_to_write" default="3.0"/>
+  <arg name="min_seconds_between_writes" default="10.0"/>
+
+  <group if="$(arg enable)">
+    <node pkg="lio_sam" type="trajectory_osm_exporter.py" name="trajectory_osm_exporter" output="screen" respawn="true">
+      <param name="path_topic" value="$(arg path_topic)"/>
+      <param name="output_csv" value="$(arg output_csv)"/>
+      <param name="output_osm" value="$(arg output_osm)"/>
+      <param name="auto_write" value="$(arg auto_write)"/>
+      <param name="save_on_shutdown" value="$(arg save_on_shutdown)"/>
+      <param name="publish_reload" value="$(arg publish_reload)"/>
+      <param name="reload_on_auto_write" value="$(arg reload_on_auto_write)"/>
+      <param name="reload_topic" value="$(arg reload_topic)"/>
+      <param name="min_new_points_to_write" value="$(arg min_new_points_to_write)"/>
+      <param name="min_end_shift_m_to_write" value="$(arg min_end_shift_m_to_write)"/>
+      <param name="min_seconds_between_writes" value="$(arg min_seconds_between_writes)"/>
+    </node>
+  </group>
+</launch>

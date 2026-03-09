@@ -1,16 +1,55 @@
 <launch>
+  <arg name="use_lio_sam" default="false"/>
+  <arg name="enable_localizer_drivable_area" default="true"/>
+  <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
+  <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="use_drivable_grid" default="true"/>
+  <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+  <arg name="grid_unknown_is_occupied" default="true"/>
+  <arg name="use_auto_osm" default="false"/>
+  <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
+  <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
+
   <!-- 1) Localization -->
-  <include file="$(find lio_localizer)/launch/run-robot.launch" />
+  <group if="$(arg use_lio_sam)">
+    <include file="$(find lio_sam)/launch/run-robot.launch">
+      <arg name="enable_drivable_area" value="true"/>
+    </include>
+  </group>
+  <group unless="$(arg use_lio_sam)">
+    <include file="$(find lio_localizer)/launch/run-robot.launch">
+      <arg name="enable_drivable_area" value="$(arg enable_localizer_drivable_area)"/>
+      <arg name="enable_drivable_area_2d_editor" value="$(arg enable_localizer_drivable_area_2d_editor)"/>
+    </include>
+  </group>
 
   <!-- 2) Global path (A*) -->
-  <include file="$(find astar_map)/launch/astar_map.launch" />
+  <group if="$(arg use_auto_osm)">
+    <include file="$(find astar_map)/launch/astar_map.launch">
+      <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="osm_file" value="$(arg auto_osm_file)"/>
+    </include>
+  </group>
+  <group unless="$(arg use_auto_osm)">
+    <include file="$(find astar_map)/launch/astar_map.launch">
+      <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="osm_file" value="$(arg default_osm_file)"/>
+    </include>
+  </group>
 
   <!-- 3) DWA: /cmd_vel → /cmd_vel_nav (remap은 include '밖'에서 적용해야 유효) -->
   <group>
     <!-- 절대/상대 토픽 모두 잡기 -->
     <remap from="/cmd_vel" to="/cmd_vel_nav"/>
     <remap from="cmd_vel"  to="/cmd_vel_nav"/>
-    <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch"/>
+    <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
+      <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
+      <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+    </include>
   </group>
 
   <!-- 4) 주차 슬롯 점유 판단 -->

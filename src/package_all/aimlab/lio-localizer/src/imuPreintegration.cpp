@@ -260,13 +260,19 @@ public:
             else
                 break;
         }
+        const double deltaTij = imuIntegratorOpt_->deltaTij();
+        if (!std::isfinite(deltaTij) || deltaTij <= 1e-6)
+        {
+            ROS_WARN_THROTTLE(1.0, "Skip optimization due to invalid IMU integration dt (deltaTij=%.9f)", deltaTij);
+            return;
+        }
         // add imu factor to graph
         const gtsam::PreintegratedImuMeasurements& preint_imu = dynamic_cast<const gtsam::PreintegratedImuMeasurements&>(*imuIntegratorOpt_);
         gtsam::ImuFactor imu_factor(X(key - 1), V(key - 1), X(key), V(key), B(key - 1), preint_imu);
         graphFactors.add(imu_factor);
         // add imu bias between factor
         graphFactors.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(B(key - 1), B(key), gtsam::imuBias::ConstantBias(),
-                         gtsam::noiseModel::Diagonal::Sigmas(sqrt(imuIntegratorOpt_->deltaTij()) * noiseModelBetweenBias)));
+                         gtsam::noiseModel::Diagonal::Sigmas(sqrt(deltaTij) * noiseModelBetweenBias)));
         // add pose factor
         gtsam::Pose3 curPose = lidarPose.compose(lidar2Imu);
         gtsam::PriorFactor<gtsam::Pose3> pose_factor(X(key), curPose, degenerate ? correctionNoise2 : correctionNoise);
@@ -277,12 +283,24 @@ public:
         graphValues.insert(V(key), propState_.v());
         graphValues.insert(B(key), prevBias_);
         // optimize
-        optimizer.update(graphFactors, graphValues);
-        optimizer.update();
+        gtsam::Values result;
+        try
+        {
+            optimizer.update(graphFactors, graphValues);
+            optimizer.update();
+            result = optimizer.calculateEstimate();
+        }
+        catch (const std::exception& e)
+        {
+            ROS_WARN_STREAM("IMU optimization failed: " << e.what() << ". Resetting IMU preintegration state.");
+            graphFactors.resize(0);
+            graphValues.clear();
+            resetParams();
+            return;
+        }
         graphFactors.resize(0);
         graphValues.clear();
         // Overwrite the beginning of the preintegration for the next step.
-        gtsam::Values result = optimizer.calculateEstimate();
         prevPose_  = result.at<gtsam::Pose3>(X(key));
         prevVel_   = result.at<gtsam::Vector3>(V(key));
         prevState_ = gtsam::NavState(prevPose_, prevVel_);
@@ -356,6 +374,12 @@ public:
         std::lock_guard<std::mutex> lock(mtx);
 
         sensor_msgs::Imu thisImu = imuConverter(*imu_raw);
+        if (!std::isfinite(thisImu.linear_acceleration.x) || !std::isfinite(thisImu.linear_acceleration.y) || !std::isfinite(thisImu.linear_acceleration.z) ||
+            !std::isfinite(thisImu.angular_velocity.x)    || !std::isfinite(thisImu.angular_velocity.y)    || !std::isfinite(thisImu.angular_velocity.z))
+        {
+            ROS_WARN_THROTTLE(1.0, "Dropping IMU sample with non-finite values");
+            return;
+        }
 
         imuQueOpt.push_back(thisImu);
         imuQueImu.push_back(thisImu);

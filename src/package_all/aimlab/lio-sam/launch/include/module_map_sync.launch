@@ -1,0 +1,24 @@
+<launch>
+  <arg name="enable" default="true"/>
+  <arg name="source_dir" default="$(env HOME)/Downloads/test"/>
+  <arg name="destination_dir" default="$(find lio_localizer)/map/test"/>
+  <arg name="wait_timeout_s" default="120.0"/>
+  <arg name="poll_period_s" default="0.5"/>
+  <arg name="stable_checks" default="3"/>
+  <arg name="delete_extra" default="true"/>
+  <arg name="copy_on_start" default="false"/>
+
+  <group if="$(arg enable)">
+    <node pkg="lio_sam" type="lio_sam_map_sync.py"
+          name="lio_sam_map_sync" output="screen" respawn="false">
+      <param name="enable" value="$(arg enable)"/>
+      <param name="source_dir" value="$(arg source_dir)"/>
+      <param name="destination_dir" value="$(arg destination_dir)"/>
+      <param name="wait_timeout_s" value="$(arg wait_timeout_s)"/>
+      <param name="poll_period_s" value="$(arg poll_period_s)"/>
+      <param name="stable_checks" value="$(arg stable_checks)"/>
+      <param name="delete_extra" value="$(arg delete_extra)"/>
+      <param name="copy_on_start" value="$(arg copy_on_start)"/>
+    </node>
+  </group>
+</launch>

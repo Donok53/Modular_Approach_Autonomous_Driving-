@@ -1,7 +1,19 @@
 <launch>
+    <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
+    <arg name="pointcloud_topic" default="/ouster/points"/>
+    <arg name="use_drivable_grid" default="true"/>
+    <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+    <arg name="grid_unknown_is_occupied" default="true"/>
+
     <!-- Node -->
     <!-- <node pkg="dynamic_window_approach" type="new2.py"   name="dynamic_window_approach"    output="screen" 	 respawn="false"/> -->
-    <node pkg="dynamic_window_approach" type="dynamicwindowapproach.py"   name="dynamic_window_approach"    output="screen" 	 respawn="false"/>
+    <node pkg="dynamic_window_approach" type="dynamicwindowapproach.py" name="dynamic_window_approach" output="screen" respawn="false">
+        <param name="pose_topic" value="$(arg pose_topic)"/>
+        <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+        <param name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
+        <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+        <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+    </node>
 
 
 </launch>

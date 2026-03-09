@@ -1,0 +1,27 @@
+<launch>
+  <arg name="enable" default="false"/>
+  <arg name="window_name" default="Drivable Area 2D Editor"/>
+  <arg name="grid_topic" default="/lio_sam/drivable_area/grid"/>
+  <arg name="odom_topic" default="/lio_sam/mapping/odometry"/>
+  <arg name="add_point_topic" default="/lio_sam/drivable_area/add_point"/>
+  <arg name="erase_point_topic" default="/lio_sam/drivable_area/erase_point"/>
+  <arg name="clear_topic" default="/lio_sam/drivable_area/clear"/>
+  <arg name="undo_topic" default="/lio_sam/drivable_area/undo"/>
+  <arg name="save_topic" default="/lio_sam/drivable_area/save"/>
+  <arg name="load_topic" default="/lio_sam/drivable_area/load"/>
+
+  <group if="$(arg enable)">
+    <node pkg="lio_sam" type="drivable_area_2d_editor.py"
+          name="lio_sam_drivable_area_2d_editor" output="screen" respawn="false">
+      <param name="window_name" value="$(arg window_name)"/>
+      <param name="grid_topic" value="$(arg grid_topic)"/>
+      <param name="odom_topic" value="$(arg odom_topic)"/>
+      <param name="add_point_topic" value="$(arg add_point_topic)"/>
+      <param name="erase_point_topic" value="$(arg erase_point_topic)"/>
+      <param name="clear_topic" value="$(arg clear_topic)"/>
+      <param name="undo_topic" value="$(arg undo_topic)"/>
+      <param name="save_topic" value="$(arg save_topic)"/>
+      <param name="load_topic" value="$(arg load_topic)"/>
+    </node>
+  </group>
+</launch>

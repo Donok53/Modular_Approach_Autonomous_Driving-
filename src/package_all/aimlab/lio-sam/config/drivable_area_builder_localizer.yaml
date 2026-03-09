@@ -1,0 +1,45 @@
+# Drivable area builder profile for post-mapping edit in LIO-Localizer stage.
+# Intended workflow:
+# 1) Build map with LIO-SAM
+# 2) Run LIO-Localizer + RViz top view
+# 3) Edit drivable area manually on 2D view and save
+
+frame_id: map
+odom_topic: /lio_localizer/odometry/optimization
+
+grid_resolution_m: 0.20
+
+# Post-edit mode: don't auto-grow while localizing, user edits explicitly.
+auto_seed_from_odom: false
+force_trail_from_odom: false
+
+# Ground auto-filtering off in localizer edit mode (manual 2D correction workflow).
+use_ground_filter: false
+use_linefit_ground_tracker: false
+use_local_slope_model: false
+use_adaptive_ground_reference: false
+
+# Manual editing
+edit_brush_radius_m: 1.00
+manual_edit_enforce_ground_filter: false
+use_clicked_point: true
+clicked_point_topic: /clicked_point
+clicked_point_mode: toggle
+
+# Visualization (same red style)
+marker_topic: /lio_sam/drivable_area/marker
+grid_topic: /lio_sam/drivable_area/grid
+marker_z_offset: 0.03
+marker_height: 0.08
+marker_color_r: 0.95
+marker_color_g: 0.20
+marker_color_b: 0.20
+marker_color_a: 0.45
+publish_risk_marker: false
+track_risk_cells: false
+
+# Persistence: load last edited area automatically in localizer stage.
+state_file_path: ~/.ros/lio_sam_drivable_area_state.json
+auto_load_state: true
+auto_save_state: false
+save_on_shutdown: true

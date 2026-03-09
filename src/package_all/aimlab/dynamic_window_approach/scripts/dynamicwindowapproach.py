@@ -19,7 +19,7 @@ import rospy
 import tf.transformations as transformations
 
 from geometry_msgs.msg import Twist, Point
-from nav_msgs.msg import Path, Odometry
+from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker
 from std_msgs.msg import Float32MultiArray
 
@@ -56,22 +56,46 @@ class DWAControl:
         self.lateral_cost_gain  = rospy.get_param("~lateral_cost_gain", 6.0)
         self.target_cost_gain   = rospy.get_param("~target_cost_gain", 2.0)
         self.progress_forward_gain = rospy.get_param("~progress_forward_gain", 0.5)
+        self.obstacle_cost_gain = rospy.get_param("~obstacle_cost_gain", 2.0)
         self.robot_stuck_flag_cons = 0.001
 
         self.server_cmd_drive_mode = 0
 
-        # ===== Obstacle stop (front ROI) =====
+        # ===== Inputs =====
+        self.pose_topic = rospy.get_param("~pose_topic", "/lio_sam/mapping/odometry")
+        self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
+        self.use_drivable_grid = bool(rospy.get_param("~use_drivable_grid", True))
+        self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
+
+        # ===== Obstacle handling (avoid + emergency stop) =====
         self.cloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
-        self.stop_distance = rospy.get_param("~stop_distance", 0.6)
+        self.emergency_stop_distance = rospy.get_param(
+            "~emergency_stop_distance",
+            rospy.get_param("~stop_distance", 0.6),
+        )
+        self.obstacle_influence_distance = rospy.get_param("~obstacle_influence_distance", 1.8)
+        self.robot_radius = rospy.get_param("~robot_radius", 0.35)
+        self.safety_margin = rospy.get_param("~safety_margin", 0.12)
         self.stop_width = rospy.get_param("~stop_width", 0.4)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
+        self.traj_check_step = max(1, int(rospy.get_param("~traj_check_step", 2)))
+        self.max_obstacle_points = max(20, int(rospy.get_param("~max_obstacle_points", 300)))
         self.block_on_count = rospy.get_param("~block_on_count", 2)
         self.block_off_count = rospy.get_param("~block_off_count", 3)
-        self.obstacle_near = False
+        self.emergency_blocked = False
         self._blk_on = 0
         self._blk_off = 0
+        self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
+
+        # ===== Drivable area grid =====
+        self.grid_resolution = None
+        self.grid_width = 0
+        self.grid_height = 0
+        self.grid_origin_x = 0.0
+        self.grid_origin_y = 0.0
+        self.grid_data = None
 
         # ===== Rotate-only mode =====
         self.rotate_only_deg = rospy.get_param("~rotate_only_deg", 80.0)
@@ -122,9 +146,12 @@ class DWAControl:
 
         # ===== ROS I/O =====
         self.sub_path = rospy.Subscriber('/astar/path', Path, self.path_callback)
-        self.sub_pose = rospy.Subscriber('lio_localizer/odometry/optimization', Odometry, self.pose_callback)
+        self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        self.sub_grid = None
+        if self.use_drivable_grid:
+            self.sub_grid = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=5)
 
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.target_pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
@@ -136,36 +163,58 @@ class DWAControl:
     def cloud_callback(self, msg):
         try:
             near = False
+            obs = []
             half_w = 0.5 * self.stop_width
+            influence_sq = self.obstacle_influence_distance * self.obstacle_influence_distance
+            stop_sq = self.emergency_stop_distance * self.emergency_stop_distance
             i = 0
             for pt in point_cloud2.read_points(msg, field_names=('x','y','z'), skip_nans=True):
                 i += 1
                 if self.cloud_downsample > 1 and (i % self.cloud_downsample != 0):
                     continue
                 x, y, z = pt
-                if x <= 0.0:
-                    continue
                 if z < self.min_z or z > self.max_z:
                     continue
-                if abs(y) > half_w:
+                d2 = x * x + y * y
+                if d2 > influence_sq:
                     continue
-                if (x*x + y*y) <= (self.stop_distance * self.stop_distance):
+                obs.append((x, y))
+                if x <= 0.0 or abs(y) > half_w:
+                    continue
+                if d2 <= stop_sq:
                     near = True
-                    break
+
+            if obs:
+                step = max(1, len(obs) // self.max_obstacle_points)
+                self.obstacle_local_points = np.array(obs[::step], dtype=np.float32)
+            else:
+                self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
+
             if near:
                 self._blk_on += 1
                 self._blk_off = 0
             else:
                 self._blk_off += 1
                 self._blk_on = 0
-            if not self.obstacle_near and self._blk_on >= self.block_on_count:
-                self.obstacle_near = True
-                rospy.logwarn("Obstacle CLOSE: stopping (<= %.2fm)", self.stop_distance)
-            elif self.obstacle_near and self._blk_off >= self.block_off_count:
-                self.obstacle_near = False
-                rospy.loginfo("Obstacle cleared: resuming")
+            if not self.emergency_blocked and self._blk_on >= self.block_on_count:
+                self.emergency_blocked = True
+                rospy.logwarn("Emergency STOP: obstacle <= %.2fm", self.emergency_stop_distance)
+            elif self.emergency_blocked and self._blk_off >= self.block_off_count:
+                self.emergency_blocked = False
+                rospy.loginfo("Emergency STOP cleared")
         except Exception as e:
             rospy.logwarn("cloud_callback error: %s", str(e))
+
+    def drivable_grid_callback(self, msg):
+        try:
+            self.grid_resolution = float(msg.info.resolution)
+            self.grid_width = int(msg.info.width)
+            self.grid_height = int(msg.info.height)
+            self.grid_origin_x = float(msg.info.origin.position.x)
+            self.grid_origin_y = float(msg.info.origin.position.y)
+            self.grid_data = msg.data
+        except Exception as e:
+            rospy.logwarn("drivable_grid_callback error: %s", str(e))
 
     # ------------------------------- rotate-only --------------------------------
     def rotate_only_enter(self, cur_yaw, desired_yaw):
@@ -385,6 +434,60 @@ class DWAControl:
             t += self.dt
         return trajectory
 
+    def _is_xy_drivable(self, x, y):
+        if not self.use_drivable_grid:
+            return True
+        if self.grid_data is None or self.grid_width <= 0 or self.grid_height <= 0:
+            return True
+
+        gx = int(math.floor((x - self.grid_origin_x) / self.grid_resolution))
+        gy = int(math.floor((y - self.grid_origin_y) / self.grid_resolution))
+        if gx < 0 or gy < 0 or gx >= self.grid_width or gy >= self.grid_height:
+            return False
+        idx = gy * self.grid_width + gx
+        occ = self.grid_data[idx]
+        if occ < 0:
+            return (not self.grid_unknown_is_occupied)
+        # drivable area builder marks drivable as 0
+        return occ == 0
+
+    def _trajectory_in_drivable_area(self, traj):
+        if not self.use_drivable_grid:
+            return True
+        for row in traj[1::self.traj_check_step]:
+            if not self._is_xy_drivable(float(row[0]), float(row[1])):
+                return False
+        return True
+
+    def _obstacle_cost_for_trajectory(self, traj, x_now):
+        obs = self.obstacle_local_points
+        if obs.shape[0] == 0:
+            return 0.0, False
+
+        c = math.cos(x_now[2])
+        s = math.sin(x_now[2])
+        min_dist = float("inf")
+        collision_dist = self.robot_radius + self.safety_margin
+
+        for row in traj[1::self.traj_check_step]:
+            dx = float(row[0]) - x_now[0]
+            dy = float(row[1]) - x_now[1]
+            lx = c * dx + s * dy
+            ly = -s * dx + c * dy
+            diff = obs - np.array([lx, ly], dtype=np.float32)
+            d2 = float(np.min(np.sum(diff * diff, axis=1)))
+            d = math.sqrt(d2)
+            if d < min_dist:
+                min_dist = d
+            if min_dist <= collision_dist:
+                return float("inf"), True
+
+        if not math.isfinite(min_dist) or min_dist >= self.obstacle_influence_distance:
+            return 0.0, False
+
+        clearance = max(0.05, min_dist - collision_dist)
+        return self.obstacle_cost_gain / clearance, False
+
     def calc_control_and_trajectory(self, x, dw, goal_xy, t_hat):
         x_init = x[:]
         min_cost = float("inf")
@@ -392,6 +495,7 @@ class DWAControl:
         best_trajectory = np.array([x])
         gx, gy = goal_xy
         t_hat = np.array(t_hat)
+        found_valid = False
 
         for v in np.arange(dw[0], dw[1], self.v_resolution):
             for y in np.arange(dw[2], dw[3], self.yaw_rate_resolution):
@@ -401,6 +505,8 @@ class DWAControl:
                     continue
 
                 traj = self.predict_trajectory(x_init, v, y)
+                if not self._trajectory_in_drivable_area(traj):
+                    continue
 
                 # 1) 타깃 점(target_xy) 기준 heading 오차
                 dx_t = gx - traj[-1, 0]
@@ -430,17 +536,24 @@ class DWAControl:
                 lat_pred = abs(float(np.dot(move_vec, normal)))
                 lateral_cost = self.lateral_cost_gain * (lat_pred ** 2)
 
+                # 5) obstacle cost
+                obstacle_cost, collision = self._obstacle_cost_for_trajectory(traj, x)
+                if collision:
+                    continue
+
                 # 최종 cost
                 final_cost = (
                     to_goal_cost +
                     target_cost +
                     speed_cost +
                     progress_penalty +
-                    lateral_cost -
+                    lateral_cost +
+                    obstacle_cost -
                     progress_reward
                 )
 
                 if final_cost <= min_cost:
+                    found_valid = True
                     min_cost = final_cost
                     best_u = [v, y]
                     best_trajectory = traj
@@ -449,6 +562,8 @@ class DWAControl:
                         abs(x[3]) < self.robot_stuck_flag_cons):
                         best_u[1] = -self.max_delta_yaw_rate
 
+        if not found_valid:
+            return [0.0, 0.0], np.array([x])
         return best_u, best_trajectory
 
     # --------------------------------- helpers -----------------------------------
@@ -523,7 +638,12 @@ class DWAControl:
         self.cmd_vel_pub.publish(cmd)
 
     def run(self):
-        rospy.loginfo("DWA node (s-tracking) started")
+        rospy.loginfo(
+            "DWA node started | pose_topic=%s, drivable_grid=%s, obstacle_avoid=on, emergency_stop=%.2fm",
+            self.pose_topic,
+            "on" if self.use_drivable_grid else "off",
+            self.emergency_stop_distance,
+        )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
              self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation),
@@ -531,8 +651,8 @@ class DWAControl:
         rate = rospy.Rate(1.0 / self.dt)
 
         while not rospy.is_shutdown():
-            # obstacle stop (block forward when not rotating-only)
-            if self.obstacle_near and not self._rot_mode:
+            # emergency stop only (avoidance is handled in DWA cost)
+            if self.emergency_blocked and not self._rot_mode:
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue

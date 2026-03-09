@@ -1,12 +1,50 @@
 <launch>
 
     <arg name="project" default="lio_sam"/>
+    <arg name="enable_drivable_area" default="true"/>
+    <arg name="enable_drivable_area_2d_editor" default="false"/>
+    <arg name="enable_map_sync" default="true"/>
+    <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
+    <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/test"/>
+    <arg name="enable_trajectory_export" default="true"/>
+    <arg name="trajectory_export_output_csv" default="$(find astar_map)/map/auto_trajectory_wgs84.csv"/>
+    <arg name="trajectory_export_output_osm" default="$(find astar_map)/map/test_trajectory.osm"/>
+    <arg name="trajectory_export_auto_write" default="false"/>
+    <arg name="trajectory_export_save_on_shutdown" default="true"/>
+    <arg name="trajectory_export_publish_reload" default="false"/>
     
     <!-- Parameters -->
     <rosparam file="$(find lio_sam)/config/params-robot.yaml" command="load" />
 
     <!--- LOAM -->
     <include file="$(find lio_sam)/launch/include/module_loam.launch" />
+
+    <!--- Drivable area from LIO-SAM odometry -->
+    <include file="$(find lio_sam)/launch/include/module_drivable_area.launch">
+      <arg name="enable" value="$(arg enable_drivable_area)"/>
+    </include>
+
+    <!-- Optional 2D editor window for drivable area (click/drag add-erase on top view) -->
+    <include file="$(find lio_sam)/launch/include/module_drivable_area_2d_editor.launch">
+      <arg name="enable" value="$(arg enable_drivable_area_2d_editor)"/>
+    </include>
+
+    <!--- Auto export LIO-SAM path to CSV/OSM (for A* map update pipeline) -->
+    <include file="$(find lio_sam)/launch/include/module_trajectory_export.launch">
+      <arg name="enable" value="$(arg enable_trajectory_export)"/>
+      <arg name="output_csv" value="$(arg trajectory_export_output_csv)"/>
+      <arg name="output_osm" value="$(arg trajectory_export_output_osm)"/>
+      <arg name="auto_write" value="$(arg trajectory_export_auto_write)"/>
+      <arg name="save_on_shutdown" value="$(arg trajectory_export_save_on_shutdown)"/>
+      <arg name="publish_reload" value="$(arg trajectory_export_publish_reload)"/>
+    </include>
+
+    <!--- Sync saved LIO-SAM PCD map to lio_localizer map folder on shutdown -->
+    <include file="$(find lio_sam)/launch/include/module_map_sync.launch">
+      <arg name="enable" value="$(arg enable_map_sync)"/>
+      <arg name="source_dir" value="$(arg map_sync_source_dir)"/>
+      <arg name="destination_dir" value="$(arg map_sync_destination_dir)"/>
+    </include>
 
     <!--- Robot State TF -->
     <!-- <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" /> -->
