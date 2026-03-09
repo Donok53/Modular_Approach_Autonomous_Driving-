@@ -2,6 +2,7 @@
   <arg name="use_lio_sam" default="false"/>
   <arg name="enable_localizer_drivable_area" default="true"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
+  <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="use_drivable_grid" default="true"/>
@@ -15,6 +16,7 @@
   <group if="$(arg use_lio_sam)">
     <include file="$(find lio_sam)/launch/run-robot.launch">
       <arg name="enable_drivable_area" value="true"/>
+      <arg name="enable_drivable_area_2d_editor" value="$(arg enable_lio_sam_drivable_area_2d_editor)"/>
     </include>
   </group>
   <group unless="$(arg use_lio_sam)">

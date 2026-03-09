@@ -20,7 +20,13 @@ class TrajectoryOsmExporter:
         self.write_period_s = max(0.2, float(rospy.get_param("~write_period_s", 2.0)))
         self.min_points = max(2, int(rospy.get_param("~min_points", 5)))
         self.min_step_m = max(0.0, float(rospy.get_param("~min_step_m", 0.25)))
+        self.max_step_m = max(0.0, float(rospy.get_param("~max_step_m", 4.0)))
         self.max_points = max(self.min_points, int(rospy.get_param("~max_points", 50000)))
+        # Some upstream path topics occasionally replay the whole prefix repeatedly
+        # (e.g. p0,p1,p0,p1,p2,...) which creates radial false edges in OSM.
+        self.replay_filter_enable = bool(rospy.get_param("~replay_filter_enable", True))
+        self.replay_match_m = max(0.01, float(rospy.get_param("~replay_match_m", 0.5)))
+        self.replay_min_resets = max(2, int(rospy.get_param("~replay_min_resets", 8)))
         self.auto_write = bool(rospy.get_param("~auto_write", True))
         self.save_on_shutdown = bool(rospy.get_param("~save_on_shutdown", True))
         self.manual_save_topic = rospy.get_param("~manual_save_topic", "/lio_sam/trajectory_export/save")
@@ -70,8 +76,7 @@ class TrajectoryOsmExporter:
         return r * math.sqrt(x * x + y * y)
 
     def _extract_points(self, msg):
-        pts = []
-        last = None
+        raw = []
         for ps in msg.poses:
             lat = float(ps.pose.position.x)
             lon = float(ps.pose.position.y)
@@ -79,14 +84,62 @@ class TrajectoryOsmExporter:
                 continue
             if lat < -90.0 or lat > 90.0 or lon < -180.0 or lon > 180.0:
                 continue
+            raw.append((lat, lon))
+
+        if not raw:
+            return []
+
+        points = self._collapse_replayed_prefix(raw)
+
+        pts = []
+        last = None
+        for lat, lon in points:
             if last is not None and self.min_step_m > 0.0:
-                if self._ll_dist_m(last[0], last[1], lat, lon) < self.min_step_m:
+                step = self._ll_dist_m(last[0], last[1], lat, lon)
+                if self.max_step_m > 0.0 and step > self.max_step_m:
+                    continue
+                if step < self.min_step_m:
                     continue
             pts.append((lat, lon))
             last = (lat, lon)
             if len(pts) >= self.max_points:
                 break
         return pts
+
+    def _collapse_replayed_prefix(self, points):
+        if (not self.replay_filter_enable) or len(points) < self.min_points:
+            return points
+
+        start = points[0]
+        cur = []
+        segments = []
+        reset_count = 0
+        for p in points:
+            if cur and self._ll_dist_m(start[0], start[1], p[0], p[1]) <= self.replay_match_m:
+                if len(cur) >= 2:
+                    segments.append(cur)
+                    cur = [p]
+                    reset_count += 1
+                    continue
+            cur.append(p)
+        if cur:
+            segments.append(cur)
+
+        if reset_count < self.replay_min_resets or len(segments) <= 1:
+            return points
+
+        best = max(segments, key=len)
+        if len(best) < self.min_points:
+            return points
+
+        rospy.logwarn_throttle(
+            2.0,
+            "trajectory_osm_exporter: replayed-prefix pattern detected (raw=%d, resets=%d) -> collapsed to %d points",
+            len(points),
+            reset_count,
+            len(best),
+        )
+        return best
 
     @staticmethod
     def _signature(pts):

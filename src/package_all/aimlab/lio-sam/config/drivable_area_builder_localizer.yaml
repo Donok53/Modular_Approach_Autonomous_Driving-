@@ -20,7 +20,7 @@ use_local_slope_model: false
 use_adaptive_ground_reference: false
 
 # Manual editing
-edit_brush_radius_m: 1.00
+edit_brush_radius_m: 0.35
 manual_edit_enforce_ground_filter: false
 use_clicked_point: true
 clicked_point_topic: /clicked_point
