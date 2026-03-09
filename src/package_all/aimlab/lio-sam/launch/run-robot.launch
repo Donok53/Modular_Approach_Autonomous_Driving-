@@ -6,6 +6,9 @@
     <arg name="enable_map_sync" default="true"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
     <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/test"/>
+    <arg name="map_sync_astar_ref_enable" default="true"/>
+    <arg name="map_sync_astar_ref_source_file" default="map_reference_coordinate.csv"/>
+    <arg name="map_sync_astar_ref_destination_file" default="$(find astar_map)/map/map_reference_coordinate.csv"/>
     <arg name="enable_trajectory_export" default="true"/>
     <arg name="trajectory_export_output_csv" default="$(find astar_map)/map/auto_trajectory_wgs84.csv"/>
     <arg name="trajectory_export_output_osm" default="$(find astar_map)/map/test_trajectory.osm"/>
@@ -44,6 +47,9 @@
       <arg name="enable" value="$(arg enable_map_sync)"/>
       <arg name="source_dir" value="$(arg map_sync_source_dir)"/>
       <arg name="destination_dir" value="$(arg map_sync_destination_dir)"/>
+      <arg name="sync_astar_ref" value="$(arg map_sync_astar_ref_enable)"/>
+      <arg name="source_ref_file" value="$(arg map_sync_astar_ref_source_file)"/>
+      <arg name="astar_ref_destination_file" value="$(arg map_sync_astar_ref_destination_file)"/>
     </include>
 
     <!--- Robot State TF -->

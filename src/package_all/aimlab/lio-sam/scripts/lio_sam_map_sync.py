@@ -15,6 +15,14 @@ class LioSamMapSync:
         self.destination_dir = os.path.expanduser(
             rospy.get_param("~destination_dir", "~/code/Modular_Approach_Autonomous_Driving-/src/package_all/aimlab/lio-localizer/map/test")
         )
+        self.sync_astar_ref = bool(rospy.get_param("~sync_astar_ref", True))
+        self.source_ref_file = rospy.get_param("~source_ref_file", "map_reference_coordinate.csv")
+        self.astar_ref_destination_file = os.path.expanduser(
+            rospy.get_param(
+                "~astar_ref_destination_file",
+                "~/code/Modular_Approach_Autonomous_Driving-/src/package_all/aimlab/astar_map/map/map_reference_coordinate.csv",
+            )
+        )
         self.wait_timeout_s = max(0.0, float(rospy.get_param("~wait_timeout_s", 120.0)))
         self.poll_period_s = max(0.05, float(rospy.get_param("~poll_period_s", 0.5)))
         self.stable_checks = max(1, int(rospy.get_param("~stable_checks", 3)))
@@ -127,11 +135,27 @@ class LioSamMapSync:
         if self.delete_extra:
             removed = self._delete_extras(self.source_dir, self.destination_dir)
 
+        astar_ref_synced = False
+        if self.sync_astar_ref:
+            src_ref_path = os.path.join(self.source_dir, self.source_ref_file)
+            dst_ref_path = self.astar_ref_destination_file
+            if os.path.isfile(src_ref_path):
+                os.makedirs(os.path.dirname(dst_ref_path) or ".", exist_ok=True)
+                shutil.copy2(src_ref_path, dst_ref_path)
+                astar_ref_synced = True
+            else:
+                rospy.logwarn(
+                    "lio_sam_map_sync (%s): source ref csv missing: %s",
+                    reason,
+                    src_ref_path,
+                )
+
         rospy.loginfo(
-            "lio_sam_map_sync completed (%s): copied=%d removed=%d src=%s dst=%s",
+            "lio_sam_map_sync completed (%s): copied=%d removed=%d ref_synced=%s src=%s dst=%s",
             reason,
             copied,
             removed,
+            str(astar_ref_synced),
             self.source_dir,
             self.destination_dir,
         )
