@@ -19,12 +19,10 @@
   <arg name="use_free_area_goal" default="true"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
   <arg name="enable_graph_planner" default="false"/>
-  <arg name="enable_parking_controller" default="false"/>
   <arg name="use_auto_osm" default="false"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
 
-  <!-- 1) Localization -->
   <group if="$(arg use_lio_sam)">
     <include file="$(find lio_sam)/launch/run-robot.launch">
       <arg name="enable_drivable_area" value="true"/>
@@ -38,7 +36,6 @@
     </include>
   </group>
 
-  <!-- 2) Global path (A*) -->
   <group if="$(eval arg('enable_graph_planner') == 'true' and arg('use_auto_osm') == 'true')">
     <include file="$(find astar_map)/launch/astar_map.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
@@ -52,59 +49,22 @@
     </include>
   </group>
 
-  <!-- 3) DWA: /cmd_vel → /cmd_vel_nav (remap은 include '밖'에서 적용해야 유효) -->
-  <group>
-    <!-- 절대/상대 토픽 모두 잡기 -->
-    <remap from="/cmd_vel" to="/cmd_vel_nav"/>
-    <remap from="cmd_vel"  to="/cmd_vel_nav"/>
-    <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
-      <arg name="pose_topic" value="$(arg pose_topic)"/>
-      <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
-      <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
-      <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
-      <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
-      <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
-      <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
-      <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
-      <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
-      <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
-      <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
-      <arg name="local_path_topic" value="$(arg local_path_topic)"/>
-      <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
-      <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
-      <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
-    </include>
-  </group>
+  <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
+    <arg name="pose_topic" value="$(arg pose_topic)"/>
+    <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
+    <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+    <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+    <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
+    <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
+    <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+    <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
+    <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+    <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+    <arg name="local_path_topic" value="$(arg local_path_topic)"/>
+    <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+    <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
+    <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
+  </include>
 
-  <!-- 4) 주차 슬롯 점유 판단 -->
-  <include file="$(find parking_occupancy)/launch/parking_occupancy.launch"/>
-  <!-- include 이후 오버라이드 -->
-  <rosparam ns="parking_occupancy">
-    single_slot_force_free: true
-  </rosparam>
-
-  <!-- 5) 도착 판정(외부 단일 노드) -->
-  <node pkg="parking_executor" type="arrive_monitor.py" name="arrive_monitor_main" output="screen">
-    <param name="path_topic"    value="$(arg local_path_topic)"/>
-    <param name="frame_id"      value="map"/>
-    <param name="pos_tol"       value="0.6"/>
-    <param name="yaw_tol_deg"   value="20"/>
-    <param name="hold_s"        value="0.5"/>
-    <!-- arrive_monitor가 rosout 기반 Goal 감지를 지원한다면 필요시 사용
-    <param name="rosout_goal_regex" value="Goal reached!"/>
-    -->
-  </node>
-
-  <!-- 6) AutoPark: twist_mux + parking_controller만 실행
-         (DWA/점유/도착모니터는 여기서 중복 실행하지 않음)
-         핵심: twist_mux 출력 /cmd_vel_out → 베이스 입력 /cmd_vel 로 remap -->
-  <group>
-    <remap from="/cmd_vel_out" to="/cmd_vel"/>
-    <include file="$(find parking_executor)/launch/parking_autopark.launch">
-      <arg name="start_dwa"            value="false"/>
-      <arg name="start_occupancy"      value="false"/>
-      <arg name="start_arrive_monitor" value="false"/>
-      <arg name="start_parking_controller" value="$(arg enable_parking_controller)"/>
-    </include>
-  </group>
 </launch>
