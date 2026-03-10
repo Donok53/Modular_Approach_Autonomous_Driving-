@@ -3,6 +3,7 @@
   <arg name="start_dwa"            default="true"/>
   <arg name="start_occupancy"      default="true"/>
   <arg name="start_arrive_monitor" default="true"/>
+  <arg name="start_parking_controller" default="true"/>
 
   <!-- ===== (선택) 내부 DWA 실행 ===== -->
   <group if="$(arg start_dwa)">
@@ -40,8 +41,10 @@
        cmd_vel_out=/cmd_vel_park, cmd_vel_nav_in=/cmd_vel_nav
        activate_topic=/arrive_monitor/arrived, rate=20Hz,
        gains/limits/tolerances 모두 내부 기본값 사용 -->
+  <group if="$(arg start_parking_controller)">
   <node pkg="parking_executor" type="parking_controller.py" name="parking_controller" output="screen">
     <!-- ⚠ 필요 시 한 줄만 추가: 점유 모듈이 TF를 'parking_slot_0'로 줄 때 -->
     <!-- <param name="slot_frame" value="parking_slot_0"/> -->
   </node>
+  </group>
 </launch>
