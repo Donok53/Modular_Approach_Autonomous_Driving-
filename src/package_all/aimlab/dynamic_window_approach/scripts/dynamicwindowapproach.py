@@ -87,6 +87,7 @@ class DWAControl:
         self.obstacle_influence_distance = rospy.get_param("~obstacle_influence_distance", 1.8)
         self.robot_radius = rospy.get_param("~robot_radius", 0.35)
         self.safety_margin = rospy.get_param("~safety_margin", 0.12)
+        self.use_pointcloud_obstacle_cost = bool(rospy.get_param("~use_pointcloud_obstacle_cost", False))
         self.stop_width = rospy.get_param("~stop_width", 0.4)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
@@ -594,6 +595,8 @@ class DWAControl:
         return True
 
     def _obstacle_cost_for_trajectory(self, traj, x_now):
+        if not self.use_pointcloud_obstacle_cost:
+            return 0.0, False
         obs = self.obstacle_local_points
         if obs.shape[0] == 0:
             return 0.0, False
