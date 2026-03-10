@@ -88,6 +88,16 @@ class DWAControl:
         self.robot_radius = rospy.get_param("~robot_radius", 0.35)
         self.safety_margin = rospy.get_param("~safety_margin", 0.12)
         self.use_pointcloud_obstacle_cost = bool(rospy.get_param("~use_pointcloud_obstacle_cost", False))
+        self.obstacle_collision_radius = max(
+            0.05, float(rospy.get_param("~obstacle_collision_radius", 0.22))
+        )
+        self.obstacle_consider_side_m = max(
+            0.2, float(rospy.get_param("~obstacle_consider_side_m", 1.1))
+        )
+        self.obstacle_consider_back_m = float(rospy.get_param("~obstacle_consider_back_m", -0.15))
+        self.obstacle_ignore_traj_steps = max(
+            0, int(rospy.get_param("~obstacle_ignore_traj_steps", 3))
+        )
         self.stop_width = rospy.get_param("~stop_width", 0.4)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
@@ -226,6 +236,8 @@ class DWAControl:
                     continue
                 d2 = x * x + y * y
                 if d2 > influence_sq:
+                    continue
+                if x < self.obstacle_consider_back_m or abs(y) > self.obstacle_consider_side_m:
                     continue
                 obs.append((x, y))
                 if x <= 0.0 or abs(y) > half_w:
@@ -604,9 +616,13 @@ class DWAControl:
         c = math.cos(x_now[2])
         s = math.sin(x_now[2])
         min_dist = float("inf")
-        collision_dist = self.robot_radius + self.safety_margin
+        collision_dist = self.obstacle_collision_radius + self.safety_margin
+        start_idx = min(len(traj) - 1, 1 + self.obstacle_ignore_traj_steps)
+        rows = traj[start_idx::self.traj_check_step]
+        if len(rows) == 0:
+            rows = traj[1::self.traj_check_step]
 
-        for row in traj[1::self.traj_check_step]:
+        for row in rows:
             dx = float(row[0]) - x_now[0]
             dy = float(row[1]) - x_now[1]
             lx = c * dx + s * dy
