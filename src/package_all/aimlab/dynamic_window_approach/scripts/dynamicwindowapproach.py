@@ -157,6 +157,10 @@ class DWAControl:
         self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.02)
         self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.20)
         self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 0.8)
+        self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.45)
+        self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 3.0)
+        self.cruise_lat_err_m = rospy.get_param("~cruise_lat_err_m", 0.15)
+        self.cruise_max_yaw_rate = math.radians(rospy.get_param("~cruise_max_yaw_rate_deg", 20.0))
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
@@ -944,6 +948,14 @@ class DWAControl:
                 and u_cmd[0] < self.min_forward_cmd
             ):
                 u_cmd[0] = min(v_cap, self.min_forward_cmd)
+
+            if (
+                min(arc_rem, dist_to_goal) > self.cruise_distance_m
+                and lat_err < self.cruise_lat_err_m
+                and abs(u_cmd[1]) < self.cruise_max_yaw_rate
+                and u_cmd[0] > 0.0
+            ):
+                u_cmd[0] = min(v_cap, max(u_cmd[0], self.cruise_min_speed))
 
             if abs(u_cmd[0]) < self.forward_motion_deadband:
                 if abs(u[0]) < self.forward_motion_deadband and abs(u[1]) < math.radians(1.0):
