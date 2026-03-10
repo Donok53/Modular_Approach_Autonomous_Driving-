@@ -74,6 +74,9 @@ class DWAControl:
         self.use_dynamic_risk_grid = bool(rospy.get_param("~use_dynamic_risk_grid", True))
         self.risk_unknown_is_occupied = bool(rospy.get_param("~risk_unknown_is_occupied", False))
         self.risk_occupied_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
+        self.debug_stop_logging = bool(rospy.get_param("~debug_stop_logging", True))
+        self.debug_dwa_stats = bool(rospy.get_param("~debug_dwa_stats", True))
+        self.stop_log_period_s = max(0.2, float(rospy.get_param("~stop_log_period_s", 1.0)))
 
         # ===== Obstacle handling (avoid + emergency stop) =====
         self.cloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
@@ -165,6 +168,15 @@ class DWAControl:
 
         self.reach_goal_flag = False
         self.prev_goal_flag = False
+        self._last_nav_reason = None
+        self._last_nav_log_sec = 0.0
+        self._last_eval_stats = {
+            "sampled": 0,
+            "skip_spin": 0,
+            "skip_grid": 0,
+            "collision": 0,
+            "valid": 0,
+        }
 
         # ===== State =====
         self.current_pose = Odometry()
@@ -267,6 +279,20 @@ class DWAControl:
         self.behavior_stop = bool(msg.stop)
         self.behavior_speed_limit = max(0.0, float(msg.speed_limit))
         self.behavior_reason = str(msg.reason)
+
+    def _log_nav_reason(self, reason, msg, warn=False):
+        if not self.debug_stop_logging:
+            return
+        now_sec = rospy.Time.now().to_sec()
+        if reason == self._last_nav_reason and (now_sec - self._last_nav_log_sec) < self.stop_log_period_s:
+            return
+        self._last_nav_reason = reason
+        self._last_nav_log_sec = now_sec
+        text = "[nav_reason] %s | %s" % (reason, msg)
+        if warn:
+            rospy.logwarn(text)
+        else:
+            rospy.loginfo(text)
 
     # ------------------------------- rotate-only --------------------------------
     def rotate_only_enter(self, cur_yaw, desired_yaw):
@@ -604,16 +630,26 @@ class DWAControl:
         gx, gy = goal_xy
         t_hat = np.array(t_hat)
         found_valid = False
+        stats = {
+            "sampled": 0,
+            "skip_spin": 0,
+            "skip_grid": 0,
+            "collision": 0,
+            "valid": 0,
+        }
 
         for v in np.arange(dw[0], dw[1], self.v_resolution):
             for y in np.arange(dw[2], dw[3], self.yaw_rate_resolution):
+                stats["sampled"] += 1
 
                 # 거의 제자리 회전(v ≈ 0, yawrate는 큰 경우) 후보는 아예 무시
                 if abs(v) < 0.03 and abs(y) > math.radians(10.0):
+                    stats["skip_spin"] += 1
                     continue
 
                 traj = self.predict_trajectory(x_init, v, y)
                 if not self._trajectory_in_drivable_area(traj):
+                    stats["skip_grid"] += 1
                     continue
 
                 # 1) 타깃 점(target_xy) 기준 heading 오차
@@ -647,7 +683,9 @@ class DWAControl:
                 # 5) obstacle cost
                 obstacle_cost, collision = self._obstacle_cost_for_trajectory(traj, x)
                 if collision:
+                    stats["collision"] += 1
                     continue
+                stats["valid"] += 1
 
                 # 최종 cost
                 final_cost = (
@@ -670,6 +708,7 @@ class DWAControl:
                         abs(x[3]) < self.robot_stuck_flag_cons):
                         best_u[1] = -self.max_delta_yaw_rate
 
+        self._last_eval_stats = stats
         if not found_valid:
             return [0.0, 0.0], np.array([x])
         return best_u, best_trajectory
@@ -767,17 +806,34 @@ class DWAControl:
 
             # emergency stop only (avoidance is handled in DWA cost)
             if self.emergency_blocked and not self._rot_mode:
+                self._log_nav_reason("stop_emergency", "front obstacle stop active", warn=True)
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
 
             # behavior-layer hard stop
             if self.behavior_stop and not self._rot_mode:
+                self._log_nav_reason(
+                    "stop_behavior",
+                    "reason=%s speed_limit=%.2f" % (self.behavior_reason, self.behavior_speed_limit),
+                    warn=True,
+                )
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
 
             if not self.path_pts:
+                local_age = (rospy.Time.now() - self.local_path_stamp).to_sec() if self.local_path_stamp.to_sec() > 0.0 else -1.0
+                self._log_nav_reason(
+                    "stop_no_path",
+                    "active=%s local_age=%.2fs global_pts=%d local_pts=%d" % (
+                        self.active_path_source,
+                        local_age,
+                        len(self.global_path_msg.poses) if self.global_path_msg else 0,
+                        len(self.local_path_msg.poses) if self.local_path_msg else 0,
+                    ),
+                    warn=True,
+                )
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -791,6 +847,7 @@ class DWAControl:
             s_proj, lat_err, target_xy, t_hat, at_goal, dist_to_goal, arc_rem = \
                 self._update_progress_and_target(px, py, yaw)
             if s_proj is None:
+                self._log_nav_reason("stop_no_target", "failed to compute target from current path", warn=True)
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -803,6 +860,10 @@ class DWAControl:
             self.prev_goal_flag = self.reach_goal_flag
             self.reach_goal_flag = at_goal
             if self.reach_goal_flag:
+                self._log_nav_reason(
+                    "goal_reached",
+                    "dist=%.2f arc=%.2f lat=%.2f" % (dist_to_goal, arc_rem, lat_err),
+                )
                 self.publish_drive([0.0, 0.0])
                 if not self.prev_goal_flag:
                     rospy.loginfo("Goal reached!")
@@ -825,6 +886,10 @@ class DWAControl:
             if self._rot_mode:
                 u_rot, done = self.rotate_only_step(yaw)
                 if not done:
+                    self._log_nav_reason(
+                        "rotate_only",
+                        "target=%.1fdeg" % math.degrees(self._rot_yaw_target),
+                    )
                     x = self.moving(x, u_rot)
                     self.publish_drive(u_rot)
                     rate.sleep()
@@ -862,7 +927,43 @@ class DWAControl:
                 u_cmd[0] = min(v_cap, self.min_forward_cmd)
 
             if abs(u_cmd[0]) < self.forward_motion_deadband:
+                if abs(u[0]) < self.forward_motion_deadband and abs(u[1]) < math.radians(1.0):
+                    st = self._last_eval_stats
+                    self._log_nav_reason(
+                        "stop_no_valid_traj",
+                        "dist=%.2f arc=%.2f lat=%.2f sampled=%d valid=%d skip_grid=%d collision=%d" % (
+                            dist_to_goal,
+                            arc_rem,
+                            lat_err,
+                            st.get("sampled", 0),
+                            st.get("valid", 0),
+                            st.get("skip_grid", 0),
+                            st.get("collision", 0),
+                        ),
+                        warn=True,
+                    )
+                elif abs(u[0]) > 0.0:
+                    self._log_nav_reason(
+                        "stop_deadband",
+                        "raw_v=%.3f dist=%.2f arc=%.2f v_cap=%.2f" % (
+                            u[0],
+                            dist_to_goal,
+                            arc_rem,
+                            v_cap,
+                        ),
+                    )
                 u_cmd[0] = 0.0
+            else:
+                self._log_nav_reason(
+                    "tracking",
+                    "cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f" % (
+                        u_cmd[0],
+                        u_cmd[1],
+                        dist_to_goal,
+                        arc_rem,
+                        lat_err,
+                    ),
+                )
 
             self.publish_drive(u_cmd)
             rate.sleep()

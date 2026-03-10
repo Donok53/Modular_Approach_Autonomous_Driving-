@@ -17,6 +17,9 @@
     <arg name="direct_goal_topic" default="/move_base_simple/goal"/>
     <arg name="goal_tolerance_m" default="0.35"/>
     <arg name="snap_search_radius_cells" default="30"/>
+    <arg name="debug_stop_logging" default="true"/>
+    <arg name="debug_dwa_stats" default="true"/>
+    <arg name="stop_log_period_s" default="1.0"/>
 
     <group if="$(arg enable_cloud_tracker)">
         <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
@@ -61,6 +64,9 @@
         <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
         <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
         <param name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
+        <param name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
+        <param name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
+        <param name="stop_log_period_s" value="$(arg stop_log_period_s)"/>
     </node>
 
 </launch>

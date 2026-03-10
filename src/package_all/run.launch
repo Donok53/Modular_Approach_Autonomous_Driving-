@@ -19,6 +19,9 @@
   <arg name="use_free_area_goal" default="true"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
   <arg name="enable_graph_planner" default="false"/>
+  <arg name="debug_stop_logging" default="true"/>
+  <arg name="debug_dwa_stats" default="true"/>
+  <arg name="stop_log_period_s" default="1.0"/>
   <arg name="use_auto_osm" default="false"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
@@ -65,6 +68,9 @@
     <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
+    <arg name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
+    <arg name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
+    <arg name="stop_log_period_s" value="$(arg stop_log_period_s)"/>
   </include>
 
 </launch>
