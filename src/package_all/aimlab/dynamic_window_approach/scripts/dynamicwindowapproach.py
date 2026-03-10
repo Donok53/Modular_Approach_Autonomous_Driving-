@@ -51,7 +51,7 @@ class DWAControl:
 
         # ===== Costs =====
         self.to_goal_cost_gain = 0.15
-        self.speed_cost_gain = 0.6
+        self.speed_cost_gain = rospy.get_param("~speed_cost_gain", 1.8)
         self.progress_cost_gain = rospy.get_param("~progress_cost_gain", 2.0)
         self.lateral_cost_gain  = rospy.get_param("~lateral_cost_gain", 6.0)
         self.target_cost_gain   = rospy.get_param("~target_cost_gain", 2.0)
@@ -157,10 +157,10 @@ class DWAControl:
         self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.02)
         self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.20)
         self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 0.8)
-        self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.45)
-        self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 3.0)
-        self.cruise_lat_err_m = rospy.get_param("~cruise_lat_err_m", 0.15)
-        self.cruise_max_yaw_rate = math.radians(rospy.get_param("~cruise_max_yaw_rate_deg", 20.0))
+        self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.55)
+        self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 2.5)
+        self.cruise_lat_err_m = rospy.get_param("~cruise_lat_err_m", 0.25)
+        self.cruise_max_yaw_rate = math.radians(rospy.get_param("~cruise_max_yaw_rate_deg", 45.0))
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
