@@ -38,11 +38,11 @@ def angdiff(a, b):
 class DWAControl:
     def __init__(self):
         # ===== Dynamics / Sampling =====
-        self.max_speed = 0.75
+        self.max_speed = 0.90
         self.min_speed = float(rospy.get_param("~min_speed", 0.0))
         self.low_speed = 0.35
         self.max_yaw_rate = math.radians(180.0)
-        self.max_accel = float(rospy.get_param("~max_accel", 0.30))
+        self.max_accel = float(rospy.get_param("~max_accel", 0.35))
         self.max_delta_yaw_rate = math.radians(450.0)
         self.v_resolution = 0.00125
         self.yaw_rate_resolution = math.radians(5.0)
@@ -151,11 +151,11 @@ class DWAControl:
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
         self.final_speed_k = rospy.get_param("~final_speed_k", 0.6)
-        self.final_speed_min = rospy.get_param("~final_speed_min", 0.18)
+        self.final_speed_min = rospy.get_param("~final_speed_min", 0.20)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
         self.near_goal_no_rotate_m = rospy.get_param("~near_goal_no_rotate_m", 1.0)
         self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.02)
-        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.16)
+        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.18)
         self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 1.2)
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
