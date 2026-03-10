@@ -16,6 +16,10 @@ class ConstrainedLocalReplanner:
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
         self.dynamic_risk_grid_topic = rospy.get_param("~dynamic_risk_grid_topic", "/planning/dynamic_risk_grid")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
+        self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
+        self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
+        self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
+        self.snap_search_radius_cells = max(1, int(rospy.get_param("~snap_search_radius_cells", 30)))
 
         self.lookahead_m = max(2.0, float(rospy.get_param("~lookahead_m", 10.0)))
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
@@ -31,20 +35,26 @@ class ConstrainedLocalReplanner:
         self.global_path = None
         self.drivable_grid = None
         self.risk_grid = None
+        self.direct_goal = None
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
         self.sub_risk = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=3)
+        self.sub_direct_goal = None
+        if self.use_direct_goal:
+            self.sub_direct_goal = rospy.Subscriber(self.direct_goal_topic, PoseStamped, self.direct_goal_callback, queue_size=2)
 
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
-            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s",
+            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s direct_goal=%s(%s)",
             self.global_path_topic,
             self.drivable_grid_topic,
             self.dynamic_risk_grid_topic,
             self.local_path_topic,
+            "on" if self.use_direct_goal else "off",
+            self.direct_goal_topic,
         )
 
     def odom_callback(self, msg):
@@ -61,6 +71,15 @@ class ConstrainedLocalReplanner:
 
     def risk_grid_callback(self, msg):
         self.risk_grid = msg
+
+    def direct_goal_callback(self, msg):
+        self.direct_goal = msg
+        rospy.loginfo(
+            "constrained_local_replanner: direct goal set (%.2f, %.2f) frame=%s",
+            float(msg.pose.position.x),
+            float(msg.pose.position.y),
+            msg.header.frame_id if msg.header.frame_id else "map",
+        )
 
     @staticmethod
     def _path_points(path):
@@ -106,6 +125,12 @@ class ConstrainedLocalReplanner:
     def _in_bounds(g, gx, gy):
         return 0 <= gx < int(g.info.width) and 0 <= gy < int(g.info.height)
 
+    @staticmethod
+    def _in_bounds_blocked(blocked, gx, gy):
+        h = len(blocked)
+        w = len(blocked[0]) if h > 0 else 0
+        return 0 <= gx < w and 0 <= gy < h
+
     def _is_blocked_cell(self, dg, rg, gx, gy):
         if not self._in_bounds(dg, gx, gy):
             return True
@@ -150,6 +175,37 @@ class ConstrainedLocalReplanner:
                         if 0 <= nx < w and 0 <= ny < h:
                             out[ny][nx] = True
         return out
+
+    def _nearest_free_cell(self, blocked, cell):
+        cx, cy = cell
+        if self._in_bounds_blocked(blocked, cx, cy) and not blocked[cy][cx]:
+            return (cx, cy)
+
+        best = None
+        best_d2 = float("inf")
+        max_r = self.snap_search_radius_cells
+        for r in range(1, max_r + 1):
+            found_this_ring = False
+            x0 = cx - r
+            x1 = cx + r
+            y0 = cy - r
+            y1 = cy + r
+            for gx in range(x0, x1 + 1):
+                for gy in range(y0, y1 + 1):
+                    if max(abs(gx - cx), abs(gy - cy)) != r:
+                        continue
+                    if not self._in_bounds_blocked(blocked, gx, gy):
+                        continue
+                    if blocked[gy][gx]:
+                        continue
+                    d2 = float((gx - cx) * (gx - cx) + (gy - cy) * (gy - cy))
+                    if d2 < best_d2:
+                        best_d2 = d2
+                        best = (gx, gy)
+                        found_this_ring = True
+            if found_this_ring:
+                return best
+        return None
 
     @staticmethod
     def _heur(a, b):
@@ -228,12 +284,78 @@ class ConstrainedLocalReplanner:
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
 
+    def _publish_world_path(self, world_points, frame_id, stamp):
+        out = Path()
+        out.header.stamp = stamp
+        out.header.frame_id = frame_id if frame_id else "map"
+        for x, y in world_points:
+            ps = PoseStamped()
+            ps.header = out.header
+            ps.pose.position.x = float(x)
+            ps.pose.position.y = float(y)
+            ps.pose.position.z = 0.0
+            ps.pose.orientation.w = 1.0
+            out.poses.append(ps)
+        if len(out.poses) >= 2:
+            self.pub_local_path.publish(out)
+
+    def _plan_direct_goal(self, dg, rg, stamp):
+        if self.direct_goal is None:
+            return False
+
+        start_xy = (self.odom_x, self.odom_y)
+        goal_xy = (
+            float(self.direct_goal.pose.position.x),
+            float(self.direct_goal.pose.position.y),
+        )
+        dist_to_goal = math.hypot(goal_xy[0] - start_xy[0], goal_xy[1] - start_xy[1])
+        if dist_to_goal <= self.goal_tolerance_m:
+            self._publish_world_path([start_xy, goal_xy], dg.header.frame_id, stamp)
+            return True
+
+        sx, sy = self._world_to_grid(dg, start_xy[0], start_xy[1])
+        gx, gy = self._world_to_grid(dg, goal_xy[0], goal_xy[1])
+
+        blocked = self._inflate_blocked(dg, rg)
+        start_cell = self._nearest_free_cell(blocked, (sx, sy))
+        goal_cell = self._nearest_free_cell(blocked, (gx, gy))
+        if start_cell is None or goal_cell is None:
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner: no free snapped cell for direct goal (start=%s goal=%s)",
+                str((sx, sy)),
+                str((gx, gy)),
+            )
+            return True
+
+        path = self._astar(blocked, start_cell, goal_cell)
+        if path is None:
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner: no direct-goal path (start=%s goal=%s snapped_start=%s snapped_goal=%s)",
+                str((sx, sy)),
+                str((gx, gy)),
+                str(start_cell),
+                str(goal_cell),
+            )
+            return True
+
+        self._publish_local_path(path, dg, stamp)
+        return True
+
     def on_timer(self, _evt):
         try:
-            if (not self.have_odom) or self.global_path is None or len(self.global_path.poses) < 2 or self.drivable_grid is None:
+            if (not self.have_odom) or self.drivable_grid is None:
                 return
             dg = self.drivable_grid
             rg = self.risk_grid
+            stamp = rospy.Time.now()
+
+            if self.use_direct_goal and self._plan_direct_goal(dg, rg, stamp):
+                return
+
+            if self.global_path is None or len(self.global_path.poses) < 2:
+                return
             pts = self._path_points(self.global_path)
             i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
             ig = self._accum_distance(pts, i0, self.lookahead_m)
@@ -244,11 +366,28 @@ class ConstrainedLocalReplanner:
             gx, gy = self._world_to_grid(dg, goal_xy[0], goal_xy[1])
 
             blocked = self._inflate_blocked(dg, rg)
-            path = self._astar(blocked, (sx, sy), (gx, gy))
-            if path is None:
-                rospy.logwarn_throttle(1.0, "constrained_local_replanner: no local path (start=%s goal=%s)", str((sx, sy)), str((gx, gy)))
+            start_cell = self._nearest_free_cell(blocked, (sx, sy))
+            goal_cell = self._nearest_free_cell(blocked, (gx, gy))
+            if start_cell is None or goal_cell is None:
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: no local path snap cell (start=%s goal=%s)",
+                    str((sx, sy)),
+                    str((gx, gy)),
+                )
                 return
-            self._publish_local_path(path, dg, rospy.Time.now())
+            path = self._astar(blocked, start_cell, goal_cell)
+            if path is None:
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: no local path (start=%s goal=%s snapped_start=%s snapped_goal=%s)",
+                    str((sx, sy)),
+                    str((gx, gy)),
+                    str(start_cell),
+                    str(goal_cell),
+                )
+                return
+            self._publish_local_path(path, dg, stamp)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))
 

@@ -16,6 +16,8 @@
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
+  <arg name="use_free_area_goal" default="true"/>
+  <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
   <arg name="use_auto_osm" default="false"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
@@ -67,6 +69,8 @@
       <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+      <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
+      <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
     </include>
   </group>
 
@@ -79,7 +83,7 @@
 
   <!-- 5) 도착 판정(외부 단일 노드) -->
   <node pkg="parking_executor" type="arrive_monitor.py" name="arrive_monitor_main" output="screen">
-    <param name="path_topic"    value="/astar/path"/>
+    <param name="path_topic"    value="$(arg local_path_topic)"/>
     <param name="frame_id"      value="map"/>
     <param name="pos_tol"       value="0.6"/>
     <param name="yaw_tol_deg"   value="20"/>
