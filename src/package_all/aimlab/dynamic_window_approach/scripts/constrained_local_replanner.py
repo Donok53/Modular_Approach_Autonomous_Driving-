@@ -20,6 +20,7 @@ class ConstrainedLocalReplanner:
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
         self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
         self.snap_search_radius_cells = max(1, int(rospy.get_param("~snap_search_radius_cells", 30)))
+        self.allow_best_effort_path = bool(rospy.get_param("~allow_best_effort_path", True))
 
         self.lookahead_m = max(2.0, float(rospy.get_param("~lookahead_m", 10.0)))
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
@@ -211,7 +212,7 @@ class ConstrainedLocalReplanner:
     def _heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
 
-    def _astar(self, blocked, start, goal):
+    def _astar(self, blocked, start, goal, allow_best_effort=False):
         w = len(blocked[0]) if blocked else 0
         h = len(blocked)
         if w <= 0 or h <= 0:
@@ -231,14 +232,20 @@ class ConstrainedLocalReplanner:
         parent = {start: None}
         g_cost = {start: 0.0}
         expanded = 0
+        best = start
+        best_h = self._heur(start, goal)
 
         while pq:
             _, gc, cur = heapq.heappop(pq)
+            cur_h = self._heur(cur, goal)
+            if cur_h < best_h:
+                best_h = cur_h
+                best = cur
             if cur == goal:
                 break
             expanded += 1
             if expanded > self.max_expand:
-                return None
+                break
             cx, cy = cur
             for dx, dy in nbrs:
                 nx = cx + dx
@@ -257,7 +264,10 @@ class ConstrainedLocalReplanner:
                     heapq.heappush(pq, (f, ng, nb))
 
         if goal not in parent:
-            return None
+            if allow_best_effort and best in parent and best != start:
+                goal = best
+            else:
+                return None
         path = []
         cur = goal
         while cur is not None:
@@ -328,7 +338,12 @@ class ConstrainedLocalReplanner:
             )
             return True
 
-        path = self._astar(blocked, start_cell, goal_cell)
+        path = self._astar(
+            blocked,
+            start_cell,
+            goal_cell,
+            allow_best_effort=self.allow_best_effort_path,
+        )
         if path is None:
             rospy.logwarn_throttle(
                 1.0,
@@ -340,6 +355,13 @@ class ConstrainedLocalReplanner:
             )
             return True
 
+        if path[-1] != goal_cell:
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner: best-effort direct path only (snapped_goal=%s reached=%s)",
+                str(goal_cell),
+                str(path[-1]),
+            )
         self._publish_local_path(path, dg, stamp)
         return True
 
@@ -376,7 +398,12 @@ class ConstrainedLocalReplanner:
                     str((gx, gy)),
                 )
                 return
-            path = self._astar(blocked, start_cell, goal_cell)
+            path = self._astar(
+                blocked,
+                start_cell,
+                goal_cell,
+                allow_best_effort=self.allow_best_effort_path,
+            )
             if path is None:
                 rospy.logwarn_throttle(
                     1.0,
@@ -387,6 +414,13 @@ class ConstrainedLocalReplanner:
                     str(goal_cell),
                 )
                 return
+            if path[-1] != goal_cell:
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: best-effort local path only (snapped_goal=%s reached=%s)",
+                    str(goal_cell),
+                    str(path[-1]),
+                )
             self._publish_local_path(path, dg, stamp)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))

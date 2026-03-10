@@ -9,9 +9,10 @@ odom_topic: /lio_localizer/odometry/optimization
 
 grid_resolution_m: 0.20
 
-# Post-edit mode: don't auto-grow while localizing, user edits explicitly.
-auto_seed_from_odom: false
-force_trail_from_odom: false
+# Field-driving mode: keep expanding around the localized robot so free-area goals
+# can be reached without fully hand-painting the map first.
+auto_seed_from_odom: true
+force_trail_from_odom: true
 
 # Ground auto-filtering off in localizer edit mode (manual 2D correction workflow).
 use_ground_filter: false

@@ -87,6 +87,8 @@ class DWAControl:
         self.stop_width = rospy.get_param("~stop_width", 0.4)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
+        self.self_filter_radius_x = max(0.0, float(rospy.get_param("~self_filter_radius_x", 0.40)))
+        self.self_filter_radius_y = max(0.0, float(rospy.get_param("~self_filter_radius_y", 0.35)))
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
         self.traj_check_step = max(1, int(rospy.get_param("~traj_check_step", 2)))
         self.max_obstacle_points = max(20, int(rospy.get_param("~max_obstacle_points", 300)))
@@ -201,6 +203,8 @@ class DWAControl:
                 if self.cloud_downsample > 1 and (i % self.cloud_downsample != 0):
                     continue
                 x, y, z = pt
+                if abs(x) < self.self_filter_radius_x and abs(y) < self.self_filter_radius_y:
+                    continue
                 if z < self.min_z or z > self.max_z:
                     continue
                 d2 = x * x + y * y
