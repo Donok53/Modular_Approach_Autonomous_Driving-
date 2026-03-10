@@ -39,7 +39,7 @@ class DWAControl:
     def __init__(self):
         # ===== Dynamics / Sampling =====
         self.max_speed = 0.6
-        self.min_speed = -0.4          
+        self.min_speed = float(rospy.get_param("~min_speed", 0.0))
         self.low_speed = 0.3
         self.max_yaw_rate = math.radians(180.0)
         self.max_accel = 0.1
@@ -134,11 +134,15 @@ class DWAControl:
         # ===== Path tracking (s-based) =====
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.5)
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
-        self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.1)
+        self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
         self.final_speed_k = rospy.get_param("~final_speed_k", 0.6)
         self.final_speed_min = rospy.get_param("~final_speed_min", 0.12)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
+        self.near_goal_no_rotate_m = rospy.get_param("~near_goal_no_rotate_m", 1.0)
+        self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.015)
+        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.10)
+        self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 0.8)
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
@@ -809,7 +813,12 @@ class DWAControl:
             # if we're roughly aligned with path tangent (forward progress), avoid entering rotate-only
             heading_vec = np.array([math.cos(yaw), math.sin(yaw)])
             dot_forward = float(np.dot(heading_vec, np.array(t_hat)))
-            if (not self._rot_mode) and (err > self._ROT_HIGH) and (dot_forward < 0.2):
+            if (
+                (not self._rot_mode)
+                and (err > self._ROT_HIGH)
+                and (dot_forward < 0.2)
+                and (min(arc_rem, dist_to_goal) > self.near_goal_no_rotate_m)
+            ):
                 self.rotate_only_enter(yaw, desired)
             if self._rot_mode:
                 u_rot, done = self.rotate_only_step(yaw)
@@ -843,7 +852,14 @@ class DWAControl:
                 u_cmd[0] = -min(v_cap, max(0.0, -u_cmd[0]))
 
             # 너무 느리게 기어가면 노이즈만 생기니, 아주 작으면 그냥 0으로
-            if abs(u_cmd[0]) < 0.03:
+            if (
+                u_cmd[0] > self.forward_motion_deadband
+                and min(arc_rem, dist_to_goal) > self.min_forward_cmd_distance
+                and u_cmd[0] < self.min_forward_cmd
+            ):
+                u_cmd[0] = min(v_cap, self.min_forward_cmd)
+
+            if abs(u_cmd[0]) < self.forward_motion_deadband:
                 u_cmd[0] = 0.0
 
             self.publish_drive(u_cmd)

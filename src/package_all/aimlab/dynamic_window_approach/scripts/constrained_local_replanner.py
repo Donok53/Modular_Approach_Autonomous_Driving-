@@ -43,6 +43,7 @@ class ConstrainedLocalReplanner:
         self.drivable_grid = None
         self.risk_grid = None
         self.direct_goal = None
+        self.cached_direct_goal_cell = None
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
@@ -84,6 +85,7 @@ class ConstrainedLocalReplanner:
 
     def direct_goal_callback(self, msg):
         self.direct_goal = msg
+        self.cached_direct_goal_cell = None
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
@@ -219,6 +221,14 @@ class ConstrainedLocalReplanner:
             if found_this_ring:
                 return best
         return None
+
+    def _resolve_direct_goal_cell(self, blocked, raw_goal_cell):
+        if self.cached_direct_goal_cell is not None:
+            cgx, cgy = self.cached_direct_goal_cell
+            if self._in_bounds_blocked(blocked, cgx, cgy) and not blocked[cgy][cgx]:
+                return self.cached_direct_goal_cell
+        self.cached_direct_goal_cell = self._nearest_free_cell(blocked, raw_goal_cell)
+        return self.cached_direct_goal_cell
 
     @staticmethod
     def _heur(a, b):
@@ -372,7 +382,7 @@ class ConstrainedLocalReplanner:
 
         blocked = self._inflate_blocked(dg, rg)
         start_cell = self._nearest_free_cell(blocked, (sx, sy))
-        goal_cell = self._nearest_free_cell(blocked, (gx, gy))
+        goal_cell = self._resolve_direct_goal_cell(blocked, (gx, gy))
         if start_cell is None or goal_cell is None:
             rospy.logwarn_throttle(
                 1.0,
