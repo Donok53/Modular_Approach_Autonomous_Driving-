@@ -42,7 +42,7 @@ class DWAControl:
         self.min_speed = float(rospy.get_param("~min_speed", 0.0))
         self.low_speed = 0.3
         self.max_yaw_rate = math.radians(180.0)
-        self.max_accel = 0.1
+        self.max_accel = float(rospy.get_param("~max_accel", 0.25))
         self.max_delta_yaw_rate = math.radians(450.0)
         self.v_resolution = 0.00125
         self.yaw_rate_resolution = math.radians(5.0)
@@ -65,7 +65,7 @@ class DWAControl:
         self.pose_topic = rospy.get_param("~pose_topic", "/lio_sam/mapping/odometry")
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
-        self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 1.0))
+        self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
         self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
         self.use_drivable_grid = bool(rospy.get_param("~use_drivable_grid", True))
@@ -137,12 +137,12 @@ class DWAControl:
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
         self.final_speed_k = rospy.get_param("~final_speed_k", 0.6)
-        self.final_speed_min = rospy.get_param("~final_speed_min", 0.12)
+        self.final_speed_min = rospy.get_param("~final_speed_min", 0.16)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
         self.near_goal_no_rotate_m = rospy.get_param("~near_goal_no_rotate_m", 1.0)
-        self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.015)
-        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.10)
-        self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 0.8)
+        self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.02)
+        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.14)
+        self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 1.2)
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
@@ -304,10 +304,12 @@ class DWAControl:
         if not path_msg or not path_msg.poses:
             return None
         n = len(path_msg.poses)
-        p0 = path_msg.poses[0].pose.position
+        p0 = path_msg.poses[min(1, n - 1)].pose.position
+        p_mid = path_msg.poses[n // 2].pose.position
         p1 = path_msg.poses[-1].pose.position
         return (n,
                 round(p0.x, 3), round(p0.y, 3),
+                round(p_mid.x, 3), round(p_mid.y, 3),
                 round(p1.x, 3), round(p1.y, 3))
 
     def _rebuild_path_geometry(self):
