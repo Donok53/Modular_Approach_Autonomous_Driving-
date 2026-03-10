@@ -18,6 +18,7 @@
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_free_area_goal" default="true"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
+  <arg name="enable_graph_planner" default="false"/>
   <arg name="use_auto_osm" default="false"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
@@ -37,13 +38,13 @@
   </group>
 
   <!-- 2) Global path (A*) -->
-  <group if="$(arg use_auto_osm)">
+  <group if="$(eval arg('enable_graph_planner') == 'true' and arg('use_auto_osm') == 'true')">
     <include file="$(find astar_map)/launch/astar_map.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
       <arg name="osm_file" value="$(arg auto_osm_file)"/>
     </include>
   </group>
-  <group unless="$(arg use_auto_osm)">
+  <group if="$(eval arg('enable_graph_planner') == 'true' and arg('use_auto_osm') != 'true')">
     <include file="$(find astar_map)/launch/astar_map.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
       <arg name="osm_file" value="$(arg default_osm_file)"/>

@@ -6,10 +6,10 @@
     <arg name="enable_map_sync" default="true"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
     <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/test"/>
-    <arg name="map_sync_astar_ref_enable" default="true"/>
+    <arg name="map_sync_astar_ref_enable" default="false"/>
     <arg name="map_sync_astar_ref_source_file" default="map_reference_coordinate.csv"/>
     <arg name="map_sync_astar_ref_destination_file" default="$(find astar_map)/map/map_reference_coordinate.csv"/>
-    <arg name="enable_trajectory_export" default="true"/>
+    <arg name="enable_trajectory_export" default="false"/>
     <arg name="trajectory_export_output_csv" default="$(find astar_map)/map/auto_trajectory_wgs84.csv"/>
     <arg name="trajectory_export_output_osm" default="$(find astar_map)/map/test_trajectory.osm"/>
     <arg name="trajectory_export_auto_write" default="false"/>
