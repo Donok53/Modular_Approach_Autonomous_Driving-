@@ -21,6 +21,12 @@ class ConstrainedLocalReplanner:
         self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
         self.snap_search_radius_cells = max(1, int(rospy.get_param("~snap_search_radius_cells", 30)))
         self.allow_best_effort_path = bool(rospy.get_param("~allow_best_effort_path", True))
+        self.best_effort_improve_margin_cells = max(
+            0.0, float(rospy.get_param("~best_effort_improve_margin_cells", 2.0))
+        )
+        self.best_effort_update_period_s = max(
+            0.1, float(rospy.get_param("~best_effort_update_period_s", 1.5))
+        )
 
         self.lookahead_m = max(2.0, float(rospy.get_param("~lookahead_m", 10.0)))
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
@@ -37,6 +43,9 @@ class ConstrainedLocalReplanner:
         self.drivable_grid = None
         self.risk_grid = None
         self.direct_goal = None
+        self.last_published_goal_cell = None
+        self.last_published_end_cell = None
+        self.last_path_publish_sec = 0.0
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
@@ -75,6 +84,9 @@ class ConstrainedLocalReplanner:
 
     def direct_goal_callback(self, msg):
         self.direct_goal = msg
+        self.last_published_goal_cell = None
+        self.last_published_end_cell = None
+        self.last_path_publish_sec = 0.0
         rospy.loginfo(
             "constrained_local_replanner: direct goal set (%.2f, %.2f) frame=%s",
             float(msg.pose.position.x),
@@ -211,6 +223,38 @@ class ConstrainedLocalReplanner:
     @staticmethod
     def _heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
+
+    def _should_publish_path(self, goal_cell, path):
+        if not path:
+            return False
+        end_cell = path[-1]
+        if self.last_published_goal_cell != goal_cell:
+            return True
+
+        now_sec = rospy.Time.now().to_sec()
+        last_end = self.last_published_end_cell
+        if last_end is None:
+            return True
+
+        # Always accept a full path to the snapped goal.
+        if end_cell == goal_cell:
+            return True
+
+        old_dist = self._heur(last_end, goal_cell)
+        new_dist = self._heur(end_cell, goal_cell)
+
+        # Keep the previously published partial path unless the new one is
+        # meaningfully better or the hold period has elapsed.
+        if new_dist + self.best_effort_improve_margin_cells < old_dist:
+            return True
+        if (now_sec - self.last_path_publish_sec) >= self.best_effort_update_period_s and new_dist <= old_dist:
+            return True
+        return False
+
+    def _record_published_path(self, goal_cell, path):
+        self.last_published_goal_cell = goal_cell
+        self.last_published_end_cell = path[-1] if path else None
+        self.last_path_publish_sec = rospy.Time.now().to_sec()
 
     def _astar(self, blocked, start, goal, allow_best_effort=False):
         w = len(blocked[0]) if blocked else 0
@@ -355,6 +399,9 @@ class ConstrainedLocalReplanner:
             )
             return True
 
+        if not self._should_publish_path(goal_cell, path):
+            return True
+
         if path[-1] != goal_cell:
             rospy.logwarn_throttle(
                 1.0,
@@ -363,6 +410,7 @@ class ConstrainedLocalReplanner:
                 str(path[-1]),
             )
         self._publish_local_path(path, dg, stamp)
+        self._record_published_path(goal_cell, path)
         return True
 
     def on_timer(self, _evt):
@@ -414,6 +462,9 @@ class ConstrainedLocalReplanner:
                     str(goal_cell),
                 )
                 return
+            if not self._should_publish_path(goal_cell, path):
+                return
+
             if path[-1] != goal_cell:
                 rospy.logwarn_throttle(
                     1.0,
@@ -422,6 +473,7 @@ class ConstrainedLocalReplanner:
                     str(path[-1]),
                 )
             self._publish_local_path(path, dg, stamp)
+            self._record_published_path(goal_cell, path)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))
 
