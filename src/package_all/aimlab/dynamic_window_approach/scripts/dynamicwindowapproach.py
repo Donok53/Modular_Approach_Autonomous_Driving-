@@ -223,6 +223,8 @@ class DWAControl:
         self.behavior_stop = False
         self.behavior_speed_limit = self.max_speed
         self.behavior_reason = "clear"
+        self.cmd_publish_hz = max(5.0, float(rospy.get_param("~cmd_publish_hz", 20.0)))
+        self.last_cmd = Twist()
 
         # ===== ROS I/O =====
         self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
@@ -243,6 +245,10 @@ class DWAControl:
         self.current_pub = rospy.Publisher('visualization_marker_2', Marker, queue_size=10)
         self.trajectory_pub = rospy.Publisher('predicted_trajectory', Marker, queue_size=10)
         self.traj_info_pub = rospy.Publisher('/traj_info', Float32MultiArray, queue_size=10)
+        self.cmd_timer = rospy.Timer(rospy.Duration(1.0 / self.cmd_publish_hz), self._cmd_timer_callback)
+
+    def _cmd_timer_callback(self, _event):
+        self.cmd_vel_pub.publish(self.last_cmd)
 
     def _point_in_local_rect(self, x, y, half_length, half_width):
         return abs(x) <= half_length and abs(y) <= half_width
@@ -899,11 +905,12 @@ class DWAControl:
         cmd = Twist()
         cmd.linear.x = u[0]
         cmd.angular.z = u[1]
+        self.last_cmd = cmd
         self.cmd_vel_pub.publish(cmd)
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm",
+            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -913,6 +920,7 @@ class DWAControl:
             self.emergency_stop_distance,
             self.robot_length_m,
             self.robot_width_m,
+            self.cmd_publish_hz,
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
