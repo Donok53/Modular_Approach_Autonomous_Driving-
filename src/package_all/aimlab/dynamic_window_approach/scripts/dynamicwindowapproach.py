@@ -65,7 +65,11 @@ class DWAControl:
         self.pose_topic = rospy.get_param("~pose_topic", "/lio_sam/mapping/odometry")
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
+        self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
+        self.avoidance_path_timeout_s = float(
+            rospy.get_param("~avoidance_path_timeout_s", max(0.5, self.local_path_timeout_s))
+        )
         self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
         self.use_drivable_grid = bool(rospy.get_param("~use_drivable_grid", True))
@@ -213,6 +217,9 @@ class DWAControl:
         self.local_path_msg = None
         self.local_path_sig = None
         self.local_path_stamp = rospy.Time(0)
+        self.avoidance_path_msg = None
+        self.avoidance_path_sig = None
+        self.avoidance_path_stamp = rospy.Time(0)
         self.active_path_source = "none"
         self.path_msg = None
         self.path_sig = None
@@ -247,6 +254,12 @@ class DWAControl:
         # ===== ROS I/O =====
         self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
         self.sub_path_local = rospy.Subscriber(self.local_path_topic, Path, self.path_callback_local, queue_size=5)
+        self.sub_path_avoidance = rospy.Subscriber(
+            self.avoidance_path_topic,
+            Path,
+            self.path_callback_avoidance,
+            queue_size=5,
+        )
         self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
         self.sub_behavior = rospy.Subscriber(self.behavior_cmd_topic, BehaviorCommand, self.behavior_cmd_callback, queue_size=10)
@@ -499,8 +512,23 @@ class DWAControl:
         self.local_path_sig = self._path_signature(path_msg)
         self.local_path_stamp = rospy.Time.now()
 
+    def path_callback_avoidance(self, path_msg):
+        self.avoidance_path_msg = path_msg
+        self.avoidance_path_sig = self._path_signature(path_msg)
+        self.avoidance_path_stamp = rospy.Time.now()
+
     def _refresh_active_path(self):
         now = rospy.Time.now()
+        use_avoidance = (
+            self.avoidance_path_msg is not None
+            and len(self.avoidance_path_msg.poses) >= 2
+            and (now - self.avoidance_path_stamp).to_sec() <= self.avoidance_path_timeout_s
+        )
+        if use_avoidance:
+            if self.active_path_source != "avoidance" or self.path_sig != self.avoidance_path_sig:
+                self._activate_path(self.avoidance_path_msg, self.avoidance_path_sig, "avoidance")
+            return
+
         use_local = (
             self.local_path_msg is not None
             and len(self.local_path_msg.poses) >= 2
@@ -968,10 +996,11 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
+            self.avoidance_path_topic,
             self.behavior_cmd_topic,
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
