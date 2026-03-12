@@ -85,11 +85,21 @@ class DWAControl:
             rospy.get_param("~stop_distance", 0.6),
         )
         self.obstacle_influence_distance = rospy.get_param("~obstacle_influence_distance", 1.8)
-        self.robot_radius = rospy.get_param("~robot_radius", 0.35)
+        legacy_robot_radius = float(rospy.get_param("~robot_radius", 0.35))
+        self.robot_width_m = max(
+            0.05, float(rospy.get_param("~robot_width_m", 2.0 * legacy_robot_radius))
+        )
+        self.robot_length_m = max(
+            0.05, float(rospy.get_param("~robot_length_m", self.robot_width_m))
+        )
+        self.robot_half_width_m = 0.5 * self.robot_width_m
+        self.robot_half_length_m = 0.5 * self.robot_length_m
+        self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
+        self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.safety_margin = rospy.get_param("~safety_margin", 0.12)
         self.use_pointcloud_obstacle_cost = bool(rospy.get_param("~use_pointcloud_obstacle_cost", False))
         self.obstacle_collision_radius = max(
-            0.05, float(rospy.get_param("~obstacle_collision_radius", 0.22))
+            0.0, float(rospy.get_param("~obstacle_collision_radius", 0.0))
         )
         self.obstacle_consider_side_m = max(
             0.2, float(rospy.get_param("~obstacle_consider_side_m", 1.1))
@@ -98,11 +108,15 @@ class DWAControl:
         self.obstacle_ignore_traj_steps = max(
             0, int(rospy.get_param("~obstacle_ignore_traj_steps", 3))
         )
-        self.stop_width = rospy.get_param("~stop_width", 0.4)   # total width (|y|<=width/2)
+        self.stop_width = rospy.get_param("~stop_width", self.robot_width_m)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
-        self.self_filter_radius_x = max(0.0, float(rospy.get_param("~self_filter_radius_x", 0.40)))
-        self.self_filter_radius_y = max(0.0, float(rospy.get_param("~self_filter_radius_y", 0.35)))
+        self.self_filter_radius_x = max(
+            0.0, float(rospy.get_param("~self_filter_radius_x", self.robot_half_length_m))
+        )
+        self.self_filter_radius_y = max(
+            0.0, float(rospy.get_param("~self_filter_radius_y", self.robot_half_width_m))
+        )
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
         self.traj_check_step = max(1, int(rospy.get_param("~traj_check_step", 2)))
         self.max_obstacle_points = max(20, int(rospy.get_param("~max_obstacle_points", 300)))
@@ -112,6 +126,7 @@ class DWAControl:
         self._blk_on = 0
         self._blk_off = 0
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
+        self._footprint_sample_cache = {}
 
         # ===== Drivable area grid =====
         self.grid_resolution = None
@@ -220,21 +235,60 @@ class DWAControl:
         self.trajectory_pub = rospy.Publisher('predicted_trajectory', Marker, queue_size=10)
         self.traj_info_pub = rospy.Publisher('/traj_info', Float32MultiArray, queue_size=10)
 
+    def _point_in_local_rect(self, x, y, half_length, half_width):
+        return abs(x) <= half_length and abs(y) <= half_width
+
+    def _point_in_local_footprint(self, x, y, padding=0.0):
+        return self._point_in_local_rect(
+            x,
+            y,
+            self.robot_half_length_m + padding,
+            self.robot_half_width_m + padding,
+        )
+
+    def _rect_clearance_local(self, points_xy, padding=0.0):
+        if points_xy.shape[0] == 0:
+            return np.empty((0,), dtype=np.float32)
+        half_length = self.robot_half_length_m + padding
+        half_width = self.robot_half_width_m + padding
+        dx = np.maximum(np.abs(points_xy[:, 0]) - half_length, 0.0)
+        dy = np.maximum(np.abs(points_xy[:, 1]) - half_width, 0.0)
+        return np.hypot(dx, dy)
+
+    def _footprint_sample_offsets(self, step_m):
+        step = max(0.05, float(step_m))
+        key = round(step, 3)
+        cached = self._footprint_sample_cache.get(key)
+        if cached is not None:
+            return cached
+
+        half_length = self.robot_half_length_m + self.footprint_padding_m
+        half_width = self.robot_half_width_m + self.footprint_padding_m
+        xs = np.arange(-half_length, half_length + 0.5 * step, step, dtype=np.float32)
+        ys = np.arange(-half_width, half_width + 0.5 * step, step, dtype=np.float32)
+        if xs.size == 0 or abs(xs[-1] - half_length) > 1e-6:
+            xs = np.append(xs, np.float32(half_length))
+        if ys.size == 0 or abs(ys[-1] - half_width) > 1e-6:
+            ys = np.append(ys, np.float32(half_width))
+        grid_x, grid_y = np.meshgrid(xs, ys)
+        offsets = np.column_stack((grid_x.ravel(), grid_y.ravel())).astype(np.float32)
+        self._footprint_sample_cache[key] = offsets
+        return offsets
+
     # ------------------------------- obstacle stop -------------------------------
     def cloud_callback(self, msg):
         try:
             near = False
             obs = []
-            half_w = 0.5 * self.stop_width
             influence_sq = self.obstacle_influence_distance * self.obstacle_influence_distance
-            stop_sq = self.emergency_stop_distance * self.emergency_stop_distance
+            stop_half_w = 0.5 * max(self.stop_width, self.robot_width_m) + self.footprint_padding_m
             i = 0
             for pt in point_cloud2.read_points(msg, field_names=('x','y','z'), skip_nans=True):
                 i += 1
                 if self.cloud_downsample > 1 and (i % self.cloud_downsample != 0):
                     continue
                 x, y, z = pt
-                if abs(x) < self.self_filter_radius_x and abs(y) < self.self_filter_radius_y:
+                if self._point_in_local_rect(x, y, self.self_filter_radius_x, self.self_filter_radius_y):
                     continue
                 if z < self.min_z or z > self.max_z:
                     continue
@@ -244,9 +298,10 @@ class DWAControl:
                 if x < self.obstacle_consider_back_m or abs(y) > self.obstacle_consider_side_m:
                     continue
                 obs.append((x, y))
-                if x <= 0.0 or abs(y) > half_w:
+                front_clearance = x - (self.robot_half_length_m + self.footprint_padding_m)
+                if front_clearance < 0.0 or abs(y) > stop_half_w:
                     continue
-                if d2 <= stop_sq:
+                if front_clearance <= self.emergency_stop_distance:
                     near = True
 
             if obs:
@@ -603,11 +658,24 @@ class DWAControl:
         return True
 
     def _trajectory_in_drivable_area(self, traj):
-        if not self.use_drivable_grid:
+        if not self.use_drivable_grid and not self.use_dynamic_risk_grid:
             return True
+        res_candidates = []
+        if self.grid_resolution is not None and self.grid_resolution > 0.0:
+            res_candidates.append(float(self.grid_resolution))
+        if self.risk_grid_resolution is not None and self.risk_grid_resolution > 0.0:
+            res_candidates.append(float(self.risk_grid_resolution))
+        sample_step = min(res_candidates) if res_candidates else 0.1
+        offsets = self._footprint_sample_offsets(sample_step)
         for row in traj[1::self.traj_check_step]:
-            if not self._is_xy_drivable(float(row[0]), float(row[1])):
-                return False
+            yaw = float(row[2])
+            c = math.cos(yaw)
+            s = math.sin(yaw)
+            for ox, oy in offsets:
+                wx = float(row[0]) + c * float(ox) - s * float(oy)
+                wy = float(row[1]) + s * float(ox) + c * float(oy)
+                if not self._is_xy_drivable(wx, wy):
+                    return False
         return True
 
     def _obstacle_cost_for_trajectory(self, traj, x_now):
@@ -617,32 +685,36 @@ class DWAControl:
         if obs.shape[0] == 0:
             return 0.0, False
 
-        c = math.cos(x_now[2])
-        s = math.sin(x_now[2])
         min_dist = float("inf")
-        collision_dist = self.obstacle_collision_radius + self.safety_margin
+        collision_padding = self.footprint_padding_m + self.safety_margin + self.obstacle_collision_radius
         start_idx = min(len(traj) - 1, 1 + self.obstacle_ignore_traj_steps)
         rows = traj[start_idx::self.traj_check_step]
         if len(rows) == 0:
             rows = traj[1::self.traj_check_step]
 
         for row in rows:
-            dx = float(row[0]) - x_now[0]
-            dy = float(row[1]) - x_now[1]
-            lx = c * dx + s * dy
-            ly = -s * dx + c * dy
-            diff = obs - np.array([lx, ly], dtype=np.float32)
-            d2 = float(np.min(np.sum(diff * diff, axis=1)))
-            d = math.sqrt(d2)
-            if d < min_dist:
-                min_dist = d
-            if min_dist <= collision_dist:
+            dx = float(row[0]) - float(x_now[0])
+            dy = float(row[1]) - float(x_now[1])
+            heading = float(row[2]) - float(x_now[2])
+            c = math.cos(heading)
+            s = math.sin(heading)
+            rel = obs - np.array([dx, dy], dtype=np.float32)
+            footprint_frame = np.empty_like(rel)
+            footprint_frame[:, 0] = c * rel[:, 0] + s * rel[:, 1]
+            footprint_frame[:, 1] = -s * rel[:, 0] + c * rel[:, 1]
+            clearances = self._rect_clearance_local(footprint_frame, padding=collision_padding)
+            if clearances.size == 0:
+                continue
+            row_min = float(np.min(clearances))
+            if row_min < min_dist:
+                min_dist = row_min
+            if row_min <= 0.0:
                 return float("inf"), True
 
         if not math.isfinite(min_dist) or min_dist >= self.obstacle_influence_distance:
             return 0.0, False
 
-        clearance = max(0.05, min_dist - collision_dist)
+        clearance = max(0.05, min_dist)
         return self.obstacle_cost_gain / clearance, False
 
     def calc_control_and_trajectory(self, x, dw, goal_xy, t_hat):
@@ -809,7 +881,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm",
+            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -817,6 +889,8 @@ class DWAControl:
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
             self.emergency_stop_distance,
+            self.robot_length_m,
+            self.robot_width_m,
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,

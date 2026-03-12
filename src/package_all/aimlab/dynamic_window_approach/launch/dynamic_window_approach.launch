@@ -18,7 +18,10 @@
     <arg name="goal_tolerance_m" default="0.35"/>
     <arg name="snap_search_radius_cells" default="30"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
-    <arg name="obstacle_collision_radius" default="0.22"/>
+    <arg name="obstacle_collision_radius" default="0.0"/>
+    <arg name="robot_width_m" default="0.60"/>
+    <arg name="robot_length_m" default="0.55"/>
+    <arg name="footprint_padding_m" default="0.0"/>
     <arg name="obstacle_consider_side_m" default="1.10"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -55,6 +58,9 @@
             <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
             <param name="goal_tolerance_m" value="$(arg goal_tolerance_m)"/>
             <param name="snap_search_radius_cells" value="$(arg snap_search_radius_cells)"/>
+            <param name="robot_width_m" value="$(arg robot_width_m)"/>
+            <param name="robot_length_m" value="$(arg robot_length_m)"/>
+            <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         </node>
     </group>
 
@@ -71,6 +77,9 @@
         <param name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
         <param name="use_pointcloud_obstacle_cost" value="$(arg use_pointcloud_obstacle_cost)"/>
         <param name="obstacle_collision_radius" value="$(arg obstacle_collision_radius)"/>
+        <param name="robot_width_m" value="$(arg robot_width_m)"/>
+        <param name="robot_length_m" value="$(arg robot_length_m)"/>
+        <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <param name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
         <param name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>

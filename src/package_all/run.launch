@@ -23,7 +23,10 @@
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
   <arg name="use_pointcloud_obstacle_cost" default="false"/>
-  <arg name="obstacle_collision_radius" default="0.22"/>
+  <arg name="obstacle_collision_radius" default="0.0"/>
+  <arg name="robot_width_m" default="0.60"/>
+  <arg name="robot_length_m" default="0.55"/>
+  <arg name="footprint_padding_m" default="0.0"/>
   <arg name="obstacle_consider_side_m" default="1.10"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -71,6 +74,9 @@
     <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
     <arg name="local_path_topic" value="$(arg local_path_topic)"/>
     <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+    <arg name="robot_width_m" value="$(arg robot_width_m)"/>
+    <arg name="robot_length_m" value="$(arg robot_length_m)"/>
+    <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
     <arg name="debug_stop_logging" value="$(arg debug_stop_logging)"/>

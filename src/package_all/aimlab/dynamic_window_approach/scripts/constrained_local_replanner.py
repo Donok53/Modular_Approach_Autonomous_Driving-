@@ -30,7 +30,14 @@ class ConstrainedLocalReplanner:
 
         self.lookahead_m = max(2.0, float(rospy.get_param("~lookahead_m", 10.0)))
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
-        self.robot_radius_m = max(0.1, float(rospy.get_param("~robot_radius_m", 0.45)))
+        legacy_robot_radius = max(0.05, float(rospy.get_param("~robot_radius_m", 0.45)))
+        self.robot_width_m = max(
+            0.05, float(rospy.get_param("~robot_width_m", 2.0 * legacy_robot_radius))
+        )
+        self.robot_length_m = max(
+            0.05, float(rospy.get_param("~robot_length_m", self.robot_width_m))
+        )
+        self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
@@ -59,13 +66,15 @@ class ConstrainedLocalReplanner:
 
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
-            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s direct_goal=%s(%s)",
+            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm",
             self.global_path_topic,
             self.drivable_grid_topic,
             self.dynamic_risk_grid_topic,
             self.local_path_topic,
             "on" if self.use_direct_goal else "off",
             self.direct_goal_topic,
+            self.robot_length_m,
+            self.robot_width_m,
         )
 
     def odom_callback(self, msg):
@@ -163,7 +172,12 @@ class ConstrainedLocalReplanner:
         w = int(dg.info.width)
         h = int(dg.info.height)
         res = float(dg.info.resolution)
-        inflate = max(1, int(math.ceil(self.robot_radius_m / max(1e-3, res))))
+        half_length_cells = max(
+            1, int(math.ceil((0.5 * self.robot_length_m + self.footprint_padding_m) / max(1e-3, res)))
+        )
+        half_width_cells = max(
+            1, int(math.ceil((0.5 * self.robot_width_m + self.footprint_padding_m) / max(1e-3, res)))
+        )
         base = [[False for _ in range(w)] for _ in range(h)]
         for y in range(h):
             row = y * w
@@ -176,15 +190,12 @@ class ConstrainedLocalReplanner:
                 base[y][x] = blocked
 
         out = [[False for _ in range(w)] for _ in range(h)]
-        rr = inflate * inflate
         for y in range(h):
             for x in range(w):
                 if not base[y][x]:
                     continue
-                for dx in range(-inflate, inflate + 1):
-                    for dy in range(-inflate, inflate + 1):
-                        if dx * dx + dy * dy > rr:
-                            continue
+                for dx in range(-half_length_cells, half_length_cells + 1):
+                    for dy in range(-half_width_cells, half_width_cells + 1):
                         nx = x + dx
                         ny = y + dy
                         if 0 <= nx < w and 0 <= ny < h:
