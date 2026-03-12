@@ -150,15 +150,24 @@ class DWAControl:
         self.rotate_ok_count = rospy.get_param("~rotate_ok_count", 3)
         self.rotate_max_spin_deg = rospy.get_param("~rotate_max_spin_deg", 420.0)
         self.rotate_max_time_s = rospy.get_param("~rotate_max_time_s", 6.0)
+        self.rotate_reentry_cooldown_s = max(
+            0.0, float(rospy.get_param("~rotate_reentry_cooldown_s", 2.5))
+        )
+        self.rotate_reentry_target_delta_deg = max(
+            0.0, float(rospy.get_param("~rotate_reentry_target_delta_deg", 12.0))
+        )
         self._ROT_HIGH = math.radians(self.rotate_only_deg)
         self._ROT_LOW  = math.radians(self.rotate_exit_deg)
         self._ROT_WMAX = math.radians(self.rotate_w_max_deg)
+        self._ROT_RETARGET = math.radians(self.rotate_reentry_target_delta_deg)
         self._rot_mode = False
         self._rot_yaw_target = None
         self._rot_prev_yaw = None
         self._rot_accum = 0.0
         self._rot_ok = 0
         self._rot_start_time = None
+        self._rot_cooldown_until = rospy.Time(0)
+        self._rot_last_timeout_target = None
 
         # ===== Path tracking (s-based) =====
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.5)
@@ -374,6 +383,7 @@ class DWAControl:
         self._rot_accum = 0.0
         self._rot_ok = 0
         self._rot_start_time = rospy.Time.now()
+        self._rot_cooldown_until = rospy.Time(0)
         rospy.loginfo("Rotate-only ENTER: target %.1f°", math.degrees(self._rot_yaw_target))
 
     def rotate_only_step(self, cur_yaw):
@@ -387,15 +397,27 @@ class DWAControl:
             self._rot_ok += 1
         else:
             self._rot_ok = 0
-        time_in = (rospy.Time.now() - self._rot_start_time).to_sec()
-        if (self._rot_ok >= self.rotate_ok_count or
-            self._rot_accum > math.radians(self.rotate_max_spin_deg) or
-            time_in > self.rotate_max_time_s):
+        now = rospy.Time.now()
+        time_in = (now - self._rot_start_time).to_sec()
+        exit_reason = None
+        if self._rot_ok >= self.rotate_ok_count:
+            exit_reason = "aligned"
+        elif self._rot_accum > math.radians(self.rotate_max_spin_deg):
+            exit_reason = "spin_limit"
+        elif time_in > self.rotate_max_time_s:
+            exit_reason = "timeout"
+        if exit_reason is not None:
             self._rot_mode = False
+            if exit_reason == "aligned":
+                self._rot_last_timeout_target = None
+                self._rot_cooldown_until = rospy.Time(0)
+            else:
+                self._rot_last_timeout_target = self._rot_yaw_target
+                self._rot_cooldown_until = now + rospy.Duration(self.rotate_reentry_cooldown_s)
             rospy.loginfo("Rotate-only EXIT: err=%.1f°, accum=%.1f°, t=%.1fs",
                           math.degrees(err), math.degrees(self._rot_accum), time_in)
-            return None, True
-        return u, False
+            return None, True, exit_reason
+        return u, False, None
 
     # ------------------------------ path handling --------------------------------
     def _path_signature(self, path_msg):
@@ -973,15 +995,21 @@ class DWAControl:
             # if we're roughly aligned with path tangent (forward progress), avoid entering rotate-only
             heading_vec = np.array([math.cos(yaw), math.sin(yaw)])
             dot_forward = float(np.dot(heading_vec, np.array(t_hat)))
+            rotate_cooldown_active = rospy.Time.now() < self._rot_cooldown_until
+            rotate_target_changed = (
+                self._rot_last_timeout_target is None or
+                abs(angdiff(desired, self._rot_last_timeout_target)) > self._ROT_RETARGET
+            )
             if (
                 (not self._rot_mode)
                 and (err > self._ROT_HIGH)
                 and (dot_forward < 0.2)
                 and (min(arc_rem, dist_to_goal) > self.near_goal_no_rotate_m)
+                and (not rotate_cooldown_active or rotate_target_changed)
             ):
                 self.rotate_only_enter(yaw, desired)
             if self._rot_mode:
-                u_rot, done = self.rotate_only_step(yaw)
+                u_rot, done, exit_reason = self.rotate_only_step(yaw)
                 if not done:
                     self._log_nav_reason(
                         "rotate_only",
@@ -991,6 +1019,14 @@ class DWAControl:
                     self.publish_drive(u_rot)
                     rate.sleep()
                     continue
+                if exit_reason in ("timeout", "spin_limit"):
+                    self._log_nav_reason(
+                        "rotate_cooldown",
+                        "skip re-entry for %.1fs after %s" % (
+                            self.rotate_reentry_cooldown_s,
+                            exit_reason,
+                        ),
+                    )
 
             # normal DWA towards target
             u, predicted = self.dwa_control(x, target_xy, t_hat, lat_err)
