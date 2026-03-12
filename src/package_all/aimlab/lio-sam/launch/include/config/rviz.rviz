@@ -64,6 +64,22 @@ Visualization Manager:
           Reference Frame: base_link
           Show Trail: false
           Value: true
+        - Alpha: 1
+          Class: rviz/RobotModel
+          Collision Enabled: false
+          Enabled: true
+          Links:
+            All Links Enabled: true
+            Expand Joint Details: false
+            Expand Link Details: false
+            Expand Tree: false
+            Link Tree Style: Links in Alphabetic Order
+          Name: Robot Model
+          Robot Description: robot_description
+          TF Prefix: ""
+          Update Interval: 0
+          Value: true
+          Visual Enabled: true
       Enabled: true
       Name: links
     - Class: rviz/Group

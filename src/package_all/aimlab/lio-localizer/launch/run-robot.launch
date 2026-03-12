@@ -25,6 +25,9 @@
       <arg name="enable" value="$(arg enable_drivable_area_2d_editor)"/>
       <arg name="odom_topic" value="/lio_localizer/odometry/optimization"/>
     </include>
+
+    <!-- Robot model for RViz -->
+    <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
     
     <!--- Run Rviz-->
     <include file="$(find lio_localizer)/launch/include/module_rviz.launch" />

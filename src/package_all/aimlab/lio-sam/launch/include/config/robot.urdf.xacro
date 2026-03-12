@@ -1,8 +1,23 @@
 <?xml version="1.0"?>
 <robot name="lio" xmlns:xacro="http://tixiaoshan.github.io/">
   <xacro:property name="PI" value="3.1415926535897931" />
+  <xacro:property name="robot_length_m" value="0.55" />
+  <xacro:property name="robot_width_m" value="0.60" />
+  <xacro:property name="robot_height_m" value="0.18" />
 
-  <link name="chassis_link"></link>
+  <material name="robot_body_blue">
+    <color rgba="0.10 0.45 0.85 0.65" />
+  </material>
+
+  <link name="chassis_link">
+    <visual>
+      <origin xyz="0 0 ${robot_height_m / 2.0}" rpy="0 0 0" />
+      <geometry>
+        <box size="${robot_length_m} ${robot_width_m} ${robot_height_m}" />
+      </geometry>
+      <material name="robot_body_blue" />
+    </visual>
+  </link>
 
   <link name="base_link"></link>
   <joint name="base_link_joint" type="fixed">
