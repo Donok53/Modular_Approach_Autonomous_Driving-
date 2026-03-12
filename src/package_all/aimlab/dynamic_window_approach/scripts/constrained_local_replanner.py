@@ -20,6 +20,7 @@ class ConstrainedLocalReplanner:
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
         self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
         self.snap_search_radius_cells = max(1, int(rospy.get_param("~snap_search_radius_cells", 30)))
+        self.freeze_path_on_first_plan = bool(rospy.get_param("~freeze_path_on_first_plan", True))
         self.allow_best_effort_path = bool(rospy.get_param("~allow_best_effort_path", True))
         self.best_effort_improve_margin_cells = max(
             0.0, float(rospy.get_param("~best_effort_improve_margin_cells", 2.0))
@@ -51,6 +52,8 @@ class ConstrainedLocalReplanner:
         self.risk_grid = None
         self.direct_goal = None
         self.cached_direct_goal_cell = None
+        self.frozen_direct_goal_cell = None
+        self.frozen_direct_grid_path = None
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
@@ -66,7 +69,7 @@ class ConstrainedLocalReplanner:
 
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
-            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm",
+            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s",
             self.global_path_topic,
             self.drivable_grid_topic,
             self.dynamic_risk_grid_topic,
@@ -75,6 +78,7 @@ class ConstrainedLocalReplanner:
             self.direct_goal_topic,
             self.robot_length_m,
             self.robot_width_m,
+            "on" if self.freeze_path_on_first_plan else "off",
         )
 
     def odom_callback(self, msg):
@@ -95,6 +99,8 @@ class ConstrainedLocalReplanner:
     def direct_goal_callback(self, msg):
         self.direct_goal = msg
         self.cached_direct_goal_cell = None
+        self.frozen_direct_goal_cell = None
+        self.frozen_direct_grid_path = None
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
@@ -403,6 +409,14 @@ class ConstrainedLocalReplanner:
             )
             return True
 
+        if (
+            self.freeze_path_on_first_plan
+            and self.frozen_direct_goal_cell == goal_cell
+            and self.frozen_direct_grid_path
+        ):
+            self._publish_local_path(self.frozen_direct_grid_path, dg, stamp)
+            return True
+
         path = self._astar(
             blocked,
             start_cell,
@@ -429,6 +443,14 @@ class ConstrainedLocalReplanner:
                 "constrained_local_replanner: best-effort direct path only (snapped_goal=%s reached=%s)",
                 str(goal_cell),
                 str(path[-1]),
+            )
+        if self.freeze_path_on_first_plan:
+            self.frozen_direct_goal_cell = goal_cell
+            self.frozen_direct_grid_path = list(path)
+            rospy.loginfo(
+                "constrained_local_replanner: path frozen for goal=%s with %d cells",
+                str(goal_cell),
+                len(path),
             )
         self._publish_local_path(path, dg, stamp)
         self._record_published_path(goal_cell, path)

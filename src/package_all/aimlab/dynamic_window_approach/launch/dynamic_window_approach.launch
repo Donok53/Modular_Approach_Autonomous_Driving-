@@ -17,6 +17,7 @@
     <arg name="direct_goal_topic" default="/move_base_simple/goal"/>
     <arg name="goal_tolerance_m" default="0.35"/>
     <arg name="snap_search_radius_cells" default="30"/>
+    <arg name="freeze_path_on_first_plan" default="true"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
     <arg name="obstacle_collision_radius" default="0.0"/>
     <arg name="robot_width_m" default="0.60"/>
@@ -58,6 +59,7 @@
             <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
             <param name="goal_tolerance_m" value="$(arg goal_tolerance_m)"/>
             <param name="snap_search_radius_cells" value="$(arg snap_search_radius_cells)"/>
+            <param name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
             <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>

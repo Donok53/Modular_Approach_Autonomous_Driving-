@@ -18,6 +18,7 @@
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_free_area_goal" default="true"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
+  <arg name="freeze_path_on_first_plan" default="true"/>
   <arg name="enable_graph_planner" default="false"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
@@ -79,6 +80,7 @@
     <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
+    <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
     <arg name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
     <arg name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
     <arg name="stop_log_period_s" value="$(arg stop_log_period_s)"/>
