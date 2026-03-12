@@ -56,6 +56,12 @@ class ConstrainedLocalReplanner:
         self.obstacle_block_margin_m = max(
             0.05, float(rospy.get_param("~obstacle_block_margin_m", 0.35))
         )
+        self.avoidance_trigger_margin_m = max(
+            0.05, float(rospy.get_param("~avoidance_trigger_margin_m", 0.20))
+        )
+        self.avoidance_trigger_ahead_m = max(
+            1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
+        )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
         )
@@ -559,6 +565,55 @@ class ConstrainedLocalReplanner:
                 return True
         return False
 
+    @staticmethod
+    def _point_to_segment_distance_sq(px, py, x0, y0, x1, y1):
+        vx = x1 - x0
+        vy = y1 - y0
+        seg_len_sq = vx * vx + vy * vy
+        if seg_len_sq <= 1e-9:
+            dx = px - x0
+            dy = py - y0
+            return dx * dx + dy * dy
+        t = ((px - x0) * vx + (py - y0) * vy) / seg_len_sq
+        t = max(0.0, min(1.0, t))
+        proj_x = x0 + t * vx
+        proj_y = y0 + t * vy
+        dx = px - proj_x
+        dy = py - proj_y
+        return dx * dx + dy * dy
+
+    def _path_blocked_by_obstacles(self, path, dg, start_cell):
+        if not path or not self.obstacle_points_map:
+            return False
+
+        start_idx = self._nearest_path_cell_index(path, start_cell)
+        if start_idx >= len(path) - 1:
+            return False
+
+        world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
+        corridor_half = (
+            max(0.5 * self.robot_width_m, 0.5 * self.robot_length_m)
+            + self.footprint_padding_m
+            + self.obstacle_block_margin_m
+            + self.avoidance_trigger_margin_m
+        )
+        corridor_half_sq = corridor_half * corridor_half
+        remain_m = 0.0
+
+        for seg_idx in range(start_idx, len(world_path) - 1):
+            x0, y0 = world_path[seg_idx]
+            x1, y1 = world_path[seg_idx + 1]
+            seg_len = math.hypot(x1 - x0, y1 - y0)
+            if seg_len <= 1e-6:
+                continue
+            remain_m += seg_len
+            for ox, oy in self.obstacle_points_map:
+                if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
+                    return True
+            if remain_m >= self.avoidance_trigger_ahead_m:
+                break
+        return False
+
     def _update_avoidance_path(self, nominal_path, base_blocked, start_cell, goal_cell, dg, stamp, label):
         frame_id = dg.header.frame_id if dg.header.frame_id else "map"
         if not self.enable_avoidance_path or len(nominal_path) < 2:
@@ -570,7 +625,10 @@ class ConstrainedLocalReplanner:
             dg,
             keep_cells=(start_cell, goal_cell),
         )
-        if obstacle_count <= 0 or not self._path_blocked_ahead(nominal_path, dynamic_blocked, start_cell):
+        path_blocked = self._path_blocked_ahead(nominal_path, dynamic_blocked, start_cell)
+        if not path_blocked:
+            path_blocked = self._path_blocked_by_obstacles(nominal_path, dg, start_cell)
+        if obstacle_count <= 0 or not path_blocked:
             self._clear_avoidance_path(frame_id, stamp)
             return
 

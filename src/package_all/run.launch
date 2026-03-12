@@ -34,6 +34,9 @@
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.35"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
+  <arg name="avoidance_hard_stop_distance" default="0.20"/>
+  <arg name="avoidance_trigger_margin_m" default="0.20"/>
+  <arg name="avoidance_trigger_ahead_m" default="8.0"/>
   <arg name="obstacle_consider_side_m" default="1.10"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -88,6 +91,9 @@
     <arg name="path_tracking_only" value="$(arg path_tracking_only)"/>
     <arg name="path_tracking_speed_cap" value="$(arg path_tracking_speed_cap)"/>
     <arg name="path_tracking_steer_filter_gain" value="$(arg path_tracking_steer_filter_gain)"/>
+    <arg name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
+    <arg name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
+    <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
     <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>

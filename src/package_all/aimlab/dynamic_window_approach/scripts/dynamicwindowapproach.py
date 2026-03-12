@@ -88,6 +88,9 @@ class DWAControl:
             "~emergency_stop_distance",
             rospy.get_param("~stop_distance", 0.6),
         )
+        self.avoidance_hard_stop_distance = max(
+            0.05, float(rospy.get_param("~avoidance_hard_stop_distance", 0.20))
+        )
         self.obstacle_influence_distance = rospy.get_param("~obstacle_influence_distance", 1.8)
         legacy_robot_radius = float(rospy.get_param("~robot_radius", 0.35))
         self.robot_width_m = max(
@@ -129,6 +132,7 @@ class DWAControl:
         self.emergency_blocked = False
         self._blk_on = 0
         self._blk_off = 0
+        self.front_obstacle_clearance = float("inf")
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
 
@@ -326,6 +330,7 @@ class DWAControl:
         try:
             near = False
             obs = []
+            min_front_clearance = float("inf")
             influence_sq = self.obstacle_influence_distance * self.obstacle_influence_distance
             stop_half_w = 0.5 * max(self.stop_width, self.robot_width_m) + self.footprint_padding_m
             i = 0
@@ -345,6 +350,8 @@ class DWAControl:
                     continue
                 obs.append((x, y))
                 front_clearance = x - (self.robot_half_length_m + self.footprint_padding_m)
+                if abs(y) <= stop_half_w and front_clearance < min_front_clearance:
+                    min_front_clearance = front_clearance
                 if front_clearance < 0.0 or abs(y) > stop_half_w:
                     continue
                 if front_clearance <= self.emergency_stop_distance:
@@ -355,6 +362,7 @@ class DWAControl:
                 self.obstacle_local_points = np.array(obs[::step], dtype=np.float32)
             else:
                 self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
+            self.front_obstacle_clearance = min_front_clearance
 
             if near:
                 self._blk_on += 1
@@ -996,7 +1004,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -1005,6 +1013,7 @@ class DWAControl:
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
             self.emergency_stop_distance,
+            self.avoidance_hard_stop_distance,
             self.robot_length_m,
             self.robot_width_m,
             self.cmd_publish_hz,
@@ -1019,8 +1028,12 @@ class DWAControl:
         while not rospy.is_shutdown():
             self._refresh_active_path()
 
-            # emergency stop only (avoidance is handled in DWA cost)
-            if self.emergency_blocked and not self._rot_mode:
+            # emergency stop only (avoidance can proceed unless obstacle is critically close)
+            avoidance_can_continue = (
+                self.active_path_source == "avoidance"
+                and self.front_obstacle_clearance > self.avoidance_hard_stop_distance
+            )
+            if self.emergency_blocked and not self._rot_mode and not avoidance_can_continue:
                 self._log_nav_reason("stop_emergency", "front obstacle stop active", warn=True)
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
