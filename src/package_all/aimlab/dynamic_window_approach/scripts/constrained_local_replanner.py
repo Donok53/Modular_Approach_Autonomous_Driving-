@@ -21,6 +21,7 @@ class ConstrainedLocalReplanner:
         self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
         self.snap_search_radius_cells = max(1, int(rospy.get_param("~snap_search_radius_cells", 30)))
         self.freeze_path_on_first_plan = bool(rospy.get_param("~freeze_path_on_first_plan", True))
+        self.smooth_path_line_of_sight = bool(rospy.get_param("~smooth_path_line_of_sight", True))
         self.allow_best_effort_path = bool(rospy.get_param("~allow_best_effort_path", True))
         self.best_effort_improve_margin_cells = max(
             0.0, float(rospy.get_param("~best_effort_improve_margin_cells", 2.0))
@@ -347,6 +348,46 @@ class ConstrainedLocalReplanner:
         path.reverse()
         return path
 
+    def _has_line_of_sight(self, blocked, start, goal):
+        x0, y0 = start
+        x1, y1 = goal
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            if not self._in_bounds_blocked(blocked, x0, y0) or blocked[y0][x0]:
+                return False
+            if x0 == x1 and y0 == y1:
+                return True
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+
+    def _simplify_grid_path(self, path, blocked):
+        if not self.smooth_path_line_of_sight or len(path) <= 2:
+            return path
+
+        simplified = [path[0]]
+        anchor_idx = 0
+        while anchor_idx < len(path) - 1:
+            farthest_idx = anchor_idx + 1
+            probe_idx = farthest_idx + 1
+            while probe_idx < len(path):
+                if not self._has_line_of_sight(blocked, path[anchor_idx], path[probe_idx]):
+                    break
+                farthest_idx = probe_idx
+                probe_idx += 1
+            simplified.append(path[farthest_idx])
+            anchor_idx = farthest_idx
+        return simplified
+
     def _publish_local_path(self, grid_path, dg, stamp):
         out = Path()
         out.header.stamp = stamp
@@ -433,6 +474,7 @@ class ConstrainedLocalReplanner:
                 str(goal_cell),
             )
             return True
+        path = self._simplify_grid_path(path, blocked)
 
         if not self._should_publish_path(goal_cell, path):
             return True
@@ -505,6 +547,7 @@ class ConstrainedLocalReplanner:
                     str(goal_cell),
                 )
                 return
+            path = self._simplify_grid_path(path, blocked)
             if not self._should_publish_path(goal_cell, path):
                 return
 

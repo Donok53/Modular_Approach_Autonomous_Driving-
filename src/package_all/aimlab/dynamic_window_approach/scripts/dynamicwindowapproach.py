@@ -193,12 +193,19 @@ class DWAControl:
         self.path_tracking_yaw_rate_max = math.radians(
             rospy.get_param("~path_tracking_yaw_rate_max_deg", 90.0)
         )
+        self.path_tracking_speed_cap = max(
+            0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.35))
+        )
+        self.path_tracking_steer_filter_gain = min(
+            1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.35)))
+        )
         self.path_tracking_slowdown_yaw = math.radians(
             rospy.get_param("~path_tracking_slowdown_yaw_deg", 35.0)
         )
         self.path_tracking_stop_yaw = math.radians(
             rospy.get_param("~path_tracking_stop_yaw_deg", 65.0)
         )
+        self._path_tracking_prev_w = 0.0
 
         # Internal path buffers
         self.global_path_msg = None
@@ -622,21 +629,35 @@ class DWAControl:
     def path_tracking_control(self, x, goal_xy, v_cap):
         dx = goal_xy[0] - x[0]
         dy = goal_xy[1] - x[1]
+        lookahead = max(0.3, math.hypot(dx, dy))
         desired_yaw = math.atan2(dy, dx)
         yaw_err = angdiff(desired_yaw, x[2])
-        w_cmd = max(
-            -self.path_tracking_yaw_rate_max,
-            min(self.path_tracking_yaw_rate_max, self.path_tracking_kp * yaw_err),
-        )
-
+        v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
         if abs_err >= self.path_tracking_stop_yaw:
             v_cmd = 0.0
+            w_target = self.path_tracking_kp * yaw_err
         else:
-            slow_ratio = 1.0
             if self.path_tracking_slowdown_yaw > 1e-6:
-                slow_ratio = max(0.15, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
-            v_cmd = min(v_cap, max(0.0, v_cap * slow_ratio))
+                slow_ratio = max(0.20, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
+            else:
+                slow_ratio = 1.0
+            v_cmd = min(v_limit, max(0.0, v_limit * slow_ratio))
+            w_target = 2.0 * v_cmd * math.sin(yaw_err) / lookahead
+
+        w_target = max(
+            -self.path_tracking_yaw_rate_max,
+            min(self.path_tracking_yaw_rate_max, w_target),
+        )
+        w_cmd = (
+            self.path_tracking_steer_filter_gain * w_target +
+            (1.0 - self.path_tracking_steer_filter_gain) * self._path_tracking_prev_w
+        )
+        w_cmd = max(
+            -self.path_tracking_yaw_rate_max,
+            min(self.path_tracking_yaw_rate_max, w_cmd),
+        )
+        self._path_tracking_prev_w = w_cmd
 
         traj = self.predict_trajectory(x, v_cmd, w_cmd)
         if not self._trajectory_in_drivable_area(traj):
