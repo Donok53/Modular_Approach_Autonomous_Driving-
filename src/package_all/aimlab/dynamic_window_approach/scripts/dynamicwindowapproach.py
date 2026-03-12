@@ -800,7 +800,8 @@ class DWAControl:
 
                 # lateral (경로 라인에서의 옆으로 벗어남)
                 normal = np.array([-t_hat[1], t_hat[0]])     # path normal
-                lat_pred = abs(float(np.dot(move_vec, normal)))
+                end_from_target = np.array([traj[-1, 0] - gx, traj[-1, 1] - gy])
+                lat_pred = abs(float(np.dot(end_from_target, normal)))
                 lateral_cost = self.lateral_cost_gain * (lat_pred ** 2)
 
                 # 5) obstacle cost
