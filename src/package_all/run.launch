@@ -28,6 +28,7 @@
   <arg name="robot_width_m" default="0.60"/>
   <arg name="robot_length_m" default="0.55"/>
   <arg name="footprint_padding_m" default="0.0"/>
+  <arg name="path_tracking_only" default="true"/>
   <arg name="obstacle_consider_side_m" default="1.10"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -78,6 +79,7 @@
     <arg name="robot_width_m" value="$(arg robot_width_m)"/>
     <arg name="robot_length_m" value="$(arg robot_length_m)"/>
     <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+    <arg name="path_tracking_only" value="$(arg path_tracking_only)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
     <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>

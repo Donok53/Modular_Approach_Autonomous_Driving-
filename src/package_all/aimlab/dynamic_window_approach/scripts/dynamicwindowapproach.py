@@ -188,6 +188,17 @@ class DWAControl:
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
+        self.path_tracking_only = bool(rospy.get_param("~path_tracking_only", True))
+        self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 1.8))
+        self.path_tracking_yaw_rate_max = math.radians(
+            rospy.get_param("~path_tracking_yaw_rate_max_deg", 90.0)
+        )
+        self.path_tracking_slowdown_yaw = math.radians(
+            rospy.get_param("~path_tracking_slowdown_yaw_deg", 35.0)
+        )
+        self.path_tracking_stop_yaw = math.radians(
+            rospy.get_param("~path_tracking_stop_yaw_deg", 65.0)
+        )
 
         # Internal path buffers
         self.global_path_msg = None
@@ -608,6 +619,31 @@ class DWAControl:
         u, trajectory = self.calc_control_and_trajectory(x, dw, goal_xy, t_hat)
         return u, trajectory
 
+    def path_tracking_control(self, x, goal_xy, v_cap):
+        dx = goal_xy[0] - x[0]
+        dy = goal_xy[1] - x[1]
+        desired_yaw = math.atan2(dy, dx)
+        yaw_err = angdiff(desired_yaw, x[2])
+        w_cmd = max(
+            -self.path_tracking_yaw_rate_max,
+            min(self.path_tracking_yaw_rate_max, self.path_tracking_kp * yaw_err),
+        )
+
+        abs_err = abs(yaw_err)
+        if abs_err >= self.path_tracking_stop_yaw:
+            v_cmd = 0.0
+        else:
+            slow_ratio = 1.0
+            if self.path_tracking_slowdown_yaw > 1e-6:
+                slow_ratio = max(0.15, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
+            v_cmd = min(v_cap, max(0.0, v_cap * slow_ratio))
+
+        traj = self.predict_trajectory(x, v_cmd, w_cmd)
+        if not self._trajectory_in_drivable_area(traj):
+            v_cmd = 0.0
+            traj = self.predict_trajectory(x, v_cmd, w_cmd)
+        return [v_cmd, w_cmd], traj
+
     def moving(self, x, u):
         x[2] = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
         x[0] = self.current_pose.pose.pose.position.x
@@ -911,7 +947,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz",
+            "DWA node started | pose=%s global=%s local=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -922,6 +958,7 @@ class DWAControl:
             self.robot_length_m,
             self.robot_width_m,
             self.cmd_publish_hz,
+            "on" if self.path_tracking_only else "off",
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
@@ -1037,11 +1074,6 @@ class DWAControl:
                         ),
                     )
 
-            # normal DWA towards target
-            u, predicted = self.dwa_control(x, target_xy, t_hat, lat_err)
-            self.visualize_predicted_trajectory(predicted)
-            x = self.moving(x, u)
-
             # final-approach speed cap
             final_window = self.final_approach_window_m
             if min(arc_rem, dist_to_goal) <= final_window:
@@ -1050,6 +1082,13 @@ class DWAControl:
             else:
                 v_cap = self.max_speed
             v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
+
+            if self.path_tracking_only:
+                u, predicted = self.path_tracking_control(x, target_xy, v_cap)
+            else:
+                u, predicted = self.dwa_control(x, target_xy, t_hat, lat_err)
+            self.visualize_predicted_trajectory(predicted)
+            x = self.moving(x, u)
 
             # low-speed clamp with cap in direction of chosen v sign
             u_cmd = list(u)
