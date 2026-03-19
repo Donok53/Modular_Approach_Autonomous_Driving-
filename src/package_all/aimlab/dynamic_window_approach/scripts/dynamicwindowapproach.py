@@ -178,7 +178,7 @@ class DWAControl:
         self._rot_last_timeout_target = None
 
         # ===== Path tracking (s-based) =====
-        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.5)
+        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.35)
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
@@ -189,7 +189,7 @@ class DWAControl:
         self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.02)
         self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.20)
         self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 0.8)
-        self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.55)
+        self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.0)
         self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 2.5)
         self.cruise_lat_err_m = rospy.get_param("~cruise_lat_err_m", 0.25)
         self.cruise_max_yaw_rate = math.radians(rospy.get_param("~cruise_max_yaw_rate_deg", 45.0))
@@ -202,7 +202,7 @@ class DWAControl:
             rospy.get_param("~path_tracking_yaw_rate_max_deg", 90.0)
         )
         self.path_tracking_speed_cap = max(
-            0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.35))
+            0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.25))
         )
         self.path_tracking_steer_filter_gain = min(
             1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.35)))
@@ -1171,6 +1171,8 @@ class DWAControl:
                 u_cmd[0] = min(v_cap, self.min_forward_cmd)
 
             if (
+                (not self.path_tracking_only)
+                and
                 min(arc_rem, dist_to_goal) > self.cruise_distance_m
                 and lat_err < self.cruise_lat_err_m
                 and abs(u_cmd[1]) < self.cruise_max_yaw_rate

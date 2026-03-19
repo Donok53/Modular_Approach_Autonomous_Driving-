@@ -44,11 +44,12 @@ class ConstrainedLocalReplanner:
         self.robot_length_m = max(
             0.05, float(rospy.get_param("~robot_length_m", self.robot_width_m))
         )
+        self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
-        self.simplify_stride = max(1, int(rospy.get_param("~simplify_stride", 2)))
+        self.simplify_stride = max(1, int(rospy.get_param("~simplify_stride", 1)))
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))

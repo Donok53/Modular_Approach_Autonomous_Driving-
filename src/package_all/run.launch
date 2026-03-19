@@ -20,7 +20,7 @@
   <arg name="use_free_area_goal" default="true"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
   <arg name="freeze_path_on_first_plan" default="true"/>
-  <arg name="smooth_path_line_of_sight" default="true"/>
+  <arg name="smooth_path_line_of_sight" default="false"/>
   <arg name="enable_avoidance_path" default="true"/>
   <arg name="enable_graph_planner" default="false"/>
   <arg name="debug_stop_logging" default="true"/>
@@ -32,7 +32,7 @@
   <arg name="robot_length_m" default="0.60"/>
   <arg name="footprint_padding_m" default="0.0"/>
   <arg name="path_tracking_only" default="true"/>
-  <arg name="path_tracking_speed_cap" default="0.35"/>
+  <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
   <arg name="avoidance_hard_stop_distance" default="0.20"/>
   <arg name="avoidance_trigger_margin_m" default="0.20"/>
