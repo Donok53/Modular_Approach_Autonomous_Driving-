@@ -543,39 +543,77 @@ class ConstrainedLocalReplanner:
         delete_all.action = Marker.DELETEALL
         markers.markers.append(delete_all)
 
-        total = len(self.path_history_entries)
+        branch_entries = [entry for entry in self.path_history_entries if entry["source"] == "avoidance"]
+        total = len(branch_entries)
         now = rospy.Time.now()
-        for idx, entry in enumerate(self.path_history_entries):
+        for idx, entry in enumerate(branch_entries):
             age_norm = 0.0 if total <= 1 else float(total - 1 - idx) / float(total - 1)
-            alpha = 0.25 + 0.55 * (1.0 - age_norm)
+            alpha = 0.45 + 0.45 * (1.0 - age_norm)
             marker = Marker()
             marker.header.stamp = now
             marker.header.frame_id = entry["frame_id"]
-            marker.ns = "path_history"
-            marker.id = int(entry["id"])
+            marker.ns = "avoidance_branch"
+            marker.id = int(entry["id"] * 10)
             marker.type = Marker.LINE_STRIP
             marker.action = Marker.ADD
             marker.pose.orientation.w = 1.0
-            marker.scale.x = 0.12 if entry["source"] == "local" else 0.09
+            marker.scale.x = 0.18
             marker.color.a = alpha
-            if entry["source"] == "local":
-                marker.color.r = 1.0
-                marker.color.g = 0.55
-                marker.color.b = 0.10
-            else:
-                marker.color.r = 0.25
-                marker.color.g = 1.0
-                marker.color.b = 0.62
+            marker.color.r = 0.20 + 0.55 * (1.0 - age_norm)
+            marker.color.g = 0.85 - 0.45 * (1.0 - age_norm)
+            marker.color.b = 1.0
             for x, y in entry["points"]:
                 p = Point()
                 p.x = float(x)
                 p.y = float(y)
-                p.z = 0.03 if entry["source"] == "local" else 0.06
+                p.z = 0.14
                 marker.points.append(p)
             markers.markers.append(marker)
+
+            entry_marker = Marker()
+            entry_marker.header.stamp = now
+            entry_marker.header.frame_id = entry["frame_id"]
+            entry_marker.ns = "avoidance_branch_entry"
+            entry_marker.id = int(entry["id"] * 10 + 1)
+            entry_marker.type = Marker.SPHERE
+            entry_marker.action = Marker.ADD
+            entry_marker.pose.orientation.w = 1.0
+            entry_marker.scale.x = 0.20
+            entry_marker.scale.y = 0.20
+            entry_marker.scale.z = 0.20
+            entry_marker.color.r = marker.color.r
+            entry_marker.color.g = marker.color.g
+            entry_marker.color.b = marker.color.b
+            entry_marker.color.a = min(1.0, alpha + 0.05)
+            entry_marker.pose.position.x = float(entry["points"][0][0])
+            entry_marker.pose.position.y = float(entry["points"][0][1])
+            entry_marker.pose.position.z = 0.16
+            markers.markers.append(entry_marker)
+
+            exit_marker = Marker()
+            exit_marker.header.stamp = now
+            exit_marker.header.frame_id = entry["frame_id"]
+            exit_marker.ns = "avoidance_branch_exit"
+            exit_marker.id = int(entry["id"] * 10 + 2)
+            exit_marker.type = Marker.SPHERE
+            exit_marker.action = Marker.ADD
+            exit_marker.pose.orientation.w = 1.0
+            exit_marker.scale.x = 0.16
+            exit_marker.scale.y = 0.16
+            exit_marker.scale.z = 0.16
+            exit_marker.color.r = 1.0
+            exit_marker.color.g = 1.0
+            exit_marker.color.b = 1.0
+            exit_marker.color.a = alpha
+            exit_marker.pose.position.x = float(entry["points"][-1][0])
+            exit_marker.pose.position.y = float(entry["points"][-1][1])
+            exit_marker.pose.position.z = 0.16
+            markers.markers.append(exit_marker)
         self.pub_path_history.publish(markers)
 
     def _record_path_history(self, source, sampled_points, frame_id):
+        if source != "avoidance":
+            return
         if len(sampled_points) < 2:
             return
         sig = self._path_signature_from_points(sampled_points)
@@ -601,7 +639,6 @@ class ConstrainedLocalReplanner:
 
     def _publish_local_path(self, grid_path, dg, stamp):
         sampled_points, frame_id = self._publish_grid_path(self.pub_local_path, grid_path, dg, stamp)
-        self._record_path_history("local", sampled_points, frame_id)
 
     def _publish_avoidance_path(self, grid_path, dg, stamp):
         sampled_points, frame_id = self._publish_grid_path(self.pub_avoidance_path, grid_path, dg, stamp)
@@ -621,7 +658,6 @@ class ConstrainedLocalReplanner:
             out.poses.append(ps)
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
-            self._record_path_history("local", world_points, out.header.frame_id)
 
     def _publish_empty_path(self, publisher, frame_id, stamp):
         out = Path()
