@@ -28,6 +28,9 @@ class ConstrainedLocalReplanner:
         self.smooth_path_line_of_sight = bool(rospy.get_param("~smooth_path_line_of_sight", True))
         self.enable_avoidance_path = bool(rospy.get_param("~enable_avoidance_path", True))
         self.allow_best_effort_path = bool(rospy.get_param("~allow_best_effort_path", True))
+        self.smooth_avoidance_line_of_sight = bool(
+            rospy.get_param("~smooth_avoidance_line_of_sight", True)
+        )
         self.best_effort_improve_margin_cells = max(
             0.0, float(rospy.get_param("~best_effort_improve_margin_cells", 2.0))
         )
@@ -50,6 +53,9 @@ class ConstrainedLocalReplanner:
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
         self.simplify_stride = max(1, int(rospy.get_param("~simplify_stride", 1)))
+        self.published_path_spacing_m = max(
+            0.05, float(rospy.get_param("~published_path_spacing_m", 0.25))
+        )
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
@@ -62,6 +68,10 @@ class ConstrainedLocalReplanner:
         )
         self.avoidance_trigger_ahead_m = max(
             1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
+        )
+        self.avoidance_hold_s = max(0.0, float(rospy.get_param("~avoidance_hold_s", 1.5)))
+        self.avoidance_clear_confirm_cycles = max(
+            1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
         )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
@@ -86,6 +96,8 @@ class ConstrainedLocalReplanner:
         self.last_path_publish_sec = 0.0
         self.obstacle_points_map = []
         self.avoidance_active = False
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = 0.0
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
@@ -175,7 +187,9 @@ class ConstrainedLocalReplanner:
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
         self.avoidance_active = False
-        self._publish_empty_path(self.pub_avoidance_path, "map", rospy.Time.now())
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = 0.0
+        self._clear_avoidance_path("map", rospy.Time.now(), force=True)
         rospy.loginfo(
             "constrained_local_replanner: direct goal set (%.2f, %.2f) frame=%s",
             float(msg.pose.position.x),
@@ -441,8 +455,8 @@ class ConstrainedLocalReplanner:
                 err += dx
                 y0 += sy
 
-    def _simplify_grid_path(self, path, blocked):
-        if not self.smooth_path_line_of_sight or len(path) <= 2:
+    def _simplify_grid_path(self, path, blocked, force=False):
+        if (not force and not self.smooth_path_line_of_sight) or len(path) <= 2:
             return path
 
         simplified = [path[0]]
@@ -463,10 +477,31 @@ class ConstrainedLocalReplanner:
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+        world_points = []
         for i, (gx, gy) in enumerate(grid_path):
             if self.simplify_stride > 1 and i not in (0, len(grid_path) - 1) and (i % self.simplify_stride != 0):
                 continue
-            x, y = self._grid_to_world(dg, gx, gy)
+            world_points.append(self._grid_to_world(dg, gx, gy))
+
+        if len(world_points) < 2:
+            return
+
+        sampled_points = [world_points[0]]
+        for i in range(len(world_points) - 1):
+            x0, y0 = world_points[i]
+            x1, y1 = world_points[i + 1]
+            seg_len = math.hypot(x1 - x0, y1 - y0)
+            if seg_len <= 1e-9:
+                continue
+            steps = max(1, int(math.ceil(seg_len / self.published_path_spacing_m)))
+            for step in range(1, steps + 1):
+                t = float(step) / float(steps)
+                sampled_points.append((
+                    x0 + t * (x1 - x0),
+                    y0 + t * (y1 - y0),
+                ))
+
+        for x, y in sampled_points:
             ps = PoseStamped()
             ps.header = out.header
             ps.pose.position.x = float(x)
@@ -504,11 +539,20 @@ class ConstrainedLocalReplanner:
         out.header.frame_id = frame_id if frame_id else "map"
         publisher.publish(out)
 
-    def _clear_avoidance_path(self, frame_id, stamp):
+    def _clear_avoidance_path(self, frame_id, stamp, force=False):
+        if self.avoidance_active and (not force):
+            now_sec = stamp.to_sec()
+            if now_sec > 0.0 and (now_sec - self.last_avoidance_publish_sec) < self.avoidance_hold_s:
+                return
+            self.avoidance_clear_count += 1
+            if self.avoidance_clear_count < self.avoidance_clear_confirm_cycles:
+                return
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
         if self.avoidance_active:
             self.avoidance_active = False
             rospy.loginfo("constrained_local_replanner: avoidance path cleared")
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = 0.0
 
     def _nearest_path_cell_index(self, path, cell):
         best_i = 0
@@ -648,12 +692,18 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp)
             return
 
-        avoid_path = self._simplify_grid_path(avoid_path, dynamic_blocked)
+        avoid_path = self._simplify_grid_path(
+            avoid_path,
+            dynamic_blocked,
+            force=self.smooth_avoidance_line_of_sight,
+        )
         if len(avoid_path) < 2:
             self._clear_avoidance_path(frame_id, stamp)
             return
 
         self._publish_avoidance_path(avoid_path, dg, stamp)
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = stamp.to_sec()
         if not self.avoidance_active:
             rospy.loginfo(
                 "constrained_local_replanner: avoidance path active | base=%s obstacle_points=%d cells=%d",

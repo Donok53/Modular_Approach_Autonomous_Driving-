@@ -19,7 +19,9 @@
     <arg name="goal_tolerance_m" default="0.35"/>
     <arg name="snap_search_radius_cells" default="30"/>
     <arg name="freeze_path_on_first_plan" default="true"/>
-    <arg name="smooth_path_line_of_sight" default="false"/>
+    <arg name="smooth_path_line_of_sight" default="true"/>
+    <arg name="smooth_avoidance_line_of_sight" default="true"/>
+    <arg name="published_path_spacing_m" default="0.25"/>
     <arg name="enable_avoidance_path" default="true"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
     <arg name="obstacle_collision_radius" default="0.0"/>
@@ -28,10 +30,14 @@
     <arg name="footprint_padding_m" default="0.0"/>
     <arg name="path_tracking_only" default="true"/>
     <arg name="path_tracking_speed_cap" default="0.25"/>
-    <arg name="path_tracking_steer_filter_gain" default="0.35"/>
+    <arg name="path_tracking_steer_filter_gain" default="0.20"/>
+    <arg name="lookahead_distance" default="0.55"/>
+    <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
     <arg name="avoidance_trigger_margin_m" default="0.20"/>
     <arg name="avoidance_trigger_ahead_m" default="8.0"/>
+    <arg name="avoidance_hold_s" default="1.5"/>
+    <arg name="avoidance_clear_confirm_cycles" default="6"/>
     <arg name="obstacle_consider_side_m" default="1.10"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -72,9 +78,13 @@
             <param name="snap_search_radius_cells" value="$(arg snap_search_radius_cells)"/>
             <param name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
             <param name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
+            <param name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
+            <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
             <param name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
             <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
             <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+            <param name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
+            <param name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
             <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -101,6 +111,8 @@
         <param name="path_tracking_only" value="$(arg path_tracking_only)"/>
         <param name="path_tracking_speed_cap" value="$(arg path_tracking_speed_cap)"/>
         <param name="path_tracking_steer_filter_gain" value="$(arg path_tracking_steer_filter_gain)"/>
+        <param name="lookahead_distance" value="$(arg lookahead_distance)"/>
+        <param name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
         <param name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
         <param name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
         <param name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>

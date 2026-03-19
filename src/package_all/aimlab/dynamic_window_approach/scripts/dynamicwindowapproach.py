@@ -178,7 +178,7 @@ class DWAControl:
         self._rot_last_timeout_target = None
 
         # ===== Path tracking (s-based) =====
-        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.35)
+        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.55)
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
@@ -197,15 +197,15 @@ class DWAControl:
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
         self.path_tracking_only = bool(rospy.get_param("~path_tracking_only", True))
-        self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 1.8))
+        self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 1.2))
         self.path_tracking_yaw_rate_max = math.radians(
-            rospy.get_param("~path_tracking_yaw_rate_max_deg", 90.0)
+            rospy.get_param("~path_tracking_yaw_rate_max_deg", 55.0)
         )
         self.path_tracking_speed_cap = max(
             0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.25))
         )
         self.path_tracking_steer_filter_gain = min(
-            1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.35)))
+            1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.20)))
         )
         self.path_tracking_slowdown_yaw = math.radians(
             rospy.get_param("~path_tracking_slowdown_yaw_deg", 35.0)
