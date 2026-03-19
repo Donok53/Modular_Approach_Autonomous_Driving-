@@ -109,6 +109,13 @@ class AStarPlanner:
         self.path_repub_period = float(rospy.get_param("~path_repub_period", 0.0))
         self._last_path_nodes = None
         self._last_path_pub_t = 0.0
+        self.publish_smoothed_path = bool(rospy.get_param("~publish_smoothed_path", True))
+        self.path_simplify_epsilon_m = max(
+            0.0, float(rospy.get_param("~path_simplify_epsilon_m", 0.20))
+        )
+        self.published_path_spacing_m = max(
+            0.05, float(rospy.get_param("~published_path_spacing_m", 0.25))
+        )
 
         # Snapping state
         self._snap_edge = None
@@ -413,6 +420,64 @@ class AStarPlanner:
         vx, vy = self._xy_to_map(v.east, v.north)
         return math.hypot(vx - ux, vy - uy)
 
+    @staticmethod
+    def _point_line_distance(pt, a, b):
+        ax, ay = a
+        bx, by = b
+        px, py = pt
+        vx = bx - ax
+        vy = by - ay
+        denom = vx * vx + vy * vy
+        if denom <= 1e-12:
+            return math.hypot(px - ax, py - ay)
+        t = ((px - ax) * vx + (py - ay) * vy) / denom
+        t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+        proj_x = ax + t * vx
+        proj_y = ay + t * vy
+        return math.hypot(px - proj_x, py - proj_y)
+
+    def _rdp(self, points, epsilon):
+        if len(points) <= 2 or epsilon <= 0.0:
+            return list(points)
+        start = points[0]
+        end = points[-1]
+        max_dist = -1.0
+        split_idx = -1
+        for i in range(1, len(points) - 1):
+            d = self._point_line_distance(points[i], start, end)
+            if d > max_dist:
+                max_dist = d
+                split_idx = i
+        if max_dist <= epsilon or split_idx < 0:
+            return [start, end]
+        left = self._rdp(points[: split_idx + 1], epsilon)
+        right = self._rdp(points[split_idx:], epsilon)
+        return left[:-1] + right
+
+    def _resample_path(self, points, spacing):
+        if len(points) <= 1:
+            return list(points)
+        out = [points[0]]
+        for i in range(len(points) - 1):
+            x0, y0 = points[i]
+            x1, y1 = points[i + 1]
+            seg_len = math.hypot(x1 - x0, y1 - y0)
+            if seg_len <= 1e-9:
+                continue
+            steps = max(1, int(math.ceil(seg_len / spacing)))
+            for step in range(1, steps + 1):
+                t = float(step) / float(steps)
+                out.append((x0 + t * (x1 - x0), y0 + t * (y1 - y0)))
+        return out
+
+    def _prepare_display_path(self, world_points):
+        if len(world_points) <= 2:
+            return list(world_points)
+        pts = list(world_points)
+        if self.publish_smoothed_path and self.path_simplify_epsilon_m > 0.0:
+            pts = self._rdp(pts, self.path_simplify_epsilon_m)
+        return self._resample_path(pts, self.published_path_spacing_m)
+
     def validate_or_blacklist(self, path_ids):
         if not self.jump_guard_enable or len(path_ids) < 2: return path_ids
         thr = self.jump_guard_max_step_m
@@ -474,27 +539,23 @@ class AStarPlanner:
         p = Path(); p.header.frame_id = "map"; p.header.stamp = stamp
         pw = Path(); pw.header.frame_id = "map"; pw.header.stamp = stamp
 
-        for nid in path[:-1]:
+        world_points = []
+        wgs_points = []
+        for nid in path:
             n = self.findNodeById(nid)
-            if n is None: continue
-            x, y = self._xy_to_map(n.east, n.north)
+            if n is None:
+                continue
+            world_points.append(self._xy_to_map(n.east, n.north))
+            wgs_points.append((n.lat, n.lon))
+
+        for x, y in self._prepare_display_path(world_points):
             ps = PoseStamped(); ps.header = p.header
             ps.pose.position.x = x; ps.pose.position.y = y; ps.pose.position.z = 0.0
             p.poses.append(ps)
 
+        for lat, lon in wgs_points:
             pwps = PoseStamped(); pwps.header = pw.header
-            pwps.pose.position.x = n.lat; pwps.pose.position.y = n.lon; pwps.pose.position.z = 0.0
-            pw.poses.append(pwps)
-
-        last = self.findNodeById(path[-1])
-        if last:
-            x, y = self._xy_to_map(last.east, last.north)
-            ps = PoseStamped(); ps.header = p.header
-            ps.pose.position.x = x; ps.pose.position.y = y; ps.pose.position.z = 0.0
-            p.poses.append(ps)
-
-            pwps = PoseStamped(); pwps.header = pw.header
-            pwps.pose.position.x = last.lat; pwps.pose.position.y = last.lon; pwps.pose.position.z = 0.0
+            pwps.pose.position.x = lat; pwps.pose.position.y = lon; pwps.pose.position.z = 0.0
             pw.poses.append(pwps)
 
         self.pub_path.publish(p)

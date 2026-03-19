@@ -431,6 +431,13 @@ Visualization Manager:
       Topic: /planning/avoidance_path
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /planning/path_history
+      Name: path_history
+      Namespaces: {}
+      Queue Size: 100
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /predicted_trajectory

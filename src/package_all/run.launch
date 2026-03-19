@@ -16,6 +16,7 @@
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
+  <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_free_area_goal" default="true"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
@@ -24,6 +25,7 @@
   <arg name="smooth_avoidance_line_of_sight" default="true"/>
   <arg name="max_los_segment_m" default="1.0"/>
   <arg name="published_path_spacing_m" default="0.25"/>
+  <arg name="path_history_max_paths" default="12"/>
   <arg name="enable_avoidance_path" default="true"/>
   <arg name="enable_graph_planner" default="false"/>
   <arg name="debug_stop_logging" default="true"/>
@@ -91,6 +93,7 @@
     <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
     <arg name="local_path_topic" value="$(arg local_path_topic)"/>
     <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+    <arg name="path_history_topic" value="$(arg path_history_topic)"/>
     <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
     <arg name="robot_width_m" value="$(arg robot_width_m)"/>
     <arg name="robot_length_m" value="$(arg robot_length_m)"/>
@@ -112,6 +115,7 @@
     <arg name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
     <arg name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
     <arg name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
+    <arg name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
     <arg name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
     <arg name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
     <arg name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>

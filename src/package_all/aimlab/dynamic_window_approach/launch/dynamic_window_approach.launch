@@ -7,6 +7,7 @@
     <arg name="global_path_topic" default="/astar/path"/>
     <arg name="local_path_topic" default="/planning/local_path"/>
     <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
+    <arg name="path_history_topic" default="/planning/path_history"/>
     <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
     <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
     <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
@@ -23,6 +24,7 @@
     <arg name="smooth_avoidance_line_of_sight" default="true"/>
     <arg name="max_los_segment_m" default="1.0"/>
     <arg name="published_path_spacing_m" default="0.25"/>
+    <arg name="path_history_max_paths" default="12"/>
     <arg name="enable_avoidance_path" default="true"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
     <arg name="obstacle_collision_radius" default="0.0"/>
@@ -72,6 +74,7 @@
             <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
             <param name="local_path_topic" value="$(arg local_path_topic)"/>
             <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+            <param name="path_history_topic" value="$(arg path_history_topic)"/>
             <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
             <param name="use_direct_goal" value="$(arg use_direct_goal)"/>
             <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
@@ -82,6 +85,7 @@
             <param name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
             <param name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
             <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
+            <param name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
             <param name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
             <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
             <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>

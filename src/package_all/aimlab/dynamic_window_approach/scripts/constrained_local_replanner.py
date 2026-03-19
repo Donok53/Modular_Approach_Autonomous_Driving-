@@ -3,12 +3,14 @@
 
 import heapq
 import math
+from collections import deque
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 class ConstrainedLocalReplanner:
@@ -19,6 +21,7 @@ class ConstrainedLocalReplanner:
         self.dynamic_risk_grid_topic = rospy.get_param("~dynamic_risk_grid_topic", "/planning/dynamic_risk_grid")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
+        self.path_history_topic = rospy.get_param("~path_history_topic", "/planning/path_history")
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
@@ -58,6 +61,9 @@ class ConstrainedLocalReplanner:
         self.simplify_stride = max(1, int(rospy.get_param("~simplify_stride", 1)))
         self.published_path_spacing_m = max(
             0.05, float(rospy.get_param("~published_path_spacing_m", 0.25))
+        )
+        self.path_history_max_paths = max(
+            1, int(rospy.get_param("~path_history_max_paths", 12))
         )
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
@@ -101,9 +107,15 @@ class ConstrainedLocalReplanner:
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
+        self.path_history_entries = deque(maxlen=self.path_history_max_paths)
+        self.path_history_next_id = 0
+        self.last_history_signature = {"local": None, "avoidance": None}
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
+        self.pub_path_history = rospy.Publisher(
+            self.path_history_topic, MarkerArray, queue_size=2, latch=True
+        )
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
@@ -113,6 +125,7 @@ class ConstrainedLocalReplanner:
         if self.use_direct_goal:
             self.sub_direct_goal = rospy.Subscriber(self.direct_goal_topic, PoseStamped, self.direct_goal_callback, queue_size=2)
 
+        self._clear_path_history()
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
             "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
@@ -192,6 +205,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
+        self._clear_path_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
         rospy.loginfo(
             "constrained_local_replanner: direct goal set (%.2f, %.2f) frame=%s",
@@ -517,12 +531,81 @@ class ConstrainedLocalReplanner:
             out.poses.append(ps)
         if len(out.poses) >= 2:
             publisher.publish(out)
+        return sampled_points, out.header.frame_id
+
+    @staticmethod
+    def _path_signature_from_points(points):
+        return tuple((round(float(x), 2), round(float(y), 2)) for x, y in points)
+
+    def _publish_path_history_markers(self):
+        markers = MarkerArray()
+        delete_all = Marker()
+        delete_all.action = Marker.DELETEALL
+        markers.markers.append(delete_all)
+
+        total = len(self.path_history_entries)
+        now = rospy.Time.now()
+        for idx, entry in enumerate(self.path_history_entries):
+            age_norm = 0.0 if total <= 1 else float(total - 1 - idx) / float(total - 1)
+            alpha = 0.25 + 0.55 * (1.0 - age_norm)
+            marker = Marker()
+            marker.header.stamp = now
+            marker.header.frame_id = entry["frame_id"]
+            marker.ns = "path_history"
+            marker.id = int(entry["id"])
+            marker.type = Marker.LINE_STRIP
+            marker.action = Marker.ADD
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.12 if entry["source"] == "local" else 0.09
+            marker.color.a = alpha
+            if entry["source"] == "local":
+                marker.color.r = 1.0
+                marker.color.g = 0.55
+                marker.color.b = 0.10
+            else:
+                marker.color.r = 0.25
+                marker.color.g = 1.0
+                marker.color.b = 0.62
+            for x, y in entry["points"]:
+                p = Point()
+                p.x = float(x)
+                p.y = float(y)
+                p.z = 0.03 if entry["source"] == "local" else 0.06
+                marker.points.append(p)
+            markers.markers.append(marker)
+        self.pub_path_history.publish(markers)
+
+    def _record_path_history(self, source, sampled_points, frame_id):
+        if len(sampled_points) < 2:
+            return
+        sig = self._path_signature_from_points(sampled_points)
+        if self.last_history_signature.get(source) == sig:
+            return
+        self.last_history_signature[source] = sig
+        self.path_history_next_id += 1
+        self.path_history_entries.append(
+            {
+                "id": self.path_history_next_id,
+                "source": source,
+                "frame_id": frame_id if frame_id else "map",
+                "points": list(sampled_points),
+            }
+        )
+        self._publish_path_history_markers()
+
+    def _clear_path_history(self):
+        self.path_history_entries.clear()
+        self.path_history_next_id = 0
+        self.last_history_signature = {"local": None, "avoidance": None}
+        self._publish_path_history_markers()
 
     def _publish_local_path(self, grid_path, dg, stamp):
-        self._publish_grid_path(self.pub_local_path, grid_path, dg, stamp)
+        sampled_points, frame_id = self._publish_grid_path(self.pub_local_path, grid_path, dg, stamp)
+        self._record_path_history("local", sampled_points, frame_id)
 
     def _publish_avoidance_path(self, grid_path, dg, stamp):
-        self._publish_grid_path(self.pub_avoidance_path, grid_path, dg, stamp)
+        sampled_points, frame_id = self._publish_grid_path(self.pub_avoidance_path, grid_path, dg, stamp)
+        self._record_path_history("avoidance", sampled_points, frame_id)
 
     def _publish_world_path(self, world_points, frame_id, stamp):
         out = Path()
@@ -538,6 +621,7 @@ class ConstrainedLocalReplanner:
             out.poses.append(ps)
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
+            self._record_path_history("local", world_points, out.header.frame_id)
 
     def _publish_empty_path(self, publisher, frame_id, stamp):
         out = Path()

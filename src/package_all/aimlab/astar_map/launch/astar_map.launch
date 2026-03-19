@@ -12,6 +12,9 @@
   <arg name="pose_topic" default="lio_localizer/odometry/optimization"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
+  <arg name="publish_smoothed_path" default="true"/>
+  <arg name="path_simplify_epsilon_m" default="0.20"/>
+  <arg name="published_path_spacing_m" default="0.25"/>
 
   <!-- <arg name="server_dst_node_list" default="-101752,-101779,-101799,-101816,-101834,-101936,-101953,-102003,-102234,-102196"/> -->
   <arg name="server_dst_node_list" default=""/>
@@ -24,6 +27,9 @@
     <param name="pose_topic" value="$(arg pose_topic)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
+    <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>
+    <param name="path_simplify_epsilon_m" value="$(arg path_simplify_epsilon_m)"/>
+    <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
     <!-- 필요한 경우 추가 파라미터 설정 -->
   </node>
 
