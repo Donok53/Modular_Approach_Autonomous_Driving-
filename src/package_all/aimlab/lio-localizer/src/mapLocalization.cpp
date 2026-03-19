@@ -49,6 +49,20 @@ enum POSE_INITIALIZATION_MODE {
     POSE_INITIALIZATION_ALREADY
 };
 
+namespace {
+bool pointFinite(const PointType& p) {
+    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+}
+
+bool affineFinite(const Eigen::Affine3d& pose) {
+    return pose.matrix().allFinite();
+}
+
+bool scalarFinite(double v) {
+    return std::isfinite(v);
+}
+}
+
 class MapLocalization : public ParamServer
 {
 public:  
@@ -168,6 +182,11 @@ public:
             searchPoint.y = cfg_initial_pose_m_deg[1];
             searchPoint.z = cfg_initial_pose_m_deg[2];
 
+            if (!pointFinite(searchPoint)) {
+                ROS_WARN("mapLocalization: ignore invalid configured initial pose");
+                return;
+            }
+
             // Find only one Nearest Neighbor
             std::vector<int> pointIdxNKNSearch;
             std::vector<float> pointNKNSquaredDistance;
@@ -281,12 +300,18 @@ public:
         for (int i = 0; i < (int)pc_in->points.size(); i++) 
         {
             PointType point_temp = transformed_cloud->points[i];
+            if (!pointFinite(point_temp)) {
+                continue;
+            }
 
             std::vector<int> pointSearchInd;
             std::vector<float> pointSearchSqDis;
             
             // Search nearest 5 points
-            kdtree.nearestKSearch(point_temp, 5, pointSearchInd, pointSearchSqDis);
+            int found_num = kdtree.nearestKSearch(point_temp, 5, pointSearchInd, pointSearchSqDis);
+            if (found_num < 5) {
+                continue;
+            }
             if (pointSearchSqDis[4] < pointCorrespondenceDist)
             {
                 std::vector<Eigen::Vector3d> nearCorners;
@@ -338,9 +363,15 @@ public:
         for (int i = 0; i < (int)transformed_cloud->points.size(); i++)
         {
             PointType point_temp = transformed_cloud->points[i];
+            if (!pointFinite(point_temp)) {
+                continue;
+            }
             std::vector<int> pointSearchInd;
             std::vector<float> pointSearchSqDis;
-            kdtree.nearestKSearch(point_temp, 5, pointSearchInd, pointSearchSqDis);
+            int found_num = kdtree.nearestKSearch(point_temp, 5, pointSearchInd, pointSearchSqDis);
+            if (found_num < 5) {
+                continue;
+            }
 
             Eigen::Matrix<double, 5, 3> matA0;
             Eigen::Matrix<double, 5, 1> matB0 = -1 * Eigen::Matrix<double, 5, 1>::Ones();
@@ -453,6 +484,9 @@ public:
             searchPoint.x = (*transformed_cloud)[src_idx].x;
             searchPoint.y = (*transformed_cloud)[src_idx].y;
             searchPoint.z = (*transformed_cloud)[src_idx].z;
+            if (!pointFinite(searchPoint)) {
+                continue;
+            }
 
             // Find only one Nearest Neighbor
             std::vector<int> pointIdxNKNSearch;
@@ -631,6 +665,11 @@ public:
         searchPoint.y = msg_ptr->pose.pose.position.y;
         searchPoint.z = msg_ptr->pose.pose.position.z;
 
+        if (!pointFinite(searchPoint)) {
+            ROS_WARN_THROTTLE(1.0, "mapLocalization: ignore invalid initial pose click");
+            return;
+        }
+
         // Find only one Nearest Neighbor
         std::vector<int> pointIdxNKNSearch;
         std::vector<float> pointNKNSquaredDistance;
@@ -710,6 +749,15 @@ public:
 
         // Update Initial Odometry Pose
         if(msg_ptr->odomAvailable) {
+            if (!scalarFinite(msg_ptr->initialGuessX) ||
+                !scalarFinite(msg_ptr->initialGuessY) ||
+                !scalarFinite(msg_ptr->initialGuessZ) ||
+                !scalarFinite(msg_ptr->initialGuessRoll) ||
+                !scalarFinite(msg_ptr->initialGuessPitch) ||
+                !scalarFinite(msg_ptr->initialGuessYaw)) {
+                ROS_WARN_THROTTLE(1.0, "mapLocalization: skip frame due to invalid odom initial guess");
+                return;
+            }
             static bool odomInitialUpdateFlag = true;
             if(odomInitialUpdateFlag){
                 odomInitialUpdateFlag = false;
@@ -721,6 +769,10 @@ public:
         Eigen::Affine3d pose_from_imu = pcl::getTransformation(msg_ptr->initialGuessX, msg_ptr->initialGuessY, msg_ptr->initialGuessZ, msg_ptr->initialGuessRoll, msg_ptr->initialGuessPitch, msg_ptr->initialGuessYaw).cast<double>();
         Eigen::Affine3d pose_incremental = prev_pose_from_imu_.inverse() * pose_from_imu;
         Eigen::Affine3d pose_predicted = prev_pose_from_opt_ * pose_incremental;
+        if (!affineFinite(pose_from_imu) || !affineFinite(pose_incremental) || !affineFinite(pose_predicted)) {
+            ROS_WARN_THROTTLE(1.0, "mapLocalization: skip frame due to non-finite predicted pose");
+            return;
+        }
 
         // Map Matching
         Eigen::Affine3d pose_from_opt = Eigen::Affine3d::Identity();
@@ -744,6 +796,10 @@ public:
         }
         else {
             std::cout << "[Fail] Map Matching Option is invalid!" << std::endl;
+            return;
+        }
+        if (!affineFinite(pose_from_opt)) {
+            ROS_WARN_THROTTLE(1.0, "mapLocalization: skip frame due to non-finite optimized pose");
             return;
         }
 

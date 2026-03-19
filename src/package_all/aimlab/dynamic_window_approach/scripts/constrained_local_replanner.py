@@ -31,6 +31,9 @@ class ConstrainedLocalReplanner:
         self.smooth_avoidance_line_of_sight = bool(
             rospy.get_param("~smooth_avoidance_line_of_sight", True)
         )
+        self.max_los_segment_m = max(
+            0.3, float(rospy.get_param("~max_los_segment_m", 1.0))
+        )
         self.best_effort_improve_margin_cells = max(
             0.0, float(rospy.get_param("~best_effort_improve_margin_cells", 2.0))
         )
@@ -455,7 +458,7 @@ class ConstrainedLocalReplanner:
                 err += dx
                 y0 += sy
 
-    def _simplify_grid_path(self, path, blocked, force=False):
+    def _simplify_grid_path(self, path, blocked, grid_resolution_m, force=False):
         if (not force and not self.smooth_path_line_of_sight) or len(path) <= 2:
             return path
 
@@ -465,6 +468,9 @@ class ConstrainedLocalReplanner:
             farthest_idx = anchor_idx + 1
             probe_idx = farthest_idx + 1
             while probe_idx < len(path):
+                seg_len_m = self._heur(path[anchor_idx], path[probe_idx]) * max(1e-3, grid_resolution_m)
+                if seg_len_m > self.max_los_segment_m:
+                    break
                 if not self._has_line_of_sight(blocked, path[anchor_idx], path[probe_idx]):
                     break
                 farthest_idx = probe_idx
@@ -695,6 +701,7 @@ class ConstrainedLocalReplanner:
         avoid_path = self._simplify_grid_path(
             avoid_path,
             dynamic_blocked,
+            float(dg.info.resolution),
             force=self.smooth_avoidance_line_of_sight,
         )
         if len(avoid_path) < 2:
@@ -779,7 +786,7 @@ class ConstrainedLocalReplanner:
             )
             self._clear_avoidance_path(dg.header.frame_id, stamp)
             return True
-        path = self._simplify_grid_path(path, blocked)
+        path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
 
         if not self._should_publish_path(goal_cell, path):
             self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
@@ -857,7 +864,7 @@ class ConstrainedLocalReplanner:
                 )
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 return
-            path = self._simplify_grid_path(path, blocked)
+            path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
             if not self._should_publish_path(goal_cell, path):
                 self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "local")
                 return

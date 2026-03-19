@@ -21,6 +21,7 @@
     <arg name="freeze_path_on_first_plan" default="true"/>
     <arg name="smooth_path_line_of_sight" default="true"/>
     <arg name="smooth_avoidance_line_of_sight" default="true"/>
+    <arg name="max_los_segment_m" default="1.0"/>
     <arg name="published_path_spacing_m" default="0.25"/>
     <arg name="enable_avoidance_path" default="true"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
@@ -79,6 +80,7 @@
             <param name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
             <param name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
             <param name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
+            <param name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
             <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
             <param name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
             <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
