@@ -101,6 +101,12 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_confirm_cycles = max(
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
         )
+        self.avoidance_reuse_on_failure_s = max(
+            0.0, float(rospy.get_param("~avoidance_reuse_on_failure_s", 0.5))
+        )
+        self.avoidance_reuse_max_deviation_m = max(
+            0.0, float(rospy.get_param("~avoidance_reuse_max_deviation_m", 0.8))
+        )
         self.avoidance_branch_backtrack_cells = max(
             0, int(rospy.get_param("~avoidance_branch_backtrack_cells", 2))
         )
@@ -139,6 +145,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
+        self.last_avoidance_solution_sec = 0.0
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
         self.path_history_next_id = 0
         self.last_history_signature = {"local": None, "avoidance": None}
@@ -246,6 +253,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
+        self.last_avoidance_solution_sec = 0.0
         self._clear_path_history()
         self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
@@ -810,9 +818,34 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
+        self.last_avoidance_solution_sec = 0.0
+
+    def _grid_path_min_distance_to_xy(self, grid_path, dg, x, y):
+        if not grid_path:
+            return float("inf")
+        best = float("inf")
+        for gx, gy in grid_path:
+            wx, wy = self._grid_to_world(dg, gx, gy)
+            d = math.hypot(float(wx) - float(x), float(wy) - float(y))
+            if d < best:
+                best = d
+        return best
 
     def _republish_last_avoidance_path(self, dg, stamp):
         if self.last_avoidance_grid_path is None or len(self.last_avoidance_grid_path) < 2:
+            return False
+        if self.last_avoidance_solution_sec <= 0.0:
+            return False
+        age_s = stamp.to_sec() - self.last_avoidance_solution_sec
+        if age_s > self.avoidance_reuse_on_failure_s:
+            return False
+        deviation_m = self._grid_path_min_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        if deviation_m > self.avoidance_reuse_max_deviation_m:
             return False
         self._publish_avoidance_path(
             self.last_avoidance_grid_path,
@@ -825,7 +858,9 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_publish_sec = stamp.to_sec()
         rospy.loginfo_throttle(
             1.0,
-            "constrained_local_replanner: keeping previous avoidance path while obstacle remains",
+            "constrained_local_replanner: keeping previous avoidance path briefly | age=%.2fs dev=%.2fm",
+            age_s,
+            deviation_m,
         )
         return True
 
@@ -1161,6 +1196,7 @@ class ConstrainedLocalReplanner:
         )
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
+        self.last_avoidance_solution_sec = stamp.to_sec()
         if not self.avoidance_active:
             rospy.loginfo(
                 "constrained_local_replanner: avoidance path active | base=%s reason=%s obstacle_points=%d cells=%d",
