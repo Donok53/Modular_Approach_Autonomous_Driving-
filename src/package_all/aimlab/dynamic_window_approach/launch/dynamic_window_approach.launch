@@ -37,6 +37,8 @@
     <arg name="lookahead_distance" default="0.55"/>
     <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
+    <arg name="use_pointcloud_static_blocking" default="true"/>
+    <arg name="pointcloud_static_block_margin_m" default="0.10"/>
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
     <arg name="avoidance_trigger_margin_m" default="0.20"/>
     <arg name="avoidance_trigger_ahead_m" default="8.0"/>
@@ -102,6 +104,8 @@
             <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
             <param name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
             <param name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
+            <param name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
+            <param name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
             <param name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
             <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
             <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>

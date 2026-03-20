@@ -69,6 +69,12 @@ class ConstrainedLocalReplanner:
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
         self.obstacle_downsample = max(1, int(rospy.get_param("~obstacle_downsample", 6)))
+        self.use_pointcloud_static_blocking = bool(
+            rospy.get_param("~use_pointcloud_static_blocking", True)
+        )
+        self.pointcloud_static_block_margin_m = max(
+            0.0, float(rospy.get_param("~pointcloud_static_block_margin_m", 0.10))
+        )
         self.obstacle_block_margin_m = max(
             0.05, float(rospy.get_param("~obstacle_block_margin_m", 0.35))
         )
@@ -322,6 +328,13 @@ class ConstrainedLocalReplanner:
                         ny = y + dy
                         if 0 <= nx < w and 0 <= ny < h:
                             out[ny][nx] = True
+        out, _ = self._overlay_pointcloud_obstacles(
+            out,
+            dg,
+            keep_cells=None,
+            enabled=self.use_pointcloud_static_blocking,
+            margin_m=self.pointcloud_static_block_margin_m,
+        )
         return out
 
     def _nearest_free_cell(self, blocked, cell):
@@ -719,12 +732,14 @@ class ConstrainedLocalReplanner:
                 best_i = i
         return best_i
 
-    def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None):
-        if (not self.use_pointcloud_avoidance_trigger) or (not self.obstacle_points_map):
+    def _overlay_pointcloud_obstacles(self, blocked, dg, keep_cells=None, enabled=True, margin_m=None):
+        if (not enabled) or (not self.obstacle_points_map):
             return [row[:] for row in blocked], 0
 
         res = max(1e-3, float(dg.info.resolution))
-        inflate_m = self.robot_radius + self.footprint_padding_m + self.obstacle_block_margin_m
+        if margin_m is None:
+            margin_m = self.obstacle_block_margin_m
+        inflate_m = self.robot_radius + self.footprint_padding_m + max(0.0, float(margin_m))
         inflate_cells = max(1, int(math.ceil(inflate_m / res)))
         out = [row[:] for row in blocked]
         keep = set(keep_cells or [])
@@ -747,6 +762,15 @@ class ConstrainedLocalReplanner:
                         continue
                     out[ny][nx] = True
         return out, marked_sources
+
+    def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None):
+        return self._overlay_pointcloud_obstacles(
+            blocked,
+            dg,
+            keep_cells=keep_cells,
+            enabled=self.use_pointcloud_avoidance_trigger,
+            margin_m=self.obstacle_block_margin_m,
+        )
 
     def _path_blocked_ahead(self, path, blocked, start_cell, grid_resolution_m, max_check_m=None):
         if not path:
