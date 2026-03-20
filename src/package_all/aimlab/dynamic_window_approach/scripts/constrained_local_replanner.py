@@ -82,6 +82,12 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_confirm_cycles = max(
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
         )
+        self.avoidance_branch_backtrack_cells = max(
+            0, int(rospy.get_param("~avoidance_branch_backtrack_cells", 2))
+        )
+        self.avoidance_rejoin_min_distance_m = max(
+            0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
+        )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
         )
@@ -506,6 +512,23 @@ class ConstrainedLocalReplanner:
         if len(world_points) < 2:
             return
 
+        sampled_points = self._sample_world_points(world_points)
+
+        for x, y in sampled_points:
+            ps = PoseStamped()
+            ps.header = out.header
+            ps.pose.position.x = float(x)
+            ps.pose.position.y = float(y)
+            ps.pose.position.z = 0.0
+            ps.pose.orientation.w = 1.0
+            out.poses.append(ps)
+        if len(out.poses) >= 2:
+            publisher.publish(out)
+        return sampled_points, out.header.frame_id
+
+    def _sample_world_points(self, world_points):
+        if len(world_points) < 2:
+            return list(world_points)
         sampled_points = [world_points[0]]
         for i in range(len(world_points) - 1):
             x0, y0 = world_points[i]
@@ -520,18 +543,7 @@ class ConstrainedLocalReplanner:
                     x0 + t * (x1 - x0),
                     y0 + t * (y1 - y0),
                 ))
-
-        for x, y in sampled_points:
-            ps = PoseStamped()
-            ps.header = out.header
-            ps.pose.position.x = float(x)
-            ps.pose.position.y = float(y)
-            ps.pose.position.z = 0.0
-            ps.pose.orientation.w = 1.0
-            out.poses.append(ps)
-        if len(out.poses) >= 2:
-            publisher.publish(out)
-        return sampled_points, out.header.frame_id
+        return sampled_points
 
     @staticmethod
     def _path_signature_from_points(points):
@@ -640,9 +652,13 @@ class ConstrainedLocalReplanner:
     def _publish_local_path(self, grid_path, dg, stamp):
         sampled_points, frame_id = self._publish_grid_path(self.pub_local_path, grid_path, dg, stamp)
 
-    def _publish_avoidance_path(self, grid_path, dg, stamp):
+    def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None):
         sampled_points, frame_id = self._publish_grid_path(self.pub_avoidance_path, grid_path, dg, stamp)
-        self._record_path_history("avoidance", sampled_points, frame_id)
+        self._record_path_history(
+            "avoidance",
+            history_points if history_points is not None else sampled_points,
+            frame_id,
+        )
 
     def _publish_world_path(self, world_points, frame_id, stamp):
         out = Path()
@@ -785,6 +801,109 @@ class ConstrainedLocalReplanner:
                 break
         return False
 
+    def _first_blocked_path_index(self, path, blocked, start_cell, dg):
+        if not path:
+            return None
+
+        start_idx = self._nearest_path_cell_index(path, start_cell)
+        for i in range(start_idx, len(path)):
+            gx, gy = path[i]
+            if not self._in_bounds_blocked(blocked, gx, gy) or blocked[gy][gx]:
+                return i
+            if i + 1 < len(path) and not self._has_line_of_sight(blocked, path[i], path[i + 1]):
+                return i + 1
+
+        if not self.obstacle_points_map:
+            return None
+
+        world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
+        corridor_half = (
+            max(0.5 * self.robot_width_m, 0.5 * self.robot_length_m)
+            + self.footprint_padding_m
+            + self.obstacle_block_margin_m
+            + self.avoidance_trigger_margin_m
+        )
+        corridor_half_sq = corridor_half * corridor_half
+        remain_m = 0.0
+
+        for seg_idx in range(start_idx, len(world_path) - 1):
+            x0, y0 = world_path[seg_idx]
+            x1, y1 = world_path[seg_idx + 1]
+            seg_len = math.hypot(x1 - x0, y1 - y0)
+            if seg_len <= 1e-6:
+                continue
+            remain_m += seg_len
+            for ox, oy in self.obstacle_points_map:
+                if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
+                    return min(seg_idx + 1, len(path) - 1)
+            if remain_m >= self.avoidance_trigger_ahead_m:
+                break
+        return None
+
+    @staticmethod
+    def _append_path_segment(out_path, segment):
+        for cell in segment:
+            if not out_path or out_path[-1] != cell:
+                out_path.append(cell)
+
+    def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg):
+        if len(nominal_path) < 2:
+            return None, None
+
+        start_idx = self._nearest_path_cell_index(nominal_path, start_cell)
+        blocked_idx = self._first_blocked_path_index(nominal_path, dynamic_blocked, start_cell, dg)
+        if blocked_idx is None:
+            return None, None
+
+        branch_start_idx = max(start_idx, blocked_idx - self.avoidance_branch_backtrack_cells)
+        while branch_start_idx > start_idx:
+            bx, by = nominal_path[branch_start_idx]
+            if self._in_bounds_blocked(dynamic_blocked, bx, by) and not dynamic_blocked[by][bx]:
+                break
+            branch_start_idx -= 1
+
+        branch_start = nominal_path[branch_start_idx]
+        min_rejoin_cells = max(
+            1, int(math.ceil(self.avoidance_rejoin_min_distance_m / max(1e-3, float(dg.info.resolution))))
+        )
+        first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
+
+        for rejoin_idx in range(first_rejoin_idx, len(nominal_path)):
+            rejoin_cell = nominal_path[rejoin_idx]
+            rx, ry = rejoin_cell
+            if not self._in_bounds_blocked(dynamic_blocked, rx, ry) or dynamic_blocked[ry][rx]:
+                continue
+            detour = self._astar(
+                dynamic_blocked,
+                branch_start,
+                rejoin_cell,
+                allow_best_effort=False,
+            )
+            if detour is None or len(detour) < 2:
+                continue
+
+            detour = self._simplify_grid_path(
+                detour,
+                dynamic_blocked,
+                float(dg.info.resolution),
+                force=self.smooth_avoidance_line_of_sight,
+            )
+            if len(detour) < 2:
+                continue
+
+            composed = []
+            self._append_path_segment(composed, [start_cell])
+            self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
+            self._append_path_segment(composed, detour[1:])
+            self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+
+            branch_history_points = self._sample_world_points(
+                [self._grid_to_world(dg, gx, gy) for gx, gy in detour]
+            )
+            return composed, branch_history_points
+
+        return None, None
+
     def _update_avoidance_path(self, nominal_path, base_blocked, start_cell, goal_cell, dg, stamp, label):
         frame_id = dg.header.frame_id if dg.header.frame_id else "map"
         if not self.enable_avoidance_path or len(nominal_path) < 2:
@@ -803,32 +922,31 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp)
             return
 
-        avoid_path = self._astar(
+        avoid_path, branch_history_points = self._build_branch_avoidance_path(
+            nominal_path,
             dynamic_blocked,
             start_cell,
-            goal_cell,
-            allow_best_effort=self.allow_best_effort_path,
+            dg,
         )
         if avoid_path is None:
             rospy.logwarn_throttle(
                 1.0,
-                "constrained_local_replanner: obstacle detected on %s path but no avoidance path found",
+                "constrained_local_replanner: obstacle detected on %s path but no branch-rejoin avoidance found",
                 label,
             )
             self._clear_avoidance_path(frame_id, stamp)
             return
 
-        avoid_path = self._simplify_grid_path(
-            avoid_path,
-            dynamic_blocked,
-            float(dg.info.resolution),
-            force=self.smooth_avoidance_line_of_sight,
-        )
         if len(avoid_path) < 2:
             self._clear_avoidance_path(frame_id, stamp)
             return
 
-        self._publish_avoidance_path(avoid_path, dg, stamp)
+        self._publish_avoidance_path(
+            avoid_path,
+            dg,
+            stamp,
+            history_points=branch_history_points,
+        )
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
         if not self.avoidance_active:

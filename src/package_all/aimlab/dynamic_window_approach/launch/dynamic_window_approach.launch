@@ -41,6 +41,8 @@
     <arg name="avoidance_trigger_ahead_m" default="8.0"/>
     <arg name="avoidance_hold_s" default="1.5"/>
     <arg name="avoidance_clear_confirm_cycles" default="6"/>
+    <arg name="avoidance_branch_backtrack_cells" default="2"/>
+    <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
     <arg name="obstacle_consider_side_m" default="1.10"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -91,6 +93,8 @@
             <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
             <param name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
             <param name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+            <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
+            <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
             <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>

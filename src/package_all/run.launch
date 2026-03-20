@@ -46,6 +46,8 @@
   <arg name="avoidance_trigger_ahead_m" default="8.0"/>
   <arg name="avoidance_hold_s" default="1.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
+  <arg name="avoidance_branch_backtrack_cells" default="2"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
   <arg name="obstacle_consider_side_m" default="1.10"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -108,6 +110,8 @@
     <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
     <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
     <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+    <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
+    <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
     <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
