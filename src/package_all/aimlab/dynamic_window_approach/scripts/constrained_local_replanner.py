@@ -1182,7 +1182,12 @@ class ConstrainedLocalReplanner:
             )
             self._clear_avoidance_path(dg.header.frame_id, stamp)
             return True
-        path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
+        # If the direct goal is visible on the blocked grid, prefer a single
+        # straight segment over the staircase-like A* cell path.
+        if path[-1] == goal_cell and self._has_line_of_sight(blocked, start_cell, goal_cell):
+            path = [start_cell, goal_cell]
+        else:
+            path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
 
         if not self._should_publish_path(goal_cell, path):
             self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")

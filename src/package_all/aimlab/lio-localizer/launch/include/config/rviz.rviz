@@ -307,12 +307,12 @@ Visualization Manager:
       Buffer Length: 1
       Class: rviz/Path
       Color: 239; 41; 41
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.30000001192092896
+      Line Width: 0.05000000074505806
       Name: Optimized Path
       Offset:
         X: 0
@@ -406,7 +406,7 @@ Visualization Manager:
       Shaft Length: 0.10000000149011612
       Topic: /planning/local_path
       Unreliable: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
