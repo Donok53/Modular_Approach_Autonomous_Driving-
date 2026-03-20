@@ -138,6 +138,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
+        self.last_avoidance_grid_path = None
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
         self.path_history_next_id = 0
         self.last_history_signature = {"local": None, "avoidance": None}
@@ -244,6 +245,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
+        self.last_avoidance_grid_path = None
         self._clear_path_history()
         self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
@@ -755,7 +757,7 @@ class ConstrainedLocalReplanner:
             end_xy=end_xy,
         )
 
-    def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None, start_xy=None, end_xy=None):
+    def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None, start_xy=None, end_xy=None, record_history=True):
         sampled_points, frame_id = self._publish_grid_path(
             self.pub_avoidance_path,
             grid_path,
@@ -764,11 +766,13 @@ class ConstrainedLocalReplanner:
             start_xy=start_xy,
             end_xy=end_xy,
         )
-        self._record_path_history(
-            "avoidance",
-            history_points if history_points is not None else sampled_points,
-            frame_id,
-        )
+        self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
+        if record_history:
+            self._record_path_history(
+                "avoidance",
+                history_points if history_points is not None else sampled_points,
+                frame_id,
+            )
 
     def _publish_world_path(self, world_points, frame_id, stamp):
         out = Path()
@@ -805,6 +809,25 @@ class ConstrainedLocalReplanner:
             rospy.loginfo("constrained_local_replanner: avoidance path cleared")
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
+        self.last_avoidance_grid_path = None
+
+    def _republish_last_avoidance_path(self, dg, stamp):
+        if self.last_avoidance_grid_path is None or len(self.last_avoidance_grid_path) < 2:
+            return False
+        self._publish_avoidance_path(
+            self.last_avoidance_grid_path,
+            dg,
+            stamp,
+            record_history=False,
+        )
+        self.avoidance_active = True
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = stamp.to_sec()
+        rospy.loginfo_throttle(
+            1.0,
+            "constrained_local_replanner: keeping previous avoidance path while obstacle remains",
+        )
+        return True
 
     def _debug_avoidance_log(self, message):
         if not self.debug_avoidance_logging:
@@ -1119,10 +1142,14 @@ class ConstrainedLocalReplanner:
                 label,
                 trigger_reason,
             )
+            if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
+                return
             self._clear_avoidance_path(frame_id, stamp)
             return
 
         if len(avoid_path) < 2:
+            if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
+                return
             self._clear_avoidance_path(frame_id, stamp)
             return
 

@@ -498,10 +498,22 @@ class DWAControl:
         self.reach_goal_flag = False
         self.prev_goal_flag = False
 
+    def _sync_progress_to_current_pose(self):
+        if len(self.path_pts) < 2:
+            self.s_cur = 0.0
+            return
+        px = float(self.current_pose.pose.pose.position.x)
+        py = float(self.current_pose.pose.pose.position.y)
+        s_proj, _lat_err, _idx, _t = self._project_to_path(px, py)
+        self.s_cur = max(0.0, min(self.s_total, s_proj))
+
     def _activate_path(self, path_msg, sig, source):
         self.path_sig = sig
         self.path_msg = path_msg
         self.active_path_source = source
+        self._path_tracking_prev_w = 0.0
+        self._rot_mode = False
+        self._rot_yaw_target = None
         if path_msg is None or len(path_msg.poses) < 2:
             self.path_pts = []
             self.seg_lens = []
@@ -510,6 +522,7 @@ class DWAControl:
             self.s_cur = 0.0
             return
         self._rebuild_path_geometry()
+        self._sync_progress_to_current_pose()
 
     def path_callback_global(self, path_msg):
         self.global_path_msg = path_msg
