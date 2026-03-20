@@ -32,6 +32,24 @@ class DynamicRiskManager:
         self.dynamic_speed_thresh_mps = max(
             0.01, float(rospy.get_param("~dynamic_speed_thresh_mps", 0.15))
         )
+        self.behavior_stop_on_count = max(
+            1, int(rospy.get_param("~behavior_stop_on_count", 2))
+        )
+        self.behavior_stop_off_count = max(
+            1, int(rospy.get_param("~behavior_stop_off_count", 6))
+        )
+        self.behavior_stop_hold_s = max(
+            0.0, float(rospy.get_param("~behavior_stop_hold_s", 0.8))
+        )
+        self.behavior_caution_on_count = max(
+            1, int(rospy.get_param("~behavior_caution_on_count", 2))
+        )
+        self.behavior_caution_off_count = max(
+            1, int(rospy.get_param("~behavior_caution_off_count", 4))
+        )
+        self.behavior_caution_hold_s = max(
+            0.0, float(rospy.get_param("~behavior_caution_hold_s", 0.6))
+        )
         self.include_static_in_behavior = bool(
             rospy.get_param("~include_static_objects_in_behavior", False)
         )
@@ -52,6 +70,11 @@ class DynamicRiskManager:
 
         self.objects = []
         self.grid_msg = None
+        self.behavior_state = "clear"
+        self.behavior_state_since = rospy.Time(0)
+        self.behavior_state_reason = "clear"
+        self.behavior_raw_state = "clear"
+        self.behavior_raw_count = 0
 
         self.pub_behavior = rospy.Publisher(self.behavior_cmd_topic, BehaviorCommand, queue_size=5)
         self.pub_risk_grid = rospy.Publisher(self.risk_grid_topic, OccupancyGrid, queue_size=1)
@@ -107,15 +130,85 @@ class DynamicRiskManager:
             return False
         return self._object_speed(obj) >= self.dynamic_speed_thresh_mps
 
-    def _evaluate_behavior(self):
+    @staticmethod
+    def _behavior_priority(state):
+        if state == "stop":
+            return 2
+        if state == "caution":
+            return 1
+        return 0
+
+    def _behavior_on_count(self, state):
+        if state == "stop":
+            return self.behavior_stop_on_count
+        if state == "caution":
+            return self.behavior_caution_on_count
+        return 1
+
+    def _behavior_off_count(self, state):
+        if state == "stop":
+            return self.behavior_stop_off_count
+        if state == "caution":
+            return self.behavior_caution_off_count
+        return 1
+
+    def _behavior_hold_s(self, state):
+        if state == "stop":
+            return self.behavior_stop_hold_s
+        if state == "caution":
+            return self.behavior_caution_hold_s
+        return 0.0
+
+    def _update_behavior_state(self, raw_state, raw_reason):
+        now = rospy.Time.now()
+        if raw_state == self.behavior_raw_state:
+            self.behavior_raw_count += 1
+        else:
+            self.behavior_raw_state = raw_state
+            self.behavior_raw_count = 1
+
+        current_prio = self._behavior_priority(self.behavior_state)
+        raw_prio = self._behavior_priority(raw_state)
+
+        if raw_state == self.behavior_state:
+            if raw_state != "clear":
+                self.behavior_state_reason = raw_reason
+            return
+
+        if raw_prio > current_prio:
+            if self.behavior_raw_count >= self._behavior_on_count(raw_state):
+                self.behavior_state = raw_state
+                self.behavior_state_since = now
+                self.behavior_state_reason = raw_reason
+            return
+
+        held_s = (now - self.behavior_state_since).to_sec() if self.behavior_state_since.to_sec() > 0.0 else float("inf")
+        if held_s < self._behavior_hold_s(self.behavior_state):
+            return
+
+        if self.behavior_raw_count >= self._behavior_off_count(self.behavior_state):
+            self.behavior_state = raw_state
+            self.behavior_state_since = now
+            self.behavior_state_reason = raw_reason if raw_state != "clear" else "clear"
+
+    def _make_behavior_cmd(self, state, reason):
         cmd = BehaviorCommand()
         cmd.header.stamp = rospy.Time.now()
         cmd.stop = False
         cmd.speed_limit = float(self.default_speed_mps)
-        cmd.reason = "clear"
+        cmd.reason = reason
+        if state == "stop":
+            cmd.stop = True
+            cmd.speed_limit = 0.0
+        elif state == "caution":
+            cmd.stop = False
+            cmd.speed_limit = min(cmd.speed_limit, self.caution_speed_mps)
+        return cmd
 
+    def _evaluate_behavior(self):
         if not self.have_odom:
-            return cmd
+            self._update_behavior_state("clear", "clear")
+            return self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason)
 
         best_ttc = None
         stop_reason = ""
@@ -152,16 +245,18 @@ class DynamicRiskManager:
             elif rx >= 0.0 and abs(ry) <= lateral_caution and ttc <= self.caution_ttc_s:
                 caution = True
 
+        raw_state = "clear"
+        raw_reason = "clear"
         if best_ttc is not None:
-            cmd.stop = True
-            cmd.speed_limit = 0.0
-            cmd.reason = stop_reason
-            return cmd
+            raw_state = "stop"
+            raw_reason = stop_reason
+        elif caution:
+            raw_state = "caution"
+            raw_reason = "ttc_caution"
 
-        if caution:
-            cmd.stop = False
-            cmd.speed_limit = min(cmd.speed_limit, self.caution_speed_mps)
-            cmd.reason = "ttc_caution"
+        self._update_behavior_state(raw_state, raw_reason)
+        cmd = self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason)
+        cmd.header.stamp = rospy.Time.now()
         return cmd
 
     @staticmethod
@@ -227,12 +322,15 @@ class DynamicRiskManager:
                 static_count = max(0, len(self.objects) - moving_count)
                 rospy.loginfo_throttle(
                     self.debug_risk_log_period_s,
-                    "dynamic_risk_manager: objects=%d moving=%d static=%d risk_static=%s behavior_static=%s stop=%s speed_limit=%.2f reason=%s",
+                    "dynamic_risk_manager: objects=%d moving=%d static=%d risk_static=%s behavior_static=%s raw=%s(%d) latched=%s stop=%s speed_limit=%.2f reason=%s",
                     len(self.objects),
                     moving_count,
                     static_count,
                     "on" if self.include_static_in_risk_grid else "off",
                     "on" if self.include_static_in_behavior else "off",
+                    self.behavior_raw_state,
+                    self.behavior_raw_count,
+                    self.behavior_state,
                     "yes" if cmd.stop else "no",
                     float(cmd.speed_limit),
                     cmd.reason,
