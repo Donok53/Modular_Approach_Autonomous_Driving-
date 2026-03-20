@@ -22,6 +22,7 @@ class ConstrainedLocalReplanner:
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.path_history_topic = rospy.get_param("~path_history_topic", "/planning/path_history")
+        self.travel_history_topic = rospy.get_param("~travel_history_topic", "/planning/travel_history")
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
@@ -64,6 +65,12 @@ class ConstrainedLocalReplanner:
         )
         self.path_history_max_paths = max(
             1, int(rospy.get_param("~path_history_max_paths", 12))
+        )
+        self.travel_history_max_points = max(
+            2, int(rospy.get_param("~travel_history_max_points", 400))
+        )
+        self.travel_history_spacing_m = max(
+            0.02, float(rospy.get_param("~travel_history_spacing_m", 0.05))
         )
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
@@ -129,11 +136,15 @@ class ConstrainedLocalReplanner:
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
         self.path_history_next_id = 0
         self.last_history_signature = {"local": None, "avoidance": None}
+        self.travel_history_points = deque(maxlen=self.travel_history_max_points)
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
         self.pub_path_history = rospy.Publisher(
             self.path_history_topic, MarkerArray, queue_size=2, latch=True
+        )
+        self.pub_travel_history = rospy.Publisher(
+            self.travel_history_topic, Marker, queue_size=2, latch=True
         )
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
@@ -145,6 +156,7 @@ class ConstrainedLocalReplanner:
             self.sub_direct_goal = rospy.Subscriber(self.direct_goal_topic, PoseStamped, self.direct_goal_callback, queue_size=2)
 
         self._clear_path_history()
+        self._clear_travel_history()
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
             "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
@@ -171,6 +183,7 @@ class ConstrainedLocalReplanner:
             1.0 - 2.0 * (q.y * q.y + q.z * q.z),
         )
         self.have_odom = True
+        self._record_travel_history_point(self.odom_x, self.odom_y)
 
     def global_path_callback(self, msg):
         self.global_path = msg
@@ -225,6 +238,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self._clear_path_history()
+        self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
         rospy.loginfo(
             "constrained_local_replanner: direct goal set (%.2f, %.2f) frame=%s",
@@ -589,16 +603,16 @@ class ConstrainedLocalReplanner:
             marker.type = Marker.LINE_STRIP
             marker.action = Marker.ADD
             marker.pose.orientation.w = 1.0
-            marker.scale.x = 0.18
+            marker.scale.x = 0.08
             marker.color.a = alpha
-            marker.color.r = 0.20 + 0.55 * (1.0 - age_norm)
-            marker.color.g = 0.85 - 0.45 * (1.0 - age_norm)
-            marker.color.b = 1.0
+            marker.color.r = 1.0
+            marker.color.g = 0.55 + 0.20 * age_norm
+            marker.color.b = 0.0
             for x, y in entry["points"]:
                 p = Point()
                 p.x = float(x)
                 p.y = float(y)
-                p.z = 0.14
+                p.z = 0.12
                 marker.points.append(p)
             markers.markers.append(marker)
 
@@ -610,16 +624,16 @@ class ConstrainedLocalReplanner:
             entry_marker.type = Marker.SPHERE
             entry_marker.action = Marker.ADD
             entry_marker.pose.orientation.w = 1.0
-            entry_marker.scale.x = 0.20
-            entry_marker.scale.y = 0.20
-            entry_marker.scale.z = 0.20
+            entry_marker.scale.x = 0.12
+            entry_marker.scale.y = 0.12
+            entry_marker.scale.z = 0.12
             entry_marker.color.r = marker.color.r
             entry_marker.color.g = marker.color.g
             entry_marker.color.b = marker.color.b
             entry_marker.color.a = min(1.0, alpha + 0.05)
             entry_marker.pose.position.x = float(entry["points"][0][0])
             entry_marker.pose.position.y = float(entry["points"][0][1])
-            entry_marker.pose.position.z = 0.16
+            entry_marker.pose.position.z = 0.14
             markers.markers.append(entry_marker)
 
             exit_marker = Marker()
@@ -630,18 +644,59 @@ class ConstrainedLocalReplanner:
             exit_marker.type = Marker.SPHERE
             exit_marker.action = Marker.ADD
             exit_marker.pose.orientation.w = 1.0
-            exit_marker.scale.x = 0.16
-            exit_marker.scale.y = 0.16
-            exit_marker.scale.z = 0.16
+            exit_marker.scale.x = 0.10
+            exit_marker.scale.y = 0.10
+            exit_marker.scale.z = 0.10
             exit_marker.color.r = 1.0
-            exit_marker.color.g = 1.0
-            exit_marker.color.b = 1.0
+            exit_marker.color.g = 0.75
+            exit_marker.color.b = 0.20
             exit_marker.color.a = alpha
             exit_marker.pose.position.x = float(entry["points"][-1][0])
             exit_marker.pose.position.y = float(entry["points"][-1][1])
-            exit_marker.pose.position.z = 0.16
+            exit_marker.pose.position.z = 0.14
             markers.markers.append(exit_marker)
         self.pub_path_history.publish(markers)
+
+    def _publish_travel_history_marker(self):
+        marker = Marker()
+        marker.header.stamp = rospy.Time.now()
+        marker.header.frame_id = "map"
+        marker.ns = "travel_history"
+        marker.id = 1
+        marker.pose.orientation.w = 1.0
+        if len(self.travel_history_points) < 2:
+            marker.action = Marker.DELETE
+            self.pub_travel_history.publish(marker)
+            return
+
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.09
+        marker.color.a = 0.95
+        marker.color.r = 0.95
+        marker.color.g = 0.15
+        marker.color.b = 0.10
+        for x, y in self.travel_history_points:
+            p = Point()
+            p.x = float(x)
+            p.y = float(y)
+            p.z = 0.10
+            marker.points.append(p)
+        self.pub_travel_history.publish(marker)
+
+    def _record_travel_history_point(self, x, y):
+        x = float(x)
+        y = float(y)
+        if self.travel_history_points:
+            lx, ly = self.travel_history_points[-1]
+            if math.hypot(x - lx, y - ly) < self.travel_history_spacing_m:
+                return
+        self.travel_history_points.append((x, y))
+        self._publish_travel_history_marker()
+
+    def _clear_travel_history(self):
+        self.travel_history_points.clear()
+        self._publish_travel_history_marker()
 
     def _record_path_history(self, source, sampled_points, frame_id):
         if source != "avoidance":
@@ -1074,15 +1129,19 @@ class ConstrainedLocalReplanner:
 
         if (
             self.freeze_path_on_first_plan
-            and self.frozen_direct_goal_cell == goal_cell
             and self.frozen_direct_grid_path
         ):
+            frozen_goal_cell = (
+                self.frozen_direct_goal_cell
+                if self.frozen_direct_goal_cell is not None
+                else self.frozen_direct_grid_path[-1]
+            )
             self._publish_local_path(self.frozen_direct_grid_path, dg, stamp)
             self._update_avoidance_path(
                 self.frozen_direct_grid_path,
                 blocked,
                 start_cell,
-                goal_cell,
+                frozen_goal_cell,
                 dg,
                 stamp,
                 "direct(frozen)",

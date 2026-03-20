@@ -386,13 +386,13 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 255; 170; 0
+      Color: 0; 220; 60
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.30000001192092896
+      Line Width: 0.10000000149011612
       Name: local_path
       Offset:
         X: 0
@@ -410,13 +410,13 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 64; 255; 160
+      Color: 255; 140; 0
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.30000001192092896
+      Line Width: 0.10000000149011612
       Name: avoidance_path
       Offset:
         X: 0
@@ -432,11 +432,19 @@ Visualization Manager:
       Unreliable: false
       Value: true
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /planning/path_history
       Name: path_history
       Namespaces: {}
       Queue Size: 100
+      Value: false
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /planning/travel_history
+      Name: travel_history
+      Namespaces:
+        {}
+      Queue Size: 20
       Value: true
     - Class: rviz/Marker
       Enabled: true
