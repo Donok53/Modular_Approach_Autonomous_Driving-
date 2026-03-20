@@ -29,6 +29,19 @@ class DynamicRiskManager:
         self.default_speed_mps = max(0.05, float(rospy.get_param("~default_speed_mps", 0.55)))
         self.front_lateral_stop_m = max(0.1, float(rospy.get_param("~front_lateral_stop_m", 1.8)))
         self.front_lateral_caution_m = max(0.1, float(rospy.get_param("~front_lateral_caution_m", 2.5)))
+        self.dynamic_speed_thresh_mps = max(
+            0.01, float(rospy.get_param("~dynamic_speed_thresh_mps", 0.15))
+        )
+        self.include_static_in_behavior = bool(
+            rospy.get_param("~include_static_objects_in_behavior", False)
+        )
+        self.include_static_in_risk_grid = bool(
+            rospy.get_param("~include_static_objects_in_risk_grid", False)
+        )
+        self.debug_risk_logging = bool(rospy.get_param("~debug_risk_logging", True))
+        self.debug_risk_log_period_s = max(
+            0.1, float(rospy.get_param("~debug_risk_log_period_s", 1.0))
+        )
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -84,6 +97,16 @@ class DynamicRiskManager:
         t = (label or "").lower()
         return ("ped" in t) or ("person" in t) or ("walker" in t)
 
+    @staticmethod
+    def _object_speed(obj):
+        return math.hypot(float(obj.twist.linear.x), float(obj.twist.linear.y))
+
+    def _is_dynamic_object(self, obj):
+        label = (obj.label or "").lower()
+        if label.startswith("static_"):
+            return False
+        return self._object_speed(obj) >= self.dynamic_speed_thresh_mps
+
     def _evaluate_behavior(self):
         cmd = BehaviorCommand()
         cmd.header.stamp = rospy.Time.now()
@@ -99,6 +122,8 @@ class DynamicRiskManager:
         caution = False
 
         for obj in self.objects:
+            if (not self.include_static_in_behavior) and (not self._is_dynamic_object(obj)):
+                continue
             ox = float(obj.pose.position.x)
             oy = float(obj.pose.position.y)
             ovx = float(obj.twist.linear.x)
@@ -172,6 +197,8 @@ class DynamicRiskManager:
 
         steps = max(1, int(math.floor(self.horizon_s / self.step_s)))
         for obj in self.objects:
+            if (not self.include_static_in_risk_grid) and (not self._is_dynamic_object(obj)):
+                continue
             x0 = float(obj.pose.position.x)
             y0 = float(obj.pose.position.y)
             vx = float(obj.twist.linear.x)
@@ -195,6 +222,21 @@ class DynamicRiskManager:
             risk_grid = self._build_risk_grid()
             if risk_grid is not None:
                 self.pub_risk_grid.publish(risk_grid)
+            if self.debug_risk_logging:
+                moving_count = sum(1 for obj in self.objects if self._is_dynamic_object(obj))
+                static_count = max(0, len(self.objects) - moving_count)
+                rospy.loginfo_throttle(
+                    self.debug_risk_log_period_s,
+                    "dynamic_risk_manager: objects=%d moving=%d static=%d risk_static=%s behavior_static=%s stop=%s speed_limit=%.2f reason=%s",
+                    len(self.objects),
+                    moving_count,
+                    static_count,
+                    "on" if self.include_static_in_risk_grid else "off",
+                    "on" if self.include_static_in_behavior else "off",
+                    "yes" if cmd.stop else "no",
+                    float(cmd.speed_limit),
+                    cmd.reason,
+                )
         except Exception as e:
             rospy.logwarn_throttle(1.0, "dynamic_risk_manager error: %s", str(e))
 

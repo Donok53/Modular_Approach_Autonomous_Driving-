@@ -9,7 +9,7 @@
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="enable_cloud_tracker" default="true"/>
-  <arg name="enable_dynamic_risk_manager" default="false"/>
+  <arg name="enable_dynamic_risk_manager" default="true"/>
   <arg name="enable_local_replanner" default="true"/>
   <arg name="use_dynamic_risk_grid" default="true"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
@@ -42,12 +42,20 @@
   <arg name="lookahead_distance" default="0.55"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
   <arg name="avoidance_hard_stop_distance" default="0.20"/>
+  <arg name="use_pointcloud_avoidance_trigger" default="false"/>
   <arg name="avoidance_trigger_margin_m" default="0.20"/>
   <arg name="avoidance_trigger_ahead_m" default="8.0"/>
   <arg name="avoidance_hold_s" default="1.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
+  <arg name="debug_avoidance_logging" default="true"/>
+  <arg name="debug_avoidance_log_period_s" default="1.0"/>
+  <arg name="dynamic_speed_thresh_mps" default="0.15"/>
+  <arg name="include_static_objects_in_behavior" default="false"/>
+  <arg name="include_static_objects_in_risk_grid" default="false"/>
+  <arg name="debug_dynamic_risk_logging" default="true"/>
+  <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
   <arg name="obstacle_consider_side_m" default="1.10"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -106,12 +114,20 @@
     <arg name="lookahead_distance" value="$(arg lookahead_distance)"/>
     <arg name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
     <arg name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
+    <arg name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
     <arg name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
     <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
     <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
     <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
     <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
     <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+    <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
+    <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
+    <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
+    <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
+    <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+    <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
+    <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
     <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
     <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
     <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
