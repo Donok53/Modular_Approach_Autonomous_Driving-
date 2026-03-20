@@ -129,6 +129,8 @@ class ConstrainedLocalReplanner:
         self.cached_direct_goal_cell = None
         self.frozen_direct_goal_cell = None
         self.frozen_direct_grid_path = None
+        self.frozen_direct_start_xy = None
+        self.frozen_direct_goal_xy = None
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
@@ -234,6 +236,8 @@ class ConstrainedLocalReplanner:
         self.cached_direct_goal_cell = None
         self.frozen_direct_goal_cell = None
         self.frozen_direct_grid_path = None
+        self.frozen_direct_start_xy = None
+        self.frozen_direct_goal_xy = None
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
@@ -536,15 +540,29 @@ class ConstrainedLocalReplanner:
             anchor_idx = farthest_idx
         return simplified
 
-    def _publish_grid_path(self, publisher, grid_path, dg, stamp):
-        out = Path()
-        out.header.stamp = stamp
-        out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+    def _grid_path_to_world_points(self, grid_path, dg, start_xy=None, end_xy=None):
         world_points = []
         for i, (gx, gy) in enumerate(grid_path):
             if self.simplify_stride > 1 and i not in (0, len(grid_path) - 1) and (i % self.simplify_stride != 0):
                 continue
             world_points.append(self._grid_to_world(dg, gx, gy))
+
+        if start_xy is not None and world_points:
+            world_points[0] = (float(start_xy[0]), float(start_xy[1]))
+        if end_xy is not None and len(world_points) >= 2:
+            world_points[-1] = (float(end_xy[0]), float(end_xy[1]))
+        return world_points
+
+    def _publish_grid_path(self, publisher, grid_path, dg, stamp, start_xy=None, end_xy=None):
+        out = Path()
+        out.header.stamp = stamp
+        out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+        world_points = self._grid_path_to_world_points(
+            grid_path,
+            dg,
+            start_xy=start_xy,
+            end_xy=end_xy,
+        )
 
         if len(world_points) < 2:
             return
@@ -674,7 +692,7 @@ class ConstrainedLocalReplanner:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.03
+        marker.scale.x = 0.10
         marker.color.a = 0.70
         marker.color.r = 0.95
         marker.color.g = 0.15
@@ -727,11 +745,25 @@ class ConstrainedLocalReplanner:
         self.last_history_signature = {"local": None, "avoidance": None}
         self._publish_path_history_markers()
 
-    def _publish_local_path(self, grid_path, dg, stamp):
-        sampled_points, frame_id = self._publish_grid_path(self.pub_local_path, grid_path, dg, stamp)
+    def _publish_local_path(self, grid_path, dg, stamp, start_xy=None, end_xy=None):
+        sampled_points, frame_id = self._publish_grid_path(
+            self.pub_local_path,
+            grid_path,
+            dg,
+            stamp,
+            start_xy=start_xy,
+            end_xy=end_xy,
+        )
 
-    def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None):
-        sampled_points, frame_id = self._publish_grid_path(self.pub_avoidance_path, grid_path, dg, stamp)
+    def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None, start_xy=None, end_xy=None):
+        sampled_points, frame_id = self._publish_grid_path(
+            self.pub_avoidance_path,
+            grid_path,
+            dg,
+            stamp,
+            start_xy=start_xy,
+            end_xy=end_xy,
+        )
         self._record_path_history(
             "avoidance",
             history_points if history_points is not None else sampled_points,
@@ -1153,7 +1185,13 @@ class ConstrainedLocalReplanner:
                 if self.frozen_direct_goal_cell is not None
                 else self.frozen_direct_grid_path[-1]
             )
-            self._publish_local_path(self.frozen_direct_grid_path, dg, stamp)
+            self._publish_local_path(
+                self.frozen_direct_grid_path,
+                dg,
+                stamp,
+                start_xy=self.frozen_direct_start_xy,
+                end_xy=self.frozen_direct_goal_xy,
+            )
             self._update_avoidance_path(
                 self.frozen_direct_grid_path,
                 blocked,
@@ -1203,12 +1241,20 @@ class ConstrainedLocalReplanner:
         if self.freeze_path_on_first_plan:
             self.frozen_direct_goal_cell = goal_cell
             self.frozen_direct_grid_path = list(path)
+            self.frozen_direct_start_xy = start_xy
+            self.frozen_direct_goal_xy = goal_xy
             rospy.loginfo(
                 "constrained_local_replanner: path frozen for goal=%s with %d cells",
                 str(goal_cell),
                 len(path),
             )
-        self._publish_local_path(path, dg, stamp)
+        self._publish_local_path(
+            path,
+            dg,
+            stamp,
+            start_xy=start_xy,
+            end_xy=goal_xy if path[-1] == goal_cell else None,
+        )
         self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
         self._record_published_path(goal_cell, path)
         return True
@@ -1277,7 +1323,13 @@ class ConstrainedLocalReplanner:
                     str(goal_cell),
                     str(path[-1]),
                 )
-            self._publish_local_path(path, dg, stamp)
+            self._publish_local_path(
+                path,
+                dg,
+                stamp,
+                start_xy=start_xy,
+                end_xy=goal_xy if path[-1] == goal_cell else None,
+            )
             self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "local")
             self._record_published_path(goal_cell, path)
         except Exception as e:
