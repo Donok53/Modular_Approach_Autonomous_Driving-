@@ -674,8 +674,8 @@ class ConstrainedLocalReplanner:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.05
-        marker.color.a = 0.95
+        marker.scale.x = 0.03
+        marker.color.a = 0.70
         marker.color.r = 0.95
         marker.color.g = 0.15
         marker.color.b = 0.10
@@ -683,7 +683,7 @@ class ConstrainedLocalReplanner:
             p = Point()
             p.x = float(x)
             p.y = float(y)
-            p.z = 0.10
+            p.z = 0.02
             marker.points.append(p)
         self.pub_travel_history.publish(marker)
 
