@@ -94,6 +94,9 @@ class ConstrainedLocalReplanner:
         self.avoidance_trigger_ahead_m = max(
             1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
         )
+        self.risk_block_confirm_cells = max(
+            1, int(rospy.get_param("~risk_block_confirm_cells", 2))
+        )
         self.avoidance_hold_s = max(0.0, float(rospy.get_param("~avoidance_hold_s", 1.5)))
         self.avoidance_clear_confirm_cycles = max(
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
@@ -671,7 +674,7 @@ class ConstrainedLocalReplanner:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.09
+        marker.scale.x = 0.05
         marker.color.a = 0.95
         marker.color.r = 0.95
         marker.color.g = 0.15
@@ -836,12 +839,17 @@ class ConstrainedLocalReplanner:
             return False
 
         remain_m = 0.0
+        blocked_run = 0
         for i in range(start_idx, len(path)):
             gx, gy = path[i]
-            if not self._in_bounds_blocked(blocked, gx, gy) or blocked[gy][gx]:
-                return True
-            if i + 1 < len(path) and not self._has_line_of_sight(blocked, path[i], path[i + 1]):
-                return True
+            cell_blocked = (not self._in_bounds_blocked(blocked, gx, gy)) or blocked[gy][gx]
+            seg_blocked = i + 1 < len(path) and (not self._has_line_of_sight(blocked, path[i], path[i + 1]))
+            if cell_blocked or seg_blocked:
+                blocked_run += 1
+                if blocked_run >= self.risk_block_confirm_cells:
+                    return True
+            else:
+                blocked_run = 0
             if i + 1 < len(path):
                 remain_m += self._heur(path[i], path[i + 1]) * max(1e-3, grid_resolution_m)
                 if max_check_m is not None and remain_m >= max_check_m:
@@ -903,12 +911,21 @@ class ConstrainedLocalReplanner:
 
         start_idx = self._nearest_path_cell_index(path, start_cell)
         remain_m = 0.0
+        blocked_run = 0
+        first_blocked_i = None
         for i in range(start_idx, len(path)):
             gx, gy = path[i]
-            if not self._in_bounds_blocked(blocked, gx, gy) or blocked[gy][gx]:
-                return i
-            if i + 1 < len(path) and not self._has_line_of_sight(blocked, path[i], path[i + 1]):
-                return i + 1
+            cell_blocked = (not self._in_bounds_blocked(blocked, gx, gy)) or blocked[gy][gx]
+            seg_blocked = i + 1 < len(path) and (not self._has_line_of_sight(blocked, path[i], path[i + 1]))
+            if cell_blocked or seg_blocked:
+                if blocked_run == 0:
+                    first_blocked_i = i if cell_blocked else min(i + 1, len(path) - 1)
+                blocked_run += 1
+                if blocked_run >= self.risk_block_confirm_cells:
+                    return first_blocked_i
+            else:
+                blocked_run = 0
+                first_blocked_i = None
             if i + 1 < len(path):
                 remain_m += self._heur(path[i], path[i + 1]) * max(1e-3, float(dg.info.resolution))
                 if max_check_m is not None and remain_m >= max_check_m:

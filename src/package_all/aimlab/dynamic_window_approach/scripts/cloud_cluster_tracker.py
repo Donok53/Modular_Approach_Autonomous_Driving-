@@ -31,6 +31,8 @@ class CloudClusterTracker:
         self.vel_alpha = min(1.0, max(0.01, float(rospy.get_param("~vel_alpha", 0.4))))
         self.publish_static = bool(rospy.get_param("~publish_static", True))
         self.static_speed_thresh_mps = max(0.01, float(rospy.get_param("~static_speed_thresh_mps", 0.15)))
+        self.dynamic_min_age = max(1, int(rospy.get_param("~dynamic_min_age", 4)))
+        self.position_jitter_m = max(0.0, float(rospy.get_param("~position_jitter_m", 0.12)))
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -170,8 +172,14 @@ class CloudClusterTracker:
             c = clusters[ci]
             t = self.tracks[tid]
             dt = max(1e-3, now_sec - t["last_t"])
-            vx_obs = (c["x"] - t["x"]) / dt
-            vy_obs = (c["y"] - t["y"]) / dt
+            dx = c["x"] - t["x"]
+            dy = c["y"] - t["y"]
+            if math.hypot(dx, dy) < self.position_jitter_m:
+                vx_obs = 0.0
+                vy_obs = 0.0
+            else:
+                vx_obs = dx / dt
+                vy_obs = dy / dt
             t["vx"] = (1.0 - self.vel_alpha) * t["vx"] + self.vel_alpha * vx_obs
             t["vy"] = (1.0 - self.vel_alpha) * t["vy"] + self.vel_alpha * vy_obs
             t["x"] = c["x"]
@@ -226,18 +234,29 @@ class CloudClusterTracker:
         out.header.frame_id = "map"
         for tid, t in self.tracks.items():
             speed = math.hypot(t["vx"], t["vy"])
-            if (not self.publish_static) and speed < self.static_speed_thresh_mps:
+            effective_vx = float(t["vx"])
+            effective_vy = float(t["vy"])
+            effective_speed = speed
+            if t["age"] < self.dynamic_min_age and effective_speed < (2.0 * self.static_speed_thresh_mps):
+                effective_vx = 0.0
+                effective_vy = 0.0
+                effective_speed = 0.0
+            if effective_speed < self.static_speed_thresh_mps:
+                effective_vx = 0.0
+                effective_vy = 0.0
+                effective_speed = 0.0
+            if (not self.publish_static) and effective_speed < self.static_speed_thresh_mps:
                 continue
             obj = TrackedObject()
             obj.id = int(tid)
-            obj.label = self._label_track(t["size_x"], t["size_y"], speed)
+            obj.label = self._label_track(t["size_x"], t["size_y"], effective_speed)
             obj.confidence = float(t["score"])
             obj.pose.position.x = float(t["x"])
             obj.pose.position.y = float(t["y"])
             obj.pose.position.z = 0.0
             obj.pose.orientation.w = 1.0
-            obj.twist.linear.x = float(t["vx"])
-            obj.twist.linear.y = float(t["vy"])
+            obj.twist.linear.x = effective_vx
+            obj.twist.linear.y = effective_vy
             obj.twist.linear.z = 0.0
             obj.size.x = float(t["size_x"])
             obj.size.y = float(t["size_y"])

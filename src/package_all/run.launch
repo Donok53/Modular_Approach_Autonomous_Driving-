@@ -45,15 +45,26 @@
   <arg name="use_pointcloud_static_blocking" default="true"/>
   <arg name="pointcloud_static_block_margin_m" default="0.10"/>
   <arg name="use_pointcloud_avoidance_trigger" default="false"/>
-  <arg name="avoidance_trigger_margin_m" default="0.20"/>
-  <arg name="avoidance_trigger_ahead_m" default="8.0"/>
+  <arg name="avoidance_trigger_margin_m" default="0.12"/>
+  <arg name="avoidance_trigger_ahead_m" default="4.0"/>
+  <arg name="risk_block_confirm_cells" default="2"/>
   <arg name="avoidance_hold_s" default="1.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
-  <arg name="dynamic_speed_thresh_mps" default="0.15"/>
+  <arg name="dynamic_speed_thresh_mps" default="0.30"/>
+  <arg name="prediction_horizon_s" default="1.5"/>
+  <arg name="prediction_step_s" default="0.2"/>
+  <arg name="prediction_inflate_m" default="0.35"/>
+  <arg name="front_lateral_stop_m" default="0.9"/>
+  <arg name="front_lateral_caution_m" default="1.2"/>
+  <arg name="cloud_tracker_max_assoc_dist_m" default="1.0"/>
+  <arg name="cloud_tracker_vel_alpha" default="0.25"/>
+  <arg name="cloud_tracker_static_speed_thresh_mps" default="0.25"/>
+  <arg name="cloud_tracker_dynamic_min_age" default="4"/>
+  <arg name="cloud_tracker_position_jitter_m" default="0.12"/>
   <arg name="include_static_objects_in_behavior" default="false"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
@@ -121,6 +132,7 @@
     <arg name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
     <arg name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
     <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+    <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
     <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
     <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
     <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
@@ -128,6 +140,16 @@
     <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
     <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
     <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
+    <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
+    <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
+    <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
+    <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
+    <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+    <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
+    <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
+    <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
+    <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+    <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
     <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
     <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
     <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
