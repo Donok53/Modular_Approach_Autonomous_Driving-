@@ -210,6 +210,7 @@
       <arg name="global_path_topic" value="/astar/path"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+      <arg name="active_path_topic" value="$(arg active_path_topic)"/>
       <arg name="path_history_topic" value="$(arg path_history_topic)"/>
       <arg name="travel_history_topic" value="/planning/travel_history"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>

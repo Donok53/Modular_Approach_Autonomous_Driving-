@@ -5,6 +5,7 @@
   <arg name="global_path_topic" default="/astar/path"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
+  <arg name="active_path_topic" default="/planning/active_path"/>
   <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="travel_history_topic" default="/planning/travel_history"/>
   <arg name="enable_local_replanner" default="true"/>
@@ -46,6 +47,12 @@
   <arg name="emergency_stop_side_margin" default="0.10"/>
   <arg name="slowdown_front_margin" default="0.80"/>
   <arg name="slowdown_side_margin" default="0.20"/>
+
+  <node pkg="dynamic_window_approach" type="active_path_mux.py" name="active_path_mux" output="screen" respawn="false">
+    <param name="local_path_topic" value="$(arg local_path_topic)"/>
+    <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+    <param name="active_path_topic" value="$(arg active_path_topic)"/>
+  </node>
 
   <group if="$(arg enable_local_replanner)">
     <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen">
