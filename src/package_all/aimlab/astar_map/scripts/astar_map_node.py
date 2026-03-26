@@ -624,12 +624,21 @@ class AStarPlanner:
             return chosen
         return self.findNodeById(self.start_id) if self.start_id is not None else chosen
 
+    def _snap_goal_node_from_xy(self, x, y):
+        edge, t, px, py, _, _ = self._nearest_projection_on_edges(x, y)
+        if edge is None:
+            n = self._find_nearest_node_simple(x, y)
+            return n, x, y
+
+        chosen = edge.dst if t >= 0.5 else edge.src
+        return chosen, px, py
+
     def callback_start(self, data):
         n = self._snap_and_update_from_position(data.pose.pose.position)
         if n:
             self.start_id = n.id; self.start_init_flag = True
             if self.debug_log_enable:
-                rospy.loginfo(f"[astar] start set by /initialpose → node {n.id}")
+                rospy.loginfo(f"[astar] start set by /initialpose -> node {n.id}")
 
     def pose_callback(self, data):
         n = self._snap_and_update_from_position(data.pose.pose.position)
@@ -637,11 +646,16 @@ class AStarPlanner:
             self.start_id = n.id; self.start_init_flag = True
 
     def callback_goal_from_rviz(self, data):
-        n = self._find_nearest_node_simple(data.pose.position.x, data.pose.position.y)
+        goal_x = data.pose.position.x
+        goal_y = data.pose.position.y
+        n, snap_x, snap_y = self._snap_goal_node_from_xy(goal_x, goal_y)
         if n and self.goal_id != n.id:
             self.goal_id = n.id; self.new_goal_flag = True
             if self.debug_log_enable:
-                rospy.loginfo(f"[astar] goal set by RViz → node {n.id}")
+                rospy.loginfo(
+                    "[astar] goal set by RViz -> node %d (clicked=%.2f, %.2f snapped=%.2f, %.2f)",
+                    n.id, goal_x, goal_y, snap_x, snap_y
+                )
 
     def callback_goal_from_server(self, data):
         if self.server_dst_node_list and 0 <= data.Cmd_dest_index < len(self.server_dst_node_list):
@@ -650,21 +664,23 @@ class AStarPlanner:
             if n and self.goal_id != n.id:
                 self.goal_id = n.id; self.new_goal_flag = True
                 if self.debug_log_enable:
-                    rospy.loginfo(f"[astar] goal set by server index → node {n.id}")
+                    rospy.loginfo(f"[astar] goal set by server index -> node {n.id}")
         elif data.Cmd_dest_lat > 0.01 and data.Cmd_dest_lon > 0.01:
-            # WGS84 dest → local map XY (mode-aware)
+            # WGS84 dest -> local map XY (mode-aware)
             if self.mode == "UTM":
                 ue, un, _, _ = utm.from_latlon(data.Cmd_dest_lat, data.Cmd_dest_lon)
                 mx, my = self._xy_to_map(ue - self._utm_ref_e, un - self._utm_ref_n)
             else:
                 e, n = self._ll_to_enu(data.Cmd_dest_lat, data.Cmd_dest_lon)
                 mx, my = self._xy_to_map(e, n)
-            p = Point(); p.x = mx; p.y = my
-            g = self._find_nearest_node_simple(p.x, p.y)
+            g, snap_x, snap_y = self._snap_goal_node_from_xy(mx, my)
             if g and self.goal_id != g.id:
                 self.goal_id = g.id; self.new_goal_flag = True
                 if self.debug_log_enable:
-                    rospy.loginfo(f"[astar] goal set by server WGS84 → node {g.id}")
+                    rospy.loginfo(
+                        "[astar] goal set by server WGS84 -> node %d (goal=%.2f, %.2f snapped=%.2f, %.2f)",
+                        g.id, mx, my, snap_x, snap_y
+                    )
 
     # -------------------- Path publish control --------------------
     def publish_path_if_changed(self, path_nodes):
