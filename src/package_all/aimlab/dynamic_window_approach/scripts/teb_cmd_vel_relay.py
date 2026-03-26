@@ -18,6 +18,15 @@ class TebCmdVelRelay(object):
         self.reverse_replacement_speed = max(
             0.0, float(rospy.get_param("~reverse_replacement_speed", 0.05))
         )
+        self.enforce_min_linear_speed = bool(
+            rospy.get_param("~enforce_min_linear_speed", True)
+        )
+        self.min_abs_linear_speed = max(
+            0.0, float(rospy.get_param("~min_abs_linear_speed", 0.04))
+        )
+        self.min_angular_for_linear_boost = max(
+            0.0, float(rospy.get_param("~min_angular_for_linear_boost", 0.20))
+        )
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
@@ -27,10 +36,11 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s publish=%.1fHz",
+            "teb_cmd_vel_relay started | in=%s out=%s publish=%.1fHz min|v|=%.3f",
             self.input_topic,
             self.output_topic,
             self.publish_hz,
+            self.min_abs_linear_speed,
         )
 
     def _sanitize_cmd(self, cmd):
@@ -49,6 +59,21 @@ class TebCmdVelRelay(object):
                 self.reverse_replacement_speed,
             )
             out.linear.x = self.reverse_replacement_speed
+        if (
+            self.enforce_min_linear_speed
+            and abs(out.linear.x) > 1e-4
+            and abs(out.linear.x) < self.min_abs_linear_speed
+            and abs(out.angular.z) >= self.min_angular_for_linear_boost
+        ):
+            boosted = math.copysign(self.min_abs_linear_speed, out.linear.x)
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: boosting tiny cmd v=%.3f -> %.3f (w=%.3f)",
+                out.linear.x,
+                boosted,
+                out.angular.z,
+            )
+            out.linear.x = boosted
         return out
 
     @staticmethod

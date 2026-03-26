@@ -40,6 +40,9 @@
     <param name="log_period_s" value="1.0"/>
     <param name="forward_only" value="false"/>
     <param name="reverse_replacement_speed" value="0.05"/>
+    <param name="enforce_min_linear_speed" value="true"/>
+    <param name="min_abs_linear_speed" value="0.04"/>
+    <param name="min_angular_for_linear_boost" value="0.20"/>
   </node>
 
   <node if="$(arg use_pointcloud_obstacles)" pkg="dynamic_window_approach" type="teb_obstacle_cloud_filter.py" name="teb_obstacle_cloud_filter" output="screen">
