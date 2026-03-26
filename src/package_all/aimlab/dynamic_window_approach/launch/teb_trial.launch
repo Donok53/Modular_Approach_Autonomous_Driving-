@@ -11,13 +11,15 @@
   <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
   <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
   <arg name="teb_filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
-  <arg name="teb_filter_min_z" default="-0.25"/>
+  <arg name="teb_filter_min_z" default="-0.05"/>
   <arg name="teb_filter_max_z" default="1.50"/>
   <arg name="teb_filter_min_range" default="0.10"/>
-  <arg name="teb_filter_max_range" default="6.0"/>
-  <arg name="teb_filter_voxel_size" default="0.10"/>
-  <arg name="teb_filter_self_radius_x" default="0.38"/>
-  <arg name="teb_filter_self_radius_y" default="0.33"/>
+  <arg name="teb_filter_max_range" default="4.5"/>
+  <arg name="teb_filter_voxel_size" default="0.15"/>
+  <arg name="teb_filter_self_radius_x" default="0.45"/>
+  <arg name="teb_filter_self_radius_y" default="0.40"/>
+  <arg name="teb_filter_rear_limit_x" default="-0.10"/>
+  <arg name="teb_filter_lateral_limit_y" default="2.0"/>
   <arg name="teb_min_spacing_m" default="0.50"/>
   <arg name="teb_max_via_points" default="200"/>
 
@@ -36,7 +38,7 @@
     <param name="publish_hz" value="20.0"/>
     <param name="idle_timeout_s" value="1.0"/>
     <param name="log_period_s" value="1.0"/>
-    <param name="forward_only" value="true"/>
+    <param name="forward_only" value="false"/>
     <param name="reverse_replacement_speed" value="0.05"/>
   </node>
 
@@ -50,6 +52,8 @@
     <param name="voxel_size" value="$(arg teb_filter_voxel_size)"/>
     <param name="self_filter_radius_x" value="$(arg teb_filter_self_radius_x)"/>
     <param name="self_filter_radius_y" value="$(arg teb_filter_self_radius_y)"/>
+    <param name="rear_limit_x" value="$(arg teb_filter_rear_limit_x)"/>
+    <param name="lateral_limit_y" value="$(arg teb_filter_lateral_limit_y)"/>
   </node>
 
   <node pkg="move_base" type="move_base" name="move_base" output="screen" clear_params="true">
