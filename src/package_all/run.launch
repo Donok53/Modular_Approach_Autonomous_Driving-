@@ -35,7 +35,7 @@
   <arg name="local_planner_mode" default="custom"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
-  <arg name="teb_publish_astar_via_points" default="true"/>
+  <arg name="teb_publish_astar_via_points" default="false"/>
   <arg name="teb_use_pointcloud_obstacles" default="true"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
