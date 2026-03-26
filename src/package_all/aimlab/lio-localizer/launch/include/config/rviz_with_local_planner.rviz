@@ -530,8 +530,16 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /astar/path_display
+      Topic: /astar/path
       Unreliable: false
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /astar/clicked_goal_marker
+      Name: clicked_goal_marker
+      Namespaces:
+        astar_clicked_goal: true
+      Queue Size: 20
       Value: true
   Enabled: true
   Global Options:

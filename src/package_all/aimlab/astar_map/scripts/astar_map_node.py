@@ -132,6 +132,7 @@ class AStarPlanner:
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
+        self.pub_goal_marker = rospy.Publisher('/astar/clicked_goal_marker', Marker, queue_size=10)
         self.pub_path = rospy.Publisher('/astar/path', Path, queue_size=10)
         self.pub_path_display = rospy.Publisher('/astar/path_display', Path, queue_size=10)
         self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10)
@@ -564,17 +565,6 @@ class AStarPlanner:
             pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
             pd.poses.append(pds)
 
-        if self._goal_display_xy is not None:
-            gx, gy = self._goal_display_xy
-            should_append_goal = True
-            if pd.poses:
-                last = pd.poses[-1].pose.position
-                should_append_goal = math.hypot(last.x - gx, last.y - gy) > 0.05
-            if should_append_goal:
-                goal_ps = PoseStamped(); goal_ps.header = pd.header
-                goal_ps.pose.position.x = gx; goal_ps.pose.position.y = gy; goal_ps.pose.position.z = 0.0
-                pd.poses.append(goal_ps)
-
         for lat, lon in wgs_points:
             pwps = PoseStamped(); pwps.header = pw.header
             pwps.pose.position.x = lat; pwps.pose.position.y = lon; pwps.pose.position.z = 0.0
@@ -583,6 +573,30 @@ class AStarPlanner:
         self.pub_path.publish(p)
         self.pub_path_display.publish(pd)
         self.pub_path_wgs84.publish(pw)
+
+    def show_clicked_goal_marker(self):
+        if self._goal_display_xy is None:
+            return
+        gx, gy = self._goal_display_xy
+        m = Marker()
+        m.header.frame_id = "map"
+        m.header.stamp = rospy.Time.now()
+        m.ns = "astar_clicked_goal"
+        m.id = 0
+        m.type = Marker.SPHERE
+        m.action = Marker.ADD
+        m.pose.position.x = gx
+        m.pose.position.y = gy
+        m.pose.position.z = 0.12
+        m.pose.orientation.w = 1.0
+        m.scale.x = 0.28
+        m.scale.y = 0.28
+        m.scale.z = 0.28
+        m.color.r = 1.0
+        m.color.g = 1.0
+        m.color.b = 1.0
+        m.color.a = 0.95
+        self.pub_goal_marker.publish(m)
 
     def show_server_dst_nodes(self):
         npt = len(self.server_dst_node_list)
@@ -795,6 +809,7 @@ if __name__ == "__main__":
                 if a.reload_map():
                     path_nodes = []
             a.visualize_graph()
+            a.show_clicked_goal_marker()
             a.show_server_dst_nodes()
 
             if a.start_init_flag and a.new_goal_flag:
