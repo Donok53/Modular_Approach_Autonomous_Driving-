@@ -35,26 +35,35 @@ class TebCmdVelRelay(object):
         self.enable_obstacle_slowdown = bool(
             rospy.get_param("~enable_obstacle_slowdown", True)
         )
+        self.robot_width_m = max(0.1, float(rospy.get_param("~robot_width_m", 0.55)))
+        self.robot_length_m = max(0.1, float(rospy.get_param("~robot_length_m", 0.60)))
+        self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.obstacle_cloud_topic = rospy.get_param(
             "~obstacle_cloud_topic", "/move_base/filtered_obstacles"
         )
         self.obstacle_cloud_timeout_s = max(
             0.1, float(rospy.get_param("~obstacle_cloud_timeout_s", 0.6))
         )
-        self.emergency_stop_distance = max(
-            0.05, float(rospy.get_param("~emergency_stop_distance", 0.65))
+        self.emergency_stop_front_margin = max(
+            0.0, float(rospy.get_param("~emergency_stop_front_margin", 0.35))
         )
-        self.emergency_stop_lateral_y = max(
-            0.10, float(rospy.get_param("~emergency_stop_lateral_y", 0.45))
+        self.emergency_stop_side_margin = max(
+            0.0, float(rospy.get_param("~emergency_stop_side_margin", 0.10))
         )
-        self.slowdown_distance = max(
-            self.emergency_stop_distance + 0.05,
-            float(rospy.get_param("~slowdown_distance", 1.10)),
+        self.slowdown_front_margin = max(
+            self.emergency_stop_front_margin + 0.05,
+            float(rospy.get_param("~slowdown_front_margin", 0.80)),
         )
-        self.slowdown_lateral_y = max(
-            self.emergency_stop_lateral_y,
-            float(rospy.get_param("~slowdown_lateral_y", 0.65)),
+        self.slowdown_side_margin = max(
+            self.emergency_stop_side_margin,
+            float(rospy.get_param("~slowdown_side_margin", 0.20)),
         )
+        self.robot_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m
+        self.robot_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m
+        self.emergency_stop_distance = self.robot_half_length + self.emergency_stop_front_margin
+        self.emergency_stop_lateral_y = self.robot_half_width + self.emergency_stop_side_margin
+        self.slowdown_distance = self.robot_half_length + self.slowdown_front_margin
+        self.slowdown_lateral_y = self.robot_half_width + self.slowdown_side_margin
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
@@ -76,13 +85,19 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm",
             self.input_topic,
             self.output_topic,
             self.publish_hz,
             self.min_abs_linear_speed,
             "on" if self.enable_emergency_stop else "off",
             "on" if self.enable_obstacle_slowdown else "off",
+            self.robot_length_m + 2.0 * self.footprint_padding_m,
+            self.robot_width_m + 2.0 * self.footprint_padding_m,
+            self.emergency_stop_distance,
+            self.emergency_stop_lateral_y,
+            self.slowdown_distance,
+            self.slowdown_lateral_y,
         )
 
     def _sanitize_cmd(self, cmd):

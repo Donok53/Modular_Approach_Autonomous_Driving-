@@ -40,10 +40,10 @@
   <arg name="teb_enable_emergency_stop" default="true"/>
   <arg name="teb_enable_obstacle_slowdown" default="true"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
-  <arg name="teb_emergency_stop_distance" default="0.65"/>
-  <arg name="teb_emergency_stop_lateral_y" default="0.45"/>
-  <arg name="teb_slowdown_distance" default="1.10"/>
-  <arg name="teb_slowdown_lateral_y" default="0.65"/>
+  <arg name="teb_emergency_stop_front_margin" default="0.35"/>
+  <arg name="teb_emergency_stop_side_margin" default="0.10"/>
+  <arg name="teb_slowdown_front_margin" default="0.80"/>
+  <arg name="teb_slowdown_side_margin" default="0.20"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
@@ -208,15 +208,18 @@
       <arg name="global_path_topic" value="/astar/path"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+      <arg name="robot_width_m" value="$(arg robot_width_m)"/>
+      <arg name="robot_length_m" value="$(arg robot_length_m)"/>
+      <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
       <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>
       <arg name="use_pointcloud_obstacles" value="$(arg teb_use_pointcloud_obstacles)"/>
       <arg name="enable_emergency_stop" value="$(arg teb_enable_emergency_stop)"/>
       <arg name="enable_obstacle_slowdown" value="$(arg teb_enable_obstacle_slowdown)"/>
       <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
-      <arg name="emergency_stop_distance" value="$(arg teb_emergency_stop_distance)"/>
-      <arg name="emergency_stop_lateral_y" value="$(arg teb_emergency_stop_lateral_y)"/>
-      <arg name="slowdown_distance" value="$(arg teb_slowdown_distance)"/>
-      <arg name="slowdown_lateral_y" value="$(arg teb_slowdown_lateral_y)"/>
+      <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
+      <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
+      <arg name="slowdown_front_margin" value="$(arg teb_slowdown_front_margin)"/>
+      <arg name="slowdown_side_margin" value="$(arg teb_slowdown_side_margin)"/>
     </include>
   </group>
 
