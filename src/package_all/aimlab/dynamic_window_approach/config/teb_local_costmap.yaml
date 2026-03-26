@@ -30,17 +30,17 @@ local_costmap:
     track_unknown_space: true
     footprint_clearing_enabled: true
     max_obstacle_height: 1.50
-    obstacle_range: 4.0
-    raytrace_range: 5.0
+    obstacle_range: 3.5
+    raytrace_range: 4.0
     ouster_points:
       data_type: PointCloud2
       topic: /ouster/points
       marking: true
-      clearing: false
-      min_obstacle_height: -0.15
+      clearing: true
+      min_obstacle_height: 0.08
       max_obstacle_height: 1.50
       expected_update_rate: 0.0
-      observation_persistence: 0.0
+      observation_persistence: 0.15
       inf_is_valid: false
 
   inflation_layer:
