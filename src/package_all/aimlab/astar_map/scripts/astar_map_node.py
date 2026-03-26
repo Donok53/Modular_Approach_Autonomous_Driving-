@@ -128,10 +128,12 @@ class AStarPlanner:
         self._reload_requested = False
         self._osm_file = ""
         self._ref_file = ""
+        self._goal_display_xy = None
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
         self.pub_path = rospy.Publisher('/astar/path', Path, queue_size=10)
+        self.pub_path_display = rospy.Publisher('/astar/path_display', Path, queue_size=10)
         self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10)
         self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10)
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
@@ -542,6 +544,7 @@ class AStarPlanner:
         if not path: return
         if stamp is None: stamp = rospy.Time.now()
         p = Path(); p.header.frame_id = "map"; p.header.stamp = stamp
+        pd = Path(); pd.header.frame_id = "map"; pd.header.stamp = stamp
         pw = Path(); pw.header.frame_id = "map"; pw.header.stamp = stamp
 
         world_points = []
@@ -557,6 +560,20 @@ class AStarPlanner:
             ps = PoseStamped(); ps.header = p.header
             ps.pose.position.x = x; ps.pose.position.y = y; ps.pose.position.z = 0.0
             p.poses.append(ps)
+            pds = PoseStamped(); pds.header = pd.header
+            pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
+            pd.poses.append(pds)
+
+        if self._goal_display_xy is not None:
+            gx, gy = self._goal_display_xy
+            should_append_goal = True
+            if pd.poses:
+                last = pd.poses[-1].pose.position
+                should_append_goal = math.hypot(last.x - gx, last.y - gy) > 0.05
+            if should_append_goal:
+                goal_ps = PoseStamped(); goal_ps.header = pd.header
+                goal_ps.pose.position.x = gx; goal_ps.pose.position.y = gy; goal_ps.pose.position.z = 0.0
+                pd.poses.append(goal_ps)
 
         for lat, lon in wgs_points:
             pwps = PoseStamped(); pwps.header = pw.header
@@ -564,6 +581,7 @@ class AStarPlanner:
             pw.poses.append(pwps)
 
         self.pub_path.publish(p)
+        self.pub_path_display.publish(pd)
         self.pub_path_wgs84.publish(pw)
 
     def show_server_dst_nodes(self):
@@ -694,6 +712,7 @@ class AStarPlanner:
     def callback_goal_from_rviz(self, data):
         goal_x = data.pose.position.x
         goal_y = data.pose.position.y
+        self._goal_display_xy = (goal_x, goal_y)
         n, snap_x, snap_y = self._snap_goal_node_from_xy(goal_x, goal_y)
         if n and self.goal_id != n.id:
             self.goal_id = n.id; self.new_goal_flag = True
@@ -719,6 +738,7 @@ class AStarPlanner:
             else:
                 e, n = self._ll_to_enu(data.Cmd_dest_lat, data.Cmd_dest_lon)
                 mx, my = self._xy_to_map(e, n)
+            self._goal_display_xy = (mx, my)
             g, snap_x, snap_y = self._snap_goal_node_from_xy(mx, my)
             if g and self.goal_id != g.id:
                 self.goal_id = g.id; self.new_goal_flag = True
