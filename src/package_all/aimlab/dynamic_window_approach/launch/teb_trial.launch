@@ -9,6 +9,7 @@
   <arg name="publish_astar_via_points" default="true"/>
   <arg name="use_pointcloud_obstacles" default="false"/>
   <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
+  <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
   <arg name="teb_min_spacing_m" default="0.50"/>
   <arg name="teb_max_via_points" default="200"/>
 
@@ -20,6 +21,14 @@
       <param name="max_points" value="$(arg teb_max_via_points)"/>
     </node>
   </group>
+
+  <node pkg="dynamic_window_approach" type="teb_cmd_vel_relay.py" name="teb_cmd_vel_relay" output="screen">
+    <param name="input_topic" value="$(arg teb_cmd_vel_input_topic)"/>
+    <param name="output_topic" value="$(arg cmd_vel_topic)"/>
+    <param name="publish_hz" value="20.0"/>
+    <param name="idle_timeout_s" value="1.0"/>
+    <param name="log_period_s" value="1.0"/>
+  </node>
 
   <node pkg="move_base" type="move_base" name="move_base" output="screen" clear_params="true">
     <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_move_base.yaml"/>
@@ -34,6 +43,6 @@
     <param name="local_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>
     <param name="local_costmap/obstacle_layer/ouster_points/topic" value="$(arg pointcloud_topic)"/>
     <param name="local_costmap/obstacle_layer/enabled" value="$(arg use_pointcloud_obstacles)"/>
-    <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
+    <remap from="cmd_vel" to="$(arg teb_cmd_vel_input_topic)"/>
   </node>
 </launch>

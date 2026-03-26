@@ -221,6 +221,7 @@ catkin_install_python(PROGRAMS
   scripts/constrained_local_replanner.py
   scripts/dynamic_risk_manager.py
   scripts/dynamicwindowapproach.py
+  scripts/teb_cmd_vel_relay.py
   scripts/test2.py
   scripts/new2.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

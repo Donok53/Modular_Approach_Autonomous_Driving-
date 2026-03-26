@@ -55,9 +55,9 @@ TebLocalPlannerROS:
   costmap_obstacles_behind_robot_dist: 1.0
   obstacle_poses_affected: 20
 
-  global_plan_viapoint_sep: 0.40
+  global_plan_viapoint_sep: -1.0
   via_points_ordered: true
-  weight_viapoint: 12.0
+  weight_viapoint: 20.0
 
   no_inner_iterations: 4
   no_outer_iterations: 3
