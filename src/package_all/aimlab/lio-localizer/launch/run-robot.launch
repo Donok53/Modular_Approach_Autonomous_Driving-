@@ -3,6 +3,7 @@
     <arg name="enable_drivable_area" default="true"/>
     <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
     <arg name="enable_drivable_area_2d_editor" default="false"/>
+    <arg name="rviz_config_file" default="$(find lio_localizer)/launch/include/config/rviz.rviz"/>
     
     <!-- Parameters -->
     <!-- <rosparam file="$(find lio_localizer)/config/params-robot_scout.yaml" command="load" /> -->
@@ -30,6 +31,8 @@
     <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
     
     <!--- Run Rviz-->
-    <include file="$(find lio_localizer)/launch/include/module_rviz.launch" />
+    <include file="$(find lio_localizer)/launch/include/module_rviz.launch">
+      <arg name="config_file" value="$(arg rviz_config_file)"/>
+    </include>
 
 </launch>

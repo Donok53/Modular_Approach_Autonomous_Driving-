@@ -91,6 +91,7 @@
     <include file="$(find lio_localizer)/launch/run-robot.launch">
       <arg name="enable_drivable_area" value="$(arg enable_localizer_drivable_area)"/>
       <arg name="enable_drivable_area_2d_editor" value="$(arg enable_localizer_drivable_area_2d_editor)"/>
+      <arg name="rviz_config_file" value="$(find lio_localizer)/launch/include/config/rviz_with_local_planner.rviz"/>
     </include>
   </group>
 
