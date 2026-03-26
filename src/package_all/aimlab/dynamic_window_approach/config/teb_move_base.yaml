@@ -19,10 +19,10 @@ TebLocalPlannerROS:
   map_frame: map
 
   max_vel_x: 0.25
-  max_vel_x_backwards: 0.05
-  max_vel_theta: 0.80
+  max_vel_x_backwards: 0.002
+  max_vel_theta: 0.45
   acc_lim_x: 0.40
-  acc_lim_theta: 1.50
+  acc_lim_theta: 0.80
 
   min_turning_radius: 0.0
   wheelbase: 0.0
@@ -30,7 +30,7 @@ TebLocalPlannerROS:
 
   xy_goal_tolerance: 0.35
   yaw_goal_tolerance: 3.14
-  free_goal_vel: true
+  free_goal_vel: false
   complete_global_plan: true
   global_plan_overwrite_orientation: true
 
@@ -57,19 +57,19 @@ TebLocalPlannerROS:
 
   global_plan_viapoint_sep: -1.0
   via_points_ordered: true
-  weight_viapoint: 12.0
+  weight_viapoint: 40.0
 
   no_inner_iterations: 4
   no_outer_iterations: 3
   optimization_activate: true
   optimization_verbose: false
-  penalty_epsilon: 0.001
+  penalty_epsilon: 0.0001
   weight_max_vel_x: 2.0
   weight_max_vel_theta: 1.0
   weight_acc_lim_x: 1.0
   weight_acc_lim_theta: 1.0
   weight_kinematics_nh: 1000.0
-  weight_kinematics_forward_drive: 300.0
+  weight_kinematics_forward_drive: 2000.0
   weight_optimaltime: 2.0
   weight_obstacle: 50.0
   weight_inflation: 0.2
