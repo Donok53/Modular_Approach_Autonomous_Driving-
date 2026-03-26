@@ -28,6 +28,8 @@
     <param name="publish_hz" value="20.0"/>
     <param name="idle_timeout_s" value="1.0"/>
     <param name="log_period_s" value="1.0"/>
+    <param name="forward_only" value="true"/>
+    <param name="reverse_replacement_speed" value="0.05"/>
   </node>
 
   <node pkg="move_base" type="move_base" name="move_base" output="screen" clear_params="true">

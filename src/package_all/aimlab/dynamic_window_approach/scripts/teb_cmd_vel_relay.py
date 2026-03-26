@@ -14,6 +14,10 @@ class TebCmdVelRelay(object):
         self.publish_hz = max(1.0, float(rospy.get_param("~publish_hz", 20.0)))
         self.idle_timeout_s = max(0.2, float(rospy.get_param("~idle_timeout_s", 1.0)))
         self.log_period_s = max(0.2, float(rospy.get_param("~log_period_s", 1.0)))
+        self.forward_only = bool(rospy.get_param("~forward_only", True))
+        self.reverse_replacement_speed = max(
+            0.0, float(rospy.get_param("~reverse_replacement_speed", 0.05))
+        )
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
@@ -28,6 +32,24 @@ class TebCmdVelRelay(object):
             self.output_topic,
             self.publish_hz,
         )
+
+    def _sanitize_cmd(self, cmd):
+        out = Twist()
+        out.linear.x = float(cmd.linear.x)
+        out.linear.y = float(cmd.linear.y)
+        out.linear.z = float(cmd.linear.z)
+        out.angular.x = float(cmd.angular.x)
+        out.angular.y = float(cmd.angular.y)
+        out.angular.z = float(cmd.angular.z)
+        if self.forward_only and out.linear.x < 0.0:
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: clamping reverse cmd v=%.3f -> %.3f",
+                out.linear.x,
+                self.reverse_replacement_speed,
+            )
+            out.linear.x = self.reverse_replacement_speed
+        return out
 
     @staticmethod
     def _cmd_mag(cmd):
@@ -56,13 +78,14 @@ class TebCmdVelRelay(object):
             )
             return
 
-        self.pub.publish(self.last_cmd)
-        if self._cmd_mag(self.last_cmd) > 1e-3:
+        cmd = self._sanitize_cmd(self.last_cmd)
+        self.pub.publish(cmd)
+        if self._cmd_mag(cmd) > 1e-3:
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: publish cmd | v=%.3f w=%.3f",
-                float(self.last_cmd.linear.x),
-                float(self.last_cmd.angular.z),
+                float(cmd.linear.x),
+                float(cmd.angular.z),
             )
 
 
