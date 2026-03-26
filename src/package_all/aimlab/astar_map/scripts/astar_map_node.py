@@ -393,10 +393,13 @@ class AStarPlanner:
         if s is None or g is None: return []
         open_set = {s.id: s}; closed = {}
         s.cost = 0.0
+        reached = (s == g)
         while open_set:
             c_id = min(open_set, key=lambda i: open_set[i].cost + self.distance(g, open_set[i]))
             cur = open_set[c_id]
-            if cur == g: break
+            if cur == g:
+                reached = True
+                break
             del open_set[c_id]; closed[c_id] = cur
             for e in self.edges(cur):
                 nid = e.dst.id
@@ -405,6 +408,8 @@ class AStarPlanner:
                 if e.dst.cost > new_cost:
                     e.dst.cost = new_cost; e.dst.parent = e.src
                 if nid not in open_set: open_set[nid] = e.dst
+        if not reached:
+            return []
         return self._backtrack(g)
 
     def _backtrack(self, node):
@@ -606,6 +611,36 @@ class AStarPlanner:
             if d2 < best_d2: best_d2=d2; best=n
         return best
 
+    def _reachable_node_ids(self, start_id):
+        start = self.findNodeById(start_id)
+        if start is None:
+            return set()
+        visited = set([start.id])
+        queue = [start]
+        while queue:
+            cur = queue.pop(0)
+            for e in self.edges(cur):
+                nid = e.dst.id
+                if nid in visited:
+                    continue
+                visited.add(nid)
+                queue.append(e.dst)
+        return visited
+
+    def _find_nearest_node_in_set(self, x, y, node_ids):
+        best = None
+        best_d2 = 1e18
+        for nid in node_ids:
+            n = self.findNodeById(nid)
+            if n is None:
+                continue
+            nx, ny = self._xy_to_map(n.east, n.north)
+            d2 = (nx - x) ** 2 + (ny - y) ** 2
+            if d2 < best_d2:
+                best_d2 = d2
+                best = n
+        return best
+
     def _snap_and_update_from_position(self, position):
         x, y = position.x, position.y
         edge, t, _, _, _, elen = self._nearest_projection_on_edges(x, y)
@@ -625,12 +660,23 @@ class AStarPlanner:
         return self.findNodeById(self.start_id) if self.start_id is not None else chosen
 
     def _snap_goal_node_from_xy(self, x, y):
+        px, py = x, y
         edge, t, px, py, _, _ = self._nearest_projection_on_edges(x, y)
         if edge is None:
-            n = self._find_nearest_node_simple(x, y)
-            return n, x, y
+            chosen = self._find_nearest_node_simple(x, y)
+        else:
+            chosen = edge.dst if t >= 0.5 else edge.src
 
-        chosen = edge.dst if t >= 0.5 else edge.src
+        if self.start_id is not None:
+            reachable = self._reachable_node_ids(self.start_id)
+            if reachable and chosen is not None and chosen.id not in reachable:
+                fallback = self._find_nearest_node_in_set(x, y, reachable)
+                if fallback is not None:
+                    chosen = fallback
+                    px, py = self._xy_to_map(chosen.east, chosen.north)
+
+        if chosen is None:
+            return None, x, y
         return chosen, px, py
 
     def callback_start(self, data):
