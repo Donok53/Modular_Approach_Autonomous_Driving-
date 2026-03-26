@@ -93,17 +93,19 @@
     </include>
   </group>
 
-  <group if="$(eval arg('enable_graph_planner') == 'true' and arg('use_auto_osm') == 'true')">
-    <include file="$(find astar_map)/launch/astar_map.launch">
-      <arg name="pose_topic" value="$(arg pose_topic)"/>
-      <arg name="osm_file" value="$(arg auto_osm_file)"/>
-    </include>
-  </group>
-  <group if="$(eval arg('enable_graph_planner') == 'true' and arg('use_auto_osm') != 'true')">
-    <include file="$(find astar_map)/launch/astar_map.launch">
-      <arg name="pose_topic" value="$(arg pose_topic)"/>
-      <arg name="osm_file" value="$(arg default_osm_file)"/>
-    </include>
+  <group if="$(arg enable_graph_planner)">
+    <group if="$(arg use_auto_osm)">
+      <include file="$(find astar_map)/launch/astar_map.launch">
+        <arg name="pose_topic" value="$(arg pose_topic)"/>
+        <arg name="osm_file" value="$(arg auto_osm_file)"/>
+      </include>
+    </group>
+    <group unless="$(arg use_auto_osm)">
+      <include file="$(find astar_map)/launch/astar_map.launch">
+        <arg name="pose_topic" value="$(arg pose_topic)"/>
+        <arg name="osm_file" value="$(arg default_osm_file)"/>
+      </include>
+    </group>
   </group>
 
   <group if="$(eval arg('local_planner_mode') == 'custom')">
@@ -188,6 +190,7 @@
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>
+      <arg name="use_pointcloud_obstacles" value="false"/>
     </include>
   </group>
 

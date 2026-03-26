@@ -19,10 +19,12 @@ class AStarPathToTebViaPoints(object):
         self.max_points = max(2, int(rospy.get_param("~max_points", 200)))
 
         self._last_sig = None
+        self._last_rx_time = 0.0
         self.pub = rospy.Publisher(self.output_topic, Path, queue_size=1, latch=True)
         self.sub = rospy.Subscriber(
             self.input_topic, Path, self.path_callback, queue_size=2
         )
+        self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
             "astar_path_to_teb_via_points started | in=%s out=%s spacing=%.2fm max_points=%d",
@@ -30,6 +32,15 @@ class AStarPathToTebViaPoints(object):
             self.output_topic,
             self.min_spacing_m,
             self.max_points,
+        )
+
+    def _watchdog_callback(self, _event):
+        if self._last_rx_time > 0.0:
+            return
+        rospy.logwarn_throttle(
+            5.0,
+            "astar_path_to_teb_via_points: waiting for input path on %s",
+            self.input_topic,
         )
 
     @staticmethod
@@ -86,6 +97,7 @@ class AStarPathToTebViaPoints(object):
         return out
 
     def path_callback(self, msg):
+        self._last_rx_time = rospy.get_time()
         sig = self._path_signature(msg)
         if sig == self._last_sig:
             return
@@ -93,6 +105,11 @@ class AStarPathToTebViaPoints(object):
 
         via = self._downsample(msg)
         if not via.poses:
+            rospy.logwarn_throttle(
+                2.0,
+                "astar_path_to_teb_via_points: received empty path on %s",
+                self.input_topic,
+            )
             return
         self.pub.publish(via)
         rospy.loginfo_throttle(
