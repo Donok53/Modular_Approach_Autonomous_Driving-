@@ -22,6 +22,13 @@
   <arg name="teb_filter_lateral_limit_y" default="2.0"/>
   <arg name="teb_min_spacing_m" default="0.50"/>
   <arg name="teb_max_via_points" default="200"/>
+  <arg name="enable_emergency_stop" default="true"/>
+  <arg name="enable_obstacle_slowdown" default="true"/>
+  <arg name="obstacle_cloud_timeout_s" default="0.6"/>
+  <arg name="emergency_stop_distance" default="0.65"/>
+  <arg name="emergency_stop_lateral_y" default="0.45"/>
+  <arg name="slowdown_distance" default="1.10"/>
+  <arg name="slowdown_lateral_y" default="0.65"/>
 
   <group if="$(arg publish_astar_via_points)">
     <node pkg="dynamic_window_approach" type="astar_path_to_teb_via_points.py" name="astar_path_to_teb_via_points" output="screen">
@@ -35,6 +42,7 @@
   <node pkg="dynamic_window_approach" type="teb_cmd_vel_relay.py" name="teb_cmd_vel_relay" output="screen">
     <param name="input_topic" value="$(arg teb_cmd_vel_input_topic)"/>
     <param name="output_topic" value="$(arg cmd_vel_topic)"/>
+    <param name="obstacle_cloud_topic" value="$(arg teb_filtered_obstacle_topic)"/>
     <param name="publish_hz" value="20.0"/>
     <param name="idle_timeout_s" value="1.0"/>
     <param name="log_period_s" value="1.0"/>
@@ -43,6 +51,13 @@
     <param name="enforce_min_linear_speed" value="true"/>
     <param name="min_abs_linear_speed" value="0.04"/>
     <param name="min_angular_for_linear_boost" value="0.20"/>
+    <param name="enable_emergency_stop" value="$(arg enable_emergency_stop)"/>
+    <param name="enable_obstacle_slowdown" value="$(arg enable_obstacle_slowdown)"/>
+    <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>
+    <param name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
+    <param name="emergency_stop_lateral_y" value="$(arg emergency_stop_lateral_y)"/>
+    <param name="slowdown_distance" value="$(arg slowdown_distance)"/>
+    <param name="slowdown_lateral_y" value="$(arg slowdown_lateral_y)"/>
   </node>
 
   <node if="$(arg use_pointcloud_obstacles)" pkg="dynamic_window_approach" type="teb_obstacle_cloud_filter.py" name="teb_obstacle_cloud_filter" output="screen">

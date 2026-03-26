@@ -37,6 +37,13 @@
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="false"/>
   <arg name="teb_use_pointcloud_obstacles" default="true"/>
+  <arg name="teb_enable_emergency_stop" default="true"/>
+  <arg name="teb_enable_obstacle_slowdown" default="true"/>
+  <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
+  <arg name="teb_emergency_stop_distance" default="0.65"/>
+  <arg name="teb_emergency_stop_lateral_y" default="0.45"/>
+  <arg name="teb_slowdown_distance" default="1.10"/>
+  <arg name="teb_slowdown_lateral_y" default="0.65"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
@@ -203,6 +210,13 @@
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>
       <arg name="use_pointcloud_obstacles" value="$(arg teb_use_pointcloud_obstacles)"/>
+      <arg name="enable_emergency_stop" value="$(arg teb_enable_emergency_stop)"/>
+      <arg name="enable_obstacle_slowdown" value="$(arg teb_enable_obstacle_slowdown)"/>
+      <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
+      <arg name="emergency_stop_distance" value="$(arg teb_emergency_stop_distance)"/>
+      <arg name="emergency_stop_lateral_y" value="$(arg teb_emergency_stop_lateral_y)"/>
+      <arg name="slowdown_distance" value="$(arg teb_slowdown_distance)"/>
+      <arg name="slowdown_lateral_y" value="$(arg teb_slowdown_lateral_y)"/>
     </include>
   </group>
 

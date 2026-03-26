@@ -30,7 +30,7 @@ local_costmap:
     track_unknown_space: true
     footprint_clearing_enabled: true
     max_obstacle_height: 1.50
-    obstacle_range: 3.5
+    obstacle_range: 4.5
     raytrace_range: 4.0
     ouster_points:
       data_type: PointCloud2
@@ -44,5 +44,5 @@ local_costmap:
       inf_is_valid: false
 
   inflation_layer:
-    inflation_radius: 0.20
-    cost_scaling_factor: 8.0
+    inflation_radius: 0.35
+    cost_scaling_factor: 10.0

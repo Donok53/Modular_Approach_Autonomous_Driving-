@@ -5,6 +5,8 @@ import math
 
 import rospy
 from geometry_msgs.msg import Twist
+from sensor_msgs import point_cloud2 as pc2
+from sensor_msgs.msg import PointCloud2
 
 
 class TebCmdVelRelay(object):
@@ -27,20 +29,60 @@ class TebCmdVelRelay(object):
         self.min_angular_for_linear_boost = max(
             0.0, float(rospy.get_param("~min_angular_for_linear_boost", 0.20))
         )
+        self.enable_emergency_stop = bool(
+            rospy.get_param("~enable_emergency_stop", True)
+        )
+        self.enable_obstacle_slowdown = bool(
+            rospy.get_param("~enable_obstacle_slowdown", True)
+        )
+        self.obstacle_cloud_topic = rospy.get_param(
+            "~obstacle_cloud_topic", "/move_base/filtered_obstacles"
+        )
+        self.obstacle_cloud_timeout_s = max(
+            0.1, float(rospy.get_param("~obstacle_cloud_timeout_s", 0.6))
+        )
+        self.emergency_stop_distance = max(
+            0.05, float(rospy.get_param("~emergency_stop_distance", 0.65))
+        )
+        self.emergency_stop_lateral_y = max(
+            0.10, float(rospy.get_param("~emergency_stop_lateral_y", 0.45))
+        )
+        self.slowdown_distance = max(
+            self.emergency_stop_distance + 0.05,
+            float(rospy.get_param("~slowdown_distance", 1.10)),
+        )
+        self.slowdown_lateral_y = max(
+            self.emergency_stop_lateral_y,
+            float(rospy.get_param("~slowdown_lateral_y", 0.65)),
+        )
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
+        self.last_obstacle_time = 0.0
+        self.closest_stop_obstacle_x = float("inf")
+        self.closest_slow_obstacle_x = float("inf")
 
         self.pub = rospy.Publisher(self.output_topic, Twist, queue_size=10)
         self.sub = rospy.Subscriber(self.input_topic, Twist, self.cmd_callback, queue_size=10)
+        self.obstacle_sub = None
+        if self.enable_emergency_stop or self.enable_obstacle_slowdown:
+            self.obstacle_sub = rospy.Subscriber(
+                self.obstacle_cloud_topic,
+                PointCloud2,
+                self.obstacle_callback,
+                queue_size=1,
+                buff_size=2**24,
+            )
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s publish=%.1fHz min|v|=%.3f",
+            "teb_cmd_vel_relay started | in=%s out=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s",
             self.input_topic,
             self.output_topic,
             self.publish_hz,
             self.min_abs_linear_speed,
+            "on" if self.enable_emergency_stop else "off",
+            "on" if self.enable_obstacle_slowdown else "off",
         )
 
     def _sanitize_cmd(self, cmd):
@@ -80,6 +122,64 @@ class TebCmdVelRelay(object):
     def _cmd_mag(cmd):
         return math.hypot(float(cmd.linear.x), float(cmd.angular.z))
 
+    def obstacle_callback(self, msg):
+        stop_min_x = float("inf")
+        slow_min_x = float("inf")
+
+        for x, y, _z in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+            if x <= 0.0:
+                continue
+            abs_y = abs(float(y))
+            if abs_y <= self.slowdown_lateral_y:
+                slow_min_x = min(slow_min_x, float(x))
+            if abs_y <= self.emergency_stop_lateral_y:
+                stop_min_x = min(stop_min_x, float(x))
+
+        self.last_obstacle_time = rospy.get_time()
+        self.closest_stop_obstacle_x = stop_min_x
+        self.closest_slow_obstacle_x = slow_min_x
+
+    def _has_fresh_obstacle_data(self, now):
+        return self.last_obstacle_time > 0.0 and (now - self.last_obstacle_time) <= self.obstacle_cloud_timeout_s
+
+    def _apply_obstacle_safety(self, cmd, now):
+        if cmd.linear.x <= 0.0 or not self._has_fresh_obstacle_data(now):
+            return cmd
+
+        if self.enable_emergency_stop and self.closest_stop_obstacle_x <= self.emergency_stop_distance:
+            stopped = Twist()
+            stopped.angular.z = cmd.angular.z
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: emergency stop | obstacle_x=%.2f m cmd_v=%.3f cmd_w=%.3f",
+                self.closest_stop_obstacle_x,
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            return stopped
+
+        if self.enable_obstacle_slowdown and self.closest_slow_obstacle_x <= self.slowdown_distance:
+            span = max(1e-3, self.slowdown_distance - self.emergency_stop_distance)
+            scale = (self.closest_slow_obstacle_x - self.emergency_stop_distance) / span
+            scale = max(0.0, min(1.0, scale))
+            slowed = Twist()
+            slowed.linear.x = cmd.linear.x * scale
+            slowed.linear.y = cmd.linear.y
+            slowed.linear.z = cmd.linear.z
+            slowed.angular.x = cmd.angular.x
+            slowed.angular.y = cmd.angular.y
+            slowed.angular.z = cmd.angular.z
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: slowing for obstacle | obstacle_x=%.2f m v=%.3f -> %.3f",
+                self.closest_slow_obstacle_x,
+                float(cmd.linear.x),
+                float(slowed.linear.x),
+            )
+            return slowed
+
+        return cmd
+
     def cmd_callback(self, msg):
         self.last_cmd = msg
         self.last_rx_time = rospy.get_time()
@@ -104,6 +204,7 @@ class TebCmdVelRelay(object):
             return
 
         cmd = self._sanitize_cmd(self.last_cmd)
+        cmd = self._apply_obstacle_safety(cmd, now)
         self.pub.publish(cmd)
         if self._cmd_mag(cmd) > 1e-3:
             rospy.loginfo_throttle(
