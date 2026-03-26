@@ -703,10 +703,10 @@ class ConstrainedLocalReplanner:
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
         marker.scale.x = 0.10
-        marker.color.a = 0.70
-        marker.color.r = 0.95
-        marker.color.g = 0.15
-        marker.color.b = 0.10
+        marker.color.a = 0.80
+        marker.color.r = 0.10
+        marker.color.g = 0.45
+        marker.color.b = 0.95
         for x, y in self.travel_history_points:
             p = Point()
             p.x = float(x)
