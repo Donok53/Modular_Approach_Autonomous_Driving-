@@ -10,6 +10,14 @@ from nav_msgs.msg import Path
 class AStarPathToTebViaPoints(object):
     def __init__(self):
         self.input_topic = rospy.get_param("~input_topic", "/astar/path")
+        self.local_input_topic = str(rospy.get_param("~local_input_topic", "")).strip()
+        self.avoidance_input_topic = str(rospy.get_param("~avoidance_input_topic", "")).strip()
+        self.local_path_timeout_s = max(
+            0.1, float(rospy.get_param("~local_path_timeout_s", 4.0))
+        )
+        self.avoidance_path_timeout_s = max(
+            0.1, float(rospy.get_param("~avoidance_path_timeout_s", 1.5))
+        )
         self.output_topic = rospy.get_param(
             "~output_topic", "/move_base/TebLocalPlannerROS/via_points"
         )
@@ -19,28 +27,55 @@ class AStarPathToTebViaPoints(object):
         self.max_points = max(2, int(rospy.get_param("~max_points", 200)))
 
         self._last_sig = None
-        self._last_rx_time = 0.0
+        self._last_key = None
+        self._fallback_msg = None
+        self._fallback_rx_time = 0.0
+        self._local_msg = None
+        self._local_rx_time = 0.0
+        self._avoidance_msg = None
+        self._avoidance_rx_time = 0.0
+
         self.pub = rospy.Publisher(self.output_topic, Path, queue_size=1, latch=True)
         self.sub = rospy.Subscriber(
-            self.input_topic, Path, self.path_callback, queue_size=2
+            self.input_topic, Path, self._make_callback("fallback"), queue_size=2
         )
+        self.sub_local = None
+        if self.local_input_topic:
+            self.sub_local = rospy.Subscriber(
+                self.local_input_topic,
+                Path,
+                self._make_callback("local"),
+                queue_size=2,
+            )
+        self.sub_avoidance = None
+        if self.avoidance_input_topic:
+            self.sub_avoidance = rospy.Subscriber(
+                self.avoidance_input_topic,
+                Path,
+                self._make_callback("avoidance"),
+                queue_size=2,
+            )
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | in=%s out=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s out=%s spacing=%.2fm max_points=%d",
             self.input_topic,
+            self.local_input_topic if self.local_input_topic else "-",
+            self.avoidance_input_topic if self.avoidance_input_topic else "-",
             self.output_topic,
             self.min_spacing_m,
             self.max_points,
         )
 
     def _watchdog_callback(self, _event):
-        if self._last_rx_time > 0.0:
+        if self._fallback_rx_time > 0.0 or self._local_rx_time > 0.0 or self._avoidance_rx_time > 0.0:
             return
         rospy.logwarn_throttle(
             5.0,
-            "astar_path_to_teb_via_points: waiting for input path on %s",
+            "astar_path_to_teb_via_points: waiting for path input | fallback=%s local=%s avoidance=%s",
             self.input_topic,
+            self.local_input_topic if self.local_input_topic else "-",
+            self.avoidance_input_topic if self.avoidance_input_topic else "-",
         )
 
     @staticmethod
@@ -96,25 +131,72 @@ class AStarPathToTebViaPoints(object):
                 out.poses[-1] = msg.poses[-1]
         return out
 
-    def path_callback(self, msg):
-        self._last_rx_time = rospy.get_time()
-        sig = self._path_signature(msg)
-        if sig == self._last_sig:
+    def _make_callback(self, source):
+        def _callback(msg):
+            now_sec = rospy.get_time()
+            if source == "fallback":
+                self._fallback_msg = msg
+                self._fallback_rx_time = now_sec
+            elif source == "local":
+                self._local_msg = msg
+                self._local_rx_time = now_sec
+            elif source == "avoidance":
+                self._avoidance_msg = msg
+                self._avoidance_rx_time = now_sec
+            self._publish_selected()
+
+        return _callback
+
+    def _is_fresh(self, stamp_sec, timeout_s):
+        return stamp_sec > 0.0 and (rospy.get_time() - stamp_sec) <= timeout_s
+
+    def _pick_path(self):
+        if (
+            self.avoidance_input_topic
+            and self._avoidance_msg is not None
+            and len(self._avoidance_msg.poses) >= 2
+            and self._is_fresh(self._avoidance_rx_time, self.avoidance_path_timeout_s)
+        ):
+            return "avoidance", self._avoidance_msg
+
+        if (
+            self.local_input_topic
+            and self._local_msg is not None
+            and len(self._local_msg.poses) >= 2
+            and self._is_fresh(self._local_rx_time, self.local_path_timeout_s)
+        ):
+            return "local", self._local_msg
+
+        if self._fallback_msg is not None and len(self._fallback_msg.poses) >= 2:
+            return "fallback", self._fallback_msg
+
+        return None, None
+
+    def _publish_selected(self):
+        source, msg = self._pick_path()
+        if msg is None:
             return
+
+        sig = self._path_signature(msg)
+        key = (source, sig)
+        if key == self._last_key and sig == self._last_sig:
+            return
+        self._last_key = key
         self._last_sig = sig
 
         via = self._downsample(msg)
         if not via.poses:
             rospy.logwarn_throttle(
                 2.0,
-                "astar_path_to_teb_via_points: received empty path on %s",
-                self.input_topic,
+                "astar_path_to_teb_via_points: selected source '%s' produced empty path",
+                source,
             )
             return
         self.pub.publish(via)
         rospy.loginfo_throttle(
             1.0,
-            "astar_path_to_teb_via_points: published %d via points from %d path poses",
+            "astar_path_to_teb_via_points: source=%s published %d via points from %d path poses",
+            source,
             len(via.poses),
             len(msg.poses),
         )

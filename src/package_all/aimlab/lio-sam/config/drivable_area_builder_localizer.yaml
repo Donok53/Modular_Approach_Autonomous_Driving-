@@ -27,15 +27,15 @@ use_clicked_point: true
 clicked_point_topic: /clicked_point
 clicked_point_mode: toggle
 
-# Visualization (same red style)
+# Visualization (white drivable overlay for RViz edit workflow)
 marker_topic: /lio_sam/drivable_area/marker
 grid_topic: /lio_sam/drivable_area/grid
 marker_z_offset: 0.03
 marker_height: 0.08
-marker_color_r: 0.95
-marker_color_g: 0.20
-marker_color_b: 0.20
-marker_color_a: 0.45
+marker_color_r: 1.00
+marker_color_g: 1.00
+marker_color_b: 1.00
+marker_color_a: 0.30
 publish_risk_marker: false
 track_risk_cells: false
 

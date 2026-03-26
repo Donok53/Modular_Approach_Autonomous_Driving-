@@ -35,7 +35,7 @@
   <arg name="local_planner_mode" default="custom"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
-  <arg name="teb_publish_astar_via_points" default="false"/>
+  <arg name="teb_publish_astar_via_points" default="true"/>
   <arg name="teb_use_pointcloud_obstacles" default="true"/>
   <arg name="teb_enable_emergency_stop" default="true"/>
   <arg name="teb_enable_obstacle_slowdown" default="true"/>
@@ -206,6 +206,20 @@
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="global_path_topic" value="/astar/path"/>
+      <arg name="local_path_topic" value="$(arg local_path_topic)"/>
+      <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+      <arg name="path_history_topic" value="$(arg path_history_topic)"/>
+      <arg name="travel_history_topic" value="/planning/travel_history"/>
+      <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+      <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+      <arg name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
+      <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
+      <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
+      <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+      <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
+      <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
+      <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
