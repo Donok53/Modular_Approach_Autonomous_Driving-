@@ -112,14 +112,15 @@ def timer_callback(event):
     print("Dest_node_index:", publish_data.Dest_node_index)
     print("Cur_latitude:", publish_data.Cur_latitude)
     print("Cur_longitude:", publish_data.Cur_longitude)
-    print("Cur_linear_velocity:", publish_data.Cur_linear_velocity)
-    print("Cur_angular_velocity:", publish_data.Cur_angular_velocity)
+    print("Cmd_linear_velocity(/cmd_vel echo):", publish_data.Cur_linear_velocity)
+    print("Cmd_angular_velocity(/cmd_vel echo):", publish_data.Cur_angular_velocity)
     print("Dist_to_destination:", publish_data.Dist_to_destination)
     print("Remain_dist_to_destination:", publish_data.Remain_dist_to_destination)
     print("Alive_count:", publish_data.Alive_count)
 
 def listener():
     rospy.init_node('multi_listener_publisher', anonymous=True)
+    rospy.loginfo("robot_send: velocity fields are derived from /cmd_vel, not wheel odometry")
 
     # Subscribers
     rospy.Subscriber('/server_to_robot_topic',server_to_robot, server_to_robot_callback)
