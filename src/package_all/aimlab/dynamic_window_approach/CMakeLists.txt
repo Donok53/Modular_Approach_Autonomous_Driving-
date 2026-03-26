@@ -216,6 +216,7 @@ include_directories(
 # catkin_add_nosetests(test)
 
 catkin_install_python(PROGRAMS 
+  scripts/astar_path_to_teb_via_points.py
   scripts/cloud_cluster_tracker.py
   scripts/constrained_local_replanner.py
   scripts/dynamic_risk_manager.py

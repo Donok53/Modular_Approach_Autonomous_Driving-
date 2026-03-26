@@ -1,0 +1,82 @@
+shutdown_costmaps: false
+controller_frequency: 10.0
+planner_frequency: 2.0
+planner_patience: 2.0
+controller_patience: 2.0
+oscillation_timeout: 3.0
+oscillation_distance: 0.20
+recovery_behavior_enabled: false
+clearing_rotation_allowed: false
+
+base_global_planner: navfn/NavfnROS
+base_local_planner: teb_local_planner/TebLocalPlannerROS
+
+NavfnROS:
+  allow_unknown: false
+
+TebLocalPlannerROS:
+  odom_topic: /lio_localizer/odometry/optimization
+  map_frame: map
+
+  max_vel_x: 0.25
+  max_vel_x_backwards: 0.05
+  max_vel_theta: 0.80
+  acc_lim_x: 0.40
+  acc_lim_theta: 1.50
+
+  min_turning_radius: 0.0
+  wheelbase: 0.0
+  cmd_angle_instead_rotvel: false
+
+  xy_goal_tolerance: 0.35
+  yaw_goal_tolerance: 0.20
+  free_goal_vel: false
+  complete_global_plan: true
+  global_plan_overwrite_orientation: true
+
+  dt_ref: 0.30
+  dt_hysteresis: 0.10
+  min_samples: 3
+  max_samples: 20
+  teb_autosize: true
+
+  footprint_model:
+    type: polygon
+    vertices:
+      - [0.30, 0.275]
+      - [0.30, -0.275]
+      - [-0.30, -0.275]
+      - [-0.30, 0.275]
+
+  min_obstacle_dist: 0.12
+  inflation_dist: 0.24
+  include_costmap_obstacles: true
+  include_dynamic_obstacles: false
+  costmap_obstacles_behind_robot_dist: 1.0
+  obstacle_poses_affected: 20
+
+  global_plan_viapoint_sep: 0.40
+  via_points_ordered: true
+  weight_viapoint: 12.0
+
+  no_inner_iterations: 4
+  no_outer_iterations: 3
+  optimization_activate: true
+  optimization_verbose: false
+  penalty_epsilon: 0.10
+  weight_max_vel_x: 2.0
+  weight_max_vel_theta: 1.0
+  weight_acc_lim_x: 1.0
+  weight_acc_lim_theta: 1.0
+  weight_kinematics_nh: 1000.0
+  weight_kinematics_forward_drive: 20.0
+  weight_optimaltime: 2.0
+  weight_obstacle: 50.0
+  weight_inflation: 0.2
+  weight_shortest_path: 0.0
+  weight_adapt_factor: 2.0
+
+  allow_init_with_backwards_motion: false
+  exact_arc_length: false
+  publish_feedback: true
+  visualize_hc_graph: false

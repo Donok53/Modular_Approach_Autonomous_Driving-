@@ -1,0 +1,37 @@
+<launch>
+  <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+  <arg name="global_path_topic" default="/astar/path"/>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="robot_base_frame" default="base_link"/>
+  <arg name="global_frame" default="map"/>
+  <arg name="publish_astar_via_points" default="true"/>
+  <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
+  <arg name="teb_min_spacing_m" default="0.50"/>
+  <arg name="teb_max_via_points" default="200"/>
+
+  <group if="$(arg publish_astar_via_points)">
+    <node pkg="dynamic_window_approach" type="astar_path_to_teb_via_points.py" name="astar_path_to_teb_via_points" output="screen">
+      <param name="input_topic" value="$(arg global_path_topic)"/>
+      <param name="output_topic" value="$(arg teb_via_points_topic)"/>
+      <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
+      <param name="max_points" value="$(arg teb_max_via_points)"/>
+    </node>
+  </group>
+
+  <node pkg="move_base" type="move_base" name="move_base" output="screen" clear_params="true">
+    <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_move_base.yaml"/>
+    <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_global_costmap.yaml"/>
+    <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_local_costmap.yaml"/>
+    <param name="TebLocalPlannerROS/odom_topic" value="$(arg pose_topic)"/>
+    <param name="global_costmap/global_frame" value="$(arg global_frame)"/>
+    <param name="global_costmap/robot_base_frame" value="$(arg robot_base_frame)"/>
+    <param name="global_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>
+    <param name="local_costmap/global_frame" value="$(arg global_frame)"/>
+    <param name="local_costmap/robot_base_frame" value="$(arg robot_base_frame)"/>
+    <param name="local_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>
+    <param name="local_costmap/obstacle_layer/ouster_points/topic" value="$(arg pointcloud_topic)"/>
+    <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
+  </node>
+</launch>

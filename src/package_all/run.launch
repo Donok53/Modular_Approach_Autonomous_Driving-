@@ -28,6 +28,10 @@
   <arg name="path_history_max_paths" default="12"/>
   <arg name="enable_avoidance_path" default="true"/>
   <arg name="enable_graph_planner" default="false"/>
+  <arg name="local_planner_mode" default="custom"/>
+  <arg name="robot_base_frame" default="base_link"/>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="teb_publish_astar_via_points" default="true"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
@@ -102,75 +106,89 @@
     </include>
   </group>
 
-  <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
-    <arg name="pose_topic" value="$(arg pose_topic)"/>
-    <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
-    <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
-    <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
-    <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
-    <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
-    <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
-    <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
-    <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
-    <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
-    <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
-    <arg name="local_path_topic" value="$(arg local_path_topic)"/>
-    <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
-    <arg name="path_history_topic" value="$(arg path_history_topic)"/>
-    <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
-    <arg name="robot_width_m" value="$(arg robot_width_m)"/>
-    <arg name="robot_length_m" value="$(arg robot_length_m)"/>
-    <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
-    <arg name="path_tracking_only" value="$(arg path_tracking_only)"/>
-    <arg name="path_tracking_speed_cap" value="$(arg path_tracking_speed_cap)"/>
-    <arg name="path_tracking_steer_filter_gain" value="$(arg path_tracking_steer_filter_gain)"/>
-    <arg name="lookahead_distance" value="$(arg lookahead_distance)"/>
-    <arg name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
-    <arg name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
-    <arg name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
-    <arg name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
-    <arg name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
-    <arg name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
-    <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
-    <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
-    <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
-    <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
-    <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
-    <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
-    <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
-    <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
-    <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
-    <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
-    <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
-    <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
-    <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
-    <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
-    <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
-    <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
-    <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
-    <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
-    <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
-    <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
-    <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
-    <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
-    <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
-    <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
-    <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
-    <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
-    <arg name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
-    <arg name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
-    <arg name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
-    <arg name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
-    <arg name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
-    <arg name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
-    <arg name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
-    <arg name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
-    <arg name="stop_log_period_s" value="$(arg stop_log_period_s)"/>
-    <arg name="use_pointcloud_obstacle_cost" value="$(arg use_pointcloud_obstacle_cost)"/>
-    <arg name="obstacle_collision_radius" value="$(arg obstacle_collision_radius)"/>
-    <arg name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
-    <arg name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>
-    <arg name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>
-  </include>
+  <group if="$(eval arg('local_planner_mode') == 'custom')">
+    <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
+      <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
+      <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+      <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
+      <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
+      <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+      <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
+      <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+      <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+      <arg name="local_path_topic" value="$(arg local_path_topic)"/>
+      <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+      <arg name="path_history_topic" value="$(arg path_history_topic)"/>
+      <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+      <arg name="robot_width_m" value="$(arg robot_width_m)"/>
+      <arg name="robot_length_m" value="$(arg robot_length_m)"/>
+      <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+      <arg name="path_tracking_only" value="$(arg path_tracking_only)"/>
+      <arg name="path_tracking_speed_cap" value="$(arg path_tracking_speed_cap)"/>
+      <arg name="path_tracking_steer_filter_gain" value="$(arg path_tracking_steer_filter_gain)"/>
+      <arg name="lookahead_distance" value="$(arg lookahead_distance)"/>
+      <arg name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
+      <arg name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
+      <arg name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
+      <arg name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
+      <arg name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
+      <arg name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
+      <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+      <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
+      <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
+      <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+      <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
+      <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
+      <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
+      <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
+      <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
+      <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
+      <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
+      <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
+      <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+      <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
+      <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
+      <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
+      <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+      <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
+      <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+      <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
+      <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
+      <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
+      <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
+      <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
+      <arg name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
+      <arg name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
+      <arg name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
+      <arg name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
+      <arg name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
+      <arg name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
+      <arg name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
+      <arg name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
+      <arg name="stop_log_period_s" value="$(arg stop_log_period_s)"/>
+      <arg name="use_pointcloud_obstacle_cost" value="$(arg use_pointcloud_obstacle_cost)"/>
+      <arg name="obstacle_collision_radius" value="$(arg obstacle_collision_radius)"/>
+      <arg name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
+      <arg name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>
+      <arg name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>
+    </include>
+  </group>
+
+  <group if="$(eval arg('local_planner_mode') == 'teb')">
+    <include file="$(find dynamic_window_approach)/launch/teb_trial.launch">
+      <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <arg name="global_path_topic" value="/astar/path"/>
+      <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
+      <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+      <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>
+    </include>
+  </group>
 
 </launch>
