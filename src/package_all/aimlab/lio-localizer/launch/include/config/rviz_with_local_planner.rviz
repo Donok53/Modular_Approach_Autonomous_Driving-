@@ -331,23 +331,23 @@ Visualization Manager:
       Use rainbow: true
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /local_planner/global_trajectory_planner/global_viz
       Name: Global Trajectory
       Namespaces:
         local_trajectory_edges: true
         local_trajectory_nodes: true
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /local_planner/global_trajectory_planner/local_viz
       Name: Local Trajectory
       Namespaces:
         local_trajectory_edges: true
         local_trajectory_nodes: true
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /lio_sam/drivable_area/marker
@@ -430,18 +430,18 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /planning/travel_history
       Name: travel_history
       Namespaces:
         {}
       Queue Size: 20
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
       Color: 25; 255; 0
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
@@ -460,12 +460,12 @@ Visualization Manager:
       Shaft Length: 0.10000000149011612
       Topic: /local_planner/global_trajectory_planner/local
       Unreliable: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
       Color: 40; 220; 40
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
@@ -484,12 +484,12 @@ Visualization Manager:
       Shaft Length: 0.10000000149011612
       Topic: /move_base/NavfnROS/plan
       Unreliable: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
       Color: 255; 150; 0
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
@@ -508,7 +508,7 @@ Visualization Manager:
       Shaft Length: 0.10000000149011612
       Topic: /move_base/TebLocalPlannerROS/local_plan
       Unreliable: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
