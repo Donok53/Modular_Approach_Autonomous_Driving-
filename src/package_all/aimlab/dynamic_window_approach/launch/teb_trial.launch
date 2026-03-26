@@ -7,9 +7,17 @@
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="global_frame" default="map"/>
   <arg name="publish_astar_via_points" default="true"/>
-  <arg name="use_pointcloud_obstacles" default="false"/>
+  <arg name="use_pointcloud_obstacles" default="true"/>
   <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
   <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
+  <arg name="teb_filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
+  <arg name="teb_filter_min_z" default="-0.25"/>
+  <arg name="teb_filter_max_z" default="1.50"/>
+  <arg name="teb_filter_min_range" default="0.10"/>
+  <arg name="teb_filter_max_range" default="6.0"/>
+  <arg name="teb_filter_voxel_size" default="0.10"/>
+  <arg name="teb_filter_self_radius_x" default="0.38"/>
+  <arg name="teb_filter_self_radius_y" default="0.33"/>
   <arg name="teb_min_spacing_m" default="0.50"/>
   <arg name="teb_max_via_points" default="200"/>
 
@@ -32,6 +40,18 @@
     <param name="reverse_replacement_speed" value="0.05"/>
   </node>
 
+  <node if="$(arg use_pointcloud_obstacles)" pkg="dynamic_window_approach" type="teb_obstacle_cloud_filter.py" name="teb_obstacle_cloud_filter" output="screen">
+    <param name="input_topic" value="$(arg pointcloud_topic)"/>
+    <param name="output_topic" value="$(arg teb_filtered_obstacle_topic)"/>
+    <param name="min_z" value="$(arg teb_filter_min_z)"/>
+    <param name="max_z" value="$(arg teb_filter_max_z)"/>
+    <param name="min_range" value="$(arg teb_filter_min_range)"/>
+    <param name="max_range" value="$(arg teb_filter_max_range)"/>
+    <param name="voxel_size" value="$(arg teb_filter_voxel_size)"/>
+    <param name="self_filter_radius_x" value="$(arg teb_filter_self_radius_x)"/>
+    <param name="self_filter_radius_y" value="$(arg teb_filter_self_radius_y)"/>
+  </node>
+
   <node pkg="move_base" type="move_base" name="move_base" output="screen" clear_params="true">
     <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_move_base.yaml"/>
     <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_global_costmap.yaml"/>
@@ -43,7 +63,7 @@
     <param name="local_costmap/global_frame" value="$(arg global_frame)"/>
     <param name="local_costmap/robot_base_frame" value="$(arg robot_base_frame)"/>
     <param name="local_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>
-    <param name="local_costmap/obstacle_layer/ouster_points/topic" value="$(arg pointcloud_topic)"/>
+    <param name="local_costmap/obstacle_layer/ouster_points/topic" value="$(arg teb_filtered_obstacle_topic)"/>
     <param name="local_costmap/obstacle_layer/enabled" value="$(arg use_pointcloud_obstacles)"/>
     <remap from="cmd_vel" to="$(arg teb_cmd_vel_input_topic)"/>
   </node>

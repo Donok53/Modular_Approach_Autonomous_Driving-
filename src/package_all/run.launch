@@ -33,6 +33,7 @@
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
+  <arg name="teb_use_pointcloud_obstacles" default="true"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
@@ -194,7 +195,7 @@
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>
-      <arg name="use_pointcloud_obstacles" value="false"/>
+      <arg name="use_pointcloud_obstacles" value="$(arg teb_use_pointcloud_obstacles)"/>
     </include>
   </group>
 
