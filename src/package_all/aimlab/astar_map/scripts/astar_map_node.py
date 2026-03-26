@@ -129,6 +129,7 @@ class AStarPlanner:
         self._osm_file = ""
         self._ref_file = ""
         self._goal_display_xy = None
+        self._display_start_xy = None
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -561,9 +562,14 @@ class AStarPlanner:
             ps = PoseStamped(); ps.header = p.header
             ps.pose.position.x = x; ps.pose.position.y = y; ps.pose.position.z = 0.0
             p.poses.append(ps)
-            pds = PoseStamped(); pds.header = pd.header
-            pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
-            pd.poses.append(pds)
+
+        if self._display_start_xy is not None and self._goal_display_xy is not None:
+            sx, sy = self._display_start_xy
+            gx, gy = self._goal_display_xy
+            for x, y in ((sx, sy), (gx, gy)):
+                pds = PoseStamped(); pds.header = pd.header
+                pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
+                pd.poses.append(pds)
 
         for lat, lon in wgs_points:
             pwps = PoseStamped(); pwps.header = pw.header
@@ -713,6 +719,10 @@ class AStarPlanner:
 
     def callback_start(self, data):
         n = self._snap_and_update_from_position(data.pose.pose.position)
+        self._display_start_xy = (
+            float(data.pose.pose.position.x),
+            float(data.pose.pose.position.y),
+        )
         if n:
             self.start_id = n.id; self.start_init_flag = True
             if self.debug_log_enable:
@@ -720,6 +730,10 @@ class AStarPlanner:
 
     def pose_callback(self, data):
         n = self._snap_and_update_from_position(data.pose.pose.position)
+        self._display_start_xy = (
+            float(data.pose.pose.position.x),
+            float(data.pose.pose.position.y),
+        )
         if n:
             self.start_id = n.id; self.start_init_flag = True
 
