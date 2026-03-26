@@ -1,6 +1,7 @@
 global_costmap:
   global_frame: map
   robot_base_frame: base_link
+  footprint: [[0.30, 0.275], [0.30, -0.275], [-0.30, -0.275], [-0.30, 0.275]]
   update_frequency: 2.0
   publish_frequency: 1.0
   transform_tolerance: 0.5
