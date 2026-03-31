@@ -41,8 +41,10 @@
     <arg name="path_tracking_only" default="true"/>
     <arg name="path_tracking_speed_cap" default="0.25"/>
     <arg name="path_tracking_steer_filter_gain" default="0.35"/>
-    <arg name="lookahead_distance" default="0.60"/>
+    <arg name="lookahead_distance" default="0.80"/>
     <arg name="snap_lat_err" default="0.20"/>
+    <arg name="snap_target_ahead_m" default="0.45"/>
+    <arg name="tracking_path_smoothing_passes" default="2"/>
     <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
     <arg name="path_tracking_in_place_yaw_rate_max_deg" default="45.0"/>
     <arg name="path_tracking_yaw_accel_max_deg" default="180.0"/>
@@ -223,6 +225,8 @@
         <param name="path_tracking_steer_filter_gain" value="$(arg path_tracking_steer_filter_gain)"/>
         <param name="lookahead_distance" value="$(arg lookahead_distance)"/>
         <param name="snap_lat_err" value="$(arg snap_lat_err)"/>
+        <param name="snap_target_ahead_m" value="$(arg snap_target_ahead_m)"/>
+        <param name="tracking_path_smoothing_passes" value="$(arg tracking_path_smoothing_passes)"/>
         <param name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
         <param name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>
         <param name="path_tracking_yaw_accel_max_deg" value="$(arg path_tracking_yaw_accel_max_deg)"/>

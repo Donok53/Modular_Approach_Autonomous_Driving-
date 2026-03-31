@@ -219,6 +219,12 @@ class DWAControl:
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
+        self.snap_target_ahead_m = max(
+            0.0, float(rospy.get_param("~snap_target_ahead_m", 0.40))
+        )
+        self.tracking_path_smoothing_passes = max(
+            0, int(rospy.get_param("~tracking_path_smoothing_passes", 2))
+        )
         self.path_tracking_only = bool(rospy.get_param("~path_tracking_only", True))
         self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 1.2))
         self.path_tracking_yaw_rate_max = math.radians(
@@ -571,6 +577,7 @@ class DWAControl:
         for ps in self.path_msg.poses:
             p = ps.pose.position
             self.path_pts.append((p.x, p.y))
+        self.path_pts = self._smooth_tracking_polyline(self.path_pts)
         # seg lengths & cumulative
         self.seg_lens = []
         self.cum_len = [0.0]
@@ -586,6 +593,29 @@ class DWAControl:
         self.s_cur = 0.0
         self.reach_goal_flag = False
         self.prev_goal_flag = False
+
+    def _smooth_tracking_polyline(self, points):
+        if len(points) < 3 or self.tracking_path_smoothing_passes <= 0:
+            return list(points)
+
+        smoothed = [(float(px), float(py)) for px, py in points]
+        for _ in range(self.tracking_path_smoothing_passes):
+            if len(smoothed) < 3:
+                break
+            next_pts = [smoothed[0]]
+            for i in range(1, len(smoothed) - 1):
+                x_prev, y_prev = smoothed[i - 1]
+                x_cur, y_cur = smoothed[i]
+                x_next, y_next = smoothed[i + 1]
+                next_pts.append(
+                    (
+                        0.25 * x_prev + 0.50 * x_cur + 0.25 * x_next,
+                        0.25 * y_prev + 0.50 * y_cur + 0.25 * y_next,
+                    )
+                )
+            next_pts.append(smoothed[-1])
+            smoothed = next_pts
+        return smoothed
 
     def _sync_progress_to_current_pose(self):
         if len(self.path_pts) < 2:
@@ -783,12 +813,14 @@ class DWAControl:
         if s_proj + self.back_jitter_m >= self.s_cur:
             self.s_cur = max(self.s_cur, s_proj)
 
-        # 1단계: 경로에서 멀리 벗어나 있으면, lookahead 대신 projection 지점으로 붙기
+        base_s = max(self.s_cur, s_proj)
+
+        # Off-path recovery should still look forward along the path, otherwise
+        # the target jumps to the perpendicular foot-point and causes zig-zag.
         if abs(lat_err) > self.snap_lat_err:
-            s_target = s_proj
+            s_target = min(self.s_total, base_s + self.snap_target_ahead_m)
         else:
-            # 2단계: 어느 정도 경로 위에 올라탄 뒤에는 lookahead 기반 타깃 사용
-            s_target = min(self.s_total, self.s_cur + self.lookahead_distance)
+            s_target = min(self.s_total, base_s + self.lookahead_distance)
 
         tx, ty, t_hat = self._interp_xy_tangent_at_s(s_target)
 
