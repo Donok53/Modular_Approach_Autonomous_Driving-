@@ -224,6 +224,15 @@ class DWAControl:
         self.path_tracking_yaw_rate_max = math.radians(
             rospy.get_param("~path_tracking_yaw_rate_max_deg", 55.0)
         )
+        self.path_tracking_in_place_yaw_rate_max = math.radians(
+            rospy.get_param(
+                "~path_tracking_in_place_yaw_rate_max_deg",
+                rospy.get_param("~path_tracking_yaw_rate_max_deg", 55.0),
+            )
+        )
+        self.path_tracking_yaw_accel_max = math.radians(
+            rospy.get_param("~path_tracking_yaw_accel_max_deg", 180.0)
+        )
         self.path_tracking_speed_cap = max(
             0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.25))
         )
@@ -820,6 +829,7 @@ class DWAControl:
         if abs_err >= self.path_tracking_stop_yaw:
             v_cmd = 0.0
             w_target = self.path_tracking_kp * yaw_err
+            w_limit = self.path_tracking_in_place_yaw_rate_max
         else:
             if self.path_tracking_slowdown_yaw > 1e-6:
                 slow_ratio = max(0.20, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
@@ -830,18 +840,25 @@ class DWAControl:
                 self.path_tracking_kp * yaw_err
                 + 2.0 * v_cmd * math.sin(angdiff(target_yaw, x[2])) / lookahead
             )
+            w_limit = self.path_tracking_yaw_rate_max
 
         w_target = max(
-            -self.path_tracking_yaw_rate_max,
-            min(self.path_tracking_yaw_rate_max, w_target),
+            -w_limit,
+            min(w_limit, w_target),
         )
-        w_cmd = (
+        w_filtered = (
             self.path_tracking_steer_filter_gain * w_target +
             (1.0 - self.path_tracking_steer_filter_gain) * self._path_tracking_prev_w
         )
+        max_w_step = max(1e-3, self.path_tracking_yaw_accel_max * self.dt)
+        w_delta = max(
+            -max_w_step,
+            min(max_w_step, w_filtered - self._path_tracking_prev_w),
+        )
+        w_cmd = self._path_tracking_prev_w + w_delta
         w_cmd = max(
-            -self.path_tracking_yaw_rate_max,
-            min(self.path_tracking_yaw_rate_max, w_cmd),
+            -w_limit,
+            min(w_limit, w_cmd),
         )
         self._path_tracking_prev_w = w_cmd
 

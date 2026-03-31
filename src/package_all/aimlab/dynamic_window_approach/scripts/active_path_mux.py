@@ -11,12 +11,12 @@ class ActivePathMux:
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
-        self.global_path_timeout_s = max(0.1, float(rospy.get_param("~global_path_timeout_s", 4.0)))
         self.local_path_timeout_s = max(0.1, float(rospy.get_param("~local_path_timeout_s", 4.0)))
         self.avoidance_path_timeout_s = max(
             0.1,
             float(rospy.get_param("~avoidance_path_timeout_s", self.local_path_timeout_s)),
         )
+        self.use_local_path_fallback = bool(rospy.get_param("~use_local_path_fallback", False))
 
         self.global_path_msg = None
         self.global_path_stamp = rospy.Time(0)
@@ -70,14 +70,14 @@ class ActivePathMux:
         if use_avoidance:
             return "avoidance", self.avoidance_path_msg
 
-        use_global = (
-            self._is_valid_path(self.global_path_msg)
-            and (now - self.global_path_stamp).to_sec() <= self.global_path_timeout_s
-        )
-        if use_global:
+        # Keep following the last valid global path until a new one arrives.
+        # The global planner is goal-driven, not a continuously streaming source.
+        if self._is_valid_path(self.global_path_msg):
             return "global", self.global_path_msg
 
         use_local = (
+            self.use_local_path_fallback
+            and
             self._is_valid_path(self.local_path_msg)
             and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
         )

@@ -17,6 +17,7 @@
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="active_path_topic" default="/planning/active_path"/>
+  <arg name="use_local_path_fallback" default="false"/>
   <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_free_area_goal" default="false"/>
@@ -65,7 +66,9 @@
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
   <arg name="lookahead_distance" default="0.60"/>
   <arg name="snap_lat_err" default="0.20"/>
-  <arg name="path_tracking_yaw_rate_max_deg" default="80.0"/>
+  <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
+  <arg name="path_tracking_in_place_yaw_rate_max_deg" default="45.0"/>
+  <arg name="path_tracking_yaw_accel_max_deg" default="180.0"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="40.0"/>
   <arg name="path_tracking_stop_yaw_deg" default="85.0"/>
   <arg name="path_tracking_cte_gain" default="1.6"/>
@@ -180,6 +183,7 @@
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
       <arg name="active_path_topic" value="$(arg active_path_topic)"/>
+      <arg name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
       <arg name="path_history_topic" value="$(arg path_history_topic)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
@@ -192,6 +196,8 @@
       <arg name="lookahead_distance" value="$(arg lookahead_distance)"/>
       <arg name="snap_lat_err" value="$(arg snap_lat_err)"/>
       <arg name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
+      <arg name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>
+      <arg name="path_tracking_yaw_accel_max_deg" value="$(arg path_tracking_yaw_accel_max_deg)"/>
       <arg name="path_tracking_slowdown_yaw_deg" value="$(arg path_tracking_slowdown_yaw_deg)"/>
       <arg name="path_tracking_stop_yaw_deg" value="$(arg path_tracking_stop_yaw_deg)"/>
       <arg name="path_tracking_cte_gain" value="$(arg path_tracking_cte_gain)"/>
