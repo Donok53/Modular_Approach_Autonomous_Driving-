@@ -192,6 +192,8 @@
         <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+        <param name="active_path_topic" value="$(arg active_path_topic)"/>
+        <param name="use_muxed_active_path" value="true"/>
         <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
         <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
         <param name="use_drivable_grid" value="$(arg use_drivable_grid)"/>

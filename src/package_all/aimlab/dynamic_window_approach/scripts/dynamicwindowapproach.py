@@ -66,9 +66,17 @@ class DWAControl:
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
+        self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
         self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
         self.avoidance_path_timeout_s = float(
             rospy.get_param("~avoidance_path_timeout_s", max(0.5, self.local_path_timeout_s))
+        )
+        self.use_muxed_active_path = bool(rospy.get_param("~use_muxed_active_path", True))
+        self.active_path_timeout_s = float(
+            rospy.get_param(
+                "~active_path_timeout_s",
+                max(0.5, self.avoidance_path_timeout_s),
+            )
         )
         self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
@@ -239,6 +247,10 @@ class DWAControl:
         self.avoidance_path_msg = None
         self.avoidance_path_sig = None
         self.avoidance_path_stamp = rospy.Time(0)
+        self.active_path_msg = None
+        self.active_path_sig = None
+        self.active_path_stamp = rospy.Time(0)
+        self.have_seen_active_path = False
         self.active_path_source = "none"
         self.path_msg = None
         self.path_sig = None
@@ -279,6 +291,14 @@ class DWAControl:
             self.path_callback_avoidance,
             queue_size=5,
         )
+        self.sub_path_active = None
+        if self.use_muxed_active_path:
+            self.sub_path_active = rospy.Subscriber(
+                self.active_path_topic,
+                Path,
+                self.path_callback_active,
+                queue_size=5,
+            )
         self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
         self.sub_behavior = rospy.Subscriber(self.behavior_cmd_topic, BehaviorCommand, self.behavior_cmd_callback, queue_size=10)
@@ -592,8 +612,33 @@ class DWAControl:
         self.avoidance_path_sig = self._path_signature(path_msg)
         self.avoidance_path_stamp = rospy.Time.now()
 
+    def path_callback_active(self, path_msg):
+        self.active_path_msg = path_msg
+        self.active_path_sig = self._path_signature(path_msg)
+        self.active_path_stamp = rospy.Time.now()
+        self.have_seen_active_path = True
+
     def _refresh_active_path(self):
         now = rospy.Time.now()
+        if self.use_muxed_active_path:
+            active_fresh = (
+                self.have_seen_active_path
+                and self.active_path_stamp.to_sec() > 0.0
+                and (now - self.active_path_stamp).to_sec() <= self.active_path_timeout_s
+            )
+            if active_fresh:
+                if self.active_path_msg is not None and len(self.active_path_msg.poses) >= 2:
+                    if self.active_path_source != "active" or self.path_sig != self.active_path_sig:
+                        self._activate_path(self.active_path_msg, self.active_path_sig, "active")
+                elif self.path_msg is not None or self.active_path_source != "none":
+                    self._activate_path(None, None, "none")
+                return
+
+            if self.have_seen_active_path:
+                if self.path_msg is not None or self.active_path_source != "none":
+                    self._activate_path(None, None, "none")
+                return
+
         use_avoidance = (
             self.avoidance_path_msg is not None
             and len(self.avoidance_path_msg.poses) >= 2
@@ -1071,11 +1116,13 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
             self.avoidance_path_topic,
+            self.active_path_topic,
+            "on" if self.use_muxed_active_path else "off",
             self.behavior_cmd_topic,
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",

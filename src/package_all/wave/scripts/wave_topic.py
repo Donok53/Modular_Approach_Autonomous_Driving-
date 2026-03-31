@@ -15,7 +15,7 @@ class WaveTopicBridge(object):
         self.timeout_s = float(rospy.get_param("~timeout_s", 1.0))
         self.log_period_s = max(0.2, float(rospy.get_param("~log_period_s", 1.0)))
         self.linear_scale = float(rospy.get_param("~linear_scale", 1.0))
-        self.angular_scale = float(rospy.get_param("~angular_scale", -1.0))
+        self.angular_scale = float(rospy.get_param("~angular_scale", 1.0))
         self.port_candidates = rospy.get_param(
             "~port_candidates",
             ["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyACM0", "/dev/ttyACM1"],
