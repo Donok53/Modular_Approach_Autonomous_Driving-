@@ -44,6 +44,9 @@ class ConstrainedLocalReplanner:
         self.best_effort_update_period_s = max(
             0.1, float(rospy.get_param("~best_effort_update_period_s", 1.5))
         )
+        self.best_effort_max_goal_gap_m = max(
+            0.0, float(rospy.get_param("~best_effort_max_goal_gap_m", 0.60))
+        )
 
         self.lookahead_m = max(2.0, float(rospy.get_param("~lookahead_m", 10.0)))
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
@@ -76,6 +79,12 @@ class ConstrainedLocalReplanner:
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
         self.obstacle_downsample = max(1, int(rospy.get_param("~obstacle_downsample", 6)))
+        self.pointcloud_cluster_resolution_m = max(
+            0.05, float(rospy.get_param("~pointcloud_cluster_resolution_m", 0.15))
+        )
+        self.pointcloud_min_cluster_points = max(
+            1, int(rospy.get_param("~pointcloud_min_cluster_points", 4))
+        )
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
@@ -214,10 +223,15 @@ class ConstrainedLocalReplanner:
         my = self.odom_y + s * x + c * y
         return mx, my
 
+    def _pointcloud_cluster_cell(self, x, y):
+        res = max(1e-3, self.pointcloud_cluster_resolution_m)
+        return (int(math.floor(x / res)), int(math.floor(y / res)))
+
     def cloud_callback(self, msg):
         if not self.have_odom:
             return
-        pts = []
+        raw_pts = []
+        cluster_counts = {}
         rr = self.obstacle_max_range_m * self.obstacle_max_range_m
         i = 0
         try:
@@ -234,8 +248,24 @@ class ConstrainedLocalReplanner:
                     continue
                 if abs(x) <= self.self_filter_radius_x and abs(y) <= self.self_filter_radius_y:
                     continue
-                pts.append(self._local_to_map(x, y))
-            self.obstacle_points_map = pts
+                raw_pts.append((x, y))
+                cell = self._pointcloud_cluster_cell(x, y)
+                cluster_counts[cell] = cluster_counts.get(cell, 0) + 1
+
+            if self.pointcloud_min_cluster_points <= 1:
+                filtered_pts = raw_pts
+            else:
+                filtered_pts = []
+                for x, y in raw_pts:
+                    cx, cy = self._pointcloud_cluster_cell(x, y)
+                    support = 0
+                    for dx in (-1, 0, 1):
+                        for dy in (-1, 0, 1):
+                            support += cluster_counts.get((cx + dx, cy + dy), 0)
+                    if support >= self.pointcloud_min_cluster_points:
+                        filtered_pts.append((x, y))
+
+            self.obstacle_points_map = [self._local_to_map(x, y) for x, y in filtered_pts]
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
 
@@ -442,6 +472,22 @@ class ConstrainedLocalReplanner:
         self.last_published_goal_cell = goal_cell
         self.last_published_end_cell = path[-1] if path else None
         self.last_path_publish_sec = rospy.Time.now().to_sec()
+
+    def _best_effort_path_is_acceptable(self, goal_cell, path, dg, label):
+        if (not path) or path[-1] == goal_cell:
+            return True
+        gap_m = self._heur(path[-1], goal_cell) * max(1e-3, float(dg.info.resolution))
+        if gap_m <= self.best_effort_max_goal_gap_m:
+            return True
+        rospy.logwarn_throttle(
+            1.0,
+            "constrained_local_replanner: rejecting best-effort %s path (snapped_goal=%s reached=%s gap=%.2fm)",
+            label,
+            str(goal_cell),
+            str(path[-1]),
+            gap_m,
+        )
+        return False
 
     def _astar(self, blocked, start, goal, allow_best_effort=False):
         w = len(blocked[0]) if blocked else 0
@@ -1289,6 +1335,10 @@ class ConstrainedLocalReplanner:
             path = [start_cell, goal_cell]
         else:
             path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
+        if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "direct"):
+            self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+            self._clear_avoidance_path(dg.header.frame_id, stamp)
+            return True
 
         if not self._should_publish_path(goal_cell, path):
             self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
@@ -1375,6 +1425,10 @@ class ConstrainedLocalReplanner:
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 return
             path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
+            if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "local"):
+                self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                self._clear_avoidance_path(dg.header.frame_id, stamp)
+                return
             if not self._should_publish_path(goal_cell, path):
                 self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "local")
                 return

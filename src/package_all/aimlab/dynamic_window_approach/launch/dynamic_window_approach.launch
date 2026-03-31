@@ -29,6 +29,7 @@
     <arg name="replan_hz" default="3.0"/>
     <arg name="lookahead_m" default="4.0"/>
     <arg name="allow_best_effort_path" default="true"/>
+    <arg name="best_effort_max_goal_gap_m" default="0.60"/>
     <arg name="enable_avoidance_path" default="true"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
     <arg name="obstacle_collision_radius" default="0.0"/>
@@ -50,6 +51,8 @@
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
     <arg name="pointcloud_static_block_margin_m" default="0.10"/>
+    <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
+    <arg name="pointcloud_min_cluster_points" default="4"/>
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
     <arg name="avoidance_trigger_margin_m" default="0.12"/>
     <arg name="avoidance_trigger_ahead_m" default="4.0"/>
@@ -82,6 +85,9 @@
     <arg name="debug_dynamic_risk_logging" default="true"/>
     <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
     <arg name="emergency_stop_distance" default="0.35"/>
+    <arg name="emergency_bin_size_m" default="0.10"/>
+    <arg name="emergency_min_close_points" default="4"/>
+    <arg name="emergency_passable_width_m" default="0.62"/>
     <arg name="block_on_count" default="4"/>
     <arg name="block_off_count" default="4"/>
     <arg name="obstacle_consider_side_m" default="0.80"/>
@@ -159,9 +165,12 @@
             <param name="replan_hz" value="$(arg replan_hz)"/>
             <param name="lookahead_m" value="$(arg lookahead_m)"/>
             <param name="allow_best_effort_path" value="$(arg allow_best_effort_path)"/>
+            <param name="best_effort_max_goal_gap_m" value="$(arg best_effort_max_goal_gap_m)"/>
             <param name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
             <param name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
             <param name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
+            <param name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
+            <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
             <param name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
             <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
             <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
@@ -209,6 +218,9 @@
         <param name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
         <param name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
         <param name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
+        <param name="emergency_bin_size_m" value="$(arg emergency_bin_size_m)"/>
+        <param name="emergency_min_close_points" value="$(arg emergency_min_close_points)"/>
+        <param name="emergency_passable_width_m" value="$(arg emergency_passable_width_m)"/>
         <param name="block_on_count" value="$(arg block_on_count)"/>
         <param name="block_off_count" value="$(arg block_off_count)"/>
         <param name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>

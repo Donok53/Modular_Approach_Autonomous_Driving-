@@ -127,6 +127,21 @@ class DWAControl:
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
         self.traj_check_step = max(1, int(rospy.get_param("~traj_check_step", 2)))
         self.max_obstacle_points = max(20, int(rospy.get_param("~max_obstacle_points", 300)))
+        self.emergency_bin_size_m = max(
+            0.05, float(rospy.get_param("~emergency_bin_size_m", 0.10))
+        )
+        self.emergency_min_close_points = max(
+            1, int(rospy.get_param("~emergency_min_close_points", 4))
+        )
+        self.emergency_passable_width_m = max(
+            0.10,
+            float(
+                rospy.get_param(
+                    "~emergency_passable_width_m",
+                    self.robot_width_m + 2.0 * self.footprint_padding_m + 0.05,
+                )
+            ),
+        )
         self.block_on_count = rospy.get_param("~block_on_count", 2)
         self.block_off_count = rospy.get_param("~block_off_count", 3)
         self.emergency_blocked = False
@@ -326,10 +341,38 @@ class DWAControl:
         return offsets
 
     # ------------------------------- obstacle stop -------------------------------
+    def _emergency_band_is_blocked(self, close_points, lateral_limit):
+        if len(close_points) < self.emergency_min_close_points:
+            return False
+
+        lateral_limit = max(lateral_limit, self.robot_half_width_m + self.footprint_padding_m)
+        bin_size = max(0.05, self.emergency_bin_size_m)
+        bin_count = max(1, int(math.ceil((2.0 * lateral_limit) / bin_size)))
+        occupied = np.zeros(bin_count, dtype=np.uint8)
+
+        for _, y in close_points:
+            idx = int(math.floor((y + lateral_limit) / bin_size))
+            if idx < 0 or idx >= bin_count:
+                continue
+            occupied[idx] = 1
+
+        longest_free_run = 0
+        free_run = 0
+        for cell in occupied:
+            if cell:
+                longest_free_run = max(longest_free_run, free_run)
+                free_run = 0
+            else:
+                free_run += 1
+        longest_free_run = max(longest_free_run, free_run)
+        max_free_gap_m = float(longest_free_run) * bin_size
+        return max_free_gap_m + 1e-6 < self.emergency_passable_width_m
+
     def cloud_callback(self, msg):
         try:
-            near = False
             obs = []
+            close_points = []
+            immediate_contact = False
             min_front_clearance = float("inf")
             influence_sq = self.obstacle_influence_distance * self.obstacle_influence_distance
             stop_half_w = 0.5 * max(self.stop_width, self.robot_width_m) + self.footprint_padding_m
@@ -352,10 +395,21 @@ class DWAControl:
                 front_clearance = x - (self.robot_half_length_m + self.footprint_padding_m)
                 if abs(y) <= stop_half_w and front_clearance < min_front_clearance:
                     min_front_clearance = front_clearance
-                if front_clearance < 0.0 or abs(y) > stop_half_w:
+                if abs(y) > self.obstacle_consider_side_m:
+                    continue
+                if abs(y) <= stop_half_w and front_clearance < 0.0:
+                    immediate_contact = True
+                    close_points.append((x, y))
+                    continue
+                if front_clearance < 0.0:
                     continue
                 if front_clearance <= self.emergency_stop_distance:
-                    near = True
+                    close_points.append((x, y))
+
+            near = immediate_contact or self._emergency_band_is_blocked(
+                close_points,
+                self.obstacle_consider_side_m,
+            )
 
             if obs:
                 step = max(1, len(obs) // self.max_obstacle_points)
