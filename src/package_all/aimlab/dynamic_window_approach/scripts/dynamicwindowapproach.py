@@ -250,7 +250,6 @@ class DWAControl:
         self.active_path_msg = None
         self.active_path_sig = None
         self.active_path_stamp = rospy.Time(0)
-        self.have_seen_active_path = False
         self.active_path_source = "none"
         self.path_msg = None
         self.path_sig = None
@@ -616,14 +615,12 @@ class DWAControl:
         self.active_path_msg = path_msg
         self.active_path_sig = self._path_signature(path_msg)
         self.active_path_stamp = rospy.Time.now()
-        self.have_seen_active_path = True
 
     def _refresh_active_path(self):
         now = rospy.Time.now()
         if self.use_muxed_active_path:
             active_fresh = (
-                self.have_seen_active_path
-                and self.active_path_stamp.to_sec() > 0.0
+                self.active_path_stamp.to_sec() > 0.0
                 and (now - self.active_path_stamp).to_sec() <= self.active_path_timeout_s
             )
             if active_fresh:
@@ -634,10 +631,9 @@ class DWAControl:
                     self._activate_path(None, None, "none")
                 return
 
-            if self.have_seen_active_path:
-                if self.path_msg is not None or self.active_path_source != "none":
-                    self._activate_path(None, None, "none")
-                return
+            if self.path_msg is not None or self.active_path_source != "none":
+                self._activate_path(None, None, "none")
+            return
 
         use_avoidance = (
             self.avoidance_path_msg is not None
