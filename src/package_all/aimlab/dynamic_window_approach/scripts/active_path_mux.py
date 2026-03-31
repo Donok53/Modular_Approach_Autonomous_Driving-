@@ -7,15 +7,19 @@ from nav_msgs.msg import Path
 
 class ActivePathMux:
     def __init__(self):
+        self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
+        self.global_path_timeout_s = max(0.1, float(rospy.get_param("~global_path_timeout_s", 4.0)))
         self.local_path_timeout_s = max(0.1, float(rospy.get_param("~local_path_timeout_s", 4.0)))
         self.avoidance_path_timeout_s = max(
             0.1,
             float(rospy.get_param("~avoidance_path_timeout_s", self.local_path_timeout_s)),
         )
 
+        self.global_path_msg = None
+        self.global_path_stamp = rospy.Time(0)
         self.local_path_msg = None
         self.local_path_stamp = rospy.Time(0)
         self.avoidance_path_msg = None
@@ -23,6 +27,7 @@ class ActivePathMux:
         self.last_source = "none"
 
         self.pub_active_path = rospy.Publisher(self.active_path_topic, Path, queue_size=2)
+        self.sub_global_path = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_local_path = rospy.Subscriber(self.local_path_topic, Path, self.local_path_callback, queue_size=5)
         self.sub_avoidance_path = rospy.Subscriber(
             self.avoidance_path_topic,
@@ -33,11 +38,16 @@ class ActivePathMux:
         self.timer = rospy.Timer(rospy.Duration(0.1), self.on_timer)
 
         rospy.loginfo(
-            "active_path_mux started | local=%s avoidance=%s active=%s",
+            "active_path_mux started | global=%s local=%s avoidance=%s active=%s",
+            self.global_path_topic,
             self.local_path_topic,
             self.avoidance_path_topic,
             self.active_path_topic,
         )
+
+    def global_path_callback(self, msg):
+        self.global_path_msg = msg
+        self.global_path_stamp = rospy.Time.now()
 
     def local_path_callback(self, msg):
         self.local_path_msg = msg
@@ -59,6 +69,13 @@ class ActivePathMux:
         )
         if use_avoidance:
             return "avoidance", self.avoidance_path_msg
+
+        use_global = (
+            self._is_valid_path(self.global_path_msg)
+            and (now - self.global_path_stamp).to_sec() <= self.global_path_timeout_s
+        )
+        if use_global:
+            return "global", self.global_path_msg
 
         use_local = (
             self._is_valid_path(self.local_path_msg)

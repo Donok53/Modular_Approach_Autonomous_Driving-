@@ -103,6 +103,7 @@
     <arg name="stop_log_period_s" default="1.0"/>
 
     <node pkg="dynamic_window_approach" type="active_path_mux.py" name="active_path_mux" output="screen" respawn="false">
+        <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
         <param name="active_path_topic" value="$(arg active_path_topic)"/>
