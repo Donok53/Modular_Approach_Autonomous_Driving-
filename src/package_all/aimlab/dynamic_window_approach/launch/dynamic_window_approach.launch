@@ -56,15 +56,24 @@
     <arg name="prediction_inflate_m" default="0.35"/>
     <arg name="front_lateral_stop_m" default="0.9"/>
     <arg name="front_lateral_caution_m" default="1.2"/>
+    <arg name="vehicle_stop_ttc_s" default="1.4"/>
+    <arg name="pedestrian_stop_ttc_s" default="2.0"/>
+    <arg name="caution_ttc_s" default="3.0"/>
+    <arg name="behavior_stop_on_count" default="3"/>
+    <arg name="behavior_stop_off_count" default="3"/>
+    <arg name="behavior_stop_hold_s" default="0.35"/>
     <arg name="cloud_tracker_max_assoc_dist_m" default="1.0"/>
     <arg name="cloud_tracker_vel_alpha" default="0.25"/>
-    <arg name="cloud_tracker_static_speed_thresh_mps" default="0.25"/>
-    <arg name="cloud_tracker_dynamic_min_age" default="4"/>
-    <arg name="cloud_tracker_position_jitter_m" default="0.12"/>
+    <arg name="cloud_tracker_static_speed_thresh_mps" default="0.35"/>
+    <arg name="cloud_tracker_dynamic_min_age" default="6"/>
+    <arg name="cloud_tracker_position_jitter_m" default="0.18"/>
     <arg name="include_static_objects_in_behavior" default="false"/>
     <arg name="include_static_objects_in_risk_grid" default="false"/>
     <arg name="debug_dynamic_risk_logging" default="true"/>
     <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
+    <arg name="emergency_stop_distance" default="0.45"/>
+    <arg name="block_on_count" default="3"/>
+    <arg name="block_off_count" default="4"/>
     <arg name="obstacle_consider_side_m" default="1.10"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -104,6 +113,12 @@
             <param name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
             <param name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
             <param name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+            <param name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
+            <param name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
+            <param name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+            <param name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
+            <param name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
+            <param name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
             <param name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
             <param name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
             <param name="debug_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
@@ -173,6 +188,9 @@
         <param name="lookahead_distance" value="$(arg lookahead_distance)"/>
         <param name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
         <param name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
+        <param name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
+        <param name="block_on_count" value="$(arg block_on_count)"/>
+        <param name="block_off_count" value="$(arg block_off_count)"/>
         <param name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
         <param name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>

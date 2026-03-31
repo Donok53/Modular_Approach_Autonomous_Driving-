@@ -39,17 +39,21 @@ def path_node_id_list_callback(data):
 
 def traj_info_callback(data):
     global publish_data, reach_goal_flag
-    # print("len(path_node_id_list): ", len(path_node_id_list), ", int(data.data[2]): ", int(data.data[2]))
-    if len(path_node_id_list) > 0 and len(path_node_id_list) >= int(data.data[2]) - 1:
-        cur_node_index_value = (int) (path_node_id_list[int(data.data[2])])
-        dest_node_index_value = (int) (path_node_id_list[-1])
+    if len(data.data) < 4:
+        return
+
+    if len(path_node_id_list) > 0:
+        cur_path_idx = int(data.data[2])
+        cur_path_idx = max(0, min(cur_path_idx, len(path_node_id_list) - 1))
+        cur_node_index_value = int(path_node_id_list[cur_path_idx])
+        dest_node_index_value = int(path_node_id_list[-1])
         if cur_node_index_value >= 0 and dest_node_index_value >= 0:
-            publish_data.Cur_node_index = (int) (path_node_id_list[int(data.data[2])])
-            publish_data.Dest_node_index = (int) (path_node_id_list[-1])
+            publish_data.Cur_node_index = cur_node_index_value
+            publish_data.Dest_node_index = dest_node_index_value
 
     publish_data.Dist_to_destination = data.data[0]
-    publish_data.Remain_dist_to_destination = data.data[0] - data.data[1]
-    reach_goal_flag = data.data[3]
+    publish_data.Remain_dist_to_destination = max(0.0, data.data[0] - data.data[1])
+    reach_goal_flag = bool(data.data[3])
     if reach_goal_flag == True:
         publish_data.Cur_state = 3
     

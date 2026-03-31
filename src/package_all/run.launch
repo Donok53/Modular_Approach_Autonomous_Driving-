@@ -60,7 +60,7 @@
   <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
   <arg name="avoidance_hard_stop_distance" default="0.20"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
-  <arg name="pointcloud_static_block_margin_m" default="0.10"/>
+  <arg name="pointcloud_static_block_margin_m" default="0.05"/>
   <arg name="use_pointcloud_avoidance_trigger" default="false"/>
   <arg name="avoidance_trigger_margin_m" default="0.12"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
@@ -71,21 +71,30 @@
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
-  <arg name="dynamic_speed_thresh_mps" default="0.30"/>
+  <arg name="dynamic_speed_thresh_mps" default="0.40"/>
   <arg name="prediction_horizon_s" default="1.5"/>
   <arg name="prediction_step_s" default="0.2"/>
   <arg name="prediction_inflate_m" default="0.35"/>
-  <arg name="front_lateral_stop_m" default="0.9"/>
-  <arg name="front_lateral_caution_m" default="1.2"/>
+  <arg name="front_lateral_stop_m" default="0.75"/>
+  <arg name="front_lateral_caution_m" default="1.0"/>
+  <arg name="vehicle_stop_ttc_s" default="1.4"/>
+  <arg name="pedestrian_stop_ttc_s" default="2.0"/>
+  <arg name="caution_ttc_s" default="3.0"/>
+  <arg name="behavior_stop_on_count" default="3"/>
+  <arg name="behavior_stop_off_count" default="3"/>
+  <arg name="behavior_stop_hold_s" default="0.35"/>
   <arg name="cloud_tracker_max_assoc_dist_m" default="1.0"/>
   <arg name="cloud_tracker_vel_alpha" default="0.25"/>
-  <arg name="cloud_tracker_static_speed_thresh_mps" default="0.25"/>
-  <arg name="cloud_tracker_dynamic_min_age" default="4"/>
-  <arg name="cloud_tracker_position_jitter_m" default="0.12"/>
+  <arg name="cloud_tracker_static_speed_thresh_mps" default="0.35"/>
+  <arg name="cloud_tracker_dynamic_min_age" default="6"/>
+  <arg name="cloud_tracker_position_jitter_m" default="0.18"/>
   <arg name="include_static_objects_in_behavior" default="false"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
+  <arg name="emergency_stop_distance" default="0.45"/>
+  <arg name="block_on_count" default="3"/>
+  <arg name="block_off_count" default="4"/>
   <arg name="obstacle_consider_side_m" default="1.10"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -173,6 +182,12 @@
       <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
       <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
       <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+      <arg name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
+      <arg name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
+      <arg name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+      <arg name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
+      <arg name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
+      <arg name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
       <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
       <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
       <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
@@ -182,6 +197,9 @@
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
       <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
+      <arg name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
+      <arg name="block_on_count" value="$(arg block_on_count)"/>
+      <arg name="block_off_count" value="$(arg block_off_count)"/>
       <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
       <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
       <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
