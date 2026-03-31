@@ -839,13 +839,7 @@ class DWAControl:
         return u, trajectory
 
     def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap):
-        dx = goal_xy[0] - x[0]
-        dy = goal_xy[1] - x[1]
-        lookahead = max(0.25, math.hypot(dx, dy))
-        target_yaw = math.atan2(dy, dx)
         path_yaw = math.atan2(t_hat[1], t_hat[0])
-        target_bias = angdiff(target_yaw, path_yaw)
-        target_bias = max(-math.radians(30.0), min(math.radians(30.0), target_bias))
         cte_correction = math.atan2(
             self.path_tracking_cte_gain * lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
@@ -854,7 +848,10 @@ class DWAControl:
             -self.path_tracking_cte_yaw_cap,
             min(self.path_tracking_cte_yaw_cap, cte_correction),
         )
-        desired_yaw = path_yaw + target_bias - cte_correction
+        # Track the preview tangent directly. The target point is already sampled
+        # ahead on the path, so adding another target-heading curvature term tends
+        # to double-count the correction and creates zig-zag on straight segments.
+        desired_yaw = path_yaw - cte_correction
         yaw_err = angdiff(desired_yaw, x[2])
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
@@ -868,10 +865,7 @@ class DWAControl:
             else:
                 slow_ratio = 1.0
             v_cmd = min(v_limit, max(0.0, v_limit * slow_ratio))
-            w_target = (
-                self.path_tracking_kp * yaw_err
-                + 2.0 * v_cmd * math.sin(angdiff(target_yaw, x[2])) / lookahead
-            )
+            w_target = self.path_tracking_kp * yaw_err
             w_limit = self.path_tracking_yaw_rate_max
 
         w_target = max(
@@ -1300,7 +1294,7 @@ class DWAControl:
                 continue
 
             # rotate-only gating with path tangent
-            desired = math.atan2(target_xy[1] - py, target_xy[0] - px)
+            desired = math.atan2(t_hat[1], t_hat[0])
             err = abs(angdiff(desired, yaw))
             # if we're roughly aligned with path tangent (forward progress), avoid entering rotate-only
             heading_vec = np.array([math.cos(yaw), math.sin(yaw)])

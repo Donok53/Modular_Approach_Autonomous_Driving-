@@ -64,18 +64,18 @@
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
-  <arg name="lookahead_distance" default="0.80"/>
+  <arg name="lookahead_distance" default="1.00"/>
   <arg name="snap_lat_err" default="0.20"/>
-  <arg name="snap_target_ahead_m" default="0.45"/>
-  <arg name="tracking_path_smoothing_passes" default="2"/>
+  <arg name="snap_target_ahead_m" default="0.60"/>
+  <arg name="tracking_path_smoothing_passes" default="3"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
   <arg name="path_tracking_in_place_yaw_rate_max_deg" default="45.0"/>
   <arg name="path_tracking_yaw_accel_max_deg" default="180.0"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="40.0"/>
   <arg name="path_tracking_stop_yaw_deg" default="85.0"/>
-  <arg name="path_tracking_cte_gain" default="1.6"/>
+  <arg name="path_tracking_cte_gain" default="1.2"/>
   <arg name="path_tracking_cte_soft_mps" default="0.25"/>
-  <arg name="path_tracking_cte_yaw_cap_deg" default="35.0"/>
+  <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
   <arg name="rotate_only_deg" default="110.0"/>
   <arg name="rotate_exit_deg" default="40.0"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
