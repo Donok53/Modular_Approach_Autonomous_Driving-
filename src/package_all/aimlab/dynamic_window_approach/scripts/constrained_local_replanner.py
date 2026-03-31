@@ -843,6 +843,47 @@ class ConstrainedLocalReplanner:
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
 
+    @staticmethod
+    def _dedupe_world_points(world_points):
+        deduped = []
+        for x, y in world_points:
+            if deduped and math.hypot(float(x) - deduped[-1][0], float(y) - deduped[-1][1]) <= 1e-3:
+                continue
+            deduped.append((float(x), float(y)))
+        return deduped
+
+    def _publish_nominal_local_segment(self, pts, i0, ig, blocked, start_cell, dg, stamp):
+        if not pts:
+            return False
+        end_idx = max(i0 + 1, ig)
+        segment_world = [pts[i] for i in range(i0, min(len(pts), end_idx + 1))]
+        if not segment_world:
+            return False
+        segment_world[0] = (self.odom_x, self.odom_y)
+        segment_world = self._dedupe_world_points(segment_world)
+        if len(segment_world) < 2:
+            return False
+
+        grid_path = []
+        for wx, wy in segment_world:
+            gx, gy = self._world_to_grid(dg, wx, wy)
+            if not self._in_bounds_blocked(blocked, gx, gy):
+                return False
+            grid_path.append((gx, gy))
+
+        if self._path_blocked_ahead(
+            grid_path,
+            blocked,
+            start_cell,
+            float(dg.info.resolution),
+            max_check_m=self.lookahead_m,
+        ):
+            return False
+
+        sampled_points = self._sample_world_points(segment_world)
+        self._publish_world_path(sampled_points, dg.header.frame_id, stamp)
+        return True
+
     def _publish_empty_path(self, publisher, frame_id, stamp):
         out = Path()
         out.header.stamp = stamp
@@ -1414,6 +1455,9 @@ class ConstrainedLocalReplanner:
                 allow_best_effort=self.allow_best_effort_path,
             )
             if path is None:
+                if self._publish_nominal_local_segment(pts, i0, ig, blocked, start_cell, dg, stamp):
+                    self._clear_avoidance_path(dg.header.frame_id, stamp)
+                    return
                 rospy.logwarn_throttle(
                     1.0,
                     "constrained_local_replanner: no local path (start=%s goal=%s snapped_start=%s snapped_goal=%s)",
@@ -1426,6 +1470,9 @@ class ConstrainedLocalReplanner:
                 return
             path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
             if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "local"):
+                if self._publish_nominal_local_segment(pts, i0, ig, blocked, start_cell, dg, stamp):
+                    self._clear_avoidance_path(dg.header.frame_id, stamp)
+                    return
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 return
