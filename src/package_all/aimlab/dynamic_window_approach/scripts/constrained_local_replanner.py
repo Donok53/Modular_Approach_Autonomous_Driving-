@@ -131,6 +131,9 @@ class ConstrainedLocalReplanner:
         self.avoidance_rejoin_min_distance_m = max(
             0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
         )
+        self.blocked_stop_before_avoidance_s = max(
+            0.0, float(rospy.get_param("~blocked_stop_before_avoidance_s", 3.0))
+        )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
         )
@@ -164,6 +167,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.local_blocked_since_sec = 0.0
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
         self.path_history_next_id = 0
         self.last_history_signature = {"local": None, "avoidance": None}
@@ -293,6 +297,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.local_blocked_since_sec = 0.0
         self._clear_path_history()
         self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
@@ -860,24 +865,9 @@ class ConstrainedLocalReplanner:
         return deduped
 
     def _publish_nominal_local_segment(self, pts, i0, ig, blocked, start_cell, dg, stamp):
-        if not pts:
+        grid_path, sampled_points = self._build_nominal_local_path(pts, i0, ig, dg)
+        if grid_path is None or sampled_points is None:
             return False
-        end_idx = max(i0 + 1, ig)
-        segment_world = [pts[i] for i in range(i0, min(len(pts), end_idx + 1))]
-        if not segment_world:
-            return False
-        segment_world[0] = (self.odom_x, self.odom_y)
-        segment_world = self._dedupe_world_points(segment_world)
-        if len(segment_world) < 2:
-            return False
-
-        grid_path = []
-        for wx, wy in segment_world:
-            gx, gy = self._world_to_grid(dg, wx, wy)
-            if not self._in_bounds_blocked(blocked, gx, gy):
-                return False
-            grid_path.append((gx, gy))
-
         if self._path_blocked_ahead(
             grid_path,
             blocked,
@@ -886,10 +876,35 @@ class ConstrainedLocalReplanner:
             max_check_m=self.lookahead_m,
         ):
             return False
-
-        sampled_points = self._sample_world_points(segment_world)
         self._publish_world_path(sampled_points, dg.header.frame_id, stamp)
         return True
+
+    def _build_nominal_local_path(self, pts, i0, ig, dg):
+        if not pts:
+            return None, None
+        end_idx = max(i0 + 1, ig)
+        segment_world = [pts[i] for i in range(i0, min(len(pts), end_idx + 1))]
+        if not segment_world:
+            return None, None
+        segment_world[0] = (self.odom_x, self.odom_y)
+        segment_world = self._dedupe_world_points(segment_world)
+        if len(segment_world) < 2:
+            return None, None
+
+        sampled_points = self._sample_world_points(segment_world)
+        grid_path = []
+        last_cell = None
+        for wx, wy in sampled_points:
+            gx, gy = self._world_to_grid(dg, wx, wy)
+            if not self._in_bounds(dg, gx, gy):
+                return None, None
+            cell = (gx, gy)
+            if cell != last_cell:
+                grid_path.append(cell)
+                last_cell = cell
+        if len(grid_path) < 2:
+            return None, None
+        return grid_path, sampled_points
 
     def _publish_empty_path(self, publisher, frame_id, stamp):
         out = Path()
@@ -1453,56 +1468,57 @@ class ConstrainedLocalReplanner:
                     str((sx, sy)),
                     str((gx, gy)),
                 )
-                self._clear_avoidance_path(dg.header.frame_id, stamp)
-                return
-            path = self._astar(
-                blocked,
-                start_cell,
-                goal_cell,
-                allow_best_effort=self.allow_best_effort_path,
-            )
-            if path is None:
-                if self._publish_nominal_local_segment(pts, i0, ig, blocked, start_cell, dg, stamp):
-                    self._clear_avoidance_path(dg.header.frame_id, stamp)
-                    return
-                rospy.logwarn_throttle(
-                    1.0,
-                    "constrained_local_replanner: no local path (start=%s goal=%s snapped_start=%s snapped_goal=%s)",
-                    str((sx, sy)),
-                    str((gx, gy)),
-                    str(start_cell),
-                    str(goal_cell),
-                )
-                self._clear_avoidance_path(dg.header.frame_id, stamp)
-                return
-            path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
-            if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "local"):
-                if self._publish_nominal_local_segment(pts, i0, ig, blocked, start_cell, dg, stamp):
-                    self._clear_avoidance_path(dg.header.frame_id, stamp)
-                    return
+                self.local_blocked_since_sec = 0.0
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 return
-            if not self._should_publish_path(goal_cell, path):
-                self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "local")
-                return
-
-            if path[-1] != goal_cell:
+            nominal_path, nominal_world = self._build_nominal_local_path(pts, i0, ig, dg)
+            if nominal_path is None or nominal_world is None:
                 rospy.logwarn_throttle(
                     1.0,
-                    "constrained_local_replanner: best-effort local path only (snapped_goal=%s reached=%s)",
-                    str(goal_cell),
-                    str(path[-1]),
+                    "constrained_local_replanner: failed to build nominal local segment from global path"
                 )
-            self._publish_local_path(
-                path,
-                dg,
-                stamp,
-                start_xy=start_xy,
-                end_xy=goal_xy if path[-1] == goal_cell else None,
+                self.local_blocked_since_sec = 0.0
+                self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                self._clear_avoidance_path(dg.header.frame_id, stamp)
+                return
+
+            nominal_blocked = self._path_blocked_ahead(
+                nominal_path,
+                blocked,
+                start_cell,
+                float(dg.info.resolution),
+                max_check_m=self.lookahead_m,
             )
-            self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "local")
-            self._record_published_path(goal_cell, path)
+            if nominal_blocked:
+                now_sec = stamp.to_sec()
+                if self.local_blocked_since_sec <= 0.0:
+                    self.local_blocked_since_sec = now_sec
+                    rospy.loginfo(
+                        "constrained_local_replanner: nominal path blocked; holding %.1fs before avoidance",
+                        self.blocked_stop_before_avoidance_s,
+                    )
+                wait_s = now_sec - self.local_blocked_since_sec
+                self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                if wait_s < self.blocked_stop_before_avoidance_s:
+                    self._clear_avoidance_path(dg.header.frame_id, stamp)
+                    return
+                self._update_avoidance_path(
+                    nominal_path,
+                    blocked,
+                    start_cell,
+                    goal_cell,
+                    dg,
+                    stamp,
+                    "local_hold",
+                )
+                return
+
+            if self.local_blocked_since_sec > 0.0:
+                rospy.loginfo("constrained_local_replanner: nominal path clear; resuming global path tracking")
+            self.local_blocked_since_sec = 0.0
+            self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
+            self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))
 

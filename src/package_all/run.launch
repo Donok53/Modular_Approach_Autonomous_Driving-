@@ -85,6 +85,7 @@
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
+  <arg name="blocked_stop_before_avoidance_s" default="3.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
@@ -205,6 +206,7 @@
       <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <arg name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
       <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
       <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
