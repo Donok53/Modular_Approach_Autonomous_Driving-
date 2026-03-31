@@ -59,6 +59,15 @@ class ConstrainedLocalReplanner:
         )
         self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
+        self.path_blocking_radius_m = max(
+            0.05,
+            float(
+                rospy.get_param(
+                    "~path_blocking_radius_m",
+                    0.5 * self.robot_width_m + self.footprint_padding_m,
+                )
+            ),
+        )
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
@@ -361,12 +370,8 @@ class ConstrainedLocalReplanner:
         w = int(dg.info.width)
         h = int(dg.info.height)
         res = float(dg.info.resolution)
-        half_length_cells = max(
-            1, int(math.ceil((0.5 * self.robot_length_m + self.footprint_padding_m) / max(1e-3, res)))
-        )
-        half_width_cells = max(
-            1, int(math.ceil((0.5 * self.robot_width_m + self.footprint_padding_m) / max(1e-3, res)))
-        )
+        inflate_m = max(0.05, self.path_blocking_radius_m)
+        inflate_cells = max(1, int(math.ceil(inflate_m / max(1e-3, res))))
         base = [[False for _ in range(w)] for _ in range(h)]
         for y in range(h):
             row = y * w
@@ -383,8 +388,10 @@ class ConstrainedLocalReplanner:
             for x in range(w):
                 if not base[y][x]:
                     continue
-                for dx in range(-half_length_cells, half_length_cells + 1):
-                    for dy in range(-half_width_cells, half_width_cells + 1):
+                for dx in range(-inflate_cells, inflate_cells + 1):
+                    for dy in range(-inflate_cells, inflate_cells + 1):
+                        if math.hypot(float(dx) * res, float(dy) * res) > inflate_m:
+                            continue
                         nx = x + dx
                         ny = y + dy
                         if 0 <= nx < w and 0 <= ny < h:
@@ -974,7 +981,7 @@ class ConstrainedLocalReplanner:
         res = max(1e-3, float(dg.info.resolution))
         if margin_m is None:
             margin_m = self.obstacle_block_margin_m
-        inflate_m = self.robot_radius + self.footprint_padding_m + max(0.0, float(margin_m))
+        inflate_m = self.path_blocking_radius_m + max(0.0, float(margin_m))
         inflate_cells = max(1, int(math.ceil(inflate_m / res)))
         out = [row[:] for row in blocked]
         keep = set(keep_cells or [])
