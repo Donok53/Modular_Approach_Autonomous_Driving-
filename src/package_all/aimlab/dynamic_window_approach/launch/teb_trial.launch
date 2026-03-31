@@ -3,19 +3,41 @@
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="global_path_topic" default="/astar/path"/>
+  <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+  <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="active_path_topic" default="/planning/active_path"/>
+  <arg name="use_local_path_fallback" default="false"/>
   <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="travel_history_topic" default="/planning/travel_history"/>
+  <arg name="enable_cloud_tracker" default="true"/>
+  <arg name="enable_dynamic_risk_manager" default="true"/>
   <arg name="enable_local_replanner" default="true"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
+  <arg name="smooth_path_line_of_sight" default="true"/>
+  <arg name="smooth_avoidance_line_of_sight" default="true"/>
+  <arg name="max_los_segment_m" default="1.0"/>
+  <arg name="published_path_spacing_m" default="0.25"/>
+  <arg name="path_history_max_paths" default="12"/>
+  <arg name="replan_hz" default="3.0"/>
+  <arg name="lookahead_m" default="4.0"/>
+  <arg name="allow_best_effort_path" default="true"/>
+  <arg name="best_effort_max_goal_gap_m" default="0.60"/>
+  <arg name="enable_avoidance_path" default="true"/>
+  <arg name="use_pointcloud_static_blocking" default="true"/>
   <arg name="pointcloud_static_block_margin_m" default="0.10"/>
+  <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
+  <arg name="pointcloud_min_cluster_points" default="4"/>
+  <arg name="use_pointcloud_avoidance_trigger" default="false"/>
+  <arg name="avoidance_trigger_margin_m" default="0.12"/>
+  <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="2"/>
   <arg name="avoidance_hold_s" default="1.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
+  <arg name="blocked_stop_before_avoidance_s" default="3.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
@@ -24,38 +46,119 @@
   <arg name="publish_astar_via_points" default="true"/>
   <arg name="use_pointcloud_obstacles" default="true"/>
   <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
+  <arg name="move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
   <arg name="teb_filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
   <arg name="teb_filter_min_z" default="-0.05"/>
   <arg name="teb_filter_max_z" default="1.50"/>
   <arg name="teb_filter_min_range" default="0.10"/>
-  <arg name="teb_filter_max_range" default="4.5"/>
+  <arg name="teb_filter_max_range" default="8.0"/>
   <arg name="teb_filter_voxel_size" default="0.15"/>
-  <arg name="teb_filter_self_radius_x" default="0.45"/>
-  <arg name="teb_filter_self_radius_y" default="0.40"/>
-  <arg name="teb_filter_rear_limit_x" default="-0.10"/>
-  <arg name="teb_filter_lateral_limit_y" default="2.0"/>
-  <arg name="teb_min_spacing_m" default="0.50"/>
-  <arg name="teb_max_via_points" default="200"/>
   <arg name="robot_width_m" default="0.55"/>
   <arg name="robot_length_m" default="0.60"/>
   <arg name="footprint_padding_m" default="0.0"/>
+  <arg name="robot_half_length_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')))"/>
+  <arg name="robot_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
+  <arg name="neg_robot_half_length_m" default="$(eval -1.0 * float(arg('robot_half_length_m')))"/>
+  <arg name="neg_robot_half_width_m" default="$(eval -1.0 * float(arg('robot_half_width_m')))"/>
+  <arg name="teb_filter_self_margin_m" default="0.10"/>
+  <arg name="teb_filter_self_radius_x" default="$(eval float(arg('robot_half_length_m')) + float(arg('teb_filter_self_margin_m')))"/>
+  <arg name="teb_filter_self_radius_y" default="$(eval float(arg('robot_half_width_m')) + float(arg('teb_filter_self_margin_m')))"/>
+  <arg name="teb_filter_rear_limit_x" default="-0.10"/>
+  <arg name="teb_filter_lateral_limit_y" default="3.5"/>
+  <arg name="teb_min_spacing_m" default="0.50"/>
+  <arg name="teb_max_via_points" default="200"/>
   <arg name="enable_emergency_stop" default="true"/>
   <arg name="enable_obstacle_slowdown" default="true"/>
+  <arg name="enable_local_path_hold_stop" default="true"/>
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
+  <arg name="behavior_cmd_timeout_s" default="0.8"/>
+  <arg name="local_hold_timeout_s" default="1.0"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>
   <arg name="emergency_stop_side_margin" default="0.10"/>
   <arg name="slowdown_front_margin" default="0.80"/>
   <arg name="slowdown_side_margin" default="0.20"/>
+  <arg name="teb_local_costmap_width_m" default="12.0"/>
+  <arg name="teb_local_costmap_height_m" default="12.0"/>
+  <arg name="teb_local_obstacle_range_m" default="8.0"/>
+  <arg name="teb_local_raytrace_range_m" default="8.5"/>
+  <arg name="teb_local_observation_persistence_s" default="0.40"/>
+  <arg name="teb_local_inflation_radius_m" default="0.40"/>
+  <arg name="teb_global_inflation_radius_m" default="0.15"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.30"/>
+  <arg name="teb_inflation_dist_m" default="0.40"/>
+  <arg name="path_blocking_radius_m" default="0.30"/>
+  <arg name="dynamic_speed_thresh_mps" default="0.50"/>
+  <arg name="prediction_horizon_s" default="1.5"/>
+  <arg name="prediction_step_s" default="0.2"/>
+  <arg name="prediction_inflate_m" default="0.35"/>
+  <arg name="front_lateral_stop_m" default="0.65"/>
+  <arg name="front_lateral_caution_m" default="0.85"/>
+  <arg name="vehicle_stop_ttc_s" default="1.1"/>
+  <arg name="pedestrian_stop_ttc_s" default="2.0"/>
+  <arg name="caution_ttc_s" default="2.5"/>
+  <arg name="behavior_stop_on_count" default="4"/>
+  <arg name="behavior_stop_off_count" default="4"/>
+  <arg name="behavior_stop_hold_s" default="0.25"/>
+  <arg name="cloud_tracker_max_assoc_dist_m" default="1.0"/>
+  <arg name="cloud_tracker_vel_alpha" default="0.25"/>
+  <arg name="cloud_tracker_static_speed_thresh_mps" default="0.45"/>
+  <arg name="cloud_tracker_dynamic_min_age" default="8"/>
+  <arg name="cloud_tracker_position_jitter_m" default="0.22"/>
+  <arg name="include_static_objects_in_behavior" default="false"/>
+  <arg name="include_static_objects_in_risk_grid" default="false"/>
+  <arg name="debug_dynamic_risk_logging" default="true"/>
+  <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
 
   <node pkg="dynamic_window_approach" type="active_path_mux.py" name="active_path_mux" output="screen" respawn="false">
+    <param name="global_path_topic" value="$(arg global_path_topic)"/>
     <param name="local_path_topic" value="$(arg local_path_topic)"/>
     <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
     <param name="active_path_topic" value="$(arg active_path_topic)"/>
+    <param name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
   </node>
 
+  <group if="$(arg enable_cloud_tracker)">
+    <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
+      <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <param name="odom_topic" value="$(arg pose_topic)"/>
+      <param name="output_topic" value="$(arg tracked_objects_topic)"/>
+      <param name="max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
+      <param name="vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
+      <param name="static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
+      <param name="dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+      <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+    </node>
+  </group>
+
+  <group if="$(arg enable_dynamic_risk_manager)">
+    <node pkg="dynamic_window_approach" type="dynamic_risk_manager.py" name="dynamic_risk_manager" output="screen" respawn="false">
+      <param name="odom_topic" value="$(arg pose_topic)"/>
+      <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+      <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+      <param name="risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+      <param name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
+      <param name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
+      <param name="prediction_step_s" value="$(arg prediction_step_s)"/>
+      <param name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
+      <param name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
+      <param name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+      <param name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
+      <param name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
+      <param name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+      <param name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
+      <param name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
+      <param name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
+      <param name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
+      <param name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+      <param name="debug_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
+      <param name="debug_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
+    </node>
+  </group>
+
   <group if="$(arg enable_local_replanner)">
-    <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen">
+    <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
       <param name="odom_topic" value="$(arg pose_topic)"/>
       <param name="global_path_topic" value="$(arg global_path_topic)"/>
       <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
@@ -65,17 +168,33 @@
       <param name="path_history_topic" value="$(arg path_history_topic)"/>
       <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
       <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
-      <param name="enable_avoidance_path" value="true"/>
-      <param name="use_pointcloud_static_blocking" value="true"/>
+      <param name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
+      <param name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
+      <param name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
+      <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
+      <param name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
+      <param name="replan_hz" value="$(arg replan_hz)"/>
+      <param name="lookahead_m" value="$(arg lookahead_m)"/>
+      <param name="allow_best_effort_path" value="$(arg allow_best_effort_path)"/>
+      <param name="best_effort_max_goal_gap_m" value="$(arg best_effort_max_goal_gap_m)"/>
+      <param name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
+      <param name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
       <param name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
+      <param name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
+      <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
+      <param name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
+      <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
+      <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
       <param name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
       <param name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
       <param name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
       <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <param name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+      <param name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <param name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <param name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
     </node>
@@ -89,6 +208,7 @@
       <param name="local_path_timeout_s" value="4.0"/>
       <param name="avoidance_path_timeout_s" value="1.5"/>
       <param name="output_topic" value="$(arg teb_via_points_topic)"/>
+      <param name="goal_output_topic" value="$(arg move_base_goal_topic)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
     </node>
@@ -98,6 +218,9 @@
     <param name="input_topic" value="$(arg teb_cmd_vel_input_topic)"/>
     <param name="output_topic" value="$(arg cmd_vel_topic)"/>
     <param name="obstacle_cloud_topic" value="$(arg teb_filtered_obstacle_topic)"/>
+    <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+    <param name="local_path_topic" value="$(arg local_path_topic)"/>
+    <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
     <param name="robot_width_m" value="$(arg robot_width_m)"/>
     <param name="robot_length_m" value="$(arg robot_length_m)"/>
     <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -111,7 +234,10 @@
     <param name="min_angular_for_linear_boost" value="0.20"/>
     <param name="enable_emergency_stop" value="$(arg enable_emergency_stop)"/>
     <param name="enable_obstacle_slowdown" value="$(arg enable_obstacle_slowdown)"/>
+    <param name="enable_local_path_hold_stop" value="$(arg enable_local_path_hold_stop)"/>
     <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>
+    <param name="behavior_cmd_timeout_s" value="$(arg behavior_cmd_timeout_s)"/>
+    <param name="local_hold_timeout_s" value="$(arg local_hold_timeout_s)"/>
     <param name="emergency_stop_front_margin" value="$(arg emergency_stop_front_margin)"/>
     <param name="emergency_stop_side_margin" value="$(arg emergency_stop_side_margin)"/>
     <param name="slowdown_front_margin" value="$(arg slowdown_front_margin)"/>
@@ -136,15 +262,35 @@
     <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_move_base.yaml"/>
     <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_global_costmap.yaml"/>
     <rosparam command="load" file="$(find dynamic_window_approach)/config/teb_local_costmap.yaml"/>
+    <rosparam subst_value="true" param="TebLocalPlannerROS/footprint_model">
+      {type: polygon, vertices: [[$(arg robot_half_length_m), $(arg robot_half_width_m)], [$(arg robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg robot_half_width_m)]]}
+    </rosparam>
+    <rosparam subst_value="true" param="local_costmap/footprint">
+      [[$(arg robot_half_length_m), $(arg robot_half_width_m)], [$(arg robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg robot_half_width_m)]]
+    </rosparam>
+    <rosparam subst_value="true" param="global_costmap/footprint">
+      [[$(arg robot_half_length_m), $(arg robot_half_width_m)], [$(arg robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg robot_half_width_m)]]
+    </rosparam>
     <param name="TebLocalPlannerROS/odom_topic" value="$(arg pose_topic)"/>
+    <param name="TebLocalPlannerROS/min_obstacle_dist" value="$(arg teb_min_obstacle_dist_m)"/>
+    <param name="TebLocalPlannerROS/inflation_dist" value="$(arg teb_inflation_dist_m)"/>
     <param name="global_costmap/global_frame" value="$(arg global_frame)"/>
     <param name="global_costmap/robot_base_frame" value="$(arg robot_base_frame)"/>
     <param name="global_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>
+    <param name="global_costmap/inflation_layer/inflation_radius" value="$(arg teb_global_inflation_radius_m)"/>
     <param name="local_costmap/global_frame" value="$(arg global_frame)"/>
     <param name="local_costmap/robot_base_frame" value="$(arg robot_base_frame)"/>
+    <param name="local_costmap/width" value="$(arg teb_local_costmap_width_m)"/>
+    <param name="local_costmap/height" value="$(arg teb_local_costmap_height_m)"/>
     <param name="local_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>
-    <param name="local_costmap/obstacle_layer/ouster_points/topic" value="$(arg teb_filtered_obstacle_topic)"/>
     <param name="local_costmap/obstacle_layer/enabled" value="$(arg use_pointcloud_obstacles)"/>
+    <param name="local_costmap/obstacle_layer/obstacle_range" value="$(arg teb_local_obstacle_range_m)"/>
+    <param name="local_costmap/obstacle_layer/raytrace_range" value="$(arg teb_local_raytrace_range_m)"/>
+    <param name="local_costmap/obstacle_layer/ouster_points/topic" value="$(arg teb_filtered_obstacle_topic)"/>
+    <param name="local_costmap/obstacle_layer/ouster_points/observation_persistence" value="$(arg teb_local_observation_persistence_s)"/>
+    <param name="local_costmap/inflation_layer/inflation_radius" value="$(arg teb_local_inflation_radius_m)"/>
     <remap from="cmd_vel" to="$(arg teb_cmd_vel_input_topic)"/>
+    <remap from="move_base_simple/goal" to="$(arg move_base_goal_topic)"/>
+    <remap from="/move_base_simple/goal" to="$(arg move_base_goal_topic)"/>
   </node>
 </launch>

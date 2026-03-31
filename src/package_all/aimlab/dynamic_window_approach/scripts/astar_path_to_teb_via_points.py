@@ -4,6 +4,7 @@
 import math
 
 import rospy
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 
 
@@ -21,6 +22,7 @@ class AStarPathToTebViaPoints(object):
         self.output_topic = rospy.get_param(
             "~output_topic", "/move_base/TebLocalPlannerROS/via_points"
         )
+        self.goal_output_topic = str(rospy.get_param("~goal_output_topic", "")).strip()
         self.min_spacing_m = max(
             0.0, float(rospy.get_param("~min_spacing_m", 0.50))
         )
@@ -28,6 +30,7 @@ class AStarPathToTebViaPoints(object):
 
         self._last_sig = None
         self._last_key = None
+        self._last_goal_sig = None
         self._fallback_msg = None
         self._fallback_rx_time = 0.0
         self._local_msg = None
@@ -36,6 +39,11 @@ class AStarPathToTebViaPoints(object):
         self._avoidance_rx_time = 0.0
 
         self.pub = rospy.Publisher(self.output_topic, Path, queue_size=1, latch=True)
+        self.goal_pub = None
+        if self.goal_output_topic:
+            self.goal_pub = rospy.Publisher(
+                self.goal_output_topic, PoseStamped, queue_size=1, latch=True
+            )
         self.sub = rospy.Subscriber(
             self.input_topic, Path, self._make_callback("fallback"), queue_size=2
         )
@@ -58,11 +66,12 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s out=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s out=%s goal_out=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
             self.output_topic,
+            self.goal_output_topic if self.goal_output_topic else "-",
             self.min_spacing_m,
             self.max_points,
         )
@@ -137,6 +146,7 @@ class AStarPathToTebViaPoints(object):
             if source == "fallback":
                 self._fallback_msg = msg
                 self._fallback_rx_time = now_sec
+                self._publish_goal_from_fallback(msg)
             elif source == "local":
                 self._local_msg = msg
                 self._local_rx_time = now_sec
@@ -146,6 +156,32 @@ class AStarPathToTebViaPoints(object):
             self._publish_selected()
 
         return _callback
+
+    def _publish_goal_from_fallback(self, msg):
+        if self.goal_pub is None or msg is None or not msg.poses:
+            return
+
+        last = msg.poses[-1]
+        goal_sig = (
+            msg.header.frame_id,
+            round(float(last.pose.position.x), 3),
+            round(float(last.pose.position.y), 3),
+        )
+        if goal_sig == self._last_goal_sig:
+            return
+        self._last_goal_sig = goal_sig
+
+        goal = PoseStamped()
+        goal.header = msg.header
+        goal.pose = last.pose
+        self.goal_pub.publish(goal)
+        rospy.loginfo_throttle(
+            1.0,
+            "astar_path_to_teb_via_points: synced move_base goal | topic=%s x=%.2f y=%.2f",
+            self.goal_output_topic,
+            float(goal.pose.position.x),
+            float(goal.pose.position.y),
+        )
 
     def _is_fresh(self, stamp_sec, timeout_s):
         return stamp_sec > 0.0 and (rospy.get_time() - stamp_sec) <= timeout_s

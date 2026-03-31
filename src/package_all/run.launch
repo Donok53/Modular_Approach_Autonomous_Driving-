@@ -40,18 +40,34 @@
   <arg name="wave_baud_rate" default="19200"/>
   <arg name="wave_linear_scale" default="1.0"/>
   <arg name="wave_angular_scale" default="1.0"/>
-  <arg name="local_planner_mode" default="custom"/>
+  <arg name="local_planner_mode" default="teb"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
   <arg name="teb_use_pointcloud_obstacles" default="true"/>
   <arg name="teb_enable_emergency_stop" default="true"/>
   <arg name="teb_enable_obstacle_slowdown" default="true"/>
+  <arg name="teb_enable_local_path_hold_stop" default="true"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
+  <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
+  <arg name="teb_local_hold_timeout_s" default="1.0"/>
   <arg name="teb_emergency_stop_front_margin" default="0.35"/>
   <arg name="teb_emergency_stop_side_margin" default="0.10"/>
   <arg name="teb_slowdown_front_margin" default="0.80"/>
   <arg name="teb_slowdown_side_margin" default="0.20"/>
+  <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
+  <arg name="teb_filter_max_range_m" default="8.0"/>
+  <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
+  <arg name="teb_filter_self_margin_m" default="0.10"/>
+  <arg name="teb_local_costmap_width_m" default="12.0"/>
+  <arg name="teb_local_costmap_height_m" default="12.0"/>
+  <arg name="teb_local_obstacle_range_m" default="8.0"/>
+  <arg name="teb_local_raytrace_range_m" default="8.5"/>
+  <arg name="teb_local_observation_persistence_s" default="0.40"/>
+  <arg name="teb_local_inflation_radius_m" default="0.40"/>
+  <arg name="teb_global_inflation_radius_m" default="0.15"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.30"/>
+  <arg name="teb_inflation_dist_m" default="0.40"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
@@ -299,35 +315,95 @@
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="global_path_topic" value="/astar/path"/>
+      <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+      <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
       <arg name="active_path_topic" value="$(arg active_path_topic)"/>
+      <arg name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
       <arg name="path_history_topic" value="$(arg path_history_topic)"/>
       <arg name="travel_history_topic" value="/planning/travel_history"/>
+      <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
+      <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+      <arg name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
+      <arg name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
+      <arg name="max_los_segment_m" value="$(arg max_los_segment_m)"/>
+      <arg name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
+      <arg name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
+      <arg name="replan_hz" value="$(arg local_replan_hz)"/>
+      <arg name="lookahead_m" value="$(arg local_replan_lookahead_m)"/>
+      <arg name="allow_best_effort_path" value="$(arg allow_best_effort_local_path)"/>
+      <arg name="best_effort_max_goal_gap_m" value="$(arg best_effort_max_goal_gap_m)"/>
+      <arg name="enable_avoidance_path" value="$(arg enable_avoidance_path)"/>
+      <arg name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
       <arg name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
+      <arg name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
+      <arg name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
+      <arg name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
+      <arg name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
+      <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
       <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
       <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
       <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <arg name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
       <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
+      <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+      <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
+      <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
+      <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
+      <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
+      <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
+      <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+      <arg name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
+      <arg name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
+      <arg name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+      <arg name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
+      <arg name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
+      <arg name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
+      <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
+      <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
+      <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
+      <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+      <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
+      <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+      <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
+      <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
       <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>
       <arg name="use_pointcloud_obstacles" value="$(arg teb_use_pointcloud_obstacles)"/>
       <arg name="enable_emergency_stop" value="$(arg teb_enable_emergency_stop)"/>
       <arg name="enable_obstacle_slowdown" value="$(arg teb_enable_obstacle_slowdown)"/>
+      <arg name="enable_local_path_hold_stop" value="$(arg teb_enable_local_path_hold_stop)"/>
       <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
+      <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
+      <arg name="local_hold_timeout_s" value="$(arg teb_local_hold_timeout_s)"/>
       <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
       <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
       <arg name="slowdown_front_margin" value="$(arg teb_slowdown_front_margin)"/>
       <arg name="slowdown_side_margin" value="$(arg teb_slowdown_side_margin)"/>
+      <arg name="move_base_goal_topic" value="$(arg teb_move_base_goal_topic)"/>
+      <arg name="teb_filter_max_range" value="$(arg teb_filter_max_range_m)"/>
+      <arg name="teb_filter_lateral_limit_y" value="$(arg teb_filter_lateral_limit_y_m)"/>
+      <arg name="teb_filter_self_margin_m" value="$(arg teb_filter_self_margin_m)"/>
+      <arg name="teb_local_costmap_width_m" value="$(arg teb_local_costmap_width_m)"/>
+      <arg name="teb_local_costmap_height_m" value="$(arg teb_local_costmap_height_m)"/>
+      <arg name="teb_local_obstacle_range_m" value="$(arg teb_local_obstacle_range_m)"/>
+      <arg name="teb_local_raytrace_range_m" value="$(arg teb_local_raytrace_range_m)"/>
+      <arg name="teb_local_observation_persistence_s" value="$(arg teb_local_observation_persistence_s)"/>
+      <arg name="teb_local_inflation_radius_m" value="$(arg teb_local_inflation_radius_m)"/>
+      <arg name="teb_global_inflation_radius_m" value="$(arg teb_global_inflation_radius_m)"/>
+      <arg name="teb_min_obstacle_dist_m" value="$(arg teb_min_obstacle_dist_m)"/>
+      <arg name="teb_inflation_dist_m" value="$(arg teb_inflation_dist_m)"/>
     </include>
   </group>
 
