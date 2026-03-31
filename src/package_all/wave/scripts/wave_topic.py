@@ -14,6 +14,8 @@ class WaveTopicBridge(object):
         self.baud_rate = int(rospy.get_param("~baud_rate", 19200))
         self.timeout_s = float(rospy.get_param("~timeout_s", 1.0))
         self.log_period_s = max(0.2, float(rospy.get_param("~log_period_s", 1.0)))
+        self.linear_scale = float(rospy.get_param("~linear_scale", 1.0))
+        self.angular_scale = float(rospy.get_param("~angular_scale", -1.0))
         self.port_candidates = rospy.get_param(
             "~port_candidates",
             ["/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyACM0", "/dev/ttyACM1"],
@@ -42,10 +44,12 @@ class WaveTopicBridge(object):
         self.port_name = resolved_port
         self.sub = rospy.Subscriber("cmd_vel", Twist, self.callback, queue_size=10)
         rospy.loginfo(
-            "wave_topic started | port=%s baud=%d timeout=%.2fs",
+            "wave_topic started | port=%s baud=%d timeout=%.2fs linear_scale=%.2f angular_scale=%.2f",
             self.port_name,
             self.baud_rate,
             self.timeout_s,
+            self.linear_scale,
+            self.angular_scale,
         )
 
     def _resolve_port(self):
@@ -60,14 +64,20 @@ class WaveTopicBridge(object):
 
     def twist_to_serial_data(self, twist):
         self.alive_count = (self.alive_count + 1) % 256
-        return f"{twist.linear.x},{twist.angular.z},0,{self.alive_count}\n"
+        linear = float(twist.linear.x) * self.linear_scale
+        angular = float(twist.angular.z) * self.angular_scale
+        return f"{linear},{angular},0,{self.alive_count}\n"
 
     def callback(self, data):
+        scaled_linear = float(data.linear.x) * self.linear_scale
+        scaled_angular = float(data.angular.z) * self.angular_scale
         rospy.loginfo_throttle(
             self.log_period_s,
-            "wave_topic: tx cmd | v=%.3f w=%.3f port=%s",
+            "wave_topic: tx cmd | ros(v=%.3f w=%.3f) scaled(v=%.3f w=%.3f) port=%s",
             data.linear.x,
             data.angular.z,
+            scaled_linear,
+            scaled_angular,
             self.port_name,
         )
         serial_data = self.twist_to_serial_data(data)

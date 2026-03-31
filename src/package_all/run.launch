@@ -37,6 +37,8 @@
   <arg name="enable_wave_cmd_bridge" default="true"/>
   <arg name="wave_port_name" default=""/>
   <arg name="wave_baud_rate" default="19200"/>
+  <arg name="wave_linear_scale" default="1.0"/>
+  <arg name="wave_angular_scale" default="-1.0"/>
   <arg name="local_planner_mode" default="custom"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
@@ -136,6 +138,8 @@
   <node if="$(arg enable_wave_cmd_bridge)" pkg="wave" type="wave_topic.py" name="wave_topic" output="screen" respawn="false">
     <param name="port_name" value="$(arg wave_port_name)"/>
     <param name="baud_rate" value="$(arg wave_baud_rate)"/>
+    <param name="linear_scale" value="$(arg wave_linear_scale)"/>
+    <param name="angular_scale" value="$(arg wave_angular_scale)"/>
   </node>
 
   <group if="$(arg enable_graph_planner)">
