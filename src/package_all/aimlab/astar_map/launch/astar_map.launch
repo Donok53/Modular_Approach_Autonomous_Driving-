@@ -14,6 +14,11 @@
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="grid_snap_search_radius_cells" default="30"/>
+  <arg name="robot_width_m" default="0.55"/>
+  <arg name="robot_length_m" default="0.60"/>
+  <arg name="footprint_padding_m" default="0.0"/>
+  <arg name="global_path_use_any_angle" default="true"/>
+  <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -33,6 +38,11 @@
     <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
     <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
     <param name="grid_snap_search_radius_cells" value="$(arg grid_snap_search_radius_cells)"/>
+    <param name="robot_width_m" value="$(arg robot_width_m)"/>
+    <param name="robot_length_m" value="$(arg robot_length_m)"/>
+    <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+    <param name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
+    <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>

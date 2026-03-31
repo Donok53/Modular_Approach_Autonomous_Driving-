@@ -105,6 +105,13 @@ class AStarPlanner:
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
         )
+        self.robot_width_m = max(0.0, float(rospy.get_param("~robot_width_m", 0.55)))
+        self.robot_length_m = max(0.0, float(rospy.get_param("~robot_length_m", 0.60)))
+        self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
+        self.global_path_use_any_angle = bool(rospy.get_param("~global_path_use_any_angle", True))
+        self.global_path_clearance_m = max(
+            0.0, float(rospy.get_param("~global_path_clearance_m", 0.02))
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -165,6 +172,11 @@ class AStarPlanner:
         rospy.loginfo("[astar] pose topic: %s", self.pose_topic)
         if self.use_drivable_grid_global:
             rospy.loginfo("[astar] global path source: drivable grid first (%s)", self.drivable_grid_topic)
+            rospy.loginfo(
+                "[astar] global grid planner: %s, inflate_radius=%.3f m",
+                "Theta*" if self.global_path_use_any_angle else "A*",
+                self._global_path_clearance_radius_m(),
+            )
         if self.enable_map_reload:
             rospy.loginfo("[astar] map reload topic: %s", self.reload_topic)
 
@@ -501,11 +513,11 @@ class AStarPlanner:
                 out.append((x0 + t * (x1 - x0), y0 + t * (y1 - y0)))
         return out
 
-    def _prepare_display_path(self, world_points):
-        if len(world_points) <= 2:
+    def _prepare_display_path(self, world_points, simplify=True):
+        if len(world_points) <= 1:
             return list(world_points)
         pts = list(world_points)
-        if self.publish_smoothed_path and self.path_simplify_epsilon_m > 0.0:
+        if simplify and self.publish_smoothed_path and self.path_simplify_epsilon_m > 0.0:
             pts = self._rdp(pts, self.path_simplify_epsilon_m)
         return self._resample_path(pts, self.published_path_spacing_m)
 
@@ -523,7 +535,12 @@ class AStarPlanner:
             out.append(pt)
         return out
 
-    def _publish_world_path_messages(self, world_points, stamp=None):
+    def _global_path_clearance_radius_m(self):
+        # Approximate the robot as a safety circle using its larger body dimension.
+        base_radius = 0.5 * max(self.robot_length_m, self.robot_width_m)
+        return base_radius + self.footprint_padding_m + self.global_path_clearance_m
+
+    def _publish_world_path_messages(self, world_points, stamp=None, simplify=True):
         if not world_points:
             return
         if stamp is None:
@@ -532,7 +549,7 @@ class AStarPlanner:
         p = Path()
         p.header.frame_id = "map"
         p.header.stamp = stamp
-        for x, y in self._prepare_display_path(world_points):
+        for x, y in self._prepare_display_path(world_points, simplify=simplify):
             ps = PoseStamped()
             ps.header = p.header
             ps.pose.position.x = float(x)
@@ -582,7 +599,7 @@ class AStarPlanner:
             self._last_world_path = list(world_points)
             self._last_path_nodes = None
             self._last_path_pub_t = time.monotonic()
-            self._publish_world_path_messages(world_points, stamp=now)
+            self._publish_world_path_messages(world_points, stamp=now, simplify=False)
             if self.debug_log_enable:
                 goal_txt = ""
                 if self._last_snapped_goal_xy is not None:
@@ -595,7 +612,7 @@ class AStarPlanner:
                     goal_txt,
                 )
         elif do_periodic:
-            self._publish_world_path_messages(world_points, stamp=now)
+            self._publish_world_path_messages(world_points, stamp=now, simplify=False)
             if self.debug_log_enable:
                 rospy.loginfo("[astar] drivable-grid path republished (periodic)")
 
@@ -658,6 +675,10 @@ class AStarPlanner:
     def _grid_in_bounds(g, gx, gy):
         return 0 <= gx < int(g.info.width) and 0 <= gy < int(g.info.height)
 
+    @staticmethod
+    def _blocked_in_bounds(blocked, gx, gy):
+        return 0 <= gy < len(blocked) and 0 <= gx < len(blocked[0])
+
     def _world_to_grid_cell(self, g, x, y):
         res = float(g.info.resolution)
         gx = int(math.floor((float(x) - float(g.info.origin.position.x)) / res))
@@ -670,7 +691,7 @@ class AStarPlanner:
         y = float(g.info.origin.position.y) + (gy + 0.5) * res
         return x, y
 
-    def _grid_cell_is_free(self, g, gx, gy):
+    def _raw_grid_cell_is_free(self, g, gx, gy):
         if not self._grid_in_bounds(g, gx, gy):
             return False
         idx = gy * int(g.info.width) + gx
@@ -681,9 +702,49 @@ class AStarPlanner:
             return True
         return False
 
-    def _nearest_free_grid_cell(self, g, cell):
+    def _build_blocked_grid(self, g):
+        w = int(g.info.width)
+        h = int(g.info.height)
+        blocked = [[False for _ in range(w)] for _ in range(h)]
+        occupied = []
+
+        for gy in range(h):
+            row_offset = gy * w
+            for gx in range(w):
+                val = int(g.data[row_offset + gx])
+                is_free = (val == 0) or (val < 0 and (not self.grid_unknown_is_occupied))
+                if not is_free:
+                    occupied.append((gx, gy))
+
+        inflate_radius_cells = int(
+            math.ceil(self._global_path_clearance_radius_m() / max(1e-6, float(g.info.resolution)))
+        )
+        if inflate_radius_cells <= 0:
+            for gx, gy in occupied:
+                blocked[gy][gx] = True
+            return blocked
+
+        offsets = []
+        radius_sq = inflate_radius_cells * inflate_radius_cells
+        for dy in range(-inflate_radius_cells, inflate_radius_cells + 1):
+            for dx in range(-inflate_radius_cells, inflate_radius_cells + 1):
+                if dx * dx + dy * dy <= radius_sq:
+                    offsets.append((dx, dy))
+
+        for ox, oy in occupied:
+            for dx, dy in offsets:
+                nx = ox + dx
+                ny = oy + dy
+                if self._blocked_in_bounds(blocked, nx, ny):
+                    blocked[ny][nx] = True
+        return blocked
+
+    def _blocked_cell_is_free(self, blocked, gx, gy):
+        return self._blocked_in_bounds(blocked, gx, gy) and (not blocked[gy][gx])
+
+    def _nearest_free_grid_cell(self, blocked, cell):
         cx, cy = cell
-        if self._grid_cell_is_free(g, cx, cy):
+        if self._blocked_cell_is_free(blocked, cx, cy):
             return (cx, cy)
 
         best = None
@@ -694,7 +755,7 @@ class AStarPlanner:
                 for gy in range(cy - r, cy + r + 1):
                     if max(abs(gx - cx), abs(gy - cy)) != r:
                         continue
-                    if not self._grid_cell_is_free(g, gx, gy):
+                    if not self._blocked_cell_is_free(blocked, gx, gy):
                         continue
                     d2 = float((gx - cx) * (gx - cx) + (gy - cy) * (gy - cy))
                     if d2 < best_d2:
@@ -709,17 +770,92 @@ class AStarPlanner:
     def _grid_heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
 
-    def _astar_on_grid(self, g, start_cell, goal_cell):
-        w = int(g.info.width)
-        h = int(g.info.height)
-        if w <= 0 or h <= 0:
+    def _grid_neighbors(self, blocked, cell):
+        cx, cy = cell
+        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        out = []
+        for dx, dy in nbrs:
+            nx = cx + dx
+            ny = cy + dy
+            if not self._blocked_cell_is_free(blocked, nx, ny):
+                continue
+            if dx != 0 and dy != 0:
+                if not self._blocked_cell_is_free(blocked, cx + dx, cy):
+                    continue
+                if not self._blocked_cell_is_free(blocked, cx, cy + dy):
+                    continue
+            out.append((nx, ny))
+        return out
+
+    @staticmethod
+    def _reconstruct_grid_path(parent, goal_cell):
+        path = []
+        cur = goal_cell
+        while cur is not None:
+            path.append(cur)
+            cur = parent[cur]
+        path.reverse()
+        return path
+
+    def _has_line_of_sight(self, blocked, start, goal):
+        x0, y0 = start
+        x1, y1 = goal
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            if not self._blocked_cell_is_free(blocked, x0, y0):
+                return False
+            if x0 == x1 and y0 == y1:
+                return True
+            e2 = 2 * err
+            nx = x0
+            ny = y0
+            moved_x = False
+            moved_y = False
+            if e2 > -dy:
+                err -= dy
+                nx += sx
+                moved_x = True
+            if e2 < dx:
+                err += dx
+                ny += sy
+                moved_y = True
+            if moved_x and moved_y:
+                if not self._blocked_cell_is_free(blocked, nx, y0):
+                    return False
+                if not self._blocked_cell_is_free(blocked, x0, ny):
+                    return False
+            x0, y0 = nx, ny
+
+    def _simplify_grid_path(self, path, blocked):
+        if len(path) <= 2:
+            return path
+        simplified = [path[0]]
+        anchor_idx = 0
+        while anchor_idx < len(path) - 1:
+            farthest_idx = anchor_idx + 1
+            probe_idx = farthest_idx + 1
+            while probe_idx < len(path):
+                if not self._has_line_of_sight(blocked, path[anchor_idx], path[probe_idx]):
+                    break
+                farthest_idx = probe_idx
+                probe_idx += 1
+            simplified.append(path[farthest_idx])
+            anchor_idx = farthest_idx
+        return simplified
+
+    def _astar_on_grid(self, blocked, start_cell, goal_cell):
+        if not blocked or not blocked[0]:
             return None
-        if not self._grid_cell_is_free(g, start_cell[0], start_cell[1]):
+        if not self._blocked_cell_is_free(blocked, start_cell[0], start_cell[1]):
             return None
-        if not self._grid_cell_is_free(g, goal_cell[0], goal_cell[1]):
+        if not self._blocked_cell_is_free(blocked, goal_cell[0], goal_cell[1]):
             return None
 
-        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
         pq = []
         heapq.heappush(pq, (self._grid_heur(start_cell, goal_cell), 0.0, start_cell))
         parent = {start_cell: None}
@@ -731,14 +867,8 @@ class AStarPlanner:
                 break
             if gc > g_cost.get(cur, float("inf")) + 1e-9:
                 continue
-            cx, cy = cur
-            for dx, dy in nbrs:
-                nx = cx + dx
-                ny = cy + dy
-                if not self._grid_cell_is_free(g, nx, ny):
-                    continue
-                step = math.sqrt(2.0) if (dx != 0 and dy != 0) else 1.0
-                nb = (nx, ny)
+            for nb in self._grid_neighbors(blocked, cur):
+                step = self._grid_heur(cur, nb)
                 ng = gc + step
                 if ng >= g_cost.get(nb, float("inf")):
                     continue
@@ -748,14 +878,50 @@ class AStarPlanner:
 
         if goal_cell not in parent:
             return None
+        return self._reconstruct_grid_path(parent, goal_cell)
 
-        path = []
-        cur = goal_cell
-        while cur is not None:
-            path.append(cur)
-            cur = parent[cur]
-        path.reverse()
-        return path
+    def _theta_star_on_grid(self, blocked, start_cell, goal_cell):
+        if not blocked or not blocked[0]:
+            return None
+        if not self._blocked_cell_is_free(blocked, start_cell[0], start_cell[1]):
+            return None
+        if not self._blocked_cell_is_free(blocked, goal_cell[0], goal_cell[1]):
+            return None
+
+        pq = []
+        heapq.heappush(pq, (self._grid_heur(start_cell, goal_cell), start_cell))
+        parent = {start_cell: None}
+        g_cost = {start_cell: 0.0}
+        closed = set()
+
+        while pq:
+            _, cur = heapq.heappop(pq)
+            if cur in closed:
+                continue
+            if cur == goal_cell:
+                break
+            closed.add(cur)
+
+            cur_parent = parent.get(cur)
+            for nb in self._grid_neighbors(blocked, cur):
+                best_parent = cur
+                best_g = g_cost[cur] + self._grid_heur(cur, nb)
+
+                if cur_parent is not None and self._has_line_of_sight(blocked, cur_parent, nb):
+                    los_g = g_cost[cur_parent] + self._grid_heur(cur_parent, nb)
+                    if los_g < best_g:
+                        best_g = los_g
+                        best_parent = cur_parent
+
+                if best_g >= g_cost.get(nb, float("inf")):
+                    continue
+                g_cost[nb] = best_g
+                parent[nb] = best_parent
+                heapq.heappush(pq, (best_g + self._grid_heur(nb, goal_cell), nb))
+
+        if goal_cell not in parent:
+            return None
+        return self._reconstruct_grid_path(parent, goal_cell)
 
     def _plan_with_drivable_grid(self, start_xy, goal_xy):
         g = self.drivable_grid
@@ -763,11 +929,12 @@ class AStarPlanner:
             return None
         if int(g.info.width) <= 0 or int(g.info.height) <= 0:
             return None
+        blocked = self._build_blocked_grid(g)
 
         start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
         goal_raw = self._world_to_grid_cell(g, goal_xy[0], goal_xy[1])
-        start_cell = self._nearest_free_grid_cell(g, start_raw)
-        goal_cell = self._nearest_free_grid_cell(g, goal_raw)
+        start_cell = self._nearest_free_grid_cell(blocked, start_raw)
+        goal_cell = self._nearest_free_grid_cell(blocked, goal_raw)
         if start_cell is None or goal_cell is None:
             rospy.logwarn_throttle(
                 1.0,
@@ -779,24 +946,45 @@ class AStarPlanner:
             )
             return None
 
-        grid_path = self._astar_on_grid(g, start_cell, goal_cell)
+        if self.global_path_use_any_angle:
+            grid_path = self._theta_star_on_grid(blocked, start_cell, goal_cell)
+            planner_name = "Theta*"
+        else:
+            grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
+            planner_name = "A*"
+        if grid_path:
+            grid_path = self._simplify_grid_path(grid_path, blocked)
+        if (not grid_path) and self.global_path_use_any_angle:
+            grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
+            if grid_path:
+                grid_path = self._simplify_grid_path(grid_path, blocked)
+                planner_name = "A* fallback"
         if not grid_path:
             rospy.logwarn_throttle(
                 1.0,
-                "[astar] drivable-grid path not found (start=%s goal=%s)",
+                "[astar] drivable-grid path not found (start=%s goal=%s radius=%.2f m)",
                 str(start_cell),
                 str(goal_cell),
+                self._global_path_clearance_radius_m(),
             )
             return None
 
+        if self.debug_log_enable:
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] drivable-grid planner=%s radius=%.2f m grid_pts=%d",
+                planner_name,
+                self._global_path_clearance_radius_m(),
+                len(grid_path),
+            )
+
+        snapped_start_xy = self._grid_cell_to_world(g, start_cell[0], start_cell[1])
         snapped_goal_xy = self._grid_cell_to_world(g, goal_cell[0], goal_cell[1])
         self._last_snapped_goal_xy = snapped_goal_xy
-        world_points = [tuple(start_xy)]
+        world_points = [tuple(start_xy) if start_cell == start_raw else snapped_start_xy]
         for gx, gy in grid_path[1:-1]:
             world_points.append(self._grid_cell_to_world(g, gx, gy))
-        world_points.append(
-            tuple(goal_xy) if goal_cell == goal_raw else snapped_goal_xy
-        )
+        world_points.append(snapped_goal_xy)
         return self._dedupe_world_points(world_points)
 
     # -------------------- Visualization --------------------
