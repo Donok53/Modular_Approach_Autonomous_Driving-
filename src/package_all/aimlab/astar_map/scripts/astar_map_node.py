@@ -112,6 +112,9 @@ class AStarPlanner:
         self.global_path_clearance_m = max(
             0.0, float(rospy.get_param("~global_path_clearance_m", 0.02))
         )
+        self.global_path_drivable_area_is_center_safe = bool(
+            rospy.get_param("~global_path_drivable_area_is_center_safe", False)
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -173,9 +176,10 @@ class AStarPlanner:
         if self.use_drivable_grid_global:
             rospy.loginfo("[astar] global path source: drivable grid first (%s)", self.drivable_grid_topic)
             rospy.loginfo(
-                "[astar] global grid planner: %s, inflate_radius=%.3f m",
+                "[astar] global grid planner: %s, center_safe_radius=%.3f m, mask_mode=%s",
                 "Theta*" if self.global_path_use_any_angle else "A*",
                 self._global_path_clearance_radius_m(),
+                "as-is" if self.global_path_drivable_area_is_center_safe else "shrink-by-footprint",
             )
         if self.enable_map_reload:
             rospy.loginfo("[astar] map reload topic: %s", self.reload_topic)
@@ -536,8 +540,12 @@ class AStarPlanner:
         return out
 
     def _global_path_clearance_radius_m(self):
-        # Approximate the robot as a safety circle using its larger body dimension.
-        base_radius = 0.5 * max(self.robot_length_m, self.robot_width_m)
+        # /drivable_area/grid is a drivable-region mask, so we derive a center-safe mask
+        # at planning time instead of modifying the published map itself.
+        if self.global_path_drivable_area_is_center_safe:
+            base_radius = 0.0
+        else:
+            base_radius = 0.5 * max(self.robot_length_m, self.robot_width_m)
         return base_radius + self.footprint_padding_m + self.global_path_clearance_m
 
     def _publish_world_path_messages(self, world_points, stamp=None, simplify=True):
@@ -716,6 +724,7 @@ class AStarPlanner:
                 if not is_free:
                     occupied.append((gx, gy))
 
+        # This is equivalent to shrinking the drivable region by the robot center margin.
         inflate_radius_cells = int(
             math.ceil(self._global_path_clearance_radius_m() / max(1e-6, float(g.info.resolution)))
         )

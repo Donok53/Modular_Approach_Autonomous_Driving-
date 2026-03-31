@@ -19,6 +19,7 @@
   <arg name="footprint_padding_m" default="0.0"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
+  <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -43,6 +44,7 @@
     <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
     <param name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
     <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
+    <param name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>

@@ -63,6 +63,7 @@
   <arg name="footprint_padding_m" default="0.0"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
+  <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -165,6 +166,7 @@
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
+        <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -177,6 +179,7 @@
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
+        <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
       </include>
     </group>
   </group>
