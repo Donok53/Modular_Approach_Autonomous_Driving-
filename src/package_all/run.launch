@@ -149,12 +149,14 @@
       <include file="$(find astar_map)/launch/astar_map.launch">
         <arg name="pose_topic" value="$(arg pose_topic)"/>
         <arg name="osm_file" value="$(arg auto_osm_file)"/>
+        <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
       <include file="$(find astar_map)/launch/astar_map.launch">
         <arg name="pose_topic" value="$(arg pose_topic)"/>
         <arg name="osm_file" value="$(arg default_osm_file)"/>
+        <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       </include>
     </group>
   </group>

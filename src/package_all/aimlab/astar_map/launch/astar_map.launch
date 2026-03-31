@@ -10,6 +10,10 @@
   <!-- <arg name="ref_file" default="$(find astar_map)/map/map_reference_coordinate_cap.csv"/> -->
   <arg name="ref_file" default="$(find astar_map)/map/map_reference_coordinate.csv"/>
   <arg name="pose_topic" default="lio_localizer/odometry/optimization"/>
+  <arg name="use_drivable_grid_global" default="true"/>
+  <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+  <arg name="grid_unknown_is_occupied" default="true"/>
+  <arg name="grid_snap_search_radius_cells" default="30"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -25,6 +29,10 @@
     <param name="ref_file" value="$(arg ref_file)"/>
     <param name="server_dst_node_list" value="$(arg server_dst_node_list)"/>
     <param name="pose_topic" value="$(arg pose_topic)"/>
+    <param name="use_drivable_grid_global" value="$(arg use_drivable_grid_global)"/>
+    <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+    <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+    <param name="grid_snap_search_radius_cells" value="$(arg grid_snap_search_radius_cells)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>
