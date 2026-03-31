@@ -12,6 +12,8 @@ from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 from visualization_msgs.msg import Marker, MarkerArray
 
+from dynamic_window_approach.msg import ExplainabilityEvent
+
 
 class ConstrainedLocalReplanner:
     def __init__(self):
@@ -168,10 +170,17 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
         self.local_blocked_since_sec = 0.0
+        self.last_avoidance_trigger_reason = ""
+        self.last_avoidance_direction = "none"
+        self._last_explain_key = None
+        self._last_explain_time = 0.0
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
         self.path_history_next_id = 0
         self.last_history_signature = {"local": None, "avoidance": None}
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
+        self.explainability_topic = rospy.get_param(
+            "~explainability_topic", "/planning/explainability"
+        )
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
@@ -180,6 +189,9 @@ class ConstrainedLocalReplanner:
         )
         self.pub_travel_history = rospy.Publisher(
             self.travel_history_topic, Marker, queue_size=2, latch=True
+        )
+        self.pub_explainability = rospy.Publisher(
+            self.explainability_topic, ExplainabilityEvent, queue_size=20
         )
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
@@ -298,6 +310,8 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
         self.local_blocked_since_sec = 0.0
+        self.last_avoidance_trigger_reason = ""
+        self.last_avoidance_direction = "none"
         self._clear_path_history()
         self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
@@ -924,6 +938,8 @@ class ConstrainedLocalReplanner:
         if self.avoidance_active:
             self.avoidance_active = False
             rospy.loginfo("constrained_local_replanner: avoidance path cleared")
+        self.last_avoidance_trigger_reason = ""
+        self.last_avoidance_direction = "none"
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
@@ -977,6 +993,88 @@ class ConstrainedLocalReplanner:
         if not self.debug_avoidance_logging:
             return
         rospy.loginfo_throttle(self.debug_avoidance_log_period_s, message)
+
+    def _publish_explainability(
+        self,
+        event_type,
+        stamp=None,
+        trigger_reason="",
+        action_taken="",
+        avoid_direction="none",
+        local_planning_active=False,
+        stop_commanded=False,
+        slowdown_commanded=False,
+        speed_before_mps=-1.0,
+        speed_after_mps=-1.0,
+        speed_limit_mps=-1.0,
+        closest_obstacle_dist_m=-1.0,
+        obstacle_lateral_offset_m=-1.0,
+        ttc_s=-1.0,
+        tracked_object_id=-1,
+        tracked_object_label="",
+        summary_text="",
+    ):
+        msg = ExplainabilityEvent()
+        msg.header.stamp = stamp if stamp is not None else rospy.Time.now()
+        msg.source_node = "constrained_local_replanner"
+        msg.event_type = str(event_type)
+        msg.decision_layer = "local_replanner"
+        msg.trigger_reason = str(trigger_reason)
+        msg.action_taken = str(action_taken)
+        msg.avoid_direction = str(avoid_direction)
+        msg.local_planning_active = bool(local_planning_active)
+        msg.stop_commanded = bool(stop_commanded)
+        msg.slowdown_commanded = bool(slowdown_commanded)
+        msg.speed_before_mps = float(speed_before_mps)
+        msg.speed_after_mps = float(speed_after_mps)
+        msg.speed_limit_mps = float(speed_limit_mps)
+        msg.closest_obstacle_dist_m = float(closest_obstacle_dist_m)
+        msg.obstacle_lateral_offset_m = float(obstacle_lateral_offset_m)
+        msg.ttc_s = float(ttc_s)
+        msg.tracked_object_id = int(tracked_object_id)
+        msg.tracked_object_label = str(tracked_object_label)
+        msg.summary_text = str(summary_text)
+
+        key = (
+            msg.event_type,
+            msg.trigger_reason,
+            msg.action_taken,
+            msg.avoid_direction,
+            msg.local_planning_active,
+            msg.stop_commanded,
+            msg.slowdown_commanded,
+            round(float(msg.obstacle_lateral_offset_m), 2),
+            msg.summary_text,
+        )
+        if key == self._last_explain_key:
+            return
+        stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp.to_sec() > 0.0 else rospy.get_time()
+        self._last_explain_key = key
+        self._last_explain_time = stamp_sec
+        self.pub_explainability.publish(msg)
+
+    def _infer_avoid_direction(self, dg, avoid_path):
+        if avoid_path is None or len(avoid_path) < 3:
+            return "none", 0.0
+
+        sx, sy = self._grid_to_world(dg, avoid_path[0][0], avoid_path[0][1])
+        ex, ey = self._grid_to_world(dg, avoid_path[-1][0], avoid_path[-1][1])
+        dx = float(ex) - float(sx)
+        dy = float(ey) - float(sy)
+        norm = math.hypot(dx, dy)
+        if norm <= 1e-6:
+            return "none", 0.0
+
+        best_signed_offset = 0.0
+        for gx, gy in avoid_path[1:-1]:
+            px, py = self._grid_to_world(dg, gx, gy)
+            signed = (dx * (float(py) - float(sy)) - dy * (float(px) - float(sx))) / norm
+            if abs(signed) > abs(best_signed_offset):
+                best_signed_offset = signed
+
+        if abs(best_signed_offset) < 0.05:
+            return "none", best_signed_offset
+        return ("left" if best_signed_offset > 0.0 else "right"), best_signed_offset
 
     def _nearest_path_cell_index(self, path, cell):
         best_i = 0
@@ -1286,6 +1384,17 @@ class ConstrainedLocalReplanner:
                 label,
                 trigger_reason,
             )
+            self._publish_explainability(
+                event_type="LOCAL_REPLAN_NO_SOLUTION",
+                stamp=stamp,
+                trigger_reason=trigger_reason,
+                action_taken="hold_stop",
+                local_planning_active=True,
+                stop_commanded=True,
+                summary_text=(
+                    "Local replanning detected '{}' on the {} path but could not find a valid avoidance branch."
+                ).format(trigger_reason, label),
+            )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return
             self._clear_avoidance_path(frame_id, stamp)
@@ -1303,9 +1412,28 @@ class ConstrainedLocalReplanner:
             stamp,
             history_points=branch_history_points,
         )
+        avoid_direction, lateral_offset = self._infer_avoid_direction(dg, avoid_path)
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
         self.last_avoidance_solution_sec = stamp.to_sec()
+        if (not self.avoidance_active) or trigger_reason != self.last_avoidance_trigger_reason or avoid_direction != self.last_avoidance_direction:
+            action_taken = "avoid_{}".format(avoid_direction) if avoid_direction in ("left", "right") else "avoid"
+            self._publish_explainability(
+                event_type="LOCAL_REPLAN_AVOIDANCE_ACTIVE",
+                stamp=stamp,
+                trigger_reason=trigger_reason,
+                action_taken=action_taken,
+                avoid_direction=avoid_direction,
+                local_planning_active=True,
+                obstacle_lateral_offset_m=lateral_offset,
+                summary_text=(
+                    "Local replanning activated an avoidance {} because '{}' blocked the {} path."
+                ).format(
+                    avoid_direction if avoid_direction in ("left", "right") else "detour",
+                    trigger_reason,
+                    label,
+                ),
+            )
         if not self.avoidance_active:
             rospy.loginfo(
                 "constrained_local_replanner: avoidance path active | base=%s reason=%s obstacle_points=%d cells=%d",
@@ -1314,6 +1442,8 @@ class ConstrainedLocalReplanner:
                 raw_point_count,
                 len(avoid_path),
             )
+        self.last_avoidance_trigger_reason = trigger_reason
+        self.last_avoidance_direction = avoid_direction
         self.avoidance_active = True
 
     def _plan_direct_goal(self, dg, rg, stamp):
@@ -1498,6 +1628,18 @@ class ConstrainedLocalReplanner:
                         "constrained_local_replanner: nominal path blocked; holding %.1fs before avoidance",
                         self.blocked_stop_before_avoidance_s,
                     )
+                    self._publish_explainability(
+                        event_type="LOCAL_REPLAN_START",
+                        stamp=stamp,
+                        trigger_reason="nominal_path_blocked",
+                        action_taken="hold_stop",
+                        local_planning_active=True,
+                        stop_commanded=True,
+                        summary_text=(
+                            "Nominal local path became blocked, so local replanning started and the robot entered a hold state for %.1f seconds before avoidance."
+                        )
+                        % self.blocked_stop_before_avoidance_s,
+                    )
                 wait_s = now_sec - self.local_blocked_since_sec
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 if wait_s < self.blocked_stop_before_avoidance_s:
@@ -1516,6 +1658,14 @@ class ConstrainedLocalReplanner:
 
             if self.local_blocked_since_sec > 0.0:
                 rospy.loginfo("constrained_local_replanner: nominal path clear; resuming global path tracking")
+                self._publish_explainability(
+                    event_type="LOCAL_REPLAN_END",
+                    stamp=stamp,
+                    trigger_reason="nominal_path_clear",
+                    action_taken="resume_global",
+                    local_planning_active=False,
+                    summary_text="Nominal local path is clear again, so local replanning ended and global path tracking resumed.",
+                )
             self.local_blocked_since_sec = 0.0
             self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
             self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")

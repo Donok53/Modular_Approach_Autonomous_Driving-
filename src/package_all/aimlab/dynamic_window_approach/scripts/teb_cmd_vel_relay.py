@@ -9,7 +9,7 @@ from nav_msgs.msg import Path
 from sensor_msgs import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2
 
-from dynamic_window_approach.msg import BehaviorCommand
+from dynamic_window_approach.msg import BehaviorCommand, ExplainabilityEvent
 
 
 class TebCmdVelRelay(object):
@@ -18,6 +18,9 @@ class TebCmdVelRelay(object):
         self.output_topic = rospy.get_param("~output_topic", "/cmd_vel")
         self.behavior_cmd_topic = str(
             rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
+        ).strip()
+        self.explainability_topic = str(
+            rospy.get_param("~explainability_topic", "/planning/explainability")
         ).strip()
         self.local_path_topic = str(
             rospy.get_param("~local_path_topic", "/planning/local_path")
@@ -98,9 +101,16 @@ class TebCmdVelRelay(object):
         self.last_avoidance_path_time = 0.0
         self.avoidance_path_active = False
         self.closest_stop_obstacle_x = float("inf")
+        self.closest_stop_obstacle_y = 0.0
         self.closest_slow_obstacle_x = float("inf")
+        self.closest_slow_obstacle_y = 0.0
+        self._last_explain_key = None
+        self._last_explain_time = 0.0
 
         self.pub = rospy.Publisher(self.output_topic, Twist, queue_size=10)
+        self.pub_explainability = rospy.Publisher(
+            self.explainability_topic, ExplainabilityEvent, queue_size=20
+        )
         self.sub = rospy.Subscriber(self.input_topic, Twist, self.cmd_callback, queue_size=10)
         self.behavior_sub = None
         if self.behavior_cmd_topic:
@@ -129,9 +139,10 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s behavior=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm",
+            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm",
             self.input_topic,
             self.output_topic,
+            self.explainability_topic if self.explainability_topic else "-",
             self.behavior_cmd_topic if self.behavior_cmd_topic else "-",
             self.local_path_topic if self.local_path_topic else "-",
             self.avoidance_path_topic if self.avoidance_path_topic else "-",
@@ -187,20 +198,28 @@ class TebCmdVelRelay(object):
 
     def obstacle_callback(self, msg):
         stop_min_x = float("inf")
+        stop_min_y = 0.0
         slow_min_x = float("inf")
+        slow_min_y = 0.0
 
         for x, y, _z in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
             if x <= 0.0:
                 continue
             abs_y = abs(float(y))
             if abs_y <= self.slowdown_lateral_y:
-                slow_min_x = min(slow_min_x, float(x))
+                if float(x) < slow_min_x:
+                    slow_min_x = float(x)
+                    slow_min_y = float(y)
             if abs_y <= self.emergency_stop_lateral_y:
-                stop_min_x = min(stop_min_x, float(x))
+                if float(x) < stop_min_x:
+                    stop_min_x = float(x)
+                    stop_min_y = float(y)
 
         self.last_obstacle_time = rospy.get_time()
         self.closest_stop_obstacle_x = stop_min_x
+        self.closest_stop_obstacle_y = stop_min_y
         self.closest_slow_obstacle_x = slow_min_x
+        self.closest_slow_obstacle_y = slow_min_y
 
     def behavior_callback(self, msg):
         self.last_behavior_time = rospy.get_time()
@@ -235,9 +254,61 @@ class TebCmdVelRelay(object):
             return not self.avoidance_path_active
         return True
 
+    def _publish_explainability(
+        self,
+        event_type,
+        stamp=None,
+        trigger_reason="",
+        action_taken="",
+        local_planning_active=False,
+        stop_commanded=False,
+        slowdown_commanded=False,
+        speed_before_mps=-1.0,
+        speed_after_mps=-1.0,
+        speed_limit_mps=-1.0,
+        closest_obstacle_dist_m=-1.0,
+        obstacle_lateral_offset_m=-1.0,
+        summary_text="",
+    ):
+        msg = ExplainabilityEvent()
+        msg.header.stamp = stamp if stamp is not None else rospy.Time.now()
+        msg.source_node = "teb_cmd_vel_relay"
+        msg.event_type = str(event_type)
+        msg.decision_layer = "control_safety_layer"
+        msg.trigger_reason = str(trigger_reason)
+        msg.action_taken = str(action_taken)
+        msg.avoid_direction = "none"
+        msg.local_planning_active = bool(local_planning_active)
+        msg.stop_commanded = bool(stop_commanded)
+        msg.slowdown_commanded = bool(slowdown_commanded)
+        msg.speed_before_mps = float(speed_before_mps)
+        msg.speed_after_mps = float(speed_after_mps)
+        msg.speed_limit_mps = float(speed_limit_mps)
+        msg.closest_obstacle_dist_m = float(closest_obstacle_dist_m)
+        msg.obstacle_lateral_offset_m = float(obstacle_lateral_offset_m)
+        msg.ttc_s = -1.0
+        msg.tracked_object_id = -1
+        msg.tracked_object_label = ""
+        msg.summary_text = str(summary_text)
+
+        key = (
+            msg.event_type,
+            msg.trigger_reason,
+            msg.action_taken,
+            msg.stop_commanded,
+            msg.slowdown_commanded,
+            round(float(msg.speed_limit_mps), 2),
+        )
+        if key == self._last_explain_key:
+            return
+        stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp.to_sec() > 0.0 else rospy.get_time()
+        self._last_explain_key = key
+        self._last_explain_time = stamp_sec
+        self.pub_explainability.publish(msg)
+
     def _apply_behavior_safety(self, cmd, now):
         if not self._has_fresh_behavior(now):
-            return cmd
+            return cmd, None
 
         if self.behavior_stop:
             rospy.logwarn_throttle(
@@ -245,7 +316,15 @@ class TebCmdVelRelay(object):
                 "teb_cmd_vel_relay: behavior stop | reason=%s",
                 self.behavior_reason,
             )
-            return Twist()
+            return Twist(), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": self.behavior_reason,
+                "action_taken": "stop",
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "summary_text": "TEB relay applied a full stop because the behavior layer requested a stop.",
+            }
 
         if self.behavior_speed_limit < float("inf") and abs(cmd.linear.x) > self.behavior_speed_limit:
             limited = Twist()
@@ -262,22 +341,39 @@ class TebCmdVelRelay(object):
                 float(cmd.linear.x),
                 float(limited.linear.x),
             )
-            return limited
-        return cmd
+            return limited, {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": self.behavior_reason,
+                "action_taken": "slowdown",
+                "stop_commanded": False,
+                "slowdown_commanded": True,
+                "speed_limit_mps": float(self.behavior_speed_limit),
+                "summary_text": "TEB relay reduced the speed because the behavior layer requested a speed limit.",
+            }
+        return cmd, None
 
     def _apply_local_hold(self, cmd, now):
         if not self._has_local_hold(now):
-            return cmd
+            return cmd, None
         rospy.logwarn_throttle(
             self.log_period_s,
             "teb_cmd_vel_relay: holding stop for local replanner | local_empty=yes avoidance=%s",
             "active" if self.avoidance_path_active else "none",
         )
-        return Twist()
+        return Twist(), {
+            "event_type": "CONTROL_ACTION_CHANGE",
+            "trigger_reason": "local_replanner_hold",
+            "action_taken": "hold_stop",
+            "stop_commanded": True,
+            "slowdown_commanded": False,
+            "speed_limit_mps": 0.0,
+            "local_planning_active": True,
+            "summary_text": "TEB relay held the robot stopped because local replanning is waiting before avoidance.",
+        }
 
     def _apply_obstacle_safety(self, cmd, now):
         if cmd.linear.x <= 0.0 or not self._has_fresh_obstacle_data(now):
-            return cmd
+            return cmd, None
 
         if self.enable_emergency_stop and self.closest_stop_obstacle_x <= self.emergency_stop_distance:
             stopped = Twist()
@@ -289,7 +385,17 @@ class TebCmdVelRelay(object):
                 float(cmd.linear.x),
                 float(cmd.angular.z),
             )
-            return stopped
+            return stopped, {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "front_obstacle_emergency",
+                "action_taken": "emergency_stop",
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(self.closest_stop_obstacle_x),
+                "obstacle_lateral_offset_m": float(self.closest_stop_obstacle_y),
+                "summary_text": "TEB relay applied an emergency stop because a close obstacle was detected ahead.",
+            }
 
         if self.enable_obstacle_slowdown and self.closest_slow_obstacle_x <= self.slowdown_distance:
             span = max(1e-3, self.slowdown_distance - self.emergency_stop_distance)
@@ -309,9 +415,19 @@ class TebCmdVelRelay(object):
                 float(cmd.linear.x),
                 float(slowed.linear.x),
             )
-            return slowed
+            return slowed, {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "front_obstacle_slowdown",
+                "action_taken": "slowdown",
+                "stop_commanded": False,
+                "slowdown_commanded": True,
+                "speed_limit_mps": float(slowed.linear.x),
+                "closest_obstacle_dist_m": float(self.closest_slow_obstacle_x),
+                "obstacle_lateral_offset_m": float(self.closest_slow_obstacle_y),
+                "summary_text": "TEB relay slowed the robot because an obstacle was detected in the forward slowdown zone.",
+            }
 
-        return cmd
+        return cmd, None
 
     def cmd_callback(self, msg):
         self.last_cmd = msg
@@ -328,6 +444,16 @@ class TebCmdVelRelay(object):
         if self.last_rx_time <= 0.0 or (now - self.last_rx_time) > self.idle_timeout_s:
             idle = Twist()
             self.pub.publish(idle)
+            self._publish_explainability(
+                event_type="CONTROL_ACTION_CHANGE",
+                trigger_reason="stale_cmd_timeout",
+                action_taken="idle_stop",
+                stop_commanded=True,
+                speed_before_mps=0.0,
+                speed_after_mps=0.0,
+                speed_limit_mps=0.0,
+                summary_text="TEB relay published a stop because no fresh command was received within the timeout.",
+            )
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: no fresh cmd from %s for %.2fs",
@@ -336,11 +462,50 @@ class TebCmdVelRelay(object):
             )
             return
 
-        cmd = self._sanitize_cmd(self.last_cmd)
-        cmd = self._apply_behavior_safety(cmd, now)
-        cmd = self._apply_local_hold(cmd, now)
-        cmd = self._apply_obstacle_safety(cmd, now)
+        cmd_before = self._sanitize_cmd(self.last_cmd)
+        cmd = cmd_before
+        explain = None
+
+        cmd, info = self._apply_behavior_safety(cmd, now)
+        if info is not None:
+            explain = info
+
+        if not (explain and explain.get("stop_commanded", False)):
+            cmd, info = self._apply_local_hold(cmd, now)
+            if info is not None:
+                explain = info
+
+        if not (explain and explain.get("stop_commanded", False)):
+            cmd, info = self._apply_obstacle_safety(cmd, now)
+            if info is not None:
+                explain = info
+
         self.pub.publish(cmd)
+        if explain is not None:
+            self._publish_explainability(
+                event_type=explain.get("event_type", "CONTROL_ACTION_CHANGE"),
+                trigger_reason=explain.get("trigger_reason", ""),
+                action_taken=explain.get("action_taken", ""),
+                local_planning_active=bool(explain.get("local_planning_active", False)),
+                stop_commanded=bool(explain.get("stop_commanded", False)),
+                slowdown_commanded=bool(explain.get("slowdown_commanded", False)),
+                speed_before_mps=float(cmd_before.linear.x),
+                speed_after_mps=float(cmd.linear.x),
+                speed_limit_mps=float(explain.get("speed_limit_mps", -1.0)),
+                closest_obstacle_dist_m=float(explain.get("closest_obstacle_dist_m", -1.0)),
+                obstacle_lateral_offset_m=float(explain.get("obstacle_lateral_offset_m", -1.0)),
+                summary_text=explain.get("summary_text", ""),
+            )
+        else:
+            self._publish_explainability(
+                event_type="CONTROL_ACTION_CHANGE",
+                trigger_reason="clear",
+                action_taken="follow_teb",
+                speed_before_mps=float(cmd_before.linear.x),
+                speed_after_mps=float(cmd.linear.x),
+                summary_text="TEB relay is forwarding the optimized local planner command without additional intervention.",
+            )
+
         if self._cmd_mag(cmd) > 1e-3:
             rospy.loginfo_throttle(
                 self.log_period_s,

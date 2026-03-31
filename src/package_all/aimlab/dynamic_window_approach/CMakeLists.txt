@@ -55,6 +55,7 @@ add_message_files(
   DIRECTORY msg
   FILES
   BehaviorCommand.msg
+  ExplainabilityEvent.msg
   robot_to_server.msg
   server_to_robot.msg
   TrackedObject.msg
@@ -115,7 +116,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES dynamic_window_approach
 #  CATKIN_DEPENDS nav_msgs roscpp rospy sensor_msgs std_msgs
-  CATKIN_DEPENDS geometry_msgs rospy message_runtime
+  CATKIN_DEPENDS geometry_msgs rospy std_msgs message_runtime
 #  DEPENDS system_lib
 )
 

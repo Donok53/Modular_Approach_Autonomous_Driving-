@@ -7,7 +7,11 @@ import rospy
 import tf.transformations as transformations
 from nav_msgs.msg import OccupancyGrid, Odometry
 
-from dynamic_window_approach.msg import BehaviorCommand, TrackedObjectArray
+from dynamic_window_approach.msg import (
+    BehaviorCommand,
+    ExplainabilityEvent,
+    TrackedObjectArray,
+)
 
 
 class DynamicRiskManager:
@@ -75,9 +79,17 @@ class DynamicRiskManager:
         self.behavior_state_reason = "clear"
         self.behavior_raw_state = "clear"
         self.behavior_raw_count = 0
+        self.explainability_topic = rospy.get_param(
+            "~explainability_topic", "/planning/explainability"
+        )
+        self._last_explain_key = None
+        self._last_explain_time = 0.0
 
         self.pub_behavior = rospy.Publisher(self.behavior_cmd_topic, BehaviorCommand, queue_size=5)
         self.pub_risk_grid = rospy.Publisher(self.risk_grid_topic, OccupancyGrid, queue_size=1)
+        self.pub_explainability = rospy.Publisher(
+            self.explainability_topic, ExplainabilityEvent, queue_size=20
+        )
 
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_objects = rospy.Subscriber(self.objects_topic, TrackedObjectArray, self.objects_callback, queue_size=5)
@@ -205,14 +217,79 @@ class DynamicRiskManager:
             cmd.speed_limit = min(cmd.speed_limit, self.caution_speed_mps)
         return cmd
 
+    def _publish_explainability(
+        self,
+        event_type,
+        stamp=None,
+        trigger_reason="",
+        action_taken="",
+        local_planning_active=False,
+        stop_commanded=False,
+        slowdown_commanded=False,
+        speed_limit_mps=-1.0,
+        closest_obstacle_dist_m=-1.0,
+        obstacle_lateral_offset_m=-1.0,
+        ttc_s=-1.0,
+        tracked_object_id=-1,
+        tracked_object_label="",
+        summary_text="",
+    ):
+        msg = ExplainabilityEvent()
+        msg.header.stamp = stamp if stamp is not None else rospy.Time.now()
+        msg.source_node = "dynamic_risk_manager"
+        msg.event_type = str(event_type)
+        msg.decision_layer = "behavior_layer"
+        msg.trigger_reason = str(trigger_reason)
+        msg.action_taken = str(action_taken)
+        msg.avoid_direction = "none"
+        msg.local_planning_active = bool(local_planning_active)
+        msg.stop_commanded = bool(stop_commanded)
+        msg.slowdown_commanded = bool(slowdown_commanded)
+        msg.speed_before_mps = -1.0
+        msg.speed_after_mps = -1.0
+        msg.speed_limit_mps = float(speed_limit_mps)
+        msg.closest_obstacle_dist_m = float(closest_obstacle_dist_m)
+        msg.obstacle_lateral_offset_m = float(obstacle_lateral_offset_m)
+        msg.ttc_s = float(ttc_s)
+        msg.tracked_object_id = int(tracked_object_id)
+        msg.tracked_object_label = str(tracked_object_label)
+        msg.summary_text = str(summary_text)
+
+        key = (
+            msg.event_type,
+            msg.trigger_reason,
+            msg.action_taken,
+            msg.stop_commanded,
+            msg.slowdown_commanded,
+            round(float(msg.speed_limit_mps), 2),
+            round(float(msg.ttc_s), 2),
+            msg.tracked_object_id,
+            msg.tracked_object_label,
+        )
+        if key == self._last_explain_key:
+            return
+        stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp.to_sec() > 0.0 else rospy.get_time()
+        self._last_explain_key = key
+        self._last_explain_time = stamp_sec
+        self.pub_explainability.publish(msg)
+
     def _evaluate_behavior(self):
         if not self.have_odom:
             self._update_behavior_state("clear", "clear")
-            return self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason)
+            return self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason), None
 
         best_ttc = None
         stop_reason = ""
+        stop_obj_id = -1
+        stop_obj_label = ""
+        stop_rx = -1.0
+        stop_ry = 0.0
         caution = False
+        caution_ttc = None
+        caution_obj_id = -1
+        caution_obj_label = ""
+        caution_rx = -1.0
+        caution_ry = 0.0
 
         for obj in self.objects:
             if (not self.include_static_in_behavior) and (not self._is_dynamic_object(obj)):
@@ -242,8 +319,18 @@ class DynamicRiskManager:
                 if (best_ttc is None) or (ttc < best_ttc):
                     best_ttc = ttc
                     stop_reason = "ttc_stop:{}:{:.2f}s".format(obj.label if obj.label else "obj", ttc)
+                    stop_obj_id = int(obj.id)
+                    stop_obj_label = str(obj.label)
+                    stop_rx = float(rx)
+                    stop_ry = float(ry)
             elif rx >= 0.0 and abs(ry) <= lateral_caution and ttc <= self.caution_ttc_s:
                 caution = True
+                if caution_ttc is None or ttc < caution_ttc:
+                    caution_ttc = ttc
+                    caution_obj_id = int(obj.id)
+                    caution_obj_label = str(obj.label)
+                    caution_rx = float(rx)
+                    caution_ry = float(ry)
 
         raw_state = "clear"
         raw_reason = "clear"
@@ -257,7 +344,23 @@ class DynamicRiskManager:
         self._update_behavior_state(raw_state, raw_reason)
         cmd = self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason)
         cmd.header.stamp = rospy.Time.now()
-        return cmd
+        event_meta = {
+            "raw_state": raw_state,
+            "raw_reason": raw_reason,
+            "behavior_state": self.behavior_state,
+            "behavior_reason": self.behavior_state_reason,
+            "stop_ttc": float(best_ttc) if best_ttc is not None else -1.0,
+            "stop_obj_id": stop_obj_id,
+            "stop_obj_label": stop_obj_label,
+            "stop_rx": stop_rx,
+            "stop_ry": stop_ry,
+            "caution_ttc": float(caution_ttc) if caution_ttc is not None else -1.0,
+            "caution_obj_id": caution_obj_id,
+            "caution_obj_label": caution_obj_label,
+            "caution_rx": caution_rx,
+            "caution_ry": caution_ry,
+        }
+        return cmd, event_meta
 
     @staticmethod
     def _mark_disk(data, width, height, cx, cy, rad_cells, value):
@@ -312,8 +415,58 @@ class DynamicRiskManager:
 
     def on_timer(self, _evt):
         try:
-            cmd = self._evaluate_behavior()
+            cmd, event_meta = self._evaluate_behavior()
             self.pub_behavior.publish(cmd)
+            if event_meta is not None:
+                behavior_state = str(event_meta["behavior_state"])
+                if behavior_state == "stop":
+                    self._publish_explainability(
+                        event_type="BEHAVIOR_STATE_CHANGE",
+                        stamp=cmd.header.stamp,
+                        trigger_reason=event_meta["behavior_reason"],
+                        action_taken="stop",
+                        stop_commanded=True,
+                        speed_limit_mps=float(cmd.speed_limit),
+                        closest_obstacle_dist_m=float(event_meta["stop_rx"]),
+                        obstacle_lateral_offset_m=float(event_meta["stop_ry"]),
+                        ttc_s=float(event_meta["stop_ttc"]),
+                        tracked_object_id=int(event_meta["stop_obj_id"]),
+                        tracked_object_label=event_meta["stop_obj_label"],
+                        summary_text=(
+                            "Dynamic risk manager requested a stop because '{}' reached TTC {:.2f}s."
+                        ).format(
+                            event_meta["stop_obj_label"] if event_meta["stop_obj_label"] else "object",
+                            max(0.0, float(event_meta["stop_ttc"])),
+                        ),
+                    )
+                elif behavior_state == "caution":
+                    self._publish_explainability(
+                        event_type="BEHAVIOR_STATE_CHANGE",
+                        stamp=cmd.header.stamp,
+                        trigger_reason=event_meta["behavior_reason"],
+                        action_taken="slowdown",
+                        slowdown_commanded=True,
+                        speed_limit_mps=float(cmd.speed_limit),
+                        closest_obstacle_dist_m=float(event_meta["caution_rx"]),
+                        obstacle_lateral_offset_m=float(event_meta["caution_ry"]),
+                        ttc_s=float(event_meta["caution_ttc"]),
+                        tracked_object_id=int(event_meta["caution_obj_id"]),
+                        tracked_object_label=event_meta["caution_obj_label"],
+                        summary_text=(
+                            "Dynamic risk manager requested a slowdown because '{}' entered the caution TTC zone."
+                        ).format(
+                            event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "object"
+                        ),
+                    )
+                else:
+                    self._publish_explainability(
+                        event_type="BEHAVIOR_STATE_CHANGE",
+                        stamp=cmd.header.stamp,
+                        trigger_reason=event_meta["behavior_reason"],
+                        action_taken="clear",
+                        speed_limit_mps=float(cmd.speed_limit),
+                        summary_text="Dynamic risk manager cleared the stop/slowdown state.",
+                    )
             risk_grid = self._build_risk_grid()
             if risk_grid is not None:
                 self.pub_risk_grid.publish(risk_grid)
