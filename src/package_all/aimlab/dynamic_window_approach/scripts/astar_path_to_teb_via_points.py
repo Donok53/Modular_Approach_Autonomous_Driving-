@@ -28,6 +28,9 @@ class AStarPathToTebViaPoints(object):
         self.goal_lookahead_m = max(
             0.0, float(rospy.get_param("~goal_lookahead_m", 4.0))
         )
+        self.final_goal_switch_distance_m = max(
+            0.0, float(rospy.get_param("~final_goal_switch_distance_m", 1.0))
+        )
         self.goal_update_min_dist_m = max(
             0.0, float(rospy.get_param("~goal_update_min_dist_m", 0.50))
         )
@@ -85,7 +88,7 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
@@ -93,6 +96,7 @@ class AStarPathToTebViaPoints(object):
             self.output_topic,
             self.goal_output_topic if self.goal_output_topic else "-",
             self.goal_lookahead_m,
+            self.final_goal_switch_distance_m,
             self.min_spacing_m,
             self.max_points,
         )
@@ -208,6 +212,12 @@ class AStarPathToTebViaPoints(object):
 
         start_idx = self._nearest_pose_index(msg)
         if start_idx >= len(msg.poses) - 1:
+            return msg.poses[-1], len(msg.poses) - 1
+
+        remain_m = 0.0
+        for idx in range(start_idx, len(msg.poses) - 1):
+            remain_m += self._dist(msg.poses[idx], msg.poses[idx + 1])
+        if remain_m <= self.final_goal_switch_distance_m:
             return msg.poses[-1], len(msg.poses) - 1
 
         accum_m = 0.0

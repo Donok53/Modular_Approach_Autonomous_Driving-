@@ -144,6 +144,12 @@ class ConstrainedLocalReplanner:
         self.blocked_stop_before_avoidance_s = max(
             0.0, float(rospy.get_param("~blocked_stop_before_avoidance_s", 3.0))
         )
+        self.near_goal_block_ignore_distance_m = max(
+            0.0, float(rospy.get_param("~near_goal_block_ignore_distance_m", 1.0))
+        )
+        self.near_goal_tail_block_ignore_distance_m = max(
+            0.0, float(rospy.get_param("~near_goal_tail_block_ignore_distance_m", 0.45))
+        )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
         )
@@ -1285,6 +1291,31 @@ class ConstrainedLocalReplanner:
             if not out_path or out_path[-1] != cell:
                 out_path.append(cell)
 
+    def _path_remaining_distance_m(self, path, dg, start_idx):
+        if not path or start_idx >= len(path) - 1:
+            return 0.0
+        remain_m = 0.0
+        scale = max(1e-3, float(dg.info.resolution))
+        for idx in range(max(0, start_idx), len(path) - 1):
+            remain_m += self._heur(path[idx], path[idx + 1]) * scale
+        return remain_m
+
+    def _should_ignore_near_goal_block(self, path, blocked_idx, start_cell, dg):
+        if blocked_idx is None or len(path) < 2:
+            return False
+        if self.near_goal_block_ignore_distance_m <= 0.0:
+            return False
+
+        start_idx = self._nearest_path_cell_index(path, start_cell)
+        if start_idx >= len(path):
+            return False
+        blocked_idx = max(start_idx, min(blocked_idx, len(path) - 1))
+        remaining_to_goal_m = self._path_remaining_distance_m(path, dg, start_idx)
+        blocked_tail_m = self._path_remaining_distance_m(path, dg, blocked_idx)
+        if remaining_to_goal_m > self.near_goal_block_ignore_distance_m:
+            return False
+        return blocked_tail_m <= self.near_goal_tail_block_ignore_distance_m
+
     def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg):
         if len(nominal_path) < 2:
             return None, None
@@ -1392,6 +1423,23 @@ class ConstrainedLocalReplanner:
             trigger_reason = "pointcloud_overlap"
 
         if trigger_reason is None:
+            self._clear_avoidance_path(frame_id, stamp)
+            return
+
+        blocked_idx = self._first_blocked_path_index(
+            nominal_path,
+            dynamic_blocked,
+            start_cell,
+            dg,
+            max_check_m=self.avoidance_trigger_ahead_m,
+        )
+        if self._should_ignore_near_goal_block(nominal_path, blocked_idx, start_cell, dg):
+            rospy.loginfo_throttle(
+                1.0,
+                "constrained_local_replanner: ignoring near-goal %s trigger at path tail (blocked_idx=%d)",
+                trigger_reason,
+                int(blocked_idx),
+            )
             self._clear_avoidance_path(frame_id, stamp)
             return
 
@@ -1637,13 +1685,23 @@ class ConstrainedLocalReplanner:
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 return
 
-            nominal_blocked = self._path_blocked_ahead(
+            blocked_idx = self._first_blocked_path_index(
                 nominal_path,
                 blocked,
                 start_cell,
-                float(dg.info.resolution),
+                dg,
                 max_check_m=self.lookahead_m,
             )
+            nominal_blocked = blocked_idx is not None
+            if nominal_blocked and self._should_ignore_near_goal_block(
+                nominal_path, blocked_idx, start_cell, dg
+            ):
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: ignoring near-goal nominal block at path tail (blocked_idx=%d)",
+                    int(blocked_idx),
+                )
+                nominal_blocked = False
             if nominal_blocked:
                 now_sec = stamp.to_sec()
                 if self.local_blocked_since_sec <= 0.0:

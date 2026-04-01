@@ -5,7 +5,7 @@ import math
 
 import rospy
 from geometry_msgs.msg import Twist
-from nav_msgs.msg import Path
+from nav_msgs.msg import Odometry, Path
 from sensor_msgs import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2
 
@@ -21,6 +21,9 @@ class TebCmdVelRelay(object):
         ).strip()
         self.explainability_topic = str(
             rospy.get_param("~explainability_topic", "/planning/explainability")
+        ).strip()
+        self.odom_topic = str(
+            rospy.get_param("~odom_topic", "/lio_localizer/odometry/optimization")
         ).strip()
         self.local_path_topic = str(
             rospy.get_param("~local_path_topic", "/planning/local_path")
@@ -103,6 +106,15 @@ class TebCmdVelRelay(object):
         self.min_in_place_rotation_angular_speed = max(
             0.0, float(rospy.get_param("~min_in_place_rotation_angular_speed", 0.20))
         )
+        self.ignore_obstacles_beyond_local_goal = bool(
+            rospy.get_param("~ignore_obstacles_beyond_local_goal", True)
+        )
+        self.near_goal_obstacle_ignore_distance_m = max(
+            0.0, float(rospy.get_param("~near_goal_obstacle_ignore_distance_m", 1.2))
+        )
+        self.obstacle_beyond_goal_slack_m = max(
+            0.0, float(rospy.get_param("~obstacle_beyond_goal_slack_m", 0.05))
+        )
         self.robot_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m
         self.robot_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m
         self.emergency_stop_distance = self.robot_half_length + self.emergency_stop_front_margin
@@ -120,8 +132,12 @@ class TebCmdVelRelay(object):
         self.last_local_path_time = 0.0
         self.local_path_empty = False
         self.local_path_pose_count = 0
+        self.local_path_remaining_m = float("inf")
         self.last_avoidance_path_time = 0.0
         self.avoidance_path_active = False
+        self.odom_x = 0.0
+        self.odom_y = 0.0
+        self.have_odom = False
         self.closest_stop_obstacle_x = float("inf")
         self.closest_stop_obstacle_y = 0.0
         self.closest_slow_obstacle_x = float("inf")
@@ -138,6 +154,11 @@ class TebCmdVelRelay(object):
         if self.behavior_cmd_topic:
             self.behavior_sub = rospy.Subscriber(
                 self.behavior_cmd_topic, BehaviorCommand, self.behavior_callback, queue_size=10
+            )
+        self.odom_sub = None
+        if self.odom_topic:
+            self.odom_sub = rospy.Subscriber(
+                self.odom_topic, Odometry, self.odom_callback, queue_size=10
             )
         self.local_path_sub = None
         if self.local_path_topic:
@@ -161,11 +182,12 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.explainability_topic if self.explainability_topic else "-",
             self.behavior_cmd_topic if self.behavior_cmd_topic else "-",
+            self.odom_topic if self.odom_topic else "-",
             self.local_path_topic if self.local_path_topic else "-",
             self.avoidance_path_topic if self.avoidance_path_topic else "-",
             self.publish_hz,
@@ -243,6 +265,12 @@ class TebCmdVelRelay(object):
     def _cmd_mag(cmd):
         return math.hypot(float(cmd.linear.x), float(cmd.angular.z))
 
+    @staticmethod
+    def _pose_dist_xy(x, y, pose_stamped):
+        dx = float(pose_stamped.pose.position.x) - float(x)
+        dy = float(pose_stamped.pose.position.y) - float(y)
+        return math.hypot(dx, dy)
+
     def _should_preserve_in_place_rotation(self, cmd):
         return abs(float(cmd.angular.z)) >= self.min_in_place_rotation_angular_speed
 
@@ -277,6 +305,11 @@ class TebCmdVelRelay(object):
         self.closest_slow_obstacle_x = slow_min_x
         self.closest_slow_obstacle_y = slow_min_y
 
+    def odom_callback(self, msg):
+        self.odom_x = float(msg.pose.pose.position.x)
+        self.odom_y = float(msg.pose.pose.position.y)
+        self.have_odom = True
+
     def behavior_callback(self, msg):
         self.last_behavior_time = rospy.get_time()
         self.behavior_stop = bool(msg.stop)
@@ -287,6 +320,28 @@ class TebCmdVelRelay(object):
         self.last_local_path_time = rospy.get_time()
         self.local_path_pose_count = len(msg.poses)
         self.local_path_empty = len(msg.poses) < 2
+        self.local_path_remaining_m = float("inf")
+        if len(msg.poses) < 2 or (not self.have_odom):
+            return
+
+        nearest_idx = 0
+        best_dist = float("inf")
+        for idx, pose in enumerate(msg.poses):
+            dist = self._pose_dist_xy(self.odom_x, self.odom_y, pose)
+            if dist < best_dist:
+                best_dist = dist
+                nearest_idx = idx
+
+        remain_m = 0.0
+        for idx in range(nearest_idx, len(msg.poses) - 1):
+            p0 = msg.poses[idx]
+            p1 = msg.poses[idx + 1]
+            remain_m += self._pose_dist_xy(
+                float(p0.pose.position.x),
+                float(p0.pose.position.y),
+                p1,
+            )
+        self.local_path_remaining_m = remain_m
 
     def avoidance_path_callback(self, msg):
         self.last_avoidance_path_time = rospy.get_time()
@@ -317,6 +372,19 @@ class TebCmdVelRelay(object):
         if self.last_avoidance_path_time > 0.0 and (now - self.last_avoidance_path_time) <= self.local_hold_timeout_s:
             return not self.avoidance_path_active
         return True
+
+    def _should_ignore_obstacle_for_local_goal(self, obstacle_x):
+        if (not self.ignore_obstacles_beyond_local_goal) or (not self.have_odom):
+            return False
+        if not math.isfinite(obstacle_x):
+            return False
+        if not math.isfinite(self.local_path_remaining_m):
+            return False
+        if self.local_path_remaining_m <= 1e-3:
+            return False
+        if self.local_path_remaining_m > self.near_goal_obstacle_ignore_distance_m:
+            return False
+        return obstacle_x > (self.local_path_remaining_m + self.obstacle_beyond_goal_slack_m)
 
     def _publish_explainability(
         self,
@@ -460,7 +528,30 @@ class TebCmdVelRelay(object):
             return cmd, None
 
         final_segment_active = self._is_final_path_segment_active()
-        if self.enable_emergency_stop and self.closest_stop_obstacle_x <= self.emergency_stop_distance:
+        ignore_stop = self._should_ignore_obstacle_for_local_goal(
+            self.closest_stop_obstacle_x
+        )
+        ignore_slow = self._should_ignore_obstacle_for_local_goal(
+            self.closest_slow_obstacle_x
+        )
+        if ignore_stop or ignore_slow:
+            obstacle_x = self.closest_stop_obstacle_x
+            if (not math.isfinite(obstacle_x)) or (
+                math.isfinite(self.closest_slow_obstacle_x)
+                and self.closest_slow_obstacle_x < obstacle_x
+            ):
+                obstacle_x = self.closest_slow_obstacle_x
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: ignoring obstacle beyond local goal obstacle_x=%.2f remain=%.2f",
+                obstacle_x,
+                self.local_path_remaining_m,
+            )
+        if (
+            self.enable_emergency_stop
+            and (not ignore_stop)
+            and self.closest_stop_obstacle_x <= self.emergency_stop_distance
+        ):
             stopped = Twist()
             rospy.logwarn_throttle(
                 self.log_period_s,
@@ -481,7 +572,11 @@ class TebCmdVelRelay(object):
                 "summary_text": "TEB relay applied an emergency stop because a close obstacle was detected ahead.",
             }
 
-        if self.enable_obstacle_slowdown and self.closest_slow_obstacle_x <= self.slowdown_distance:
+        if (
+            self.enable_obstacle_slowdown
+            and (not ignore_slow)
+            and self.closest_slow_obstacle_x <= self.slowdown_distance
+        ):
             span = max(1e-3, self.slowdown_distance - self.emergency_stop_distance)
             scale = (self.closest_slow_obstacle_x - self.emergency_stop_distance) / span
             scale = max(0.0, min(1.0, scale))

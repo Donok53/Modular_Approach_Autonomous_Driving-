@@ -41,6 +41,8 @@
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
   <arg name="blocked_stop_before_avoidance_s" default="3.0"/>
+  <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
+  <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
@@ -77,11 +79,16 @@
   <arg name="allow_in_place_rotation_near_obstacle" default="true"/>
   <arg name="allow_in_place_rotation_during_local_hold" default="true"/>
   <arg name="min_in_place_rotation_angular_speed" default="0.20"/>
+  <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
+  <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
+  <arg name="obstacle_beyond_goal_slack_m" default="0.05"/>
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="behavior_cmd_timeout_s" default="0.8"/>
   <arg name="local_hold_timeout_s" default="1.0"/>
   <arg name="move_base_goal_lookahead_m" default="4.0"/>
+  <arg name="final_goal_switch_distance_m" default="1.0"/>
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
+  <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>
   <arg name="emergency_stop_side_margin" default="0.10"/>
   <arg name="slowdown_front_margin" default="0.80"/>
@@ -203,6 +210,8 @@
       <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <param name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
+      <param name="near_goal_block_ignore_distance_m" value="$(arg near_goal_block_ignore_distance_m)"/>
+      <param name="near_goal_tail_block_ignore_distance_m" value="$(arg near_goal_tail_block_ignore_distance_m)"/>
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -223,6 +232,7 @@
       <param name="odom_topic" value="$(arg pose_topic)"/>
       <param name="goal_output_topic" value="$(arg move_base_goal_topic)"/>
       <param name="goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
+      <param name="final_goal_switch_distance_m" value="$(arg final_goal_switch_distance_m)"/>
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
@@ -233,6 +243,7 @@
     <param name="input_topic" value="$(arg teb_cmd_vel_input_topic)"/>
     <param name="output_topic" value="$(arg cmd_vel_topic)"/>
     <param name="obstacle_cloud_topic" value="$(arg teb_filtered_obstacle_topic)"/>
+    <param name="odom_topic" value="$(arg pose_topic)"/>
     <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
     <param name="local_path_topic" value="$(arg local_path_topic)"/>
     <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
@@ -257,6 +268,9 @@
     <param name="allow_in_place_rotation_near_obstacle" value="$(arg allow_in_place_rotation_near_obstacle)"/>
     <param name="allow_in_place_rotation_during_local_hold" value="$(arg allow_in_place_rotation_during_local_hold)"/>
     <param name="min_in_place_rotation_angular_speed" value="$(arg min_in_place_rotation_angular_speed)"/>
+    <param name="ignore_obstacles_beyond_local_goal" value="$(arg ignore_obstacles_beyond_local_goal)"/>
+    <param name="near_goal_obstacle_ignore_distance_m" value="$(arg near_goal_obstacle_ignore_distance_m)"/>
+    <param name="obstacle_beyond_goal_slack_m" value="$(arg obstacle_beyond_goal_slack_m)"/>
     <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>
     <param name="behavior_cmd_timeout_s" value="$(arg behavior_cmd_timeout_s)"/>
     <param name="local_hold_timeout_s" value="$(arg local_hold_timeout_s)"/>
@@ -294,6 +308,7 @@
       [[$(arg robot_half_length_m), $(arg robot_half_width_m)], [$(arg robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg neg_robot_half_width_m)], [$(arg neg_robot_half_length_m), $(arg robot_half_width_m)]]
     </rosparam>
     <param name="TebLocalPlannerROS/odom_topic" value="$(arg pose_topic)"/>
+    <param name="TebLocalPlannerROS/xy_goal_tolerance" value="$(arg teb_xy_goal_tolerance_m)"/>
     <param name="TebLocalPlannerROS/min_obstacle_dist" value="$(arg teb_min_obstacle_dist_m)"/>
     <param name="TebLocalPlannerROS/inflation_dist" value="$(arg teb_inflation_dist_m)"/>
     <param name="TebLocalPlannerROS/weight_viapoint" value="$(arg teb_weight_viapoint)"/>
