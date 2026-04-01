@@ -29,7 +29,7 @@ class AStarPathToTebViaPoints(object):
             0.0, float(rospy.get_param("~goal_lookahead_m", 4.0))
         )
         self.final_goal_switch_distance_m = max(
-            0.0, float(rospy.get_param("~final_goal_switch_distance_m", 1.3))
+            0.0, float(rospy.get_param("~final_goal_switch_distance_m", 0.5))
         )
         self.goal_update_min_dist_m = max(
             0.0, float(rospy.get_param("~goal_update_min_dist_m", 0.50))
