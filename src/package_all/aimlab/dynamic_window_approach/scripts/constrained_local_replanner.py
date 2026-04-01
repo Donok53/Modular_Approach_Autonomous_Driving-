@@ -102,22 +102,25 @@ class ConstrainedLocalReplanner:
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
         self.pointcloud_static_block_margin_m = max(
-            0.0, float(rospy.get_param("~pointcloud_static_block_margin_m", 0.10))
+            0.0, float(rospy.get_param("~pointcloud_static_block_margin_m", 0.05))
         )
         self.obstacle_block_margin_m = max(
-            0.05, float(rospy.get_param("~obstacle_block_margin_m", 0.35))
+            0.05, float(rospy.get_param("~obstacle_block_margin_m", 0.15))
         )
         self.use_pointcloud_avoidance_trigger = bool(
             rospy.get_param("~use_pointcloud_avoidance_trigger", False)
         )
         self.avoidance_trigger_margin_m = max(
-            0.05, float(rospy.get_param("~avoidance_trigger_margin_m", 0.20))
+            0.05, float(rospy.get_param("~avoidance_trigger_margin_m", 0.08))
         )
         self.avoidance_trigger_ahead_m = max(
             1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
         )
         self.risk_block_confirm_cells = max(
-            1, int(rospy.get_param("~risk_block_confirm_cells", 2))
+            1, int(rospy.get_param("~risk_block_confirm_cells", 3))
+        )
+        self.pointcloud_block_confirm_points = max(
+            1, int(rospy.get_param("~pointcloud_block_confirm_points", 3))
         )
         self.avoidance_hold_s = max(0.0, float(rospy.get_param("~avoidance_hold_s", 1.5)))
         self.avoidance_clear_confirm_cycles = max(
@@ -1188,6 +1191,7 @@ class ConstrainedLocalReplanner:
         )
         corridor_half_sq = corridor_half * corridor_half
         remain_m = 0.0
+        hit_indices = set()
 
         for seg_idx in range(start_idx, len(world_path) - 1):
             x0, y0 = world_path[seg_idx]
@@ -1196,9 +1200,13 @@ class ConstrainedLocalReplanner:
             if seg_len <= 1e-6:
                 continue
             remain_m += seg_len
-            for ox, oy in self.obstacle_points_map:
+            for obs_idx, (ox, oy) in enumerate(self.obstacle_points_map):
+                if obs_idx in hit_indices:
+                    continue
                 if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
-                    return True
+                    hit_indices.add(obs_idx)
+                    if len(hit_indices) >= self.pointcloud_block_confirm_points:
+                        return True
             if remain_m >= self.avoidance_trigger_ahead_m:
                 break
         return False
@@ -1240,6 +1248,8 @@ class ConstrainedLocalReplanner:
         )
         corridor_half_sq = corridor_half * corridor_half
         remain_m = 0.0
+        hit_indices = set()
+        first_hit_i = None
 
         for seg_idx in range(start_idx, len(world_path) - 1):
             x0, y0 = world_path[seg_idx]
@@ -1248,9 +1258,15 @@ class ConstrainedLocalReplanner:
             if seg_len <= 1e-6:
                 continue
             remain_m += seg_len
-            for ox, oy in self.obstacle_points_map:
+            for obs_idx, (ox, oy) in enumerate(self.obstacle_points_map):
+                if obs_idx in hit_indices:
+                    continue
                 if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
-                    return min(seg_idx + 1, len(path) - 1)
+                    hit_indices.add(obs_idx)
+                    if first_hit_i is None:
+                        first_hit_i = min(seg_idx + 1, len(path) - 1)
+                    if len(hit_indices) >= self.pointcloud_block_confirm_points:
+                        return first_hit_i
             if remain_m >= self.avoidance_trigger_ahead_m:
                 break
         return None
