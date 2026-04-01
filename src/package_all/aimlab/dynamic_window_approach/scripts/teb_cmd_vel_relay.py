@@ -419,9 +419,9 @@ class TebCmdVelRelay(object):
         if cmd.linear.x <= 0.0 or not self._has_fresh_obstacle_data(now):
             return cmd, None
 
+        final_segment_active = self._is_final_path_segment_active()
         if self.enable_emergency_stop and self.closest_stop_obstacle_x <= self.emergency_stop_distance:
             stopped = Twist()
-            stopped.angular.z = cmd.angular.z
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: emergency stop | obstacle_x=%.2f m cmd_v=%.3f cmd_w=%.3f",
@@ -452,6 +452,18 @@ class TebCmdVelRelay(object):
             slowed.angular.x = cmd.angular.x
             slowed.angular.y = cmd.angular.y
             slowed.angular.z = cmd.angular.z
+            if abs(slowed.linear.x) <= self.final_cmd_linear_stop_threshold:
+                if abs(slowed.angular.z) > 1e-4:
+                    rospy.loginfo_throttle(
+                        self.log_period_s,
+                        "teb_cmd_vel_relay: suppressing obstacle-stop spin v=%.3f w=%.3f final=%s",
+                        slowed.linear.x,
+                        slowed.angular.z,
+                        "yes" if final_segment_active else "no",
+                    )
+                slowed.angular.z = 0.0
+                slowed.angular.x = 0.0
+                slowed.angular.y = 0.0
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: slowing for obstacle | obstacle_x=%.2f m v=%.3f -> %.3f",
