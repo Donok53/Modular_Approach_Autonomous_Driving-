@@ -26,6 +26,9 @@ class ConstrainedLocalReplanner:
         self.path_history_topic = rospy.get_param("~path_history_topic", "/planning/path_history")
         self.travel_history_topic = rospy.get_param("~travel_history_topic", "/planning/travel_history")
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
+        self.obstacle_pointcloud_topic = rospy.get_param(
+            "~obstacle_pointcloud_topic", self.pointcloud_topic
+        )
         self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
         self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
@@ -202,7 +205,12 @@ class ConstrainedLocalReplanner:
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
         self.sub_risk = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=3)
-        self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        self.sub_cloud = rospy.Subscriber(
+            self.obstacle_pointcloud_topic,
+            PointCloud2,
+            self.cloud_callback,
+            queue_size=1,
+        )
         self.sub_direct_goal = None
         if self.use_direct_goal:
             self.sub_direct_goal = rospy.Subscriber(self.direct_goal_topic, PoseStamped, self.direct_goal_callback, queue_size=2)

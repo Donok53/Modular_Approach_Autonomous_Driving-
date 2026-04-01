@@ -94,6 +94,15 @@ class TebCmdVelRelay(object):
             self.emergency_stop_side_margin,
             float(rospy.get_param("~slowdown_side_margin", 0.20)),
         )
+        self.allow_in_place_rotation_near_obstacle = bool(
+            rospy.get_param("~allow_in_place_rotation_near_obstacle", True)
+        )
+        self.allow_in_place_rotation_during_local_hold = bool(
+            rospy.get_param("~allow_in_place_rotation_during_local_hold", True)
+        )
+        self.min_in_place_rotation_angular_speed = max(
+            0.0, float(rospy.get_param("~min_in_place_rotation_angular_speed", 0.20))
+        )
         self.robot_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m
         self.robot_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m
         self.emergency_stop_distance = self.robot_half_length + self.emergency_stop_front_margin
@@ -152,7 +161,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm",
+            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.explainability_topic if self.explainability_topic else "-",
@@ -170,6 +179,8 @@ class TebCmdVelRelay(object):
             self.emergency_stop_lateral_y,
             self.slowdown_distance,
             self.slowdown_lateral_y,
+            "on" if self.allow_in_place_rotation_near_obstacle else "off",
+            "on" if self.allow_in_place_rotation_during_local_hold else "off",
         )
 
     def _sanitize_cmd(self, cmd):
@@ -231,6 +242,15 @@ class TebCmdVelRelay(object):
     @staticmethod
     def _cmd_mag(cmd):
         return math.hypot(float(cmd.linear.x), float(cmd.angular.z))
+
+    def _should_preserve_in_place_rotation(self, cmd):
+        return abs(float(cmd.angular.z)) >= self.min_in_place_rotation_angular_speed
+
+    @staticmethod
+    def _rotation_only_cmd(cmd):
+        out = Twist()
+        out.angular.z = float(cmd.angular.z)
+        return out
 
     def obstacle_callback(self, msg):
         stop_min_x = float("inf")
@@ -399,6 +419,26 @@ class TebCmdVelRelay(object):
     def _apply_local_hold(self, cmd, now):
         if not self._has_local_hold(now):
             return cmd, None
+        if (
+            self.allow_in_place_rotation_during_local_hold
+            and self._should_preserve_in_place_rotation(cmd)
+        ):
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: local hold keeps in-place rotation | w=%.3f avoidance=%s",
+                float(cmd.angular.z),
+                "active" if self.avoidance_path_active else "none",
+            )
+            return self._rotation_only_cmd(cmd), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "local_replanner_hold",
+                "action_taken": "hold_rotate",
+                "stop_commanded": False,
+                "slowdown_commanded": True,
+                "speed_limit_mps": 0.0,
+                "local_planning_active": True,
+                "summary_text": "TEB relay held forward motion for local replanning but kept an in-place rotation command.",
+            }
         rospy.logwarn_throttle(
             self.log_period_s,
             "teb_cmd_vel_relay: holding stop for local replanner | local_empty=yes avoidance=%s",
@@ -453,17 +493,31 @@ class TebCmdVelRelay(object):
             slowed.angular.y = cmd.angular.y
             slowed.angular.z = cmd.angular.z
             if abs(slowed.linear.x) <= self.final_cmd_linear_stop_threshold:
-                if abs(slowed.angular.z) > 1e-4:
+                if (
+                    self.allow_in_place_rotation_near_obstacle
+                    and (not final_segment_active)
+                    and self._should_preserve_in_place_rotation(cmd)
+                ):
                     rospy.loginfo_throttle(
                         self.log_period_s,
-                        "teb_cmd_vel_relay: suppressing obstacle-stop spin v=%.3f w=%.3f final=%s",
+                        "teb_cmd_vel_relay: converting obstacle slowdown to in-place rotation v=%.3f w=%.3f obstacle_x=%.2f",
                         slowed.linear.x,
-                        slowed.angular.z,
-                        "yes" if final_segment_active else "no",
+                        cmd.angular.z,
+                        self.closest_slow_obstacle_x,
                     )
-                slowed.angular.z = 0.0
-                slowed.angular.x = 0.0
-                slowed.angular.y = 0.0
+                    slowed = self._rotation_only_cmd(cmd)
+                else:
+                    if abs(slowed.angular.z) > 1e-4:
+                        rospy.loginfo_throttle(
+                            self.log_period_s,
+                            "teb_cmd_vel_relay: suppressing obstacle-stop spin v=%.3f w=%.3f final=%s",
+                            slowed.linear.x,
+                            slowed.angular.z,
+                            "yes" if final_segment_active else "no",
+                        )
+                    slowed.angular.z = 0.0
+                    slowed.angular.x = 0.0
+                    slowed.angular.y = 0.0
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: slowing for obstacle | obstacle_x=%.2f m v=%.3f -> %.3f",
