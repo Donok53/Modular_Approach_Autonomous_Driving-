@@ -145,10 +145,10 @@ class ConstrainedLocalReplanner:
             0.0, float(rospy.get_param("~blocked_stop_before_avoidance_s", 3.0))
         )
         self.near_goal_block_ignore_distance_m = max(
-            0.0, float(rospy.get_param("~near_goal_block_ignore_distance_m", 1.0))
+            0.0, float(rospy.get_param("~near_goal_block_ignore_distance_m", 1.2))
         )
         self.near_goal_tail_block_ignore_distance_m = max(
-            0.0, float(rospy.get_param("~near_goal_tail_block_ignore_distance_m", 0.45))
+            0.0, float(rospy.get_param("~near_goal_tail_block_ignore_distance_m", 0.75))
         )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
