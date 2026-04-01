@@ -6,6 +6,7 @@ import math
 import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
+from nav_msgs.msg import Odometry
 
 
 class AStarPathToTebViaPoints(object):
@@ -22,6 +23,7 @@ class AStarPathToTebViaPoints(object):
         self.output_topic = rospy.get_param(
             "~output_topic", "/move_base/TebLocalPlannerROS/via_points"
         )
+        self.odom_topic = str(rospy.get_param("~odom_topic", "")).strip()
         self.goal_output_topic = str(rospy.get_param("~goal_output_topic", "")).strip()
         self.goal_lookahead_m = max(
             0.0, float(rospy.get_param("~goal_lookahead_m", 4.0))
@@ -43,6 +45,9 @@ class AStarPathToTebViaPoints(object):
         self._local_rx_time = 0.0
         self._avoidance_msg = None
         self._avoidance_rx_time = 0.0
+        self._odom_x = 0.0
+        self._odom_y = 0.0
+        self._have_odom = False
 
         self.pub = rospy.Publisher(self.output_topic, Path, queue_size=1, latch=True)
         self.goal_pub = None
@@ -69,13 +74,22 @@ class AStarPathToTebViaPoints(object):
                 self._make_callback("avoidance"),
                 queue_size=2,
             )
+        self.sub_odom = None
+        if self.odom_topic:
+            self.sub_odom = rospy.Subscriber(
+                self.odom_topic,
+                Odometry,
+                self._odom_callback,
+                queue_size=5,
+            )
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s out=%s goal_out=%s goal_lookahead=%.2fm spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
+            self.odom_topic if self.odom_topic else "-",
             self.output_topic,
             self.goal_output_topic if self.goal_output_topic else "-",
             self.goal_lookahead_m,
@@ -99,6 +113,11 @@ class AStarPathToTebViaPoints(object):
         dx = float(a.pose.position.x) - float(b.pose.position.x)
         dy = float(a.pose.position.y) - float(b.pose.position.y)
         return math.hypot(dx, dy)
+
+    def _odom_callback(self, msg):
+        self._odom_x = float(msg.pose.pose.position.x)
+        self._odom_y = float(msg.pose.pose.position.y)
+        self._have_odom = True
 
     @staticmethod
     def _path_signature(msg):
@@ -163,6 +182,23 @@ class AStarPathToTebViaPoints(object):
 
         return _callback
 
+    def _nearest_pose_index(self, msg):
+        if msg is None or not msg.poses:
+            return 0
+        if not self._have_odom:
+            return 0
+
+        best_idx = 0
+        best_dist_sq = float("inf")
+        for idx, pose in enumerate(msg.poses):
+            dx = float(pose.pose.position.x) - self._odom_x
+            dy = float(pose.pose.position.y) - self._odom_y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_idx = idx
+        return best_idx
+
     def _goal_from_selected_path(self, msg):
         if msg is None or not msg.poses:
             return None, None
@@ -170,8 +206,12 @@ class AStarPathToTebViaPoints(object):
         if self.goal_lookahead_m <= 1e-6 or len(msg.poses) == 1:
             return msg.poses[-1], len(msg.poses) - 1
 
+        start_idx = self._nearest_pose_index(msg)
+        if start_idx >= len(msg.poses) - 1:
+            return msg.poses[-1], len(msg.poses) - 1
+
         accum_m = 0.0
-        for idx in range(1, len(msg.poses)):
+        for idx in range(start_idx + 1, len(msg.poses)):
             accum_m += self._dist(msg.poses[idx - 1], msg.poses[idx])
             if accum_m >= self.goal_lookahead_m:
                 return msg.poses[idx], idx

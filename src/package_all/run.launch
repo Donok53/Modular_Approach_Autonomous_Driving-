@@ -107,7 +107,7 @@
   <arg name="pointcloud_static_block_margin_m" default="0.05"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
-  <arg name="use_pointcloud_avoidance_trigger" default="false"/>
+  <arg name="use_pointcloud_avoidance_trigger" default="true"/>
   <arg name="avoidance_trigger_margin_m" default="0.12"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="2"/>

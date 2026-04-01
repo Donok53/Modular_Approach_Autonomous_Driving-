@@ -44,6 +44,18 @@ class TebCmdVelRelay(object):
         self.min_angular_for_linear_boost = max(
             0.0, float(rospy.get_param("~min_angular_for_linear_boost", 0.20))
         )
+        self.reverse_deadband_mps = max(
+            0.0, float(rospy.get_param("~reverse_deadband_mps", 0.03))
+        )
+        self.final_path_pose_threshold = max(
+            1, int(rospy.get_param("~final_path_pose_threshold", 2))
+        )
+        self.final_cmd_linear_stop_threshold = max(
+            0.0, float(rospy.get_param("~final_cmd_linear_stop_threshold", 0.15))
+        )
+        self.final_cmd_angular_stop_threshold = max(
+            0.0, float(rospy.get_param("~final_cmd_angular_stop_threshold", 0.35))
+        )
         self.enable_emergency_stop = bool(
             rospy.get_param("~enable_emergency_stop", True)
         )
@@ -98,6 +110,7 @@ class TebCmdVelRelay(object):
         self.behavior_reason = "clear"
         self.last_local_path_time = 0.0
         self.local_path_empty = False
+        self.local_path_pose_count = 0
         self.last_avoidance_path_time = 0.0
         self.avoidance_path_active = False
         self.closest_stop_obstacle_x = float("inf")
@@ -167,6 +180,28 @@ class TebCmdVelRelay(object):
         out.angular.x = float(cmd.angular.x)
         out.angular.y = float(cmd.angular.y)
         out.angular.z = float(cmd.angular.z)
+        final_segment_active = self._is_final_path_segment_active()
+        if out.linear.x < 0.0 and abs(out.linear.x) <= self.reverse_deadband_mps:
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
+                out.linear.x,
+                out.angular.z,
+            )
+            out.linear.x = 0.0
+        if (
+            final_segment_active
+            and abs(out.linear.x) <= self.final_cmd_linear_stop_threshold
+            and abs(out.angular.z) <= self.final_cmd_angular_stop_threshold
+        ):
+            if abs(out.linear.x) > 1e-4 or abs(out.angular.z) > 1e-4:
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: zeroing near-goal settling cmd v=%.3f w=%.3f",
+                    out.linear.x,
+                    out.angular.z,
+                )
+            return Twist()
         if self.forward_only and out.linear.x < 0.0:
             rospy.logwarn_throttle(
                 self.log_period_s,
@@ -177,11 +212,12 @@ class TebCmdVelRelay(object):
             out.linear.x = self.reverse_replacement_speed
         if (
             self.enforce_min_linear_speed
-            and abs(out.linear.x) > 1e-4
-            and abs(out.linear.x) < self.min_abs_linear_speed
+            and out.linear.x > 1e-4
+            and out.linear.x < self.min_abs_linear_speed
             and abs(out.angular.z) >= self.min_angular_for_linear_boost
+            and not final_segment_active
         ):
-            boosted = math.copysign(self.min_abs_linear_speed, out.linear.x)
+            boosted = self.min_abs_linear_speed
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: boosting tiny cmd v=%.3f -> %.3f (w=%.3f)",
@@ -229,11 +265,19 @@ class TebCmdVelRelay(object):
 
     def local_path_callback(self, msg):
         self.last_local_path_time = rospy.get_time()
+        self.local_path_pose_count = len(msg.poses)
         self.local_path_empty = len(msg.poses) < 2
 
     def avoidance_path_callback(self, msg):
         self.last_avoidance_path_time = rospy.get_time()
         self.avoidance_path_active = len(msg.poses) >= 2
+
+    def _is_final_path_segment_active(self):
+        return (
+            self.local_path_pose_count > 0
+            and self.local_path_pose_count <= self.final_path_pose_threshold
+            and not self.avoidance_path_active
+        )
 
     def _has_fresh_obstacle_data(self, now):
         return self.last_obstacle_time > 0.0 and (now - self.last_obstacle_time) <= self.obstacle_cloud_timeout_s

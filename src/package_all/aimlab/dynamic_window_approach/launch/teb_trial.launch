@@ -29,7 +29,7 @@
   <arg name="pointcloud_static_block_margin_m" default="0.10"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
-  <arg name="use_pointcloud_avoidance_trigger" default="false"/>
+  <arg name="use_pointcloud_avoidance_trigger" default="true"/>
   <arg name="avoidance_trigger_margin_m" default="0.12"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="2"/>
@@ -211,6 +211,7 @@
       <param name="local_path_timeout_s" value="4.0"/>
       <param name="avoidance_path_timeout_s" value="1.5"/>
       <param name="output_topic" value="$(arg teb_via_points_topic)"/>
+      <param name="odom_topic" value="$(arg pose_topic)"/>
       <param name="goal_output_topic" value="$(arg move_base_goal_topic)"/>
       <param name="goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
@@ -237,6 +238,10 @@
     <param name="enforce_min_linear_speed" value="true"/>
     <param name="min_abs_linear_speed" value="0.04"/>
     <param name="min_angular_for_linear_boost" value="0.20"/>
+    <param name="reverse_deadband_mps" value="0.03"/>
+    <param name="final_path_pose_threshold" value="2"/>
+    <param name="final_cmd_linear_stop_threshold" value="0.15"/>
+    <param name="final_cmd_angular_stop_threshold" value="0.35"/>
     <param name="enable_emergency_stop" value="$(arg enable_emergency_stop)"/>
     <param name="enable_obstacle_slowdown" value="$(arg enable_obstacle_slowdown)"/>
     <param name="enable_local_path_hold_stop" value="$(arg enable_local_path_hold_stop)"/>
