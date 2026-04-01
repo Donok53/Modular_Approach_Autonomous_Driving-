@@ -23,6 +23,12 @@ class AStarPathToTebViaPoints(object):
             "~output_topic", "/move_base/TebLocalPlannerROS/via_points"
         )
         self.goal_output_topic = str(rospy.get_param("~goal_output_topic", "")).strip()
+        self.goal_lookahead_m = max(
+            0.0, float(rospy.get_param("~goal_lookahead_m", 4.0))
+        )
+        self.goal_update_min_dist_m = max(
+            0.0, float(rospy.get_param("~goal_update_min_dist_m", 0.50))
+        )
         self.min_spacing_m = max(
             0.0, float(rospy.get_param("~min_spacing_m", 0.50))
         )
@@ -66,12 +72,13 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s out=%s goal_out=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s out=%s goal_out=%s goal_lookahead=%.2fm spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
             self.output_topic,
             self.goal_output_topic if self.goal_output_topic else "-",
+            self.goal_lookahead_m,
             self.min_spacing_m,
             self.max_points,
         )
@@ -146,7 +153,6 @@ class AStarPathToTebViaPoints(object):
             if source == "fallback":
                 self._fallback_msg = msg
                 self._fallback_rx_time = now_sec
-                self._publish_goal_from_fallback(msg)
             elif source == "local":
                 self._local_msg = msg
                 self._local_rx_time = now_sec
@@ -157,30 +163,52 @@ class AStarPathToTebViaPoints(object):
 
         return _callback
 
-    def _publish_goal_from_fallback(self, msg):
+    def _goal_from_selected_path(self, msg):
+        if msg is None or not msg.poses:
+            return None, None
+
+        if self.goal_lookahead_m <= 1e-6 or len(msg.poses) == 1:
+            return msg.poses[-1], len(msg.poses) - 1
+
+        accum_m = 0.0
+        for idx in range(1, len(msg.poses)):
+            accum_m += self._dist(msg.poses[idx - 1], msg.poses[idx])
+            if accum_m >= self.goal_lookahead_m:
+                return msg.poses[idx], idx
+        return msg.poses[-1], len(msg.poses) - 1
+
+    def _publish_goal_for_selected_path(self, source, msg):
         if self.goal_pub is None or msg is None or not msg.poses:
             return
 
-        last = msg.poses[-1]
-        goal_sig = (
-            msg.header.frame_id,
-            round(float(last.pose.position.x), 3),
-            round(float(last.pose.position.y), 3),
-        )
-        if goal_sig == self._last_goal_sig:
+        goal_pose, goal_idx = self._goal_from_selected_path(msg)
+        if goal_pose is None:
             return
-        self._last_goal_sig = goal_sig
+
+        goal_x = float(goal_pose.pose.position.x)
+        goal_y = float(goal_pose.pose.position.y)
+        if self._last_goal_sig is not None:
+            prev_source, prev_frame, prev_x, prev_y = self._last_goal_sig
+            if (
+                prev_source == source
+                and prev_frame == msg.header.frame_id
+                and math.hypot(goal_x - prev_x, goal_y - prev_y) < self.goal_update_min_dist_m
+            ):
+                return
+        self._last_goal_sig = (source, msg.header.frame_id, goal_x, goal_y)
 
         goal = PoseStamped()
         goal.header = msg.header
-        goal.pose = last.pose
+        goal.pose = goal_pose.pose
         self.goal_pub.publish(goal)
         rospy.loginfo_throttle(
             1.0,
-            "astar_path_to_teb_via_points: synced move_base goal | topic=%s x=%.2f y=%.2f",
+            "astar_path_to_teb_via_points: synced move_base goal | topic=%s source=%s idx=%d x=%.2f y=%.2f",
             self.goal_output_topic,
-            float(goal.pose.position.x),
-            float(goal.pose.position.y),
+            source,
+            goal_idx,
+            goal_x,
+            goal_y,
         )
 
     def _is_fresh(self, stamp_sec, timeout_s):
@@ -229,6 +257,7 @@ class AStarPathToTebViaPoints(object):
             )
             return
         self.pub.publish(via)
+        self._publish_goal_for_selected_path(source, msg)
         rospy.loginfo_throttle(
             1.0,
             "astar_path_to_teb_via_points: source=%s published %d via points from %d path poses",

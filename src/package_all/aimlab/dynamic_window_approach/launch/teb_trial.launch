@@ -74,6 +74,8 @@
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="behavior_cmd_timeout_s" default="0.8"/>
   <arg name="local_hold_timeout_s" default="1.0"/>
+  <arg name="move_base_goal_lookahead_m" default="4.0"/>
+  <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>
   <arg name="emergency_stop_side_margin" default="0.10"/>
   <arg name="slowdown_front_margin" default="0.80"/>
@@ -87,7 +89,8 @@
   <arg name="teb_global_inflation_radius_m" default="0.15"/>
   <arg name="teb_min_obstacle_dist_m" default="0.30"/>
   <arg name="teb_inflation_dist_m" default="0.40"/>
-  <arg name="path_blocking_radius_m" default="0.30"/>
+  <arg name="teb_weight_viapoint" default="120.0"/>
+  <arg name="path_blocking_radius_m" default="$(eval 0.5 * ((float(arg('robot_length_m')) ** 2 + float(arg('robot_width_m')) ** 2) ** 0.5) + float(arg('footprint_padding_m')))"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
   <arg name="prediction_horizon_s" default="1.5"/>
   <arg name="prediction_step_s" default="0.2"/>
@@ -209,6 +212,8 @@
       <param name="avoidance_path_timeout_s" value="1.5"/>
       <param name="output_topic" value="$(arg teb_via_points_topic)"/>
       <param name="goal_output_topic" value="$(arg move_base_goal_topic)"/>
+      <param name="goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
+      <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
     </node>
@@ -274,6 +279,7 @@
     <param name="TebLocalPlannerROS/odom_topic" value="$(arg pose_topic)"/>
     <param name="TebLocalPlannerROS/min_obstacle_dist" value="$(arg teb_min_obstacle_dist_m)"/>
     <param name="TebLocalPlannerROS/inflation_dist" value="$(arg teb_inflation_dist_m)"/>
+    <param name="TebLocalPlannerROS/weight_viapoint" value="$(arg teb_weight_viapoint)"/>
     <param name="global_costmap/global_frame" value="$(arg global_frame)"/>
     <param name="global_costmap/robot_base_frame" value="$(arg robot_base_frame)"/>
     <param name="global_costmap/drivable_layer/map_topic" value="$(arg drivable_grid_topic)"/>

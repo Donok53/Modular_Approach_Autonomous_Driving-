@@ -61,12 +61,14 @@ class ConstrainedLocalReplanner:
         )
         self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
+        self.footprint_clearance_radius_m = self.robot_radius + self.footprint_padding_m
         self.path_blocking_radius_m = max(
             0.05,
+            self.footprint_clearance_radius_m,
             float(
                 rospy.get_param(
                     "~path_blocking_radius_m",
-                    0.5 * self.robot_width_m + self.footprint_padding_m,
+                    self.footprint_clearance_radius_m,
                 )
             ),
         )
@@ -1180,8 +1182,7 @@ class ConstrainedLocalReplanner:
 
         world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
         corridor_half = (
-            max(0.5 * self.robot_width_m, 0.5 * self.robot_length_m)
-            + self.footprint_padding_m
+            self.path_blocking_radius_m
             + self.obstacle_block_margin_m
             + self.avoidance_trigger_margin_m
         )
@@ -1233,8 +1234,7 @@ class ConstrainedLocalReplanner:
 
         world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
         corridor_half = (
-            max(0.5 * self.robot_width_m, 0.5 * self.robot_length_m)
-            + self.footprint_padding_m
+            self.path_blocking_radius_m
             + self.obstacle_block_margin_m
             + self.avoidance_trigger_margin_m
         )

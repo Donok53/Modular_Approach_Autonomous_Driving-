@@ -545,7 +545,9 @@ class AStarPlanner:
         if self.global_path_drivable_area_is_center_safe:
             base_radius = 0.0
         else:
-            base_radius = 0.5 * max(self.robot_length_m, self.robot_width_m)
+            # Use the circumscribed radius so the planned centerline stays safe for
+            # the robot corners even on diagonal segments.
+            base_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         return base_radius + self.footprint_padding_m + self.global_path_clearance_m
 
     def _publish_world_path_messages(self, world_points, stamp=None, simplify=True):

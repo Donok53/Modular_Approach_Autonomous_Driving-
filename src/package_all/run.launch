@@ -51,6 +51,8 @@
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
+  <arg name="teb_move_base_goal_lookahead_m" default="$(arg local_replan_lookahead_m)"/>
+  <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_emergency_stop_front_margin" default="0.35"/>
   <arg name="teb_emergency_stop_side_margin" default="0.10"/>
   <arg name="teb_slowdown_front_margin" default="0.80"/>
@@ -68,6 +70,7 @@
   <arg name="teb_global_inflation_radius_m" default="0.15"/>
   <arg name="teb_min_obstacle_dist_m" default="0.30"/>
   <arg name="teb_inflation_dist_m" default="0.40"/>
+  <arg name="teb_weight_viapoint" default="120.0"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
   <arg name="stop_log_period_s" default="1.0"/>
@@ -75,8 +78,8 @@
   <arg name="obstacle_collision_radius" default="0.0"/>
   <arg name="robot_width_m" default="0.55"/>
   <arg name="robot_length_m" default="0.60"/>
-  <arg name="path_blocking_radius_m" default="0.30"/>
   <arg name="footprint_padding_m" default="0.0"/>
+  <arg name="path_blocking_radius_m" default="$(eval 0.5 * ((float(arg('robot_length_m')) ** 2 + float(arg('robot_width_m')) ** 2) ** 0.5) + float(arg('footprint_padding_m')))"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
@@ -387,6 +390,8 @@
       <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
       <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
       <arg name="local_hold_timeout_s" value="$(arg teb_local_hold_timeout_s)"/>
+      <arg name="move_base_goal_lookahead_m" value="$(arg teb_move_base_goal_lookahead_m)"/>
+      <arg name="move_base_goal_update_min_dist_m" value="$(arg teb_move_base_goal_update_min_dist_m)"/>
       <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
       <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
       <arg name="slowdown_front_margin" value="$(arg teb_slowdown_front_margin)"/>
@@ -404,6 +409,7 @@
       <arg name="teb_global_inflation_radius_m" value="$(arg teb_global_inflation_radius_m)"/>
       <arg name="teb_min_obstacle_dist_m" value="$(arg teb_min_obstacle_dist_m)"/>
       <arg name="teb_inflation_dist_m" value="$(arg teb_inflation_dist_m)"/>
+      <arg name="teb_weight_viapoint" value="$(arg teb_weight_viapoint)"/>
     </include>
   </group>
 
