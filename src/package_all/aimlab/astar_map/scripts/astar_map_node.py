@@ -526,6 +526,41 @@ class AStarPlanner:
         return self._resample_path(pts, self.published_path_spacing_m)
 
     @staticmethod
+    def _set_pose_yaw(pose_stamped, yaw):
+        pose_stamped.pose.orientation.x = 0.0
+        pose_stamped.pose.orientation.y = 0.0
+        pose_stamped.pose.orientation.z = math.sin(0.5 * yaw)
+        pose_stamped.pose.orientation.w = math.cos(0.5 * yaw)
+
+    @staticmethod
+    def _path_yaws(points):
+        if not points:
+            return []
+        if len(points) == 1:
+            return [0.0]
+
+        yaws = []
+        last_yaw = 0.0
+        for idx in range(len(points)):
+            if idx == 0:
+                ax, ay = points[idx]
+                bx, by = points[idx + 1]
+            elif idx == len(points) - 1:
+                ax, ay = points[idx - 1]
+                bx, by = points[idx]
+            else:
+                ax, ay = points[idx - 1]
+                bx, by = points[idx + 1]
+            dx = float(bx) - float(ax)
+            dy = float(by) - float(ay)
+            if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+                yaws.append(last_yaw)
+                continue
+            last_yaw = math.atan2(dy, dx)
+            yaws.append(last_yaw)
+        return yaws
+
+    @staticmethod
     def _world_path_signature(world_points):
         return tuple((round(float(x), 2), round(float(y), 2)) for x, y in world_points)
 
@@ -559,13 +594,15 @@ class AStarPlanner:
         p = Path()
         p.header.frame_id = "map"
         p.header.stamp = stamp
-        for x, y in self._prepare_display_path(world_points, simplify=simplify):
+        display_points = self._prepare_display_path(world_points, simplify=simplify)
+        display_yaws = self._path_yaws(display_points)
+        for (x, y), yaw in zip(display_points, display_yaws):
             ps = PoseStamped()
             ps.header = p.header
             ps.pose.position.x = float(x)
             ps.pose.position.y = float(y)
             ps.pose.position.z = 0.0
-            ps.pose.orientation.w = 1.0
+            self._set_pose_yaw(ps, yaw)
             p.poses.append(ps)
 
         pd = Path()
@@ -1015,9 +1052,12 @@ class AStarPlanner:
             world_points.append(self._xy_to_map(n.east, n.north))
             wgs_points.append((n.lat, n.lon))
 
-        for x, y in self._prepare_display_path(world_points):
+        display_points = self._prepare_display_path(world_points)
+        display_yaws = self._path_yaws(display_points)
+        for (x, y), yaw in zip(display_points, display_yaws):
             ps = PoseStamped(); ps.header = p.header
             ps.pose.position.x = x; ps.pose.position.y = y; ps.pose.position.z = 0.0
+            self._set_pose_yaw(ps, yaw)
             p.poses.append(ps)
 
         if self._display_start_xy is not None and self._goal_display_xy is not None:

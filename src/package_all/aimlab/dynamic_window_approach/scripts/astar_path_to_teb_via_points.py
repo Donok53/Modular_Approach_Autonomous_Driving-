@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import copy
 import math
 
 import rospy
@@ -120,6 +121,51 @@ class AStarPathToTebViaPoints(object):
         dy = float(a.pose.position.y) - float(b.pose.position.y)
         return math.hypot(dx, dy)
 
+    @staticmethod
+    def _set_pose_yaw(pose_stamped, yaw):
+        pose_stamped.pose.orientation.x = 0.0
+        pose_stamped.pose.orientation.y = 0.0
+        pose_stamped.pose.orientation.z = math.sin(0.5 * yaw)
+        pose_stamped.pose.orientation.w = math.cos(0.5 * yaw)
+
+    @staticmethod
+    def _angle_diff(a, b):
+        return math.atan2(math.sin(a - b), math.cos(a - b))
+
+    @staticmethod
+    def _segment_yaw(a, b):
+        dx = float(b.pose.position.x) - float(a.pose.position.x)
+        dy = float(b.pose.position.y) - float(a.pose.position.y)
+        if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+            return None
+        return math.atan2(dy, dx)
+
+    def _path_pose_yaw(self, msg, idx):
+        if msg is None or not msg.poses or len(msg.poses) == 1:
+            return 0.0
+
+        pose_count = len(msg.poses)
+        candidate_pairs = []
+        if 0 < idx < pose_count - 1:
+            candidate_pairs.append((msg.poses[idx - 1], msg.poses[idx + 1]))
+        if idx < pose_count - 1:
+            candidate_pairs.append((msg.poses[idx], msg.poses[idx + 1]))
+        if idx > 0:
+            candidate_pairs.append((msg.poses[idx - 1], msg.poses[idx]))
+
+        for pose_a, pose_b in candidate_pairs:
+            yaw = self._segment_yaw(pose_a, pose_b)
+            if yaw is not None:
+                return yaw
+        return 0.0
+
+    def _orient_path(self, path):
+        if path is None or not path.poses:
+            return path
+        for idx, pose in enumerate(path.poses):
+            self._set_pose_yaw(pose, self._path_pose_yaw(path, idx))
+        return path
+
     def _odom_callback(self, msg):
         self._odom_x = float(msg.pose.pose.position.x)
         self._odom_y = float(msg.pose.pose.position.y)
@@ -140,37 +186,37 @@ class AStarPathToTebViaPoints(object):
         return tuple(sig)
 
     def _downsample(self, msg):
-        if len(msg.poses) <= 2 or self.min_spacing_m <= 1e-6:
-            out = Path()
-            out.header = msg.header
-            out.poses = list(msg.poses[: self.max_points])
-            return out
-
         out = Path()
         out.header = msg.header
-        out.poses.append(msg.poses[0])
+        if len(msg.poses) <= 2 or self.min_spacing_m <= 1e-6:
+            out.poses = [copy.deepcopy(pose) for pose in msg.poses[: self.max_points]]
+            return self._orient_path(out)
+
+        selected_poses = [msg.poses[0]]
         last = msg.poses[0]
 
         for pose in msg.poses[1:-1]:
             if self._dist(last, pose) < self.min_spacing_m:
                 continue
-            out.poses.append(pose)
+            selected_poses.append(pose)
             last = pose
-            if len(out.poses) >= (self.max_points - 1):
+            if len(selected_poses) >= (self.max_points - 1):
                 break
 
-        if msg.poses[-1] is not out.poses[-1]:
-            out.poses.append(msg.poses[-1])
+        if selected_poses[-1] is not msg.poses[-1]:
+            selected_poses.append(msg.poses[-1])
 
-        if len(out.poses) > self.max_points:
-            step = max(1, len(out.poses) // max(1, self.max_points - 1))
-            reduced = out.poses[::step]
-            if reduced[-1] is not out.poses[-1]:
-                reduced.append(out.poses[-1])
-            out.poses = reduced[: self.max_points]
-            if out.poses[-1] is not msg.poses[-1]:
-                out.poses[-1] = msg.poses[-1]
-        return out
+        if len(selected_poses) > self.max_points:
+            step = max(1, len(selected_poses) // max(1, self.max_points - 1))
+            reduced = selected_poses[::step]
+            if reduced[-1] is not selected_poses[-1]:
+                reduced.append(selected_poses[-1])
+            selected_poses = reduced[: self.max_points]
+            if selected_poses[-1] is not msg.poses[-1]:
+                selected_poses[-1] = msg.poses[-1]
+
+        out.poses = [copy.deepcopy(pose) for pose in selected_poses]
+        return self._orient_path(out)
 
     def _make_callback(self, source):
         def _callback(msg):
@@ -239,19 +285,24 @@ class AStarPathToTebViaPoints(object):
 
         goal_x = float(goal_pose.pose.position.x)
         goal_y = float(goal_pose.pose.position.y)
+        goal_yaw = self._path_pose_yaw(msg, goal_idx)
         if self._last_goal_sig is not None:
-            prev_source, prev_frame, prev_x, prev_y = self._last_goal_sig
+            prev_source, prev_frame, prev_x, prev_y, prev_yaw = self._last_goal_sig
             if (
                 prev_source == source
                 and prev_frame == msg.header.frame_id
                 and math.hypot(goal_x - prev_x, goal_y - prev_y) < self.goal_update_min_dist_m
+                and abs(self._angle_diff(goal_yaw, prev_yaw)) < math.radians(10.0)
             ):
                 return
-        self._last_goal_sig = (source, msg.header.frame_id, goal_x, goal_y)
+        self._last_goal_sig = (source, msg.header.frame_id, goal_x, goal_y, goal_yaw)
 
         goal = PoseStamped()
         goal.header = msg.header
-        goal.pose = goal_pose.pose
+        goal.pose.position.x = goal_x
+        goal.pose.position.y = goal_y
+        goal.pose.position.z = float(goal_pose.pose.position.z)
+        self._set_pose_yaw(goal, goal_yaw)
         self.goal_pub.publish(goal)
         rospy.loginfo_throttle(
             1.0,

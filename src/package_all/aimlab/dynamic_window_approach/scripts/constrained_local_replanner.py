@@ -669,14 +669,15 @@ class ConstrainedLocalReplanner:
             return
 
         sampled_points = self._sample_world_points(world_points)
+        sampled_yaws = self._path_yaws(sampled_points)
 
-        for x, y in sampled_points:
+        for (x, y), yaw in zip(sampled_points, sampled_yaws):
             ps = PoseStamped()
             ps.header = out.header
             ps.pose.position.x = float(x)
             ps.pose.position.y = float(y)
             ps.pose.position.z = 0.0
-            ps.pose.orientation.w = 1.0
+            self._set_pose_yaw(ps, yaw)
             out.poses.append(ps)
         if len(out.poses) >= 2:
             publisher.publish(out)
@@ -700,6 +701,41 @@ class ConstrainedLocalReplanner:
                     y0 + t * (y1 - y0),
                 ))
         return sampled_points
+
+    @staticmethod
+    def _set_pose_yaw(pose_stamped, yaw):
+        pose_stamped.pose.orientation.x = 0.0
+        pose_stamped.pose.orientation.y = 0.0
+        pose_stamped.pose.orientation.z = math.sin(0.5 * yaw)
+        pose_stamped.pose.orientation.w = math.cos(0.5 * yaw)
+
+    @staticmethod
+    def _path_yaws(points):
+        if not points:
+            return []
+        if len(points) == 1:
+            return [0.0]
+
+        yaws = []
+        last_yaw = 0.0
+        for idx in range(len(points)):
+            if idx == 0:
+                ax, ay = points[idx]
+                bx, by = points[idx + 1]
+            elif idx == len(points) - 1:
+                ax, ay = points[idx - 1]
+                bx, by = points[idx]
+            else:
+                ax, ay = points[idx - 1]
+                bx, by = points[idx + 1]
+            dx = float(bx) - float(ax)
+            dy = float(by) - float(ay)
+            if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+                yaws.append(last_yaw)
+                continue
+            last_yaw = math.atan2(dy, dx)
+            yaws.append(last_yaw)
+        return yaws
 
     @staticmethod
     def _path_signature_from_points(points):
@@ -877,13 +913,14 @@ class ConstrainedLocalReplanner:
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = frame_id if frame_id else "map"
-        for x, y in world_points:
+        yaws = self._path_yaws(world_points)
+        for (x, y), yaw in zip(world_points, yaws):
             ps = PoseStamped()
             ps.header = out.header
             ps.pose.position.x = float(x)
             ps.pose.position.y = float(y)
             ps.pose.position.z = 0.0
-            ps.pose.orientation.w = 1.0
+            self._set_pose_yaw(ps, yaw)
             out.poses.append(ps)
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
