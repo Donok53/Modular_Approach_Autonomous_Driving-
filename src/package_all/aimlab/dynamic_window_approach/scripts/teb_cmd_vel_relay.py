@@ -50,6 +50,15 @@ class TebCmdVelRelay(object):
         self.reverse_deadband_mps = max(
             0.0, float(rospy.get_param("~reverse_deadband_mps", 0.03))
         )
+        self.enable_cmd_smoothing = bool(
+            rospy.get_param("~enable_cmd_smoothing", True)
+        )
+        self.max_linear_slew_mps2 = max(
+            0.0, float(rospy.get_param("~max_linear_slew_mps2", 0.70))
+        )
+        self.max_angular_slew_rps2 = max(
+            0.0, float(rospy.get_param("~max_angular_slew_rps2", 1.40))
+        )
         self.final_path_pose_threshold = max(
             1, int(rospy.get_param("~final_path_pose_threshold", 2))
         )
@@ -130,6 +139,8 @@ class TebCmdVelRelay(object):
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
+        self.last_publish_cmd = Twist()
+        self.last_publish_time = 0.0
         self.last_obstacle_time = 0.0
         self.last_behavior_time = 0.0
         self.behavior_stop = False
@@ -189,7 +200,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.explainability_topic if self.explainability_topic else "-",
@@ -202,6 +213,9 @@ class TebCmdVelRelay(object):
             "on" if self.enable_emergency_stop else "off",
             "on" if self.enable_obstacle_slowdown else "off",
             "on" if self.enable_local_path_hold_stop else "off",
+            "on" if self.enable_cmd_smoothing else "off",
+            self.max_linear_slew_mps2,
+            self.max_angular_slew_rps2,
             self.robot_length_m + 2.0 * self.footprint_padding_m,
             self.robot_width_m + 2.0 * self.footprint_padding_m,
             self.emergency_stop_distance,
@@ -221,6 +235,53 @@ class TebCmdVelRelay(object):
             self.pub.publish(cmd)
         except rospy.ROSException:
             pass
+
+    @staticmethod
+    def _clamp_delta(current, target, limit):
+        if limit <= 0.0:
+            return float(target)
+        delta = float(target) - float(current)
+        if delta > limit:
+            delta = limit
+        elif delta < -limit:
+            delta = -limit
+        return float(current) + delta
+
+    def _apply_cmd_smoothing(self, cmd, now, bypass=False):
+        if bypass or (not self.enable_cmd_smoothing):
+            return cmd
+        if self.last_publish_time <= 0.0:
+            return cmd
+
+        dt = max(1e-3, float(now) - float(self.last_publish_time))
+        linear_limit = self.max_linear_slew_mps2 * dt
+        angular_limit = self.max_angular_slew_rps2 * dt
+
+        out = Twist()
+        out.linear.x = self._clamp_delta(
+            self.last_publish_cmd.linear.x, cmd.linear.x, linear_limit
+        )
+        out.linear.y = float(cmd.linear.y)
+        out.linear.z = float(cmd.linear.z)
+        out.angular.x = float(cmd.angular.x)
+        out.angular.y = float(cmd.angular.y)
+        out.angular.z = self._clamp_delta(
+            self.last_publish_cmd.angular.z, cmd.angular.z, angular_limit
+        )
+
+        if (
+            abs(out.linear.x - float(cmd.linear.x)) > 1e-4
+            or abs(out.angular.z - float(cmd.angular.z)) > 1e-4
+        ):
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: smoothing cmd | target(v=%.3f w=%.3f) -> out(v=%.3f w=%.3f)",
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+                float(out.linear.x),
+                float(out.angular.z),
+            )
+        return out
 
     def _sanitize_cmd(self, cmd):
         out = Twist()
@@ -691,6 +752,8 @@ class TebCmdVelRelay(object):
         if self.last_rx_time <= 0.0 or (now - self.last_rx_time) > self.idle_timeout_s:
             idle = Twist()
             self._safe_publish_cmd(idle)
+            self.last_publish_cmd = idle
+            self.last_publish_time = now
             self._publish_explainability(
                 event_type="CONTROL_ACTION_CHANGE",
                 trigger_reason="stale_cmd_timeout",
@@ -727,7 +790,15 @@ class TebCmdVelRelay(object):
             if info is not None:
                 explain = info
 
+        cmd = self._apply_cmd_smoothing(
+            cmd,
+            now,
+            bypass=bool(explain and explain.get("stop_commanded", False))
+            or self._is_final_goal_brake_active(),
+        )
         self._safe_publish_cmd(cmd)
+        self.last_publish_cmd = cmd
+        self.last_publish_time = now
         if explain is not None:
             self._publish_explainability(
                 event_type=explain.get("event_type", "CONTROL_ACTION_CHANGE"),
