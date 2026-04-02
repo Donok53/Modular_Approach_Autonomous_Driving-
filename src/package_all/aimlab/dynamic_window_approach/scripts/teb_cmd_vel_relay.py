@@ -214,6 +214,14 @@ class TebCmdVelRelay(object):
             "on" if self.allow_in_place_rotation_during_local_hold else "off",
         )
 
+    def _safe_publish_cmd(self, cmd):
+        if rospy.is_shutdown():
+            return
+        try:
+            self.pub.publish(cmd)
+        except rospy.ROSException:
+            pass
+
     def _sanitize_cmd(self, cmd):
         out = Twist()
         out.linear.x = float(cmd.linear.x)
@@ -232,13 +240,23 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return Twist()
-            rospy.loginfo_throttle(
-                self.log_period_s,
-                "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
-                out.linear.x,
-                out.angular.z,
-            )
-            out.linear.x = 0.0
+            if self.reverse_replacement_speed > 1e-4:
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: replacing tiny reverse cmd v=%.3f -> %.3f (w=%.3f)",
+                    out.linear.x,
+                    self.reverse_replacement_speed,
+                    out.angular.z,
+                )
+                out.linear.x = self.reverse_replacement_speed
+            else:
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
+                    out.linear.x,
+                    out.angular.z,
+                )
+                out.linear.x = 0.0
         if self.forward_only and out.linear.x < 0.0:
             rospy.logwarn_throttle(
                 self.log_period_s,
@@ -454,7 +472,12 @@ class TebCmdVelRelay(object):
         stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp.to_sec() > 0.0 else rospy.get_time()
         self._last_explain_key = key
         self._last_explain_time = stamp_sec
-        self.pub_explainability.publish(msg)
+        if rospy.is_shutdown():
+            return
+        try:
+            self.pub_explainability.publish(msg)
+        except rospy.ROSException:
+            pass
 
     def _apply_behavior_safety(self, cmd, now):
         if not self._has_fresh_behavior(now):
@@ -507,13 +530,13 @@ class TebCmdVelRelay(object):
             return cmd, None
         if (
             self.allow_in_place_rotation_during_local_hold
+            and self.avoidance_path_active
             and self._should_preserve_in_place_rotation(cmd)
         ):
             rospy.loginfo_throttle(
                 self.log_period_s,
-                "teb_cmd_vel_relay: local hold keeps in-place rotation | w=%.3f avoidance=%s",
+                "teb_cmd_vel_relay: local hold keeps in-place rotation | w=%.3f avoidance=active",
                 float(cmd.angular.z),
-                "active" if self.avoidance_path_active else "none",
             )
             return self._rotation_only_cmd(cmd), {
                 "event_type": "CONTROL_ACTION_CHANGE",
@@ -666,7 +689,7 @@ class TebCmdVelRelay(object):
         now = rospy.get_time()
         if self.last_rx_time <= 0.0 or (now - self.last_rx_time) > self.idle_timeout_s:
             idle = Twist()
-            self.pub.publish(idle)
+            self._safe_publish_cmd(idle)
             self._publish_explainability(
                 event_type="CONTROL_ACTION_CHANGE",
                 trigger_reason="stale_cmd_timeout",
@@ -703,7 +726,7 @@ class TebCmdVelRelay(object):
             if info is not None:
                 explain = info
 
-        self.pub.publish(cmd)
+        self._safe_publish_cmd(cmd)
         if explain is not None:
             self._publish_explainability(
                 event_type=explain.get("event_type", "CONTROL_ACTION_CHANGE"),

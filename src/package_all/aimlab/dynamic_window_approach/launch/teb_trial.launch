@@ -67,6 +67,7 @@
   <arg name="neg_robot_half_length_m" default="$(eval -1.0 * float(arg('robot_half_length_m')))"/>
   <arg name="neg_robot_half_width_m" default="$(eval -1.0 * float(arg('robot_half_width_m')))"/>
   <arg name="teb_filter_self_margin_m" default="0.18"/>
+  <arg name="teb_filter_self_padding_m" default="0.05"/>
   <arg name="teb_filter_self_radius_x" default="$(eval float(arg('robot_half_length_m')) + float(arg('teb_filter_self_margin_m')))"/>
   <arg name="teb_filter_self_radius_y" default="$(eval float(arg('robot_half_width_m')) + float(arg('teb_filter_self_margin_m')))"/>
   <arg name="teb_filter_rear_limit_x" default="-0.10"/>
@@ -294,6 +295,7 @@
     <param name="voxel_size" value="$(arg teb_filter_voxel_size)"/>
     <param name="self_filter_radius_x" value="$(arg teb_filter_self_radius_x)"/>
     <param name="self_filter_radius_y" value="$(arg teb_filter_self_radius_y)"/>
+    <param name="self_filter_padding_m" value="$(arg teb_filter_self_padding_m)"/>
     <param name="rear_limit_x" value="$(arg teb_filter_rear_limit_x)"/>
     <param name="lateral_limit_y" value="$(arg teb_filter_lateral_limit_y)"/>
   </node>
