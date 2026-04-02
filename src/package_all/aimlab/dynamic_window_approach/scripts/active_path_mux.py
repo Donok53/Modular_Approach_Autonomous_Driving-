@@ -61,14 +61,46 @@ class ActivePathMux:
     def _is_valid_path(msg):
         return msg is not None and len(msg.poses) >= 2
 
+    @staticmethod
+    def _is_fresh(stamp, timeout_s):
+        return stamp.to_sec() > 0.0 and (rospy.Time.now() - stamp).to_sec() <= timeout_s
+
+    def _has_explicit_local_hold(self):
+        return (
+            self.local_path_msg is not None
+            and len(self.local_path_msg.poses) < 2
+            and self._is_fresh(self.local_path_stamp, self.local_path_timeout_s)
+        )
+
+    @staticmethod
+    def _empty_path_like(msg=None):
+        out = Path()
+        if msg is not None:
+            out.header = msg.header
+        else:
+            out.header.stamp = rospy.Time.now()
+            out.header.frame_id = "map"
+        return out
+
+    def _safe_publish(self, msg):
+        if rospy.is_shutdown():
+            return False
+        try:
+            self.pub_active_path.publish(msg)
+            return True
+        except rospy.ROSException:
+            return False
+
     def _select_active_path(self):
-        now = rospy.Time.now()
         use_avoidance = (
             self._is_valid_path(self.avoidance_path_msg)
-            and (now - self.avoidance_path_stamp).to_sec() <= self.avoidance_path_timeout_s
+            and self._is_fresh(self.avoidance_path_stamp, self.avoidance_path_timeout_s)
         )
         if use_avoidance:
             return "avoidance", self.avoidance_path_msg
+
+        if self._has_explicit_local_hold():
+            return "hold", self.local_path_msg
 
         # Keep following the last valid global path until a new one arrives.
         # The global planner is goal-driven, not a continuously streaming source.
@@ -79,7 +111,7 @@ class ActivePathMux:
             self.use_local_path_fallback
             and
             self._is_valid_path(self.local_path_msg)
-            and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
+            and self._is_fresh(self.local_path_stamp, self.local_path_timeout_s)
         )
         if use_local:
             return "local", self.local_path_msg
@@ -88,15 +120,14 @@ class ActivePathMux:
 
     def on_timer(self, _event):
         source, msg = self._select_active_path()
-        if source == "none":
-            if self.last_source != "none":
-                out = Path()
-                out.header.stamp = rospy.Time.now()
-                out.header.frame_id = "map"
-                self.pub_active_path.publish(out)
-                self.last_source = "none"
+        if source in ("none", "hold"):
+            if self.last_source != source:
+                if self._safe_publish(self._empty_path_like(msg)):
+                    rospy.loginfo("active_path_mux: source=%s", source)
+                self.last_source = source
             return
-        self.pub_active_path.publish(msg)
+        if not self._safe_publish(msg):
+            return
         if source != self.last_source:
             rospy.loginfo("active_path_mux: source=%s", source)
             self.last_source = source
