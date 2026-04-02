@@ -77,6 +77,7 @@
   <arg name="enable_emergency_stop" default="true"/>
   <arg name="enable_obstacle_slowdown" default="false"/>
   <arg name="enable_local_path_hold_stop" default="true"/>
+  <arg name="hold_requires_avoidance_path" default="true"/>
   <arg name="enable_cmd_smoothing" default="true"/>
   <arg name="max_linear_slew_mps2" default="0.70"/>
   <arg name="max_angular_slew_rps2" default="1.40"/>
@@ -242,6 +243,7 @@
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
+      <param name="hold_requires_avoidance_path" value="$(arg hold_requires_avoidance_path)"/>
     </node>
   </group>
 
@@ -274,6 +276,7 @@
     <param name="enable_emergency_stop" value="$(arg enable_emergency_stop)"/>
     <param name="enable_obstacle_slowdown" value="$(arg enable_obstacle_slowdown)"/>
     <param name="enable_local_path_hold_stop" value="$(arg enable_local_path_hold_stop)"/>
+    <param name="hold_requires_avoidance_path" value="$(arg hold_requires_avoidance_path)"/>
     <param name="allow_in_place_rotation_near_obstacle" value="$(arg allow_in_place_rotation_near_obstacle)"/>
     <param name="allow_in_place_rotation_during_local_hold" value="$(arg allow_in_place_rotation_during_local_hold)"/>
     <param name="min_in_place_rotation_angular_speed" value="$(arg min_in_place_rotation_angular_speed)"/>

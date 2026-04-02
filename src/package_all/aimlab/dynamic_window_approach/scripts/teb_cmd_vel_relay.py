@@ -83,6 +83,9 @@ class TebCmdVelRelay(object):
         self.enable_local_path_hold_stop = bool(
             rospy.get_param("~enable_local_path_hold_stop", True)
         )
+        self.hold_requires_avoidance_path = bool(
+            rospy.get_param("~hold_requires_avoidance_path", True)
+        )
         self.robot_width_m = max(0.1, float(rospy.get_param("~robot_width_m", 0.55)))
         self.robot_length_m = max(0.1, float(rospy.get_param("~robot_length_m", 0.60)))
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
@@ -200,7 +203,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.explainability_topic if self.explainability_topic else "-",
@@ -213,6 +216,7 @@ class TebCmdVelRelay(object):
             "on" if self.enable_emergency_stop else "off",
             "on" if self.enable_obstacle_slowdown else "off",
             "on" if self.enable_local_path_hold_stop else "off",
+            "on" if self.hold_requires_avoidance_path else "off",
             "on" if self.enable_cmd_smoothing else "off",
             self.max_linear_slew_mps2,
             self.max_angular_slew_rps2,
@@ -449,6 +453,8 @@ class TebCmdVelRelay(object):
         if (now - self.last_local_path_time) > self.local_hold_timeout_s:
             return False
         if not self.local_path_empty:
+            return False
+        if self.hold_requires_avoidance_path and (not self.avoidance_path_active):
             return False
         if (
             (not self.avoidance_path_active)

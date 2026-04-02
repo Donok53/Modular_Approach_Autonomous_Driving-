@@ -36,6 +36,9 @@ class AStarPathToTebViaPoints(object):
             0.0, float(rospy.get_param("~goal_update_min_dist_m", 0.50))
         )
         self.respect_local_hold = bool(rospy.get_param("~respect_local_hold", True))
+        self.hold_requires_avoidance_path = bool(
+            rospy.get_param("~hold_requires_avoidance_path", True)
+        )
         self.min_spacing_m = max(
             0.0, float(rospy.get_param("~min_spacing_m", 0.50))
         )
@@ -90,7 +93,7 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm local_hold=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
@@ -100,6 +103,7 @@ class AStarPathToTebViaPoints(object):
             self.goal_lookahead_m,
             self.final_goal_switch_distance_m,
             "on" if self.respect_local_hold else "off",
+            "on" if self.hold_requires_avoidance_path else "off",
             self.min_spacing_m,
             self.max_points,
         )
@@ -318,12 +322,23 @@ class AStarPathToTebViaPoints(object):
         return stamp_sec > 0.0 and (rospy.get_time() - stamp_sec) <= timeout_s
 
     def _has_fresh_local_hold(self):
-        return (
+        if not (
             self.respect_local_hold
             and bool(self.local_input_topic)
             and self._local_msg is not None
             and len(self._local_msg.poses) < 2
             and self._is_fresh(self._local_rx_time, self.local_path_timeout_s)
+        ):
+            return False
+
+        if not self.hold_requires_avoidance_path:
+            return True
+
+        return (
+            bool(self.avoidance_input_topic)
+            and self._avoidance_msg is not None
+            and len(self._avoidance_msg.poses) >= 2
+            and self._is_fresh(self._avoidance_rx_time, self.avoidance_path_timeout_s)
         )
 
     @staticmethod
