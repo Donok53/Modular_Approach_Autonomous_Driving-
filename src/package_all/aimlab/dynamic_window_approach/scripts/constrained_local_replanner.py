@@ -178,6 +178,8 @@ class ConstrainedLocalReplanner:
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
         self.obstacle_points_map = []
+        self.obstacle_raw_point_count = 0
+        self.obstacle_cluster_count = 0
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
@@ -276,6 +278,7 @@ class ConstrainedLocalReplanner:
             return
         raw_pts = []
         cluster_counts = {}
+        cluster_sums = {}
         rr = self.obstacle_max_range_m * self.obstacle_max_range_m
         i = 0
         try:
@@ -295,23 +298,31 @@ class ConstrainedLocalReplanner:
                 raw_pts.append((x, y))
                 cell = self._pointcloud_cluster_cell(x, y)
                 cluster_counts[cell] = cluster_counts.get(cell, 0) + 1
+                sx, sy = cluster_sums.get(cell, (0.0, 0.0))
+                cluster_sums[cell] = (sx + x, sy + y)
 
-            if self.pointcloud_min_cluster_points <= 1:
-                filtered_pts = raw_pts
-            else:
-                filtered_pts = []
-                for x, y in raw_pts:
-                    cx, cy = self._pointcloud_cluster_cell(x, y)
-                    support = 0
-                    for dx in (-1, 0, 1):
-                        for dy in (-1, 0, 1):
-                            support += cluster_counts.get((cx + dx, cy + dy), 0)
-                    if support >= self.pointcloud_min_cluster_points:
-                        filtered_pts.append((x, y))
+            self.obstacle_raw_point_count = len(raw_pts)
+            filtered_pts = []
+            for (cx, cy), count in cluster_counts.items():
+                support = 0
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        support += cluster_counts.get((cx + dx, cy + dy), 0)
+                if support < self.pointcloud_min_cluster_points:
+                    continue
+                sx, sy = cluster_sums[(cx, cy)]
+                filtered_pts.append((sx / float(count), sy / float(count)))
 
+            self.obstacle_cluster_count = len(filtered_pts)
             self.obstacle_points_map = [self._local_to_map(x, y) for x, y in filtered_pts]
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
+
+    def _pointcloud_corridor_half_width_m(self, margin_m):
+        return max(
+            0.05,
+            0.5 * self.robot_width_m + self.footprint_padding_m + max(0.0, float(margin_m)),
+        )
 
     def direct_goal_callback(self, msg):
         self.direct_goal = msg
@@ -1150,7 +1161,7 @@ class ConstrainedLocalReplanner:
         res = max(1e-3, float(dg.info.resolution))
         if margin_m is None:
             margin_m = self.obstacle_block_margin_m
-        inflate_m = self.path_blocking_radius_m + max(0.0, float(margin_m))
+        inflate_m = self._pointcloud_corridor_half_width_m(margin_m)
         inflate_cells = max(1, int(math.ceil(inflate_m / res)))
         out = [row[:] for row in blocked]
         keep = set(keep_cells or [])
@@ -1235,10 +1246,8 @@ class ConstrainedLocalReplanner:
             return False
 
         world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
-        corridor_half = (
-            self.path_blocking_radius_m
-            + self.obstacle_block_margin_m
-            + self.avoidance_trigger_margin_m
+        corridor_half = self._pointcloud_corridor_half_width_m(
+            self.obstacle_block_margin_m + self.avoidance_trigger_margin_m
         )
         corridor_half_sq = corridor_half * corridor_half
         remain_m = 0.0
@@ -1292,10 +1301,8 @@ class ConstrainedLocalReplanner:
             return None
 
         world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
-        corridor_half = (
-            self.path_blocking_radius_m
-            + self.obstacle_block_margin_m
-            + self.avoidance_trigger_margin_m
+        corridor_half = self._pointcloud_corridor_half_width_m(
+            self.obstacle_block_margin_m + self.avoidance_trigger_margin_m
         )
         corridor_half_sq = corridor_half * corridor_half
         remain_m = 0.0
@@ -1439,15 +1446,16 @@ class ConstrainedLocalReplanner:
         if (not predicted_overlap) and self.use_pointcloud_avoidance_trigger:
             pointcloud_overlap = self._path_blocked_by_obstacles(nominal_path, dg, start_cell)
 
-        raw_point_count = len(self.obstacle_points_map)
+        clustered_point_count = len(self.obstacle_points_map)
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} pointcloud_enabled={} pointcloud_overlap={} raw_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} pointcloud_enabled={} pointcloud_overlap={} raw_points={} clustered_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
                 "on" if self.use_pointcloud_avoidance_trigger else "off",
                 "yes" if pointcloud_overlap else "no",
-                raw_point_count,
+                self.obstacle_raw_point_count,
+                clustered_point_count,
                 obstacle_count,
                 self.avoidance_trigger_ahead_m,
             )

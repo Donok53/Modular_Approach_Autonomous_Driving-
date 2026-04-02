@@ -26,7 +26,7 @@
   <arg name="allow_best_effort_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
   <arg name="enable_avoidance_path" default="true"/>
-  <arg name="use_pointcloud_static_blocking" default="true"/>
+  <arg name="use_pointcloud_static_blocking" default="false"/>
   <arg name="pointcloud_static_block_margin_m" default="0.05"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
@@ -259,8 +259,8 @@
     <param name="publish_hz" value="20.0"/>
     <param name="idle_timeout_s" value="1.0"/>
     <param name="log_period_s" value="1.0"/>
-    <param name="forward_only" value="false"/>
-    <param name="reverse_replacement_speed" value="0.05"/>
+    <param name="forward_only" value="true"/>
+    <param name="reverse_replacement_speed" value="0.0"/>
     <param name="enforce_min_linear_speed" value="false"/>
     <param name="min_abs_linear_speed" value="0.04"/>
     <param name="min_angular_for_linear_boost" value="0.20"/>
