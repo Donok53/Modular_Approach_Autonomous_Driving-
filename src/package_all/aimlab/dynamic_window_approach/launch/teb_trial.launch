@@ -108,7 +108,7 @@
   <arg name="teb_global_inflation_radius_m" default="0.15"/>
   <arg name="teb_min_obstacle_dist_m" default="0.30"/>
   <arg name="teb_inflation_dist_m" default="0.40"/>
-  <arg name="teb_weight_viapoint" default="120.0"/>
+  <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * ((float(arg('robot_length_m')) ** 2 + float(arg('robot_width_m')) ** 2) ** 0.5) + float(arg('footprint_padding_m')))"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
   <arg name="prediction_horizon_s" default="1.5"/>

@@ -301,24 +301,13 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return Twist()
-            if self.forward_only:
-                if self.reverse_replacement_speed > 1e-4:
-                    rospy.loginfo_throttle(
-                        self.log_period_s,
-                        "teb_cmd_vel_relay: replacing tiny reverse cmd v=%.3f -> %.3f (w=%.3f)",
-                        out.linear.x,
-                        self.reverse_replacement_speed,
-                        out.angular.z,
-                    )
-                    out.linear.x = self.reverse_replacement_speed
-                else:
-                    rospy.loginfo_throttle(
-                        self.log_period_s,
-                        "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
-                        out.linear.x,
-                        out.angular.z,
-                    )
-                    out.linear.x = 0.0
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
+                out.linear.x,
+                out.angular.z,
+            )
+            out.linear.x = 0.0
         if self.forward_only and out.linear.x < 0.0:
             rospy.logwarn_throttle(
                 self.log_period_s,
