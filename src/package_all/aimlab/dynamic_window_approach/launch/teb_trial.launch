@@ -83,6 +83,7 @@
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
   <arg name="obstacle_beyond_goal_slack_m" default="0.05"/>
   <arg name="final_brake_distance_m" default="0.18"/>
+  <arg name="ignore_local_hold_near_goal_distance_m" default="0.45"/>
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="behavior_cmd_timeout_s" default="0.8"/>
   <arg name="local_hold_timeout_s" default="1.0"/>
@@ -273,6 +274,7 @@
     <param name="near_goal_obstacle_ignore_distance_m" value="$(arg near_goal_obstacle_ignore_distance_m)"/>
     <param name="obstacle_beyond_goal_slack_m" value="$(arg obstacle_beyond_goal_slack_m)"/>
     <param name="final_brake_distance_m" value="$(arg final_brake_distance_m)"/>
+    <param name="ignore_local_hold_near_goal_distance_m" value="$(arg ignore_local_hold_near_goal_distance_m)"/>
     <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>
     <param name="behavior_cmd_timeout_s" value="$(arg behavior_cmd_timeout_s)"/>
     <param name="local_hold_timeout_s" value="$(arg local_hold_timeout_s)"/>
