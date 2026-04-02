@@ -75,7 +75,7 @@
   <arg name="teb_min_spacing_m" default="0.50"/>
   <arg name="teb_max_via_points" default="200"/>
   <arg name="enable_emergency_stop" default="true"/>
-  <arg name="enable_obstacle_slowdown" default="true"/>
+  <arg name="enable_obstacle_slowdown" default="false"/>
   <arg name="enable_local_path_hold_stop" default="true"/>
   <arg name="allow_in_place_rotation_near_obstacle" default="true"/>
   <arg name="allow_in_place_rotation_during_local_hold" default="true"/>
