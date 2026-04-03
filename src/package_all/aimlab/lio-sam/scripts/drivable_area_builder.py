@@ -129,6 +129,7 @@ class DrivableAreaBuilder:
         self.max_history = max(1, int(rospy.get_param("~max_history", 30)))
         self.save_topic = rospy.get_param("~save_topic", "/lio_sam/drivable_area/save")
         self.load_topic = rospy.get_param("~load_topic", "/lio_sam/drivable_area/load")
+        self.read_only_mode = bool(rospy.get_param("~read_only_mode", False))
 
         # Persistence
         self.state_file_path = os.path.expanduser(
@@ -202,8 +203,9 @@ class DrivableAreaBuilder:
             self.load_state_from_file(log_prefix="startup")
 
         rospy.loginfo(
-            "drivable_area_builder started | odom=%s, auto_seed=%s, ground_filter=%s, adaptive_ref=%s, grid=%.2fm, state=%s",
+            "drivable_area_builder started | odom=%s, mode=%s, auto_seed=%s, ground_filter=%s, adaptive_ref=%s, grid=%.2fm, state=%s",
             self.odom_topic,
+            "read_only" if self.read_only_mode else "editable",
             "on" if self.auto_seed_from_odom else "off",
             "on" if self.use_ground_filter else "off",
             "on" if self.use_adaptive_ground_reference else "off",
@@ -239,6 +241,9 @@ class DrivableAreaBuilder:
     def key_to_center(self, ix, iy):
         r = self.grid_resolution_m
         return (ix + 0.5) * r, (iy + 0.5) * r
+
+    def _mutations_allowed(self):
+        return not self.read_only_mode
 
     def _prune_ground_cache(self, now_sec):
         ttl = self.ground_cell_ttl_s
@@ -752,26 +757,26 @@ class DrivableAreaBuilder:
             return changed
 
     def odom_callback(self, msg):
-        if not self.auto_seed_from_odom:
-            return
-
         x = float(msg.pose.pose.position.x)
         y = float(msg.pose.pose.position.y)
         z = float(msg.pose.pose.position.z)
 
         with self._lock:
+            self._last_odom_z = z
+            self._last_odom_xy = (x, y)
+            last_seed_xy = self._last_seed_xy
             trail_z = self._fallback_ground_z_at_xy_locked(x, y, z)
+
+        if self.read_only_mode:
+            return
+        if not self.auto_seed_from_odom:
+            return
 
         if self.force_trail_from_odom:
             # Guaranteed narrow drivable trail along the confirmed traversed path.
             self.paint_circle(
                 x, y, trail_z, self.force_trail_radius_m, allow=True, record_history=False, enforce_ground_filter=False
             )
-
-        with self._lock:
-            self._last_odom_z = z
-            self._last_odom_xy = (x, y)
-            last_seed_xy = self._last_seed_xy
 
         if last_seed_xy is None:
             self.paint_circle(
@@ -790,6 +795,9 @@ class DrivableAreaBuilder:
                 self._last_seed_xy = (x, y)
 
     def apply_edit(self, x, y, allow, source):
+        if not self._mutations_allowed():
+            rospy.logwarn_throttle(1.0, "drivable_area %s ignored: builder is in read-only mode", source)
+            return
         with self._lock:
             z = self._last_odom_z
         changed = self.paint_circle(
@@ -830,6 +838,9 @@ class DrivableAreaBuilder:
         rospy.loginfo("drivable_area clicked_point_mode set to '%s'", self.clicked_point_mode)
 
     def clear_callback(self, _msg):
+        if not self._mutations_allowed():
+            rospy.logwarn_throttle(1.0, "drivable_area clear ignored: builder is in read-only mode")
+            return
         with self._lock:
             if not self._cells:
                 return
@@ -850,6 +861,9 @@ class DrivableAreaBuilder:
         rospy.loginfo("drivable_area cleared")
 
     def undo_callback(self, _msg):
+        if not self._mutations_allowed():
+            rospy.logwarn_throttle(1.0, "drivable_area undo ignored: builder is in read-only mode")
+            return
         with self._lock:
             if not self._history:
                 rospy.loginfo("drivable_area undo: no history")
@@ -969,18 +983,26 @@ class DrivableAreaBuilder:
         return True
 
     def save_callback(self, _msg):
+        if not self._mutations_allowed():
+            rospy.logwarn_throttle(1.0, "drivable_area save ignored: builder is in read-only mode")
+            return
         try:
             self.save_state_to_file(log_prefix="topic")
         except Exception as e:
             rospy.logwarn("drivable_area save failed: %s", str(e))
 
     def load_callback(self, _msg):
+        if not self._mutations_allowed():
+            rospy.logwarn_throttle(1.0, "drivable_area load ignored: builder is in read-only mode")
+            return
         try:
             self.load_state_from_file(log_prefix="topic")
         except Exception as e:
             rospy.logwarn("drivable_area load failed: %s", str(e))
 
     def on_auto_save_timer(self, _event):
+        if not self._mutations_allowed():
+            return
         with self._lock:
             changed = self._changed_since_persist
         if not changed:
@@ -991,6 +1013,8 @@ class DrivableAreaBuilder:
             rospy.logwarn_throttle(1.0, "drivable_area auto-save failed: %s", str(e))
 
     def on_shutdown(self):
+        if not self._mutations_allowed():
+            return
         if not self.save_on_shutdown:
             return
         with self._lock:

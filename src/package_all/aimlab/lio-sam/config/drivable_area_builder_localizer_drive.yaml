@@ -1,0 +1,40 @@
+# Drivable area profile for localization + driving.
+# Loads the last edited drivable area, but never mutates or re-saves it at runtime.
+
+frame_id: map
+odom_topic: /lio_localizer/odometry/optimization
+
+grid_resolution_m: 0.20
+
+# Keep the loaded drivable area frozen during localization/driving so
+# localization drift or runtime odometry never contaminates the saved state.
+read_only_mode: true
+auto_seed_from_odom: false
+force_trail_from_odom: false
+
+# No manual editing in driving profile.
+use_clicked_point: false
+
+# Ground auto-filtering off because this profile is read-only anyway.
+use_ground_filter: false
+use_linefit_ground_tracker: false
+use_local_slope_model: false
+use_adaptive_ground_reference: false
+
+# Visualization
+marker_topic: /lio_sam/drivable_area/marker
+grid_topic: /lio_sam/drivable_area/grid
+marker_z_offset: 0.03
+marker_height: 0.08
+marker_color_r: 1.00
+marker_color_g: 1.00
+marker_color_b: 1.00
+marker_color_a: 0.30
+publish_risk_marker: false
+track_risk_cells: false
+
+# Persistence: load once, never save from localization/driving runs.
+state_file_path: ~/.ros/lio_sam_drivable_area_state.json
+auto_load_state: true
+auto_save_state: false
+save_on_shutdown: false

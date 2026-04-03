@@ -1,10 +1,10 @@
-<launch>   
+<launch>
     <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
     <arg name="pointcloud_topic" default="/ouster/points"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
     <arg name="grid_unknown_is_occupied" default="true"/>
     <arg name="enable_drivable_area" default="true"/>
-    <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
+    <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer_drive.yaml"/>
     <arg name="enable_cloud_tracker" default="true"/>
     <arg name="enable_dynamic_risk_manager" default="true"/>
     <arg name="enable_local_replanner" default="true"/>
@@ -23,7 +23,7 @@
         <arg name="enable" value="$(arg enable_drivable_area)"/>
         <arg name="config_file" value="$(arg drivable_area_config_file)"/>
     </include>
-    
+
     <!-- Accuracy-first local planning stack -->
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
         <arg name="pose_topic" value="$(arg pose_topic)"/>
