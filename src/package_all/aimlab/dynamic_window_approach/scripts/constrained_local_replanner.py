@@ -1271,7 +1271,15 @@ class ConstrainedLocalReplanner:
                 break
         return False
 
-    def _first_blocked_path_index(self, path, blocked, start_cell, dg, max_check_m=None):
+    def _first_blocked_path_index(
+        self,
+        path,
+        blocked,
+        start_cell,
+        dg,
+        max_check_m=None,
+        include_pointcloud=False,
+    ):
         if not path:
             return None
 
@@ -1297,7 +1305,7 @@ class ConstrainedLocalReplanner:
                 if max_check_m is not None and remain_m >= max_check_m:
                     return None
 
-        if not self.obstacle_points_map:
+        if (not include_pointcloud) or (not self.obstacle_points_map):
             return None
 
         world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
@@ -1371,6 +1379,7 @@ class ConstrainedLocalReplanner:
             start_cell,
             dg,
             max_check_m=self.avoidance_trigger_ahead_m,
+            include_pointcloud=self.use_pointcloud_avoidance_trigger,
         )
         if blocked_idx is None:
             return None, None
@@ -1477,6 +1486,7 @@ class ConstrainedLocalReplanner:
             start_cell,
             dg,
             max_check_m=self.avoidance_trigger_ahead_m,
+            include_pointcloud=self.use_pointcloud_avoidance_trigger,
         )
         if self._should_ignore_near_goal_block(nominal_path, blocked_idx, start_cell, dg):
             rospy.loginfo_throttle(
@@ -1556,7 +1566,7 @@ class ConstrainedLocalReplanner:
                 "constrained_local_replanner: avoidance path active | base=%s reason=%s obstacle_points=%d cells=%d",
                 label,
                 trigger_reason,
-                raw_point_count,
+                clustered_point_count,
                 len(avoid_path),
             )
         self.last_avoidance_trigger_reason = trigger_reason
@@ -1736,6 +1746,7 @@ class ConstrainedLocalReplanner:
                 start_cell,
                 dg,
                 max_check_m=self.lookahead_m,
+                include_pointcloud=self.use_pointcloud_static_blocking,
             )
             nominal_blocked = blocked_idx is not None
             if nominal_blocked and self._should_ignore_near_goal_block(
