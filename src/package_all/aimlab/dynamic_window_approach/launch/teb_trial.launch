@@ -298,6 +298,10 @@
     <param name="publish_hz" value="20.0"/>
     <param name="idle_timeout_s" value="1.0"/>
     <param name="log_period_s" value="1.0"/>
+    <param name="debug_text_topic" value="/planning/teb_debug_text"/>
+    <param name="debug_text_period_s" value="0.25"/>
+    <param name="debug_screen_logging" value="true"/>
+    <param name="debug_screen_log_period_s" value="0.25"/>
     <param name="forward_only" value="true"/>
     <param name="reverse_replacement_speed" value="$(arg reverse_replacement_speed_mps)"/>
     <param name="enforce_min_linear_speed" value="false"/>

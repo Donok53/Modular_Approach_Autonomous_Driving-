@@ -181,6 +181,10 @@ class TebCmdVelRelay(object):
         self._last_debug_text = ""
         self._last_debug_text_time = 0.0
         self._last_debug_screen_time = 0.0
+        self._last_sanitize_reason = "init"
+        self._last_safety_reason = "init"
+        self._last_smoothing_reason = "init"
+        self._last_target_cmd = Twist()
 
         self.pub = rospy.Publisher(self.output_topic, Twist, queue_size=10)
         self.pub_debug_text = None
@@ -264,6 +268,22 @@ class TebCmdVelRelay(object):
             return "inf"
         return ("{:.%df}" % int(precision)).format(v)
 
+    @staticmethod
+    def _copy_cmd(cmd):
+        out = Twist()
+        out.linear.x = float(cmd.linear.x)
+        out.linear.y = float(cmd.linear.y)
+        out.linear.z = float(cmd.linear.z)
+        out.angular.x = float(cmd.angular.x)
+        out.angular.y = float(cmd.angular.y)
+        out.angular.z = float(cmd.angular.z)
+        return out
+
+    @staticmethod
+    def _join_diag_flags(flags):
+        clean = [str(flag).strip() for flag in flags if str(flag).strip()]
+        return "+".join(clean) if clean else "pass"
+
     def _publish_debug_text(self, text, now=None, force=False):
         if rospy.is_shutdown():
             return
@@ -300,16 +320,21 @@ class TebCmdVelRelay(object):
             else "inf"
         )
         return (
-            "relay reason={} action={} raw(v={},w={}) sanitized(v={},w={}) out(v={},w={}) "
+            "relay reason={} action={} sanitize={} safety={} smooth={} raw(v={},w={}) sanitized(v={},w={}) target(v={},w={}) out(v={},w={}) "
             "local(n={},empty={},remain={}) avoid={} hold={} final_brake={} "
             "behavior(stop={},limit={}) obs(stop_x={},slow_x={})"
         ).format(
             trigger_reason,
             action_taken,
+            self._last_sanitize_reason,
+            self._last_safety_reason,
+            self._last_smoothing_reason,
             self._fmt_debug_float(raw_cmd.linear.x, 3),
             self._fmt_debug_float(raw_cmd.angular.z, 3),
             self._fmt_debug_float(sanitized_cmd.linear.x, 3),
             self._fmt_debug_float(sanitized_cmd.angular.z, 3),
+            self._fmt_debug_float(self._last_target_cmd.linear.x, 3),
+            self._fmt_debug_float(self._last_target_cmd.angular.z, 3),
             self._fmt_debug_float(final_cmd.linear.x, 3),
             self._fmt_debug_float(final_cmd.angular.z, 3),
             int(self.local_path_pose_count),
@@ -344,9 +369,12 @@ class TebCmdVelRelay(object):
         return float(current) + delta
 
     def _apply_cmd_smoothing(self, cmd, now, bypass=False):
+        self._last_smoothing_reason = "pass"
         if bypass or (not self.enable_cmd_smoothing):
+            self._last_smoothing_reason = "bypass" if bypass else "disabled"
             return cmd
         if self.last_publish_time <= 0.0:
+            self._last_smoothing_reason = "unprimed"
             return cmd
 
         dt = max(1e-3, float(now) - float(self.last_publish_time))
@@ -365,10 +393,27 @@ class TebCmdVelRelay(object):
             self.last_publish_cmd.angular.z, cmd.angular.z, angular_limit
         )
 
-        if (
-            abs(out.linear.x - float(cmd.linear.x)) > 1e-4
-            or abs(out.angular.z - float(cmd.angular.z)) > 1e-4
-        ):
+        smooth_flags = []
+        if abs(out.linear.x - float(cmd.linear.x)) > 1e-4:
+            if abs(float(cmd.linear.x)) <= 1e-4 and abs(float(out.linear.x)) > 1e-4:
+                smooth_flags.append("carry_linear")
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: smoothing carried linear motion after zero target prev_v=%.3f target_v=%.3f out_v=%.3f",
+                    float(self.last_publish_cmd.linear.x),
+                    float(cmd.linear.x),
+                    float(out.linear.x),
+                )
+            else:
+                smooth_flags.append("limit_linear")
+        if abs(out.angular.z - float(cmd.angular.z)) > 1e-4:
+            if abs(float(cmd.angular.z)) <= 1e-4 and abs(float(out.angular.z)) > 1e-4:
+                smooth_flags.append("carry_angular")
+            else:
+                smooth_flags.append("limit_angular")
+        self._last_smoothing_reason = self._join_diag_flags(smooth_flags)
+
+        if smooth_flags:
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: smoothing cmd | target(v=%.3f w=%.3f) -> out(v=%.3f w=%.3f)",
@@ -390,7 +435,9 @@ class TebCmdVelRelay(object):
         now = rospy.get_time()
         final_brake_active = self._is_final_goal_brake_active()
         fresh_empty_local_path = self._has_fresh_empty_local_path(now)
+        sanitize_flags = []
         if self._should_force_goal_stop(out, final_brake_active):
+            self._last_sanitize_reason = "force_goal_stop"
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: forcing terminal goal stop remain=%.3f v=%.3f w=%.3f",
@@ -402,6 +449,7 @@ class TebCmdVelRelay(object):
         reverse_clamped_to_stop = False
         if out.linear.x < 0.0 and abs(out.linear.x) <= self.reverse_deadband_mps:
             if final_brake_active or fresh_empty_local_path:
+                self._last_sanitize_reason = "tiny_reverse_goal_stop"
                 rospy.loginfo_throttle(
                     self.log_period_s,
                     "teb_cmd_vel_relay: stopping tiny reverse near goal/local hold v=%.3f w=%.3f",
@@ -410,6 +458,7 @@ class TebCmdVelRelay(object):
                 )
                 return Twist()
             if self._should_convert_small_reverse_to_rotation(out):
+                self._last_sanitize_reason = "tiny_reverse_to_rotation"
                 rospy.loginfo_throttle(
                     self.log_period_s,
                     "teb_cmd_vel_relay: converting tiny reverse to rotation-only v=%.3f w=%.3f",
@@ -417,6 +466,7 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return self._rotation_only_cmd(out)
+            sanitize_flags.append("tiny_reverse")
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
@@ -426,17 +476,21 @@ class TebCmdVelRelay(object):
             if self.forward_only and self.reverse_replacement_speed > 1e-4:
                 out.linear.x = self.reverse_replacement_speed
                 reverse_clamped_to_stop = False
+                sanitize_flags.append("crawl")
                 rospy.loginfo_throttle(
                     self.log_period_s,
-                    "teb_cmd_vel_relay: replacing tiny reverse cmd with forward crawl v=%.3f (w=%.3f)",
+                    "teb_cmd_vel_relay: replacing tiny reverse cmd with forward crawl v=%.3f (w=%.3f | rot_thresh=%.3f preserve_rot=no)",
                     out.linear.x,
                     out.angular.z,
+                    self.min_in_place_rotation_angular_speed,
                 )
             else:
                 out.linear.x = 0.0
                 reverse_clamped_to_stop = True
+                sanitize_flags.append("zero")
         if self.forward_only and out.linear.x < 0.0:
             if self._should_convert_small_reverse_to_rotation(out):
+                self._last_sanitize_reason = "reverse_to_rotation"
                 rospy.loginfo_throttle(
                     self.log_period_s,
                     "teb_cmd_vel_relay: converting reverse cmd to rotation-only v=%.3f w=%.3f",
@@ -444,6 +498,7 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return self._rotation_only_cmd(out)
+            sanitize_flags.append("reverse_clamp")
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: clamping reverse cmd v=%.3f -> %.3f",
@@ -452,14 +507,17 @@ class TebCmdVelRelay(object):
             )
             out.linear.x = self.reverse_replacement_speed
             reverse_clamped_to_stop = out.linear.x <= 1e-4
+            sanitize_flags.append("crawl" if out.linear.x > 1e-4 else "zero")
         if reverse_clamped_to_stop and abs(out.angular.z) > 1e-4:
             if self._should_preserve_in_place_rotation(out):
+                self._last_sanitize_reason = "reverse_clamped_to_rotation"
                 rospy.loginfo_throttle(
                     self.log_period_s,
                     "teb_cmd_vel_relay: converting reverse-clamped cmd to in-place rotation w=%.3f",
                     out.angular.z,
                 )
                 return self._rotation_only_cmd(out)
+            sanitize_flags.append("suppress_spin")
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: suppressing spin for reverse-clamped cmd w=%.3f",
@@ -484,6 +542,8 @@ class TebCmdVelRelay(object):
                 out.angular.z,
             )
             out.linear.x = boosted
+            sanitize_flags.append("min_boost")
+        self._last_sanitize_reason = self._join_diag_flags(sanitize_flags)
         return out
 
     @staticmethod
@@ -736,6 +796,7 @@ class TebCmdVelRelay(object):
             return cmd, None
 
         if self.behavior_stop:
+            self._last_safety_reason = "behavior_stop"
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: behavior stop | reason=%s",
@@ -766,6 +827,7 @@ class TebCmdVelRelay(object):
                 float(cmd.linear.x),
                 float(limited.linear.x),
             )
+            self._last_safety_reason = "behavior_limit"
             return limited, {
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": self.behavior_reason,
@@ -785,6 +847,7 @@ class TebCmdVelRelay(object):
             and self.avoidance_path_active
             and self._should_preserve_in_place_rotation(cmd)
         ):
+            self._last_safety_reason = "local_hold_rotate"
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: local hold keeps in-place rotation | w=%.3f avoidance=active",
@@ -805,6 +868,7 @@ class TebCmdVelRelay(object):
             "teb_cmd_vel_relay: holding stop for local replanner | local_empty=yes avoidance=%s",
             "active" if self.avoidance_path_active else "none",
         )
+        self._last_safety_reason = "local_hold_stop"
         return Twist(), {
             "event_type": "CONTROL_ACTION_CHANGE",
             "trigger_reason": "local_replanner_hold",
@@ -828,6 +892,7 @@ class TebCmdVelRelay(object):
             self.closest_slow_obstacle_x
         )
         if ignore_stop or ignore_slow:
+            self._last_safety_reason = "ignore_obstacle_beyond_goal"
             obstacle_x = self.closest_stop_obstacle_x
             if (not math.isfinite(obstacle_x)) or (
                 math.isfinite(self.closest_slow_obstacle_x)
@@ -853,6 +918,7 @@ class TebCmdVelRelay(object):
                 float(cmd.linear.x),
                 float(cmd.angular.z),
             )
+            self._last_safety_reason = "obstacle_emergency_stop"
             return stopped, {
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": "front_obstacle_emergency",
@@ -913,6 +979,7 @@ class TebCmdVelRelay(object):
                 float(cmd.linear.x),
                 float(slowed.linear.x),
             )
+            self._last_safety_reason = "obstacle_slowdown"
             return slowed, {
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": "front_obstacle_slowdown",
@@ -941,6 +1008,10 @@ class TebCmdVelRelay(object):
         now = rospy.get_time()
         if self.last_rx_time <= 0.0 or (now - self.last_rx_time) > self.idle_timeout_s:
             idle = Twist()
+            self._last_sanitize_reason = "stale_cmd"
+            self._last_safety_reason = "stale_cmd"
+            self._last_smoothing_reason = "idle"
+            self._last_target_cmd = Twist()
             self._safe_publish_cmd(idle)
             self.last_publish_cmd = idle
             self.last_publish_time = now
@@ -961,7 +1032,7 @@ class TebCmdVelRelay(object):
                 self.idle_timeout_s,
             )
             self._publish_debug_text(
-                "relay reason=stale_cmd_timeout action=idle_stop raw(v=0.000,w=0.000) sanitized(v=0.000,w=0.000) out(v=0.000,w=0.000) "
+                "relay reason=stale_cmd_timeout action=idle_stop sanitize=stale_cmd safety=stale_cmd smooth=idle raw(v=0.000,w=0.000) sanitized(v=0.000,w=0.000) target(v=0.000,w=0.000) out(v=0.000,w=0.000) "
                 "local(n={},empty={},remain={}) avoid={} hold={} final_brake={} behavior(stop={},limit={}) obs(stop_x={},slow_x={})".format(
                     int(self.local_path_pose_count),
                     "yes" if self.local_path_empty else "no",
@@ -980,6 +1051,7 @@ class TebCmdVelRelay(object):
             )
             return
 
+        self._last_safety_reason = "clear"
         cmd_before = self._sanitize_cmd(self.last_cmd)
         cmd = cmd_before
         explain = None
@@ -998,6 +1070,7 @@ class TebCmdVelRelay(object):
             if info is not None:
                 explain = info
 
+        self._last_target_cmd = self._copy_cmd(cmd)
         cmd = self._apply_cmd_smoothing(
             cmd,
             now,
