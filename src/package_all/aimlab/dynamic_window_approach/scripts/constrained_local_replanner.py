@@ -201,6 +201,9 @@ class ConstrainedLocalReplanner:
         self.debug_text_period_s = max(
             0.1, float(rospy.get_param("~debug_text_period_s", 0.5))
         )
+        self.debug_screen_logging = bool(
+            rospy.get_param("~debug_screen_logging", True)
+        )
         self.explainability_topic = rospy.get_param(
             "~explainability_topic", "/planning/explainability"
         )
@@ -266,7 +269,7 @@ class ConstrainedLocalReplanner:
         return ("{:.%df}" % int(precision)).format(v)
 
     def _publish_debug_text(self, text, stamp=None, force=False):
-        if self.pub_debug_text is None or rospy.is_shutdown():
+        if rospy.is_shutdown():
             return
         stamp_sec = rospy.get_time() if stamp is None else float(stamp.to_sec())
         if (
@@ -277,10 +280,13 @@ class ConstrainedLocalReplanner:
             return
         self._last_debug_text = text
         self._last_debug_text_time = stamp_sec
-        try:
-            self.pub_debug_text.publish(String(data=text))
-        except rospy.ROSException:
-            pass
+        if self.pub_debug_text is not None:
+            try:
+                self.pub_debug_text.publish(String(data=text))
+            except rospy.ROSException:
+                pass
+        if self.debug_screen_logging:
+            rospy.loginfo("constrained_local_replanner debug | %s", text)
 
     def odom_callback(self, msg):
         p = msg.pose.pose.position

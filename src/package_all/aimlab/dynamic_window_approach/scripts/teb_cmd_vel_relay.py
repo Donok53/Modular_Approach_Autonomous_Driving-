@@ -26,6 +26,9 @@ class TebCmdVelRelay(object):
         self.debug_text_period_s = max(
             0.1, float(rospy.get_param("~debug_text_period_s", 0.5))
         )
+        self.debug_screen_logging = bool(
+            rospy.get_param("~debug_screen_logging", True)
+        )
         self.explainability_topic = str(
             rospy.get_param("~explainability_topic", "/planning/explainability")
         ).strip()
@@ -258,7 +261,7 @@ class TebCmdVelRelay(object):
         return ("{:.%df}" % int(precision)).format(v)
 
     def _publish_debug_text(self, text, now=None, force=False):
-        if self.pub_debug_text is None or rospy.is_shutdown():
+        if rospy.is_shutdown():
             return
         stamp = rospy.get_time() if now is None else float(now)
         if (
@@ -269,10 +272,13 @@ class TebCmdVelRelay(object):
             return
         self._last_debug_text = text
         self._last_debug_text_time = stamp
-        try:
-            self.pub_debug_text.publish(String(data=text))
-        except rospy.ROSException:
-            pass
+        if self.pub_debug_text is not None:
+            try:
+                self.pub_debug_text.publish(String(data=text))
+            except rospy.ROSException:
+                pass
+        if self.debug_screen_logging:
+            rospy.loginfo("teb_cmd_vel_relay debug | %s", text)
 
     def _build_debug_text(self, raw_cmd, sanitized_cmd, final_cmd, explain, now):
         trigger_reason = "clear"
