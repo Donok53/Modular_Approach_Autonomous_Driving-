@@ -416,6 +416,13 @@ class TebCmdVelRelay(object):
             out.linear.x = self.reverse_replacement_speed
             reverse_clamped_to_stop = out.linear.x <= 1e-4
         if reverse_clamped_to_stop and abs(out.angular.z) > 1e-4:
+            if self._should_preserve_in_place_rotation(out):
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: converting reverse-clamped cmd to in-place rotation w=%.3f",
+                    out.angular.z,
+                )
+                return self._rotation_only_cmd(out)
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: suppressing spin for reverse-clamped cmd w=%.3f",
