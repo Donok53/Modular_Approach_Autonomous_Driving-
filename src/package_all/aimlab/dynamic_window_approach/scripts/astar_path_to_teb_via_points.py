@@ -321,7 +321,7 @@ class AStarPathToTebViaPoints(object):
     def _is_fresh(self, stamp_sec, timeout_s):
         return stamp_sec > 0.0 and (rospy.get_time() - stamp_sec) <= timeout_s
 
-    def _has_fresh_local_hold(self):
+    def _has_fresh_empty_local_path(self):
         if not (
             self.respect_local_hold
             and bool(self.local_input_topic)
@@ -329,6 +329,11 @@ class AStarPathToTebViaPoints(object):
             and len(self._local_msg.poses) < 2
             and self._is_fresh(self._local_rx_time, self.local_path_timeout_s)
         ):
+            return False
+        return True
+
+    def _has_fresh_local_hold(self):
+        if not self._has_fresh_empty_local_path():
             return False
 
         if not self.hold_requires_avoidance_path:
@@ -369,6 +374,9 @@ class AStarPathToTebViaPoints(object):
             return "local", self._local_msg
 
         if self._has_fresh_local_hold():
+            return "local_hold", self._local_msg
+
+        if self._has_fresh_empty_local_path():
             return "local_hold", self._local_msg
 
         if self._fallback_msg is not None and len(self._fallback_msg.poses) >= 2:

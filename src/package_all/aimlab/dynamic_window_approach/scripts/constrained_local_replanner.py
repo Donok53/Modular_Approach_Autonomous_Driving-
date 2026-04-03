@@ -1021,7 +1021,12 @@ class ConstrainedLocalReplanner:
         segment_world = [pts[i] for i in range(i0, min(len(pts), end_idx + 1))]
         if not segment_world:
             return None
-        segment_world[0] = (self.odom_x, self.odom_y)
+        if len(segment_world) == 1:
+            # Keep a short near-goal segment alive by preserving the goal point
+            # and prepending the current robot pose instead of overwriting it.
+            segment_world = [(self.odom_x, self.odom_y), segment_world[0]]
+        else:
+            segment_world[0] = (self.odom_x, self.odom_y)
         segment_world = self._dedupe_world_points(segment_world)
         if len(segment_world) < 2:
             return None

@@ -387,13 +387,15 @@ class TebCmdVelRelay(object):
         out.angular.x = float(cmd.angular.x)
         out.angular.y = float(cmd.angular.y)
         out.angular.z = float(cmd.angular.z)
+        now = rospy.get_time()
         final_brake_active = self._is_final_goal_brake_active()
+        fresh_empty_local_path = self._has_fresh_empty_local_path(now)
         reverse_clamped_to_stop = False
         if out.linear.x < 0.0 and abs(out.linear.x) <= self.reverse_deadband_mps:
-            if final_brake_active:
+            if final_brake_active or fresh_empty_local_path:
                 rospy.loginfo_throttle(
                     self.log_period_s,
-                    "teb_cmd_vel_relay: braking at final goal v=%.3f w=%.3f",
+                    "teb_cmd_vel_relay: stopping tiny reverse near goal/local hold v=%.3f w=%.3f",
                     out.linear.x,
                     out.angular.z,
                 )
@@ -560,6 +562,24 @@ class TebCmdVelRelay(object):
             and self.local_path_remaining_m <= self.final_brake_distance_m
         )
 
+    def _has_fresh_empty_local_path(self, now=None):
+        now_sec = rospy.get_time() if now is None else float(now)
+        return (
+            self.last_local_path_time > 0.0
+            and (now_sec - self.last_local_path_time) <= self.local_hold_timeout_s
+            and self.local_path_empty
+        )
+
+    def _has_fresh_near_goal_empty_local_path(self, now=None):
+        if not self._has_fresh_empty_local_path(now):
+            return False
+        return (
+            (not self.avoidance_path_active)
+            and math.isfinite(self.last_nonempty_local_path_remaining_m)
+            and self.last_nonempty_local_path_remaining_m
+            <= self.ignore_local_hold_near_goal_distance_m
+        )
+
     def _has_fresh_obstacle_data(self, now):
         return self.last_obstacle_time > 0.0 and (now - self.last_obstacle_time) <= self.obstacle_cloud_timeout_s
 
@@ -575,6 +595,8 @@ class TebCmdVelRelay(object):
             return False
         if not self.local_path_empty:
             return False
+        if self._has_fresh_near_goal_empty_local_path(now):
+            return True
         if self.hold_requires_avoidance_path and (not self.avoidance_path_active):
             return False
         if (
