@@ -222,6 +222,7 @@ catkin_install_python(PROGRAMS
   scripts/constrained_local_replanner.py
   scripts/dynamic_risk_manager.py
   scripts/dynamicwindowapproach.py
+  scripts/planning_odom_filter.py
   scripts/teb_cmd_vel_relay.py
   scripts/test2.py
   scripts/new2.py

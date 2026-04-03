@@ -1,5 +1,38 @@
 <launch>
     <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
+    <arg name="planning_pose_topic" default="/lio_localizer/odometry/planning"/>
+    <arg name="enable_pose_filter" default="true"/>
+    <arg name="pose_filter_forward_tau_s" default="0.18"/>
+    <arg name="pose_filter_lateral_tau_s" default="0.70"/>
+    <arg name="pose_filter_turning_lateral_tau_s" default="0.20"/>
+    <arg name="pose_filter_yaw_tau_s" default="0.45"/>
+    <arg name="pose_filter_turning_yaw_tau_s" default="0.18"/>
+    <arg name="pose_filter_twist_tau_s" default="0.25"/>
+    <arg name="pose_filter_lateral_deadband_m" default="0.03"/>
+    <arg name="pose_filter_yaw_deadband_deg" default="1.5"/>
+    <arg name="pose_filter_straight_speed_min_mps" default="0.10"/>
+    <arg name="pose_filter_turning_yaw_rate_threshold_rps" default="0.20"/>
+    <arg name="pose_filter_turning_yaw_error_deg" default="10.0"/>
+    <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.18"/>
+
+    <group if="$(arg enable_pose_filter)">
+        <node pkg="dynamic_window_approach" type="planning_odom_filter.py" name="planning_odom_filter" output="screen" respawn="false">
+            <param name="input_topic" value="$(arg pose_topic)"/>
+            <param name="output_topic" value="$(arg planning_pose_topic)"/>
+            <param name="forward_tau_s" value="$(arg pose_filter_forward_tau_s)"/>
+            <param name="lateral_tau_s" value="$(arg pose_filter_lateral_tau_s)"/>
+            <param name="turning_lateral_tau_s" value="$(arg pose_filter_turning_lateral_tau_s)"/>
+            <param name="yaw_tau_s" value="$(arg pose_filter_yaw_tau_s)"/>
+            <param name="turning_yaw_tau_s" value="$(arg pose_filter_turning_yaw_tau_s)"/>
+            <param name="twist_tau_s" value="$(arg pose_filter_twist_tau_s)"/>
+            <param name="lateral_deadband_m" value="$(arg pose_filter_lateral_deadband_m)"/>
+            <param name="yaw_deadband_deg" value="$(arg pose_filter_yaw_deadband_deg)"/>
+            <param name="straight_speed_min_mps" value="$(arg pose_filter_straight_speed_min_mps)"/>
+            <param name="turning_yaw_rate_threshold_rps" value="$(arg pose_filter_turning_yaw_rate_threshold_rps)"/>
+            <param name="turning_yaw_error_deg" value="$(arg pose_filter_turning_yaw_error_deg)"/>
+            <param name="max_straight_lateral_correction_mps" value="$(arg pose_filter_max_straight_lateral_correction_mps)"/>
+        </node>
+    </group>
     <arg name="pointcloud_topic" default="/ouster/points"/>
     <arg name="obstacle_pointcloud_topic" default="$(arg pointcloud_topic)"/>
     <arg name="use_drivable_grid" default="true"/>
@@ -122,7 +155,7 @@
         <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
             <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
-            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="odom_topic" value="$(arg planning_pose_topic)"/>
             <param name="output_topic" value="$(arg tracked_objects_topic)"/>
             <param name="max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
             <param name="vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
@@ -134,7 +167,7 @@
 
     <group if="$(arg enable_dynamic_risk_manager)">
         <node pkg="dynamic_window_approach" type="dynamic_risk_manager.py" name="dynamic_risk_manager" output="screen" respawn="false">
-            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="odom_topic" value="$(arg planning_pose_topic)"/>
             <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
             <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
             <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
@@ -160,7 +193,7 @@
 
     <group if="$(arg enable_local_replanner)">
         <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
-            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="odom_topic" value="$(arg planning_pose_topic)"/>
             <param name="global_path_topic" value="$(arg global_path_topic)"/>
             <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
             <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
@@ -208,7 +241,7 @@
     </group>
 
     <node pkg="dynamic_window_approach" type="dynamicwindowapproach.py" name="dynamic_window_approach" output="screen" respawn="false">
-        <param name="pose_topic" value="$(arg pose_topic)"/>
+        <param name="pose_topic" value="$(arg planning_pose_topic)"/>
         <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
