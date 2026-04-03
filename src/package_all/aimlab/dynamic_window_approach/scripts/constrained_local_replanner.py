@@ -10,6 +10,7 @@ from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
+from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 
 from dynamic_window_approach.msg import ExplainabilityEvent
@@ -194,9 +195,17 @@ class ConstrainedLocalReplanner:
         self.path_history_next_id = 0
         self.last_history_signature = {"local": None, "avoidance": None}
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
+        self.debug_text_topic = str(
+            rospy.get_param("~debug_text_topic", "/planning/local_replanner_debug_text")
+        ).strip()
+        self.debug_text_period_s = max(
+            0.1, float(rospy.get_param("~debug_text_period_s", 0.5))
+        )
         self.explainability_topic = rospy.get_param(
             "~explainability_topic", "/planning/explainability"
         )
+        self._last_debug_text = ""
+        self._last_debug_text_time = 0.0
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
@@ -209,6 +218,11 @@ class ConstrainedLocalReplanner:
         self.pub_explainability = rospy.Publisher(
             self.explainability_topic, ExplainabilityEvent, queue_size=20
         )
+        self.pub_debug_text = None
+        if self.debug_text_topic:
+            self.pub_debug_text = rospy.Publisher(
+                self.debug_text_topic, String, queue_size=20
+            )
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
@@ -240,6 +254,33 @@ class ConstrainedLocalReplanner:
             "on" if self.freeze_path_on_first_plan else "off",
             "on" if self.enable_avoidance_path else "off",
         )
+
+    @staticmethod
+    def _fmt_debug_float(value, precision=2):
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return "nan"
+        if not math.isfinite(v):
+            return "inf"
+        return ("{:.%df}" % int(precision)).format(v)
+
+    def _publish_debug_text(self, text, stamp=None, force=False):
+        if self.pub_debug_text is None or rospy.is_shutdown():
+            return
+        stamp_sec = rospy.get_time() if stamp is None else float(stamp.to_sec())
+        if (
+            (not force)
+            and text == self._last_debug_text
+            and (stamp_sec - self._last_debug_text_time) < self.debug_text_period_s
+        ):
+            return
+        self._last_debug_text = text
+        self._last_debug_text_time = stamp_sec
+        try:
+            self.pub_debug_text.publish(String(data=text))
+        except rospy.ROSException:
+            pass
 
     def odom_callback(self, msg):
         p = msg.pose.pose.position
@@ -1061,6 +1102,29 @@ class ConstrainedLocalReplanner:
             return
         rospy.loginfo_throttle(self.debug_avoidance_log_period_s, message)
 
+    def _build_debug_text(self, state, stamp, **kwargs):
+        wait_s = max(0.0, float(kwargs.get("wait_s", 0.0)))
+        path_len = int(kwargs.get("path_len", 0))
+        trigger_reason = str(kwargs.get("trigger_reason", "clear") or "clear")
+        avoid_direction = str(kwargs.get("avoid_direction", "none") or "none")
+        overlay_points = int(kwargs.get("overlay_points", 0))
+        return (
+            "local_replanner state={} reason={} avoid={} dir={} wait={}/{} "
+            "path_len={} raw_pts={} clustered={} overlay_pts={} blocked_since={}"
+        ).format(
+            state,
+            trigger_reason,
+            "on" if self.avoidance_active else "off",
+            avoid_direction,
+            self._fmt_debug_float(wait_s),
+            self._fmt_debug_float(self.blocked_stop_before_avoidance_s),
+            path_len,
+            int(self.obstacle_raw_point_count),
+            int(self.obstacle_cluster_count),
+            overlay_points,
+            self._fmt_debug_float(self.local_blocked_since_sec),
+        )
+
     def _publish_explainability(
         self,
         event_type,
@@ -1437,6 +1501,15 @@ class ConstrainedLocalReplanner:
         frame_id = dg.header.frame_id if dg.header.frame_id else "map"
         if not self.enable_avoidance_path or len(nominal_path) < 2:
             self._clear_avoidance_path(frame_id, stamp)
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "avoidance_disabled",
+                    stamp,
+                    trigger_reason="disabled",
+                    path_len=len(nominal_path),
+                ),
+                stamp=stamp,
+            )
             return
 
         dynamic_blocked, obstacle_count = self._overlay_dynamic_obstacles(
@@ -1478,6 +1551,16 @@ class ConstrainedLocalReplanner:
 
         if trigger_reason is None:
             self._clear_avoidance_path(frame_id, stamp)
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "follow_nominal",
+                    stamp,
+                    trigger_reason="clear",
+                    path_len=len(nominal_path),
+                    overlay_points=obstacle_count,
+                ),
+                stamp=stamp,
+            )
             return
 
         blocked_idx = self._first_blocked_path_index(
@@ -1522,12 +1605,34 @@ class ConstrainedLocalReplanner:
                     "Local replanning detected '{}' on the {} path but could not find a valid avoidance branch."
                 ).format(trigger_reason, label),
             )
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "avoid_no_solution",
+                    stamp,
+                    trigger_reason=trigger_reason,
+                    path_len=len(nominal_path),
+                    overlay_points=obstacle_count,
+                ),
+                stamp=stamp,
+                force=True,
+            )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return
             self._clear_avoidance_path(frame_id, stamp)
             return
 
         if len(avoid_path) < 2:
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "avoid_too_short",
+                    stamp,
+                    trigger_reason=trigger_reason,
+                    path_len=len(avoid_path),
+                    overlay_points=obstacle_count,
+                ),
+                stamp=stamp,
+                force=True,
+            )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return
             self._clear_avoidance_path(frame_id, stamp)
@@ -1572,6 +1677,18 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_trigger_reason = trigger_reason
         self.last_avoidance_direction = avoid_direction
         self.avoidance_active = True
+        self._publish_debug_text(
+            self._build_debug_text(
+                "avoid_active",
+                stamp,
+                trigger_reason=trigger_reason,
+                avoid_direction=avoid_direction,
+                path_len=len(avoid_path),
+                overlay_points=obstacle_count,
+            ),
+            stamp=stamp,
+            force=True,
+        )
 
     def _plan_direct_goal(self, dg, rg, stamp):
         if self.direct_goal is None:
@@ -1705,6 +1822,10 @@ class ConstrainedLocalReplanner:
 
             if self.global_path is None or len(self.global_path.poses) < 2:
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
+                self._publish_debug_text(
+                    self._build_debug_text("no_global_path", stamp, trigger_reason="missing_global"),
+                    stamp=stamp,
+                )
                 return
             pts = self._path_points(self.global_path)
             i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
@@ -1728,6 +1849,11 @@ class ConstrainedLocalReplanner:
                 self.local_blocked_since_sec = 0.0
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
+                self._publish_debug_text(
+                    self._build_debug_text("no_snap_cell", stamp, trigger_reason="snap_failed"),
+                    stamp=stamp,
+                    force=True,
+                )
                 return
             nominal_path, nominal_world = self._build_nominal_local_path(pts, i0, ig, dg)
             if nominal_path is None or nominal_world is None:
@@ -1738,6 +1864,15 @@ class ConstrainedLocalReplanner:
                 self.local_blocked_since_sec = 0.0
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "nominal_build_failed",
+                        stamp,
+                        trigger_reason="nominal_segment_invalid",
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
                 return
 
             blocked_idx = self._first_blocked_path_index(
@@ -1780,6 +1915,17 @@ class ConstrainedLocalReplanner:
                     )
                 wait_s = now_sec - self.local_blocked_since_sec
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "hold_wait",
+                        stamp,
+                        trigger_reason="nominal_path_blocked",
+                        wait_s=wait_s,
+                        path_len=len(nominal_path),
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
                 if wait_s < self.blocked_stop_before_avoidance_s:
                     self._clear_avoidance_path(dg.header.frame_id, stamp)
                     return
@@ -1807,6 +1953,15 @@ class ConstrainedLocalReplanner:
             self.local_blocked_since_sec = 0.0
             self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
             self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "follow_nominal",
+                    stamp,
+                    trigger_reason="clear",
+                    path_len=len(nominal_path),
+                ),
+                stamp=stamp,
+            )
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))
 

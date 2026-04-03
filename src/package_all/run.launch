@@ -48,8 +48,8 @@
   <arg name="teb_enable_emergency_stop" default="true"/>
   <arg name="teb_enable_obstacle_slowdown" default="false"/>
   <arg name="teb_enable_local_path_hold_stop" default="true"/>
-  <arg name="teb_allow_in_place_rotation_near_obstacle" default="true"/>
-  <arg name="teb_allow_in_place_rotation_during_local_hold" default="true"/>
+  <arg name="teb_allow_in_place_rotation_near_obstacle" default="false"/>
+  <arg name="teb_allow_in_place_rotation_during_local_hold" default="false"/>
   <arg name="teb_min_in_place_rotation_angular_speed" default="0.20"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
@@ -69,10 +69,10 @@
   <arg name="teb_local_obstacle_range_m" default="8.0"/>
   <arg name="teb_local_raytrace_range_m" default="8.5"/>
   <arg name="teb_local_observation_persistence_s" default="0.40"/>
-  <arg name="teb_local_inflation_radius_m" default="0.40"/>
+  <arg name="teb_local_inflation_radius_m" default="0.30"/>
   <arg name="teb_global_inflation_radius_m" default="0.15"/>
-  <arg name="teb_min_obstacle_dist_m" default="0.30"/>
-  <arg name="teb_inflation_dist_m" default="0.40"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.18"/>
+  <arg name="teb_inflation_dist_m" default="0.25"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
@@ -120,7 +120,7 @@
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
-  <arg name="blocked_stop_before_avoidance_s" default="3.0"/>
+  <arg name="blocked_stop_before_avoidance_s" default="1.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
