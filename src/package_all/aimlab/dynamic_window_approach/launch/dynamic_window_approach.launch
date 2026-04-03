@@ -87,10 +87,17 @@
     <arg name="path_tracking_cte_gain" default="1.2"/>
     <arg name="path_tracking_cte_soft_mps" default="0.25"/>
     <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
+    <arg name="path_tracking_heading_filter_gain" default="0.18"/>
+    <arg name="path_tracking_crawl_speed" default="0.10"/>
+    <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
+    <arg name="path_tracking_stop_distance_m" default="0.80"/>
     <arg name="rotate_only_deg" default="110.0"/>
     <arg name="rotate_exit_deg" default="40.0"/>
     <arg name="rotate_reentry_cooldown_s" default="4.0"/>
     <arg name="near_goal_no_rotate_m" default="1.5"/>
+    <arg name="forward_motion_deadband" default="0.01"/>
+    <arg name="min_forward_cmd" default="0.12"/>
+    <arg name="min_forward_cmd_distance" default="0.60"/>
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
     <arg name="pointcloud_static_block_margin_m" default="0.05"/>
@@ -274,10 +281,17 @@
         <param name="path_tracking_cte_gain" value="$(arg path_tracking_cte_gain)"/>
         <param name="path_tracking_cte_soft_mps" value="$(arg path_tracking_cte_soft_mps)"/>
         <param name="path_tracking_cte_yaw_cap_deg" value="$(arg path_tracking_cte_yaw_cap_deg)"/>
+        <param name="path_tracking_heading_filter_gain" value="$(arg path_tracking_heading_filter_gain)"/>
+        <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
+        <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
+        <param name="path_tracking_stop_distance_m" value="$(arg path_tracking_stop_distance_m)"/>
         <param name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
         <param name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>
         <param name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
+        <param name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>
+        <param name="min_forward_cmd" value="$(arg min_forward_cmd)"/>
+        <param name="min_forward_cmd_distance" value="$(arg min_forward_cmd_distance)"/>
         <param name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
         <param name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
         <param name="emergency_bin_size_m" value="$(arg emergency_bin_size_m)"/>

@@ -34,6 +34,11 @@ def angdiff(a, b):
     d = a - b
     return math.atan2(math.sin(d), math.cos(d))
 
+
+def wrap_angle(a):
+    """Wrap angle to [-pi, pi]."""
+    return math.atan2(math.sin(a), math.cos(a))
+
 # ----------------------------------- DWA node -----------------------------------
 class DWAControl:
     def __init__(self):
@@ -258,7 +263,27 @@ class DWAControl:
         self.path_tracking_cte_yaw_cap = math.radians(
             rospy.get_param("~path_tracking_cte_yaw_cap_deg", 35.0)
         )
+        self.path_tracking_heading_filter_gain = min(
+            1.0,
+            max(0.05, float(rospy.get_param("~path_tracking_heading_filter_gain", 0.18))),
+        )
+        self.path_tracking_crawl_speed = max(
+            0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.10))
+        )
+        self.path_tracking_large_yaw_crawl_speed = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_tracking_large_yaw_crawl_speed",
+                    self.path_tracking_crawl_speed,
+                )
+            ),
+        )
+        self.path_tracking_stop_distance_m = max(
+            0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.80))
+        )
         self._path_tracking_prev_w = 0.0
+        self._path_tracking_prev_desired_yaw = None
 
         # Internal path buffers
         self.global_path_msg = None
@@ -637,6 +662,7 @@ class DWAControl:
         self.active_path_source = source
         if reset_tracking:
             self._path_tracking_prev_w = 0.0
+            self._path_tracking_prev_desired_yaw = None
             self._rot_mode = False
             self._rot_yaw_target = None
         if path_msg is None or len(path_msg.poses) < 2:
@@ -838,8 +864,8 @@ class DWAControl:
         u, trajectory = self.calc_control_and_trajectory(x, dw, goal_xy, t_hat)
         return u, trajectory
 
-    def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap):
-        path_yaw = math.atan2(t_hat[1], t_hat[0])
+    def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap, remaining_dist):
+        path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
         cte_correction = math.atan2(
             self.path_tracking_cte_gain * lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
@@ -851,20 +877,36 @@ class DWAControl:
         # Track the preview tangent directly. The target point is already sampled
         # ahead on the path, so adding another target-heading curvature term tends
         # to double-count the correction and creates zig-zag on straight segments.
-        desired_yaw = path_yaw - cte_correction
+        desired_yaw_raw = path_yaw_raw - cte_correction
+        if self._path_tracking_prev_desired_yaw is None:
+            desired_yaw = desired_yaw_raw
+        else:
+            desired_yaw = wrap_angle(
+                self._path_tracking_prev_desired_yaw +
+                self.path_tracking_heading_filter_gain *
+                angdiff(desired_yaw_raw, self._path_tracking_prev_desired_yaw)
+            )
+        self._path_tracking_prev_desired_yaw = desired_yaw
         yaw_err = angdiff(desired_yaw, x[2])
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
+        far_from_goal = remaining_dist > self.path_tracking_stop_distance_m
         if abs_err >= self.path_tracking_stop_yaw:
-            v_cmd = 0.0
             w_target = self.path_tracking_kp * yaw_err
-            w_limit = self.path_tracking_in_place_yaw_rate_max
+            if far_from_goal and self.path_tracking_large_yaw_crawl_speed > 0.0:
+                v_cmd = min(v_limit, self.path_tracking_large_yaw_crawl_speed)
+                w_limit = self.path_tracking_yaw_rate_max
+            else:
+                v_cmd = 0.0
+                w_limit = self.path_tracking_in_place_yaw_rate_max
         else:
             if self.path_tracking_slowdown_yaw > 1e-6:
-                slow_ratio = max(0.20, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
+                slow_ratio = max(0.25, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
             else:
                 slow_ratio = 1.0
             v_cmd = min(v_limit, max(0.0, v_limit * slow_ratio))
+            if far_from_goal and v_cmd > 0.0 and self.path_tracking_crawl_speed > 0.0:
+                v_cmd = max(v_cmd, min(v_limit, self.path_tracking_crawl_speed))
             w_target = self.path_tracking_kp * yaw_err
             w_limit = self.path_tracking_yaw_rate_max
 
@@ -1197,7 +1239,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -1213,6 +1255,9 @@ class DWAControl:
             self.robot_width_m,
             self.cmd_publish_hz,
             "on" if self.path_tracking_only else "off",
+            self.path_tracking_crawl_speed,
+            self.path_tracking_large_yaw_crawl_speed,
+            self.path_tracking_heading_filter_gain,
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
@@ -1342,7 +1387,14 @@ class DWAControl:
             v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
 
             if self.path_tracking_only:
-                u, predicted = self.path_tracking_control(x, target_xy, t_hat, lat_err, v_cap)
+                u, predicted = self.path_tracking_control(
+                    x,
+                    target_xy,
+                    t_hat,
+                    lat_err,
+                    v_cap,
+                    min(arc_rem, dist_to_goal),
+                )
             else:
                 u, predicted = self.dwa_control(x, target_xy, t_hat, lat_err)
             self.visualize_predicted_trajectory(predicted)
@@ -1359,9 +1411,10 @@ class DWAControl:
 
             # 너무 느리게 기어가면 노이즈만 생기니, 아주 작으면 그냥 0으로
             if (
-                u_cmd[0] > self.forward_motion_deadband
+                u_cmd[0] > 0.0
                 and min(arc_rem, dist_to_goal) > self.min_forward_cmd_distance
                 and u_cmd[0] < self.min_forward_cmd
+                and (self.path_tracking_only or u_cmd[0] > self.forward_motion_deadband)
             ):
                 u_cmd[0] = min(v_cap, self.min_forward_cmd)
 
