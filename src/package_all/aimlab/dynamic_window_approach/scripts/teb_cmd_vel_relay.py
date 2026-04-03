@@ -587,34 +587,18 @@ class TebCmdVelRelay(object):
             return not self.avoidance_path_active
         return True
 
-    def _effective_local_path_remaining_m(self, now=None):
-        if math.isfinite(self.local_path_remaining_m):
-            return self.local_path_remaining_m
-        if not self.local_path_empty:
-            return float("inf")
-        if self.last_local_path_time <= 0.0:
-            return float("inf")
-        if now is None:
-            now = rospy.get_time()
-        if (now - self.last_local_path_time) > self.local_hold_timeout_s:
-            return float("inf")
-        if not math.isfinite(self.last_nonempty_local_path_remaining_m):
-            return float("inf")
-        return self.last_nonempty_local_path_remaining_m
-
-    def _should_ignore_obstacle_for_local_goal(self, obstacle_x, now=None):
+    def _should_ignore_obstacle_for_local_goal(self, obstacle_x):
         if (not self.ignore_obstacles_beyond_local_goal) or (not self.have_odom):
             return False
         if not math.isfinite(obstacle_x):
             return False
-        remain_m = self._effective_local_path_remaining_m(now=now)
-        if not math.isfinite(remain_m):
+        if not math.isfinite(self.local_path_remaining_m):
             return False
-        if remain_m <= 1e-3:
+        if self.local_path_remaining_m <= 1e-3:
             return False
-        if remain_m > self.near_goal_obstacle_ignore_distance_m:
+        if self.local_path_remaining_m > self.near_goal_obstacle_ignore_distance_m:
             return False
-        return obstacle_x > (remain_m + self.obstacle_beyond_goal_slack_m)
+        return obstacle_x > (self.local_path_remaining_m + self.obstacle_beyond_goal_slack_m)
 
     def _publish_explainability(
         self,
@@ -763,12 +747,11 @@ class TebCmdVelRelay(object):
             return cmd, None
 
         final_segment_active = self._is_final_path_segment_active()
-        remain_m = self._effective_local_path_remaining_m(now=now)
         ignore_stop = self._should_ignore_obstacle_for_local_goal(
-            self.closest_stop_obstacle_x, now=now
+            self.closest_stop_obstacle_x
         )
         ignore_slow = self._should_ignore_obstacle_for_local_goal(
-            self.closest_slow_obstacle_x, now=now
+            self.closest_slow_obstacle_x
         )
         if ignore_stop or ignore_slow:
             obstacle_x = self.closest_stop_obstacle_x
@@ -781,7 +764,7 @@ class TebCmdVelRelay(object):
                 self.log_period_s,
                 "teb_cmd_vel_relay: ignoring obstacle beyond local goal obstacle_x=%.2f remain=%.2f",
                 obstacle_x,
-                remain_m,
+                self.local_path_remaining_m,
             )
         if (
             self.enable_emergency_stop

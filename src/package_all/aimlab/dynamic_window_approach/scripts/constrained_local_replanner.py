@@ -1000,7 +1000,7 @@ class ConstrainedLocalReplanner:
         return deduped
 
     def _publish_nominal_local_segment(self, pts, i0, ig, blocked, start_cell, dg, stamp):
-        grid_path, sampled_points = self._build_nominal_local_path(pts, i0, ig, dg)
+        grid_path, sampled_points, _ = self._build_nominal_local_path(pts, i0, ig, dg)
         if grid_path is None or sampled_points is None:
             return False
         if self._path_blocked_ahead(
@@ -1014,32 +1014,48 @@ class ConstrainedLocalReplanner:
         self._publish_world_path(sampled_points, dg.header.frame_id, stamp)
         return True
 
-    def _build_nominal_local_path(self, pts, i0, ig, dg):
+    def _build_nominal_world_segment(self, pts, i0, ig):
         if not pts:
-            return None, None
+            return None
         end_idx = max(i0 + 1, ig)
         segment_world = [pts[i] for i in range(i0, min(len(pts), end_idx + 1))]
         if not segment_world:
-            return None, None
+            return None
         segment_world[0] = (self.odom_x, self.odom_y)
         segment_world = self._dedupe_world_points(segment_world)
         if len(segment_world) < 2:
-            return None, None
+            return None
+        return segment_world
 
+    @staticmethod
+    def _world_path_length(world_points):
+        if world_points is None or len(world_points) < 2:
+            return 0.0
+        total = 0.0
+        for idx in range(len(world_points) - 1):
+            x0, y0 = world_points[idx]
+            x1, y1 = world_points[idx + 1]
+            total += math.hypot(float(x1) - float(x0), float(y1) - float(y0))
+        return total
+
+    def _build_nominal_local_path(self, pts, i0, ig, dg):
+        segment_world = self._build_nominal_world_segment(pts, i0, ig)
+        if segment_world is None:
+            return None, None, "segment_too_short"
         sampled_points = self._sample_world_points(segment_world)
         grid_path = []
         last_cell = None
         for wx, wy in sampled_points:
             gx, gy = self._world_to_grid(dg, wx, wy)
             if not self._in_bounds(dg, gx, gy):
-                return None, None
+                return None, sampled_points, "out_of_bounds"
             cell = (gx, gy)
             if cell != last_cell:
                 grid_path.append(cell)
                 last_cell = cell
         if len(grid_path) < 2:
-            return None, None
-        return grid_path, sampled_points
+            return None, sampled_points, "degenerate_grid"
+        return grid_path, sampled_points, ""
 
     def _publish_empty_path(self, publisher, frame_id, stamp):
         out = Path()
@@ -1868,11 +1884,41 @@ class ConstrainedLocalReplanner:
                     force=True,
                 )
                 return
-            nominal_path, nominal_world = self._build_nominal_local_path(pts, i0, ig, dg)
+            nominal_path, nominal_world, nominal_fail_reason = self._build_nominal_local_path(
+                pts, i0, ig, dg
+            )
             if nominal_path is None or nominal_world is None:
+                nominal_world_remain_m = self._world_path_length(nominal_world)
+                if (
+                    nominal_fail_reason == "degenerate_grid"
+                    and nominal_world is not None
+                    and len(nominal_world) >= 2
+                    and nominal_world_remain_m <= self.near_goal_block_ignore_distance_m
+                ):
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: keeping short near-goal nominal segment in world frame (points=%d remain=%.2f m)",
+                        len(nominal_world),
+                        nominal_world_remain_m,
+                    )
+                    self.local_blocked_since_sec = 0.0
+                    self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
+                    self._clear_avoidance_path(dg.header.frame_id, stamp)
+                    self._publish_debug_text(
+                        self._build_debug_text(
+                            "follow_nominal_world",
+                            stamp,
+                            trigger_reason="nominal_segment_short_near_goal",
+                            path_len=len(nominal_world),
+                        ),
+                        stamp=stamp,
+                        force=True,
+                    )
+                    return
                 rospy.logwarn_throttle(
                     1.0,
-                    "constrained_local_replanner: failed to build nominal local segment from global path"
+                    "constrained_local_replanner: failed to build nominal local segment from global path (reason=%s)",
+                    nominal_fail_reason if nominal_fail_reason else "unknown",
                 )
                 self.local_blocked_since_sec = 0.0
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
