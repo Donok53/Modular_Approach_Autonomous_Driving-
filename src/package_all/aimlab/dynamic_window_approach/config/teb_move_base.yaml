@@ -19,7 +19,7 @@ TebLocalPlannerROS:
   map_frame: map
 
   max_vel_x: 0.25
-  max_vel_x_backwards: 0.05
+  max_vel_x_backwards: 0.0
   max_vel_theta: 0.45
   acc_lim_x: 0.40
   acc_lim_theta: 0.80
@@ -32,7 +32,7 @@ TebLocalPlannerROS:
   yaw_goal_tolerance: 3.14
   free_goal_vel: false
   complete_global_plan: true
-  global_plan_overwrite_orientation: true
+  global_plan_overwrite_orientation: false
 
   dt_ref: 0.30
   dt_hysteresis: 0.10
@@ -69,7 +69,7 @@ TebLocalPlannerROS:
   weight_acc_lim_x: 1.0
   weight_acc_lim_theta: 1.0
   weight_kinematics_nh: 1000.0
-  weight_kinematics_forward_drive: 5000.0
+  weight_kinematics_forward_drive: 20000.0
   weight_optimaltime: 2.0
   weight_obstacle: 120.0
   weight_inflation: 0.8

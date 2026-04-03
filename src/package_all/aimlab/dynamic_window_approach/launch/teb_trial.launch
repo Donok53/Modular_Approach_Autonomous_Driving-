@@ -95,8 +95,8 @@
   <arg name="enable_cmd_smoothing" default="true"/>
   <arg name="max_linear_slew_mps2" default="0.70"/>
   <arg name="max_angular_slew_rps2" default="1.40"/>
-  <arg name="allow_in_place_rotation_near_obstacle" default="true"/>
-  <arg name="allow_in_place_rotation_during_local_hold" default="true"/>
+  <arg name="allow_in_place_rotation_near_obstacle" default="false"/>
+  <arg name="allow_in_place_rotation_during_local_hold" default="false"/>
   <arg name="min_in_place_rotation_angular_speed" default="0.20"/>
   <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
@@ -110,6 +110,9 @@
   <arg name="final_goal_switch_distance_m" default="0.5"/>
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
+  <arg name="teb_max_vel_x_backwards_mps" default="0.0"/>
+  <arg name="teb_weight_forward_drive" default="20000.0"/>
+  <arg name="teb_global_plan_overwrite_orientation" default="false"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>
   <arg name="emergency_stop_side_margin" default="0.10"/>
   <arg name="slowdown_front_margin" default="0.80"/>
@@ -357,6 +360,9 @@
     </rosparam>
     <param name="TebLocalPlannerROS/odom_topic" value="$(arg planning_pose_topic)"/>
     <param name="TebLocalPlannerROS/xy_goal_tolerance" value="$(arg teb_xy_goal_tolerance_m)"/>
+    <param name="TebLocalPlannerROS/max_vel_x_backwards" value="$(arg teb_max_vel_x_backwards_mps)"/>
+    <param name="TebLocalPlannerROS/weight_kinematics_forward_drive" value="$(arg teb_weight_forward_drive)"/>
+    <param name="TebLocalPlannerROS/global_plan_overwrite_orientation" value="$(arg teb_global_plan_overwrite_orientation)"/>
     <param name="TebLocalPlannerROS/min_obstacle_dist" value="$(arg teb_min_obstacle_dist_m)"/>
     <param name="TebLocalPlannerROS/inflation_dist" value="$(arg teb_inflation_dist_m)"/>
     <param name="TebLocalPlannerROS/weight_viapoint" value="$(arg teb_weight_viapoint)"/>

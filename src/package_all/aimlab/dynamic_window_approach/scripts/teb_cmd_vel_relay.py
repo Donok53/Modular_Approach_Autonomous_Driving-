@@ -296,6 +296,7 @@ class TebCmdVelRelay(object):
         out.angular.y = float(cmd.angular.y)
         out.angular.z = float(cmd.angular.z)
         final_brake_active = self._is_final_goal_brake_active()
+        reverse_clamped_to_stop = False
         if out.linear.x < 0.0 and abs(out.linear.x) <= self.reverse_deadband_mps:
             if final_brake_active:
                 rospy.loginfo_throttle(
@@ -312,6 +313,7 @@ class TebCmdVelRelay(object):
                 out.angular.z,
             )
             out.linear.x = 0.0
+            reverse_clamped_to_stop = True
         if self.forward_only and out.linear.x < 0.0:
             rospy.logwarn_throttle(
                 self.log_period_s,
@@ -320,6 +322,16 @@ class TebCmdVelRelay(object):
                 self.reverse_replacement_speed,
             )
             out.linear.x = self.reverse_replacement_speed
+            reverse_clamped_to_stop = out.linear.x <= 1e-4
+        if reverse_clamped_to_stop and abs(out.angular.z) > 1e-4:
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: suppressing spin for reverse-clamped cmd w=%.3f",
+                out.angular.z,
+            )
+            out.angular.z = 0.0
+            out.angular.x = 0.0
+            out.angular.y = 0.0
         if (
             self.enforce_min_linear_speed
             and out.linear.x > 1e-4
