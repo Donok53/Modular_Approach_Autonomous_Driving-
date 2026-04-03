@@ -390,6 +390,15 @@ class TebCmdVelRelay(object):
         now = rospy.get_time()
         final_brake_active = self._is_final_goal_brake_active()
         fresh_empty_local_path = self._has_fresh_empty_local_path(now)
+        if self._should_force_goal_stop(out, final_brake_active):
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: forcing terminal goal stop remain=%.3f v=%.3f w=%.3f",
+                self.local_path_remaining_m,
+                out.linear.x,
+                out.angular.z,
+            )
+            return Twist()
         reverse_clamped_to_stop = False
         if out.linear.x < 0.0 and abs(out.linear.x) <= self.reverse_deadband_mps:
             if final_brake_active or fresh_empty_local_path:
@@ -400,6 +409,14 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return Twist()
+            if self._should_convert_small_reverse_to_rotation(out):
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: converting tiny reverse to rotation-only v=%.3f w=%.3f",
+                    out.linear.x,
+                    out.angular.z,
+                )
+                return self._rotation_only_cmd(out)
             rospy.loginfo_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: zeroing tiny reverse cmd v=%.3f (w=%.3f)",
@@ -419,6 +436,14 @@ class TebCmdVelRelay(object):
                 out.linear.x = 0.0
                 reverse_clamped_to_stop = True
         if self.forward_only and out.linear.x < 0.0:
+            if self._should_convert_small_reverse_to_rotation(out):
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: converting reverse cmd to rotation-only v=%.3f w=%.3f",
+                    out.linear.x,
+                    out.angular.z,
+                )
+                return self._rotation_only_cmd(out)
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: clamping reverse cmd v=%.3f -> %.3f",
@@ -560,6 +585,33 @@ class TebCmdVelRelay(object):
             self._is_final_path_segment_active()
             and math.isfinite(self.local_path_remaining_m)
             and self.local_path_remaining_m <= self.final_brake_distance_m
+        )
+
+    def _terminal_goal_stop_distance_m(self):
+        return min(
+            self.final_brake_distance_m,
+            max(0.03, 0.5 * self.final_cmd_linear_stop_threshold),
+        )
+
+    def _should_force_goal_stop(self, cmd, final_brake_active=None):
+        if final_brake_active is None:
+            final_brake_active = self._is_final_goal_brake_active()
+        if (not final_brake_active) or (not math.isfinite(self.local_path_remaining_m)):
+            return False
+        if self.local_path_remaining_m > self._terminal_goal_stop_distance_m():
+            return False
+        return (
+            abs(float(cmd.linear.x)) <= self.final_cmd_linear_stop_threshold
+            and abs(float(cmd.angular.z)) <= self.final_cmd_angular_stop_threshold
+        )
+
+    def _should_convert_small_reverse_to_rotation(self, cmd):
+        return (
+            self.forward_only
+            and float(cmd.linear.x) < 0.0
+            and abs(float(cmd.linear.x))
+            <= max(self.reverse_deadband_mps, self.min_abs_linear_speed)
+            and self._should_preserve_in_place_rotation(cmd)
         )
 
     def _has_fresh_empty_local_path(self, now=None):
