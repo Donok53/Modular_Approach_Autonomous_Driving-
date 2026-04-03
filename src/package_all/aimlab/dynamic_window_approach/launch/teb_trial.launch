@@ -111,7 +111,7 @@
   <arg name="final_goal_switch_distance_m" default="0.5"/>
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
-  <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
+  <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
   <arg name="teb_global_plan_overwrite_orientation" default="true"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>

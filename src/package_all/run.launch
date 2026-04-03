@@ -75,7 +75,7 @@
   <arg name="teb_min_obstacle_dist_m" default="0.18"/>
   <arg name="teb_inflation_dist_m" default="0.25"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
-  <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
+  <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>

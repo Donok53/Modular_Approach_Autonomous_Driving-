@@ -404,11 +404,7 @@ class TebCmdVelRelay(object):
                 out.linear.x,
                 out.angular.z,
             )
-            if (
-                self.forward_only
-                and self.reverse_replacement_speed > 1e-4
-                and (not self._should_preserve_in_place_rotation(out))
-            ):
+            if self.forward_only and self.reverse_replacement_speed > 1e-4:
                 out.linear.x = self.reverse_replacement_speed
                 reverse_clamped_to_stop = False
                 rospy.loginfo_throttle(
