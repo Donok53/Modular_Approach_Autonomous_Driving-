@@ -457,6 +457,19 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return Twist()
+            if self._should_coast_through_tiny_reverse(
+                out, final_brake_active, fresh_empty_local_path
+            ):
+                prev_v = float(self.last_publish_cmd.linear.x)
+                self._last_sanitize_reason = "tiny_reverse_coast"
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: coasting through tiny reverse prev_v=%.3f raw(v=%.3f,w=%.3f)",
+                    prev_v,
+                    out.linear.x,
+                    out.angular.z,
+                )
+                return self._coast_forward_cmd(out)
             if self._should_convert_small_reverse_to_rotation(out):
                 self._last_sanitize_reason = "tiny_reverse_to_rotation"
                 rospy.loginfo_throttle(
@@ -473,21 +486,9 @@ class TebCmdVelRelay(object):
                 out.linear.x,
                 out.angular.z,
             )
-            if self.forward_only and self.reverse_replacement_speed > 1e-4:
-                out.linear.x = self.reverse_replacement_speed
-                reverse_clamped_to_stop = False
-                sanitize_flags.append("crawl")
-                rospy.loginfo_throttle(
-                    self.log_period_s,
-                    "teb_cmd_vel_relay: replacing tiny reverse cmd with forward crawl v=%.3f (w=%.3f | rot_thresh=%.3f preserve_rot=no)",
-                    out.linear.x,
-                    out.angular.z,
-                    self.min_in_place_rotation_angular_speed,
-                )
-            else:
-                out.linear.x = 0.0
-                reverse_clamped_to_stop = True
-                sanitize_flags.append("zero")
+            out.linear.x = 0.0
+            reverse_clamped_to_stop = True
+            sanitize_flags.append("zero")
         if self.forward_only and out.linear.x < 0.0:
             if self._should_convert_small_reverse_to_rotation(out):
                 self._last_sanitize_reason = "reverse_to_rotation"
@@ -501,13 +502,12 @@ class TebCmdVelRelay(object):
             sanitize_flags.append("reverse_clamp")
             rospy.logwarn_throttle(
                 self.log_period_s,
-                "teb_cmd_vel_relay: clamping reverse cmd v=%.3f -> %.3f",
+                "teb_cmd_vel_relay: clamping reverse cmd to stop v=%.3f",
                 out.linear.x,
-                self.reverse_replacement_speed,
             )
-            out.linear.x = self.reverse_replacement_speed
-            reverse_clamped_to_stop = out.linear.x <= 1e-4
-            sanitize_flags.append("crawl" if out.linear.x > 1e-4 else "zero")
+            out.linear.x = 0.0
+            reverse_clamped_to_stop = True
+            sanitize_flags.append("zero")
         if reverse_clamped_to_stop and abs(out.angular.z) > 1e-4:
             if self._should_preserve_in_place_rotation(out):
                 self._last_sanitize_reason = "reverse_clamped_to_rotation"
@@ -562,6 +562,12 @@ class TebCmdVelRelay(object):
     @staticmethod
     def _rotation_only_cmd(cmd):
         out = Twist()
+        out.angular.z = float(cmd.angular.z)
+        return out
+
+    def _coast_forward_cmd(self, cmd):
+        out = Twist()
+        out.linear.x = max(0.0, float(self.last_publish_cmd.linear.x))
         out.angular.z = float(cmd.angular.z)
         return out
 
@@ -660,10 +666,7 @@ class TebCmdVelRelay(object):
             return False
         if self.local_path_remaining_m > self._terminal_goal_stop_distance_m():
             return False
-        return (
-            abs(float(cmd.linear.x)) <= self.final_cmd_linear_stop_threshold
-            and abs(float(cmd.angular.z)) <= self.final_cmd_angular_stop_threshold
-        )
+        return True
 
     def _should_convert_small_reverse_to_rotation(self, cmd):
         return (
@@ -673,6 +676,27 @@ class TebCmdVelRelay(object):
             <= max(self.reverse_deadband_mps, self.min_abs_linear_speed)
             and self._should_preserve_in_place_rotation(cmd)
         )
+
+    def _should_coast_through_tiny_reverse(
+        self, cmd, final_brake_active=False, fresh_empty_local_path=False
+    ):
+        if not self.forward_only:
+            return False
+        if final_brake_active or fresh_empty_local_path:
+            return False
+        if float(cmd.linear.x) >= 0.0:
+            return False
+        if abs(float(cmd.linear.x)) > max(self.reverse_deadband_mps, self.min_abs_linear_speed):
+            return False
+        prev_v = float(self.last_publish_cmd.linear.x)
+        if prev_v <= max(self.reverse_replacement_speed, self.min_abs_linear_speed):
+            return False
+        if (
+            math.isfinite(self.local_path_remaining_m)
+            and self.local_path_remaining_m <= self.ignore_local_hold_near_goal_distance_m
+        ):
+            return False
+        return True
 
     def _has_fresh_empty_local_path(self, now=None):
         now_sec = rospy.get_time() if now is None else float(now)
