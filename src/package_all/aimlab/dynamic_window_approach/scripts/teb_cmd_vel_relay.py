@@ -404,8 +404,22 @@ class TebCmdVelRelay(object):
                 out.linear.x,
                 out.angular.z,
             )
-            out.linear.x = 0.0
-            reverse_clamped_to_stop = True
+            if (
+                self.forward_only
+                and self.reverse_replacement_speed > 1e-4
+                and (not self._should_preserve_in_place_rotation(out))
+            ):
+                out.linear.x = self.reverse_replacement_speed
+                reverse_clamped_to_stop = False
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: replacing tiny reverse cmd with forward crawl v=%.3f (w=%.3f)",
+                    out.linear.x,
+                    out.angular.z,
+                )
+            else:
+                out.linear.x = 0.0
+                reverse_clamped_to_stop = True
         if self.forward_only and out.linear.x < 0.0:
             rospy.logwarn_throttle(
                 self.log_period_s,

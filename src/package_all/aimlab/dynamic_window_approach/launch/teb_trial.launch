@@ -98,6 +98,7 @@
   <arg name="allow_in_place_rotation_near_obstacle" default="false"/>
   <arg name="allow_in_place_rotation_during_local_hold" default="false"/>
   <arg name="min_in_place_rotation_angular_speed" default="0.05"/>
+  <arg name="reverse_replacement_speed_mps" default="0.03"/>
   <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
   <arg name="obstacle_beyond_goal_slack_m" default="0.05"/>
@@ -110,8 +111,8 @@
   <arg name="final_goal_switch_distance_m" default="0.5"/>
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
-  <arg name="teb_max_vel_x_backwards_mps" default="0.05"/>
-  <arg name="teb_weight_forward_drive" default="5000.0"/>
+  <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
+  <arg name="teb_weight_forward_drive" default="8000.0"/>
   <arg name="teb_global_plan_overwrite_orientation" default="true"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>
   <arg name="emergency_stop_side_margin" default="0.10"/>
@@ -298,7 +299,7 @@
     <param name="idle_timeout_s" value="1.0"/>
     <param name="log_period_s" value="1.0"/>
     <param name="forward_only" value="true"/>
-    <param name="reverse_replacement_speed" value="0.0"/>
+    <param name="reverse_replacement_speed" value="$(arg reverse_replacement_speed_mps)"/>
     <param name="enforce_min_linear_speed" value="false"/>
     <param name="min_abs_linear_speed" value="0.04"/>
     <param name="min_angular_for_linear_boost" value="0.20"/>
