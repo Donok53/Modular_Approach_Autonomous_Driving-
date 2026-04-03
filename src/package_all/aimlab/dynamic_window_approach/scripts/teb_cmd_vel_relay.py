@@ -135,7 +135,7 @@ class TebCmdVelRelay(object):
             rospy.get_param("~allow_in_place_rotation_during_local_hold", True)
         )
         self.min_in_place_rotation_angular_speed = max(
-            0.0, float(rospy.get_param("~min_in_place_rotation_angular_speed", 0.20))
+            0.0, float(rospy.get_param("~min_in_place_rotation_angular_speed", 0.05))
         )
         self.ignore_obstacles_beyond_local_goal = bool(
             rospy.get_param("~ignore_obstacles_beyond_local_goal", True)

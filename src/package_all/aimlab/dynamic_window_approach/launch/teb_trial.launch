@@ -97,7 +97,7 @@
   <arg name="max_angular_slew_rps2" default="1.40"/>
   <arg name="allow_in_place_rotation_near_obstacle" default="false"/>
   <arg name="allow_in_place_rotation_during_local_hold" default="false"/>
-  <arg name="min_in_place_rotation_angular_speed" default="0.20"/>
+  <arg name="min_in_place_rotation_angular_speed" default="0.05"/>
   <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
   <arg name="obstacle_beyond_goal_slack_m" default="0.05"/>

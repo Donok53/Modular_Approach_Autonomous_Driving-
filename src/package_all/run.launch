@@ -50,7 +50,7 @@
   <arg name="teb_enable_local_path_hold_stop" default="true"/>
   <arg name="teb_allow_in_place_rotation_near_obstacle" default="false"/>
   <arg name="teb_allow_in_place_rotation_during_local_hold" default="false"/>
-  <arg name="teb_min_in_place_rotation_angular_speed" default="0.20"/>
+  <arg name="teb_min_in_place_rotation_angular_speed" default="0.05"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
