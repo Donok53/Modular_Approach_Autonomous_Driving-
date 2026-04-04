@@ -1,13 +1,22 @@
 <launch>
     <arg name="project" default="lio_sam"/>
+    <arg name="base_config_file" default="$(find lio_localizer)/config/params-robot_scout.yaml"/>
+    <arg name="environment" default="indoor"/>
+    <arg name="outdoor_gps_topic" default="/smc_2000/fix"/>
     <arg name="enable_drivable_area" default="true"/>
     <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
     <arg name="enable_drivable_area_2d_editor" default="false"/>
     <arg name="rviz_config_file" default="$(find lio_localizer)/launch/include/config/rviz.rviz"/>
     
     <!-- Parameters -->
-    <!-- <rosparam file="$(find lio_localizer)/config/params-robot_scout.yaml" command="load" /> -->
-    <rosparam file="$(find lio_localizer)/config/params-robot_scout.yaml" command="load" />
+    <rosparam file="$(arg base_config_file)" command="load" />
+    <group unless="$(eval str(arg('environment')).lower() == 'outdoor')">
+      <rosparam file="$(find lio_localizer)/config/params-env-indoor.yaml" command="load" />
+    </group>
+    <group if="$(eval str(arg('environment')).lower() == 'outdoor')">
+      <rosparam file="$(find lio_localizer)/config/params-env-outdoor.yaml" command="load" />
+      <param name="lio_localizer/gpsTopic" value="$(arg outdoor_gps_topic)" />
+    </group>
 
     <!-- Nodes -->
     <node pkg="lio_localizer" type="lio_localizer_imuPreintegration"   name="lio_localizer_imuPreintegration"    output="screen" 	 respawn="true"/>

@@ -1,4 +1,7 @@
 <launch>
+    <arg name="base_config_file" default="$(find lio_localizer)/config/params-robot_scout.yaml"/>
+    <arg name="environment" default="indoor"/>
+    <arg name="outdoor_gps_topic" default="/smc_2000/fix"/>
     <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
     <arg name="pointcloud_topic" default="/ouster/points"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
@@ -11,7 +14,14 @@
     <arg name="use_dynamic_risk_grid" default="true"/>
 
     <!-- Parameters -->
-    <rosparam file="$(find lio_localizer)/config/params-robot_scout.yaml" command="load" />
+    <rosparam file="$(arg base_config_file)" command="load" />
+    <group unless="$(eval str(arg('environment')).lower() == 'outdoor')">
+        <rosparam file="$(find lio_localizer)/config/params-env-indoor.yaml" command="load" />
+    </group>
+    <group if="$(eval str(arg('environment')).lower() == 'outdoor')">
+        <rosparam file="$(find lio_localizer)/config/params-env-outdoor.yaml" command="load" />
+        <param name="lio_localizer/gpsTopic" value="$(arg outdoor_gps_topic)" />
+    </group>
 
     <!-- Lio-Localizer Nodes -->
     <node pkg="lio_localizer" type="lio_localizer_imuPreintegration"    name="lio_localizer_imuPreintegration"      output="screen" 	respawn="true"/>

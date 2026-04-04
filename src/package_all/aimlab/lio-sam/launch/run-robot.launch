@@ -1,6 +1,9 @@
 <launch>
 
     <arg name="project" default="lio_sam"/>
+    <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
+    <arg name="environment" default="indoor"/>
+    <arg name="outdoor_gps_topic" default="/smc_2000/fix"/>
     <arg name="enable_drivable_area" default="true"/>
     <arg name="enable_drivable_area_2d_editor" default="false"/>
     <arg name="enable_map_sync" default="true"/>
@@ -17,7 +20,14 @@
     <arg name="trajectory_export_publish_reload" default="false"/>
     
     <!-- Parameters -->
-    <rosparam file="$(find lio_sam)/config/params-robot.yaml" command="load" />
+    <rosparam file="$(arg base_config_file)" command="load" />
+    <group unless="$(eval str(arg('environment')).lower() == 'outdoor')">
+      <rosparam file="$(find lio_sam)/config/params-env-indoor.yaml" command="load" />
+    </group>
+    <group if="$(eval str(arg('environment')).lower() == 'outdoor')">
+      <rosparam file="$(find lio_sam)/config/params-env-outdoor.yaml" command="load" />
+      <param name="lio_sam/gpsTopic" value="$(arg outdoor_gps_topic)" />
+    </group>
 
     <!--- LOAM -->
     <include file="$(find lio_sam)/launch/include/module_loam.launch" />

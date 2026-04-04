@@ -1,0 +1,7 @@
+lio_sam:
+  gpsTopic: "/gps/disabled"
+  useImuHeadingInitialization: false
+  useGpsElevation: false
+  odometrySurfLeafSize: 0.2
+  mappingCornerLeafSize: 0.1
+  mappingSurfLeafSize: 0.2
