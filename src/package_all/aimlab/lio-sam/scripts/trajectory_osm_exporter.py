@@ -14,9 +14,13 @@ from std_msgs.msg import Empty
 
 class TrajectoryOsmExporter:
     def __init__(self):
-        self.path_topic = rospy.get_param("~path_topic", "/lio_sam/mapping/path_pose_wgs84")
-        self.output_csv = os.path.expanduser(rospy.get_param("~output_csv", "~/.ros/trajectory_wgs84.csv"))
-        self.output_osm = os.path.expanduser(rospy.get_param("~output_osm", "~/.ros/trajectory_wgs84.osm"))
+        self.path_topic = rospy.get_param("~path_topic", "/lio_sam/mapping/path")
+        self.path_mode = str(rospy.get_param("~path_mode", "local")).strip().lower()
+        if self.path_mode not in ("local", "wgs84"):
+            rospy.logwarn("trajectory_osm_exporter: invalid path_mode=%s -> fallback to local", self.path_mode)
+            self.path_mode = "local"
+        self.output_csv = os.path.expanduser(rospy.get_param("~output_csv", "~/.ros/trajectory.csv"))
+        self.output_osm = os.path.expanduser(rospy.get_param("~output_osm", "~/.ros/trajectory.osm"))
         self.write_period_s = max(0.2, float(rospy.get_param("~write_period_s", 2.0)))
         self.min_points = max(2, int(rospy.get_param("~min_points", 5)))
         self.min_step_m = max(0.0, float(rospy.get_param("~min_step_m", 0.25)))
@@ -57,7 +61,8 @@ class TrajectoryOsmExporter:
         rospy.on_shutdown(self.on_shutdown)
 
         rospy.loginfo(
-            "trajectory_osm_exporter started | topic=%s -> csv=%s, osm=%s",
+            "trajectory_osm_exporter started | mode=%s topic=%s -> csv=%s, osm=%s",
+            self.path_mode,
             self.path_topic,
             self.output_csv,
             self.output_osm,
@@ -75,16 +80,41 @@ class TrajectoryOsmExporter:
         y = dp
         return r * math.sqrt(x * x + y * y)
 
+    @staticmethod
+    def _xy_dist_m(p0, p1):
+        return math.hypot(float(p1[0]) - float(p0[0]), float(p1[1]) - float(p0[1]))
+
+    def _point_distance_m(self, p0, p1):
+        if self.path_mode == "local":
+            return self._xy_dist_m(p0, p1)
+        return self._ll_dist_m(p0[0], p0[1], p1[0], p1[1])
+
+    @staticmethod
+    def _local_xy_to_pseudo_latlon(x, y):
+        # Keep valid OSM lat/lon fields even for a GNSS-free local trajectory.
+        lat = float(y) / 111320.0
+        lon = float(x) / 111320.0
+        return lat, lon
+
     def _extract_points(self, msg):
         raw = []
-        for ps in msg.poses:
-            lat = float(ps.pose.position.x)
-            lon = float(ps.pose.position.y)
-            if not math.isfinite(lat) or not math.isfinite(lon):
-                continue
-            if lat < -90.0 or lat > 90.0 or lon < -180.0 or lon > 180.0:
-                continue
-            raw.append((lat, lon))
+        if self.path_mode == "local":
+            for ps in msg.poses:
+                x = float(ps.pose.position.x)
+                y = float(ps.pose.position.y)
+                z = float(ps.pose.position.z)
+                if not math.isfinite(x) or not math.isfinite(y) or not math.isfinite(z):
+                    continue
+                raw.append((x, y, z))
+        else:
+            for ps in msg.poses:
+                lat = float(ps.pose.position.x)
+                lon = float(ps.pose.position.y)
+                if not math.isfinite(lat) or not math.isfinite(lon):
+                    continue
+                if lat < -90.0 or lat > 90.0 or lon < -180.0 or lon > 180.0:
+                    continue
+                raw.append((lat, lon))
 
         if not raw:
             return []
@@ -93,15 +123,15 @@ class TrajectoryOsmExporter:
 
         pts = []
         last = None
-        for lat, lon in points:
+        for point in points:
             if last is not None and self.min_step_m > 0.0:
-                step = self._ll_dist_m(last[0], last[1], lat, lon)
+                step = self._point_distance_m(last, point)
                 if self.max_step_m > 0.0 and step > self.max_step_m:
                     continue
                 if step < self.min_step_m:
                     continue
-            pts.append((lat, lon))
-            last = (lat, lon)
+            pts.append(point)
+            last = point
             if len(pts) >= self.max_points:
                 break
         return pts
@@ -115,7 +145,7 @@ class TrajectoryOsmExporter:
         segments = []
         reset_count = 0
         for p in points:
-            if cur and self._ll_dist_m(start[0], start[1], p[0], p[1]) <= self.replay_match_m:
+            if cur and self._point_distance_m(start, p) <= self.replay_match_m:
                 if len(cur) >= 2:
                     segments.append(cur)
                     cur = [p]
@@ -148,7 +178,7 @@ class TrajectoryOsmExporter:
         n = len(pts)
         p0 = pts[0]
         p1 = pts[-1]
-        return (n, round(p0[0], 7), round(p0[1], 7), round(p1[0], 7), round(p1[1], 7))
+        return (n, round(float(p0[0]), 7), round(float(p0[1]), 7), round(float(p1[0]), 7), round(float(p1[1]), 7))
 
     def path_callback(self, msg):
         pts = self._extract_points(msg)
@@ -170,9 +200,14 @@ class TrajectoryOsmExporter:
         tmp = out + ".tmp"
         with open(tmp, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["lat", "lon"])
-            for lat, lon in points:
-                w.writerow([("{:.8f}".format(lat)), ("{:.8f}".format(lon))])
+            if self.path_mode == "local":
+                w.writerow(["x", "y", "z"])
+                for x, y, z in points:
+                    w.writerow([("{:.8f}".format(x)), ("{:.8f}".format(y)), ("{:.8f}".format(z))])
+            else:
+                w.writerow(["lat", "lon"])
+                for lat, lon in points:
+                    w.writerow([("{:.8f}".format(lat)), ("{:.8f}".format(lon))])
         os.replace(tmp, out)
 
     def _write_osm(self, points):
@@ -184,26 +219,46 @@ class TrajectoryOsmExporter:
 
         root = ET.Element("osm", attrib={"version": "0.6", "generator": "trajectory_osm_exporter.py"})
         node_ids = []
-        for i, (lat, lon) in enumerate(points):
+        for i, point in enumerate(points):
             nid = str(-(i + 1))
             node_ids.append(nid)
-            ET.SubElement(
-                root,
-                "node",
-                attrib={
-                    "id": nid,
-                    "action": "modify",
-                    "visible": "true",
-                    "lat": "{:.8f}".format(lat),
-                    "lon": "{:.8f}".format(lon),
-                },
-            )
+            if self.path_mode == "local":
+                x, y, z = point
+                lat, lon = self._local_xy_to_pseudo_latlon(x, y)
+                node_el = ET.SubElement(
+                    root,
+                    "node",
+                    attrib={
+                        "id": nid,
+                        "action": "modify",
+                        "visible": "true",
+                        "lat": "{:.8f}".format(lat),
+                        "lon": "{:.8f}".format(lon),
+                    },
+                )
+                ET.SubElement(node_el, "tag", attrib={"k": "local_x", "v": "{:.8f}".format(x)})
+                ET.SubElement(node_el, "tag", attrib={"k": "local_y", "v": "{:.8f}".format(y)})
+                ET.SubElement(node_el, "tag", attrib={"k": "local_z", "v": "{:.8f}".format(z)})
+            else:
+                lat, lon = point
+                ET.SubElement(
+                    root,
+                    "node",
+                    attrib={
+                        "id": nid,
+                        "action": "modify",
+                        "visible": "true",
+                        "lat": "{:.8f}".format(lat),
+                        "lon": "{:.8f}".format(lon),
+                    },
+                )
 
         way = ET.SubElement(root, "way", attrib={"id": "-1", "action": "modify", "visible": "true"})
         for nid in node_ids:
             ET.SubElement(way, "nd", attrib={"ref": nid})
         ET.SubElement(way, "tag", attrib={"k": "highway", "v": "service"})
         ET.SubElement(way, "tag", attrib={"k": "name", "v": "auto_generated"})
+        ET.SubElement(way, "tag", attrib={"k": "coord_mode", "v": self.path_mode})
 
         xml = ET.tostring(root, encoding="utf-8")
         with open(tmp, "wb") as f:
@@ -262,7 +317,7 @@ class TrajectoryOsmExporter:
         count_delta = abs(len(points) - last_count)
         end_shift = 0.0
         if last_end is not None:
-            end_shift = self._ll_dist_m(last_end[0], last_end[1], points[-1][0], points[-1][1])
+            end_shift = self._point_distance_m(last_end, points[-1])
 
         if count_delta < self.min_new_points_to_write and end_shift < self.min_end_shift_m_to_write:
             return

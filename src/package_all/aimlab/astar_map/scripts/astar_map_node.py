@@ -293,6 +293,16 @@ class AStarPlanner:
             rospy.logwarn(f"[astar] failed to read ref CSV: {e}")
             return None
 
+    @staticmethod
+    def _read_node_tag_float(node_el, key):
+        tag = node_el.find(f'tag[@k="{key}"]')
+        if tag is None:
+            return None
+        try:
+            return float(tag.attrib["v"])
+        except Exception:
+            return None
+
     def _decide_mode_from_csv(self, refcsv):
         if self._mode_param in ("ENU", "UTM"):
             self.mode = "ENU" if self._mode_param == "ENU" else "UTM"
@@ -337,13 +347,22 @@ class AStarPlanner:
             self._enu_R = self._ecef_to_enu_matrix(self._ref_lat, self._ref_lon)
 
             self.node_list = []
+            local_xy_count = 0
             for nd in root.findall('.//node'):
                 nid = int(nd.attrib['id'])
                 lat = float(nd.attrib['lat']); lon = float(nd.attrib['lon'])
                 tag = nd.find('tag[@k="name"]')
                 name = tag.attrib['v'] if tag is not None else None
-                e, n = self._ll_to_enu(lat, lon)
+                local_x = self._read_node_tag_float(nd, "local_x")
+                local_y = self._read_node_tag_float(nd, "local_y")
+                if local_x is not None and local_y is not None:
+                    e, n = local_x, local_y
+                    local_xy_count += 1
+                else:
+                    e, n = self._ll_to_enu(lat, lon)
                 self.node_list.append(Node(nid, e, n, lat, lon, name))
+            if local_xy_count > 0:
+                rospy.loginfo("[astar] using embedded local_x/local_y for %d OSM nodes", local_xy_count)
 
         else:  # UTM-REL
             self._utm_ref_e = refcsv.get("ref_east", 0.0) if refcsv else 0.0

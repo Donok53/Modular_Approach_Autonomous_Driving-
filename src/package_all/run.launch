@@ -157,7 +157,7 @@
   <arg name="obstacle_consider_side_m" default="0.80"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
-  <arg name="use_auto_osm" default="false"/>
+  <arg name="use_auto_osm" default="true"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
   <arg name="astar_ref_file" default="$(find lio_localizer)/map/test/map_reference_coordinate.csv"/>

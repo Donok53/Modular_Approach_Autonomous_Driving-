@@ -1,7 +1,8 @@
 <launch>
   <arg name="enable" default="true"/>
-  <arg name="path_topic" default="/lio_sam/mapping/path_pose_wgs84"/>
-  <arg name="output_csv" default="$(find astar_map)/map/auto_trajectory_wgs84.csv"/>
+  <arg name="path_topic" default="/lio_sam/mapping/path"/>
+  <arg name="path_mode" default="local"/>
+  <arg name="output_csv" default="$(find astar_map)/map/auto_trajectory_local.csv"/>
   <arg name="output_osm" default="$(find astar_map)/map/auto_trajectory.osm"/>
   <arg name="auto_write" default="false"/>
   <arg name="save_on_shutdown" default="true"/>
@@ -15,6 +16,7 @@
   <group if="$(arg enable)">
     <node pkg="lio_sam" type="trajectory_osm_exporter.py" name="trajectory_osm_exporter" output="screen" respawn="true">
       <param name="path_topic" value="$(arg path_topic)"/>
+      <param name="path_mode" value="$(arg path_mode)"/>
       <param name="output_csv" value="$(arg output_csv)"/>
       <param name="output_osm" value="$(arg output_osm)"/>
       <param name="auto_write" value="$(arg auto_write)"/>
