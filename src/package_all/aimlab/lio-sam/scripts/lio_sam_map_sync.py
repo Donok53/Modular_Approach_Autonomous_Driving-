@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import math
 import os
 import shutil
 import struct
@@ -51,6 +52,8 @@ class LioSamMapSync:
         self.global_map_input_file = rospy.get_param("~global_map_input_file", "GlobalMap.pcd")
         self.global_map_2d_output = rospy.get_param("~global_map_2d_output", "GlobalMap2D.pcd")
         self.global_map_2d_z_value = float(rospy.get_param("~global_map_2d_z_value", 0.0))
+        self.global_map_2d_binary_output = bool(rospy.get_param("~global_map_2d_binary_output", True))
+        self.global_map_2d_xy_leaf_size = max(0.0, float(rospy.get_param("~global_map_2d_xy_leaf_size", 0.20)))
         self.write_asset_descriptions = bool(rospy.get_param("~write_asset_descriptions", False))
         self.asset_readme_file = rospy.get_param("~asset_readme_file", "README_static_assets.txt")
 
@@ -194,8 +197,48 @@ class LioSamMapSync:
                 f.write("%.6f %.6f %.6f %.6f\n" % (x, y, z, intensity))
 
     @staticmethod
+    def _write_binary_pcd(path, points):
+        header = (
+            "# .PCD v0.7 - Point Cloud Data file format\n"
+            "VERSION 0.7\n"
+            "FIELDS x y z intensity\n"
+            "SIZE 4 4 4 4\n"
+            "TYPE F F F F\n"
+            "COUNT 1 1 1 1\n"
+            "WIDTH %d\n"
+            "HEIGHT 1\n"
+            "VIEWPOINT 0 0 0 1 0 0 0\n"
+            "POINTS %d\n"
+            "DATA binary\n"
+        ) % (len(points), len(points))
+        with open(path, "wb") as f:
+            f.write(header.encode("ascii"))
+            for x, y, z, intensity in points:
+                f.write(struct.pack("<ffff", float(x), float(y), float(z), float(intensity)))
+
+    @classmethod
+    def _write_pcd(cls, path, points, binary_output):
+        if binary_output:
+            cls._write_binary_pcd(path, points)
+        else:
+            cls._write_ascii_pcd(path, points)
+
+    @staticmethod
     def _cell_center(ix, iy, resolution):
         return (float(ix) + 0.5) * resolution, (float(iy) + 0.5) * resolution
+
+    @staticmethod
+    def _downsample_xy_points(points, leaf_size):
+        if leaf_size <= 0.0:
+            return list(points)
+        kept = {}
+        inv = 1.0 / leaf_size
+        for x, y, z, intensity in points:
+            key = (int(math.floor(x * inv)), int(math.floor(y * inv)))
+            prev = kept.get(key)
+            if prev is None or intensity > prev[3]:
+                kept[key] = (x, y, z, intensity)
+        return list(kept.values())
 
     @staticmethod
     def _pcd_type_to_struct(type_code, size):
@@ -335,14 +378,24 @@ class LioSamMapSync:
             return generated
 
         flattened = [(x, y, self.global_map_2d_z_value, intensity) for x, y, _z, intensity in points]
+        before_count = len(flattened)
+        flattened = self._downsample_xy_points(flattened, self.global_map_2d_xy_leaf_size)
         if not flattened:
             rospy.logwarn("lio_sam_map_sync: global map had no points for 2d export")
             return generated
 
         out_path = os.path.join(self.destination_dir, self.global_map_2d_output)
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-        self._write_ascii_pcd(out_path, flattened)
+        self._write_pcd(out_path, flattened, self.global_map_2d_binary_output)
         generated.append(os.path.relpath(out_path, self.destination_dir))
+        rospy.loginfo(
+            "lio_sam_map_sync: exported %s (%d -> %d pts, binary=%s, xy_leaf=%.3f m)",
+            self.global_map_2d_output,
+            before_count,
+            len(flattened),
+            str(self.global_map_2d_binary_output),
+            self.global_map_2d_xy_leaf_size,
+        )
         return generated
 
     def _export_drivable_area_pcds(self):
@@ -381,7 +434,7 @@ class LioSamMapSync:
         if drivable_points:
             drivable_path = os.path.join(self.destination_dir, self.drivable_area_pcd_output)
             os.makedirs(os.path.dirname(drivable_path) or ".", exist_ok=True)
-            self._write_ascii_pcd(drivable_path, drivable_points)
+            self._write_pcd(drivable_path, drivable_points, True)
             generated.append(os.path.relpath(drivable_path, self.destination_dir))
         else:
             rospy.logwarn("lio_sam_map_sync: drivable-area state json has no cells to export")
@@ -398,7 +451,7 @@ class LioSamMapSync:
         risk_path = os.path.join(self.destination_dir, self.drivable_area_risk_pcd_output)
         if risk_points:
             os.makedirs(os.path.dirname(risk_path) or ".", exist_ok=True)
-            self._write_ascii_pcd(risk_path, risk_points)
+            self._write_pcd(risk_path, risk_points, True)
             generated.append(os.path.relpath(risk_path, self.destination_dir))
         elif os.path.exists(risk_path):
             os.remove(risk_path)
@@ -466,7 +519,7 @@ class LioSamMapSync:
             if "GlobalMap.pcd" in existing_assets:
                 f.write("- GlobalMap.pcd: 전체 환경을 나타내는 대표 3D 포인트클라우드 맵입니다. 웹에서 3D 배경 맵으로 쓰기 좋습니다.\n")
             if "GlobalMap2D.pcd" in existing_assets:
-                f.write("- GlobalMap2D.pcd: GlobalMap.pcd를 z=0 평면으로 펼쳐 만든 2D 배경용 포인트클라우드입니다. 웹 관제에서 평면 배경 맵처럼 쓰기 좋습니다.\n")
+                f.write("- GlobalMap2D.pcd: GlobalMap.pcd를 z=0 평면으로 펼치고 XY 기준으로 다운샘플한 2D 배경용 포인트클라우드입니다. 웹 관제에서 평면 배경 맵처럼 쓰기 좋습니다.\n")
             if "CornerMap.pcd" in existing_assets:
                 f.write("- CornerMap.pcd: 코너/엣지 특징점만 따로 모아둔 맵입니다. 주로 LOAM 방식 정합과 디버깅에 사용합니다.\n")
             if "SurfMap.pcd" in existing_assets:
