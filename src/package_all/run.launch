@@ -160,6 +160,7 @@
   <arg name="use_auto_osm" default="false"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
+  <arg name="astar_ref_file" default="$(find lio_localizer)/map/test/map_reference_coordinate.csv"/>
 
   <group if="$(arg use_lio_sam)">
     <include file="$(find lio_sam)/launch/run-robot.launch">
@@ -190,6 +191,7 @@
       <include file="$(find astar_map)/launch/astar_map.launch">
         <arg name="pose_topic" value="$(arg pose_topic)"/>
         <arg name="osm_file" value="$(arg auto_osm_file)"/>
+        <arg name="ref_file" value="$(arg astar_ref_file)"/>
         <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
@@ -203,6 +205,7 @@
       <include file="$(find astar_map)/launch/astar_map.launch">
         <arg name="pose_topic" value="$(arg pose_topic)"/>
         <arg name="osm_file" value="$(arg default_osm_file)"/>
+        <arg name="ref_file" value="$(arg astar_ref_file)"/>
         <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
