@@ -340,6 +340,12 @@ public:
                 continue;
             }
 
+            if (currentImuTime <= imuTime[imuPointerCur-1])
+            {
+                ROS_WARN_THROTTLE(1.0, "Skipping non-increasing IMU timestamp in deskew");
+                continue;
+            }
+
             // get angular velocity
             double angular_x, angular_y, angular_z;
             imuAngular2rosAngular(&thisImuMsg, &angular_x, &angular_y, &angular_z);
@@ -447,6 +453,9 @@ public:
     {
         *rotXCur = 0; *rotYCur = 0; *rotZCur = 0;
 
+        if (imuPointerCur <= 0)
+            return;
+
         int imuPointerFront = 0;
         while (imuPointerFront < imuPointerCur)
         {
@@ -455,15 +464,33 @@ public:
             ++imuPointerFront;
         }
 
-        if (pointTime > imuTime[imuPointerFront] || imuPointerFront == 0)
+        if (imuPointerFront == 0)
         {
-            *rotXCur = imuRotX[imuPointerFront];
-            *rotYCur = imuRotY[imuPointerFront];
-            *rotZCur = imuRotZ[imuPointerFront];
-        } else {
+            *rotXCur = imuRotX[0];
+            *rotYCur = imuRotY[0];
+            *rotZCur = imuRotZ[0];
+        }
+        else if (imuPointerFront >= imuPointerCur)
+        {
+            *rotXCur = imuRotX[imuPointerCur];
+            *rotYCur = imuRotY[imuPointerCur];
+            *rotZCur = imuRotZ[imuPointerCur];
+        }
+        else
+        {
             int imuPointerBack = imuPointerFront - 1;
-            double ratioFront = (pointTime - imuTime[imuPointerBack]) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-            double ratioBack = (imuTime[imuPointerFront] - pointTime) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
+            double timeDiff = imuTime[imuPointerFront] - imuTime[imuPointerBack];
+            if (timeDiff <= 1e-6)
+            {
+                ROS_WARN_THROTTLE(1.0, "Skipping duplicate IMU timestamps during deskew interpolation");
+                *rotXCur = imuRotX[imuPointerFront];
+                *rotYCur = imuRotY[imuPointerFront];
+                *rotZCur = imuRotZ[imuPointerFront];
+                return;
+            }
+
+            double ratioFront = (pointTime - imuTime[imuPointerBack]) / timeDiff;
+            double ratioBack = (imuTime[imuPointerFront] - pointTime) / timeDiff;
             *rotXCur = imuRotX[imuPointerFront] * ratioFront + imuRotX[imuPointerBack] * ratioBack;
             *rotYCur = imuRotY[imuPointerFront] * ratioFront + imuRotY[imuPointerBack] * ratioBack;
             *rotZCur = imuRotZ[imuPointerFront] * ratioFront + imuRotZ[imuPointerBack] * ratioBack;

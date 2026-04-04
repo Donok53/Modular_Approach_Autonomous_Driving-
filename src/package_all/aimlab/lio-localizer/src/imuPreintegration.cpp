@@ -381,13 +381,20 @@ public:
             return;
         }
 
+        double imuTime = ROS_TIME(&thisImu);
+        if ((!imuQueImu.empty() && imuTime <= ROS_TIME(&imuQueImu.back())) ||
+            (!imuQueOpt.empty() && imuTime <= ROS_TIME(&imuQueOpt.back())))
+        {
+            ROS_WARN_THROTTLE(1.0, "Dropping IMU sample with non-increasing timestamp in preintegration");
+            return;
+        }
+
         imuQueOpt.push_back(thisImu);
         imuQueImu.push_back(thisImu);
 
         if (doneFirstOpt == false)
             return;
 
-        double imuTime = ROS_TIME(&thisImu);
         double dt = (lastImuT_imu < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_imu);
         if(dt <= 0.0) return;
         lastImuT_imu = imuTime;

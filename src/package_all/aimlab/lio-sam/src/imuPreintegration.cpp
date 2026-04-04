@@ -467,6 +467,20 @@ public:
         std::lock_guard<std::mutex> lock(mtx);
 
         sensor_msgs::Imu thisImu = imuConverter(*imu_raw);
+        if (!std::isfinite(thisImu.linear_acceleration.x) || !std::isfinite(thisImu.linear_acceleration.y) || !std::isfinite(thisImu.linear_acceleration.z) ||
+            !std::isfinite(thisImu.angular_velocity.x)    || !std::isfinite(thisImu.angular_velocity.y)    || !std::isfinite(thisImu.angular_velocity.z))
+        {
+            ROS_WARN_THROTTLE(1.0, "Dropping IMU sample with non-finite values");
+            return;
+        }
+
+        double imuTime = ROS_TIME(&thisImu);
+        if ((!imuQueImu.empty() && imuTime <= ROS_TIME(&imuQueImu.back())) ||
+            (!imuQueOpt.empty() && imuTime <= ROS_TIME(&imuQueOpt.back())))
+        {
+            ROS_WARN_THROTTLE(1.0, "Dropping IMU sample with non-increasing timestamp in preintegration");
+            return;
+        }
 
         imuQueOpt.push_back(thisImu);
         imuQueImu.push_back(thisImu);
@@ -474,7 +488,6 @@ public:
         if (doneFirstOpt == false)
             return;
 
-        double imuTime = ROS_TIME(&thisImu);
         double dt = (lastImuT_imu < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_imu);
         // double dt = (lastImuT_imu < 0 || (imuTime - lastImuT_imu) <= 0) ? (1.0 / 500) : (imuTime - lastImuT_imu);
         if(dt <= 0.0) return;
