@@ -3,7 +3,7 @@ lio_localizer:
   # Topics
   pointCloudTopic: "ouster/points"            # Point cloud data
   imuTopic: "imu/data"                        # IMU data
-  #gpsTopic: "smc_2000/fix"
+  gpsTopic: "/gps/disabled"                  # localizer GNSS init path is disabled; avoid unintended GPS subscription
 
   # Map File Path
   # mapFilePath: "map/ai_convergence"
