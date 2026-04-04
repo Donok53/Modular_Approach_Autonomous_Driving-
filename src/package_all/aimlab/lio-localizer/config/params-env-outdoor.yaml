@@ -1,4 +1,4 @@
 lio_localizer:
-  odometrySurfLeafSize: 0.4
-  mappingCornerLeafSize: 0.2
-  mappingSurfLeafSize: 0.4
+  odometrySurfLeafSize: 0.3
+  mappingCornerLeafSize: 0.15
+  mappingSurfLeafSize: 0.3
