@@ -1,7 +1,6 @@
 <launch>
   <arg name="use_lio_sam" default="false"/>
   <arg name="localization_environment" default="indoor"/>
-  <arg name="outdoor_gps_topic" default="/smc_2000/fix"/>
   <arg name="enable_localizer_drivable_area" default="true"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
   <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
@@ -165,7 +164,6 @@
   <group if="$(arg use_lio_sam)">
     <include file="$(find lio_sam)/launch/run-robot.launch">
       <arg name="environment" value="$(arg localization_environment)"/>
-      <arg name="outdoor_gps_topic" value="$(arg outdoor_gps_topic)"/>
       <arg name="enable_drivable_area" value="true"/>
       <arg name="enable_drivable_area_2d_editor" value="$(arg enable_lio_sam_drivable_area_2d_editor)"/>
     </include>
@@ -173,7 +171,6 @@
   <group unless="$(arg use_lio_sam)">
     <include file="$(find lio_localizer)/launch/run-robot.launch">
       <arg name="environment" value="$(arg localization_environment)"/>
-      <arg name="outdoor_gps_topic" value="$(arg outdoor_gps_topic)"/>
       <arg name="enable_drivable_area" value="$(arg enable_localizer_drivable_area)"/>
       <arg name="enable_drivable_area_2d_editor" value="$(arg enable_localizer_drivable_area_2d_editor)"/>
       <arg name="rviz_config_file" value="$(find lio_localizer)/launch/include/config/rviz_with_local_planner.rviz"/>

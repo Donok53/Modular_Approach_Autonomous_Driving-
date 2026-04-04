@@ -1,6 +1,4 @@
 lio_localizer:
-  gpsTopic: "/gps/disabled"
   odometrySurfLeafSize: 0.2
   mappingCornerLeafSize: 0.1
   mappingSurfLeafSize: 0.2
-  voxelGridFilterSize: 0.1

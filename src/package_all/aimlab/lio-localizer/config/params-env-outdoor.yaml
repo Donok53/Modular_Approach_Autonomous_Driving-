@@ -2,4 +2,3 @@ lio_localizer:
   odometrySurfLeafSize: 0.4
   mappingCornerLeafSize: 0.2
   mappingSurfLeafSize: 0.4
-  voxelGridFilterSize: 0.2
