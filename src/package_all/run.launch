@@ -202,7 +202,7 @@
     <param name="global_map_2d_output" value="GlobalMap2D.pcd"/>
     <param name="global_map_2d_z_value" value="0.0"/>
     <param name="global_map_2d_binary_output" value="true"/>
-    <param name="global_map_2d_xy_leaf_size" value="0.20"/>
+    <param name="global_map_2d_xy_leaf_size" value="0.11"/>
     <param name="write_asset_descriptions" value="true"/>
     <param name="asset_readme_file" value="README_static_assets.txt"/>
     <param name="drivable_area_state_file" value="$(arg monitoring_bundle_drivable_state_file)"/>
