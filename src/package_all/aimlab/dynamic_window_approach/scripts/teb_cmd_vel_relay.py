@@ -394,6 +394,15 @@ class TebCmdVelRelay(object):
         )
 
         smooth_flags = []
+        if abs(float(cmd.linear.x)) <= 1e-4 and abs(float(out.linear.x)) > 1e-4:
+            smooth_flags.append("cut_linear")
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: cutting linear carry for zero target prev_v=%.3f target_w=%.3f",
+                float(self.last_publish_cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            out.linear.x = 0.0
         if abs(out.linear.x - float(cmd.linear.x)) > 1e-4:
             if abs(float(cmd.linear.x)) <= 1e-4 and abs(float(out.linear.x)) > 1e-4:
                 smooth_flags.append("carry_linear")
@@ -656,7 +665,7 @@ class TebCmdVelRelay(object):
     def _terminal_goal_stop_distance_m(self):
         return min(
             self.final_brake_distance_m,
-            max(0.03, 0.5 * self.final_cmd_linear_stop_threshold),
+            max(0.12, 0.8 * self.final_cmd_linear_stop_threshold),
         )
 
     def _should_force_goal_stop(self, cmd, final_brake_active=None):
@@ -690,6 +699,11 @@ class TebCmdVelRelay(object):
             return False
         prev_v = float(self.last_publish_cmd.linear.x)
         if prev_v <= max(self.reverse_replacement_speed, self.min_abs_linear_speed):
+            return False
+        if (
+            self.local_path_pose_count > 0
+            and self.local_path_pose_count <= (self.final_path_pose_threshold + 1)
+        ):
             return False
         if (
             math.isfinite(self.local_path_remaining_m)
