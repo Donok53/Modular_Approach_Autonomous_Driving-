@@ -197,6 +197,10 @@
     <param name="write_manifest" value="true"/>
     <param name="manifest_file" value="asset_manifest.json"/>
     <param name="export_drivable_area_pcd" value="true"/>
+    <param name="export_global_map_2d_pcd" value="true"/>
+    <param name="global_map_input_file" value="GlobalMap.pcd"/>
+    <param name="global_map_2d_output" value="GlobalMap2D.pcd"/>
+    <param name="global_map_2d_z_value" value="0.0"/>
     <param name="write_asset_descriptions" value="true"/>
     <param name="asset_readme_file" value="README_static_assets.txt"/>
     <param name="drivable_area_state_file" value="$(arg monitoring_bundle_drivable_state_file)"/>

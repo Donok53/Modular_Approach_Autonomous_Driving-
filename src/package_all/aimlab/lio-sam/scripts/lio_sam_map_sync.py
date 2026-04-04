@@ -4,6 +4,7 @@
 import json
 import os
 import shutil
+import struct
 import time
 
 import rospy
@@ -46,6 +47,10 @@ class LioSamMapSync:
         self.drivable_area_risk_pcd_output = rospy.get_param(
             "~drivable_area_risk_pcd_output", "DrivableAreaRiskMap.pcd"
         )
+        self.export_global_map_2d_pcd = bool(rospy.get_param("~export_global_map_2d_pcd", False))
+        self.global_map_input_file = rospy.get_param("~global_map_input_file", "GlobalMap.pcd")
+        self.global_map_2d_output = rospy.get_param("~global_map_2d_output", "GlobalMap2D.pcd")
+        self.global_map_2d_z_value = float(rospy.get_param("~global_map_2d_z_value", 0.0))
         self.write_asset_descriptions = bool(rospy.get_param("~write_asset_descriptions", False))
         self.asset_readme_file = rospy.get_param("~asset_readme_file", "README_static_assets.txt")
 
@@ -192,6 +197,154 @@ class LioSamMapSync:
     def _cell_center(ix, iy, resolution):
         return (float(ix) + 0.5) * resolution, (float(iy) + 0.5) * resolution
 
+    @staticmethod
+    def _pcd_type_to_struct(type_code, size):
+        table = {
+            ("F", 4): "f",
+            ("F", 8): "d",
+            ("I", 1): "b",
+            ("I", 2): "h",
+            ("I", 4): "i",
+            ("I", 8): "q",
+            ("U", 1): "B",
+            ("U", 2): "H",
+            ("U", 4): "I",
+            ("U", 8): "Q",
+        }
+        return table.get((type_code, size))
+
+    @classmethod
+    def _read_pcd_header(cls, path):
+        header = {}
+        with open(path, "rb") as f:
+            while True:
+                line = f.readline()
+                if not line:
+                    raise ValueError("pcd header ended unexpectedly: %s" % path)
+                text = line.decode("ascii", errors="ignore").strip()
+                if not text or text.startswith("#"):
+                    continue
+                parts = text.split()
+                key = parts[0].upper()
+                values = parts[1:]
+                header[key] = values
+                if key == "DATA":
+                    header["DATA_START"] = f.tell()
+                    break
+
+        fields = header.get("FIELDS", [])
+        size = [int(v) for v in header.get("SIZE", [])]
+        types = header.get("TYPE", [])
+        counts = [int(v) for v in header.get("COUNT", ["1"] * len(fields))]
+        points = int(header.get("POINTS", [header.get("WIDTH", ["0"])[0]])[0])
+        data_mode = header.get("DATA", [""])[0].lower()
+
+        if not (len(fields) == len(size) == len(types) == len(counts)):
+            raise ValueError("pcd header field metadata mismatch: %s" % path)
+
+        offset = 0
+        layout = []
+        for name, item_size, item_type, item_count in zip(fields, size, types, counts):
+            struct_code = cls._pcd_type_to_struct(item_type, item_size)
+            if struct_code is None:
+                raise ValueError("unsupported pcd field type %s/%s in %s" % (item_type, item_size, path))
+            layout.append(
+                {
+                    "name": name,
+                    "size": item_size,
+                    "type": item_type,
+                    "count": item_count,
+                    "offset": offset,
+                    "struct_code": struct_code,
+                }
+            )
+            offset += item_size * item_count
+
+        header["POINT_COUNT"] = points
+        header["DATA_MODE"] = data_mode
+        header["POINT_STEP"] = offset
+        header["LAYOUT"] = layout
+        return header
+
+    @classmethod
+    def _read_pcd_points(cls, path):
+        header = cls._read_pcd_header(path)
+        fields = {item["name"]: item for item in header["LAYOUT"]}
+        if "x" not in fields or "y" not in fields or "z" not in fields:
+            raise ValueError("pcd missing x/y/z fields: %s" % path)
+
+        points = []
+        data_mode = header["DATA_MODE"]
+        point_count = header["POINT_COUNT"]
+        point_step = header["POINT_STEP"]
+        field_names = header.get("FIELDS", [])
+
+        if data_mode == "ascii":
+            with open(path, "r", encoding="ascii", errors="ignore") as f:
+                started = False
+                field_index = {name: idx for idx, name in enumerate(field_names)}
+                for line in f:
+                    if not started:
+                        if line.strip().lower().startswith("data"):
+                            started = True
+                        continue
+                    row = line.strip().split()
+                    if not row:
+                        continue
+                    x = float(row[field_index["x"]])
+                    y = float(row[field_index["y"]])
+                    z = float(row[field_index["z"]])
+                    intensity = float(row[field_index["intensity"]]) if "intensity" in field_index else 0.0
+                    points.append((x, y, z, intensity))
+            return points
+
+        if data_mode != "binary":
+            raise ValueError("unsupported pcd data mode '%s' in %s" % (data_mode, path))
+
+        def unpack_scalar(blob, spec):
+            fmt = "<" + spec["struct_code"]
+            return struct.unpack_from(fmt, blob, spec["offset"])[0]
+
+        with open(path, "rb") as f:
+            f.seek(header["DATA_START"])
+            for _ in range(point_count):
+                blob = f.read(point_step)
+                if len(blob) < point_step:
+                    break
+                x = float(unpack_scalar(blob, fields["x"]))
+                y = float(unpack_scalar(blob, fields["y"]))
+                z = float(unpack_scalar(blob, fields["z"]))
+                intensity = float(unpack_scalar(blob, fields["intensity"])) if "intensity" in fields else 0.0
+                points.append((x, y, z, intensity))
+        return points
+
+    def _export_global_map_2d(self):
+        generated = []
+        if not self.export_global_map_2d_pcd:
+            return generated
+
+        src_path = os.path.join(self.destination_dir, self.global_map_input_file)
+        if not os.path.isfile(src_path):
+            rospy.logwarn("lio_sam_map_sync: global map file missing, skip 2d export: %s", src_path)
+            return generated
+
+        try:
+            points = self._read_pcd_points(src_path)
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: failed to build 2d global map pcd: %s", str(e))
+            return generated
+
+        flattened = [(x, y, self.global_map_2d_z_value, intensity) for x, y, _z, intensity in points]
+        if not flattened:
+            rospy.logwarn("lio_sam_map_sync: global map had no points for 2d export")
+            return generated
+
+        out_path = os.path.join(self.destination_dir, self.global_map_2d_output)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        self._write_ascii_pcd(out_path, flattened)
+        generated.append(os.path.relpath(out_path, self.destination_dir))
+        return generated
+
     def _export_drivable_area_pcds(self):
         generated = []
         if not self.export_drivable_area_pcd:
@@ -289,6 +442,7 @@ class LioSamMapSync:
         existing_assets = []
         for name in [
             "GlobalMap.pcd",
+            "GlobalMap2D.pcd",
             "CornerMap.pcd",
             "SurfMap.pcd",
             "DrivableAreaMap.pcd",
@@ -311,6 +465,8 @@ class LioSamMapSync:
             f.write("\n")
             if "GlobalMap.pcd" in existing_assets:
                 f.write("- GlobalMap.pcd: 전체 환경을 나타내는 대표 3D 포인트클라우드 맵입니다. 웹에서 3D 배경 맵으로 쓰기 좋습니다.\n")
+            if "GlobalMap2D.pcd" in existing_assets:
+                f.write("- GlobalMap2D.pcd: GlobalMap.pcd를 z=0 평면으로 펼쳐 만든 2D 배경용 포인트클라우드입니다. 웹 관제에서 평면 배경 맵처럼 쓰기 좋습니다.\n")
             if "CornerMap.pcd" in existing_assets:
                 f.write("- CornerMap.pcd: 코너/엣지 특징점만 따로 모아둔 맵입니다. 주로 LOAM 방식 정합과 디버깅에 사용합니다.\n")
             if "SurfMap.pcd" in existing_assets:
@@ -330,6 +486,7 @@ class LioSamMapSync:
             f.write("\n")
             f.write("권장 사용 방식\n")
             f.write("- 3D 관제 화면: GlobalMap.pcd + localization pose\n")
+            f.write("- 2D 관제 화면: GlobalMap2D.pcd + localization pose\n")
             f.write("- 2D/2.5D 관제 화면: DrivableAreaMap.pcd + path/osm + localization pose\n")
             f.write("- 설명 가능한 주행 화면: 위 자산들에 path, tracked objects, explainability topic을 함께 겹쳐서 사용\n")
 
@@ -346,7 +503,9 @@ class LioSamMapSync:
         if self.delete_extra:
             removed = self._delete_extras(self.source_dir, self.destination_dir)
         copied += self._copy_extra_files()
-        generated = self._export_drivable_area_pcds()
+        generated = []
+        generated.extend(self._export_global_map_2d())
+        generated.extend(self._export_drivable_area_pcds())
         self._write_manifest()
         self._write_asset_descriptions()
 
