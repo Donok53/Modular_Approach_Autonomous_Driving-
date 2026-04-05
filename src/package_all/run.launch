@@ -60,7 +60,7 @@
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
-  <arg name="teb_move_base_goal_lookahead_m" default="$(arg local_replan_lookahead_m)"/>
+  <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_emergency_stop_front_margin" default="0.35"/>
   <arg name="teb_emergency_stop_side_margin" default="0.03"/>
@@ -81,7 +81,7 @@
   <arg name="teb_global_inflation_radius_m" default="0.15"/>
   <arg name="teb_min_obstacle_dist_m" default="0.18"/>
   <arg name="teb_inflation_dist_m" default="0.25"/>
-  <arg name="teb_weight_viapoint" default="60.0"/>
+  <arg name="teb_weight_viapoint" default="200.0"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
   <arg name="debug_stop_logging" default="true"/>
