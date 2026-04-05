@@ -51,6 +51,7 @@
   <arg name="teb_enable_local_path_hold_stop" default="true"/>
   <arg name="teb_allow_in_place_rotation_near_obstacle" default="true"/>
   <arg name="teb_allow_in_place_rotation_during_local_hold" default="true"/>
+  <arg name="teb_max_angular_slew_rps2" default="0.95"/>
   <arg name="teb_defer_local_hold_while_avoidance_active" default="true"/>
   <arg name="teb_min_in_place_rotation_angular_speed" default="0.05"/>
   <arg name="teb_reverse_replacement_speed_mps" default="0.03"/>
@@ -61,12 +62,8 @@
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
-  <arg name="teb_move_base_goal_lookahead_m" default="1.0"/>
-  <arg name="teb_local_goal_lookahead_m" default="0.90"/>
-  <arg name="teb_avoidance_goal_lookahead_m" default="0.65"/>
-  <arg name="teb_move_base_goal_update_min_dist_m" default="0.15"/>
-  <arg name="teb_via_corner_preserve_angle_deg" default="25.0"/>
-  <arg name="teb_via_corner_anchor_distance_m" default="0.18"/>
+  <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
+  <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_emergency_stop_front_margin" default="0.35"/>
   <arg name="teb_emergency_stop_side_margin" default="0.01"/>
   <arg name="teb_emergency_stop_far_lateral_ratio" default="0.55"/>
@@ -86,9 +83,10 @@
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
   <arg name="teb_min_obstacle_dist_m" default="0.04"/>
   <arg name="teb_inflation_dist_m" default="0.08"/>
-  <arg name="teb_min_spacing_m" default="0.12"/>
-  <arg name="teb_weight_viapoint" default="350.0"/>
+  <arg name="teb_weight_viapoint" default="200.0"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
+  <arg name="teb_max_vel_theta_rps" default="0.35"/>
+  <arg name="teb_acc_lim_theta_rps2" default="0.60"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
   <arg name="debug_stop_logging" default="true"/>
   <arg name="debug_dwa_stats" default="true"/>
@@ -481,6 +479,7 @@
       <arg name="defer_local_hold_while_avoidance_active" value="$(arg teb_defer_local_hold_while_avoidance_active)"/>
       <arg name="allow_in_place_rotation_near_obstacle" value="$(arg teb_allow_in_place_rotation_near_obstacle)"/>
       <arg name="allow_in_place_rotation_during_local_hold" value="$(arg teb_allow_in_place_rotation_during_local_hold)"/>
+      <arg name="max_angular_slew_rps2" value="$(arg teb_max_angular_slew_rps2)"/>
       <arg name="min_in_place_rotation_angular_speed" value="$(arg teb_min_in_place_rotation_angular_speed)"/>
       <arg name="reverse_replacement_speed_mps" value="$(arg teb_reverse_replacement_speed_mps)"/>
       <arg name="enable_tiny_reverse_forward_crawl" value="$(arg teb_enable_tiny_reverse_forward_crawl)"/>
@@ -491,11 +490,7 @@
       <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
       <arg name="local_hold_timeout_s" value="$(arg teb_local_hold_timeout_s)"/>
       <arg name="move_base_goal_lookahead_m" value="$(arg teb_move_base_goal_lookahead_m)"/>
-      <arg name="local_goal_lookahead_m" value="$(arg teb_local_goal_lookahead_m)"/>
-      <arg name="avoidance_goal_lookahead_m" value="$(arg teb_avoidance_goal_lookahead_m)"/>
       <arg name="move_base_goal_update_min_dist_m" value="$(arg teb_move_base_goal_update_min_dist_m)"/>
-      <arg name="corner_preserve_angle_deg" value="$(arg teb_via_corner_preserve_angle_deg)"/>
-      <arg name="corner_anchor_distance_m" value="$(arg teb_via_corner_anchor_distance_m)"/>
       <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
       <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
       <arg name="emergency_stop_far_lateral_ratio" value="$(arg teb_emergency_stop_far_lateral_ratio)"/>
@@ -515,9 +510,10 @@
       <arg name="teb_global_inflation_radius_m" value="$(arg teb_global_inflation_radius_m)"/>
       <arg name="teb_min_obstacle_dist_m" value="$(arg teb_min_obstacle_dist_m)"/>
       <arg name="teb_inflation_dist_m" value="$(arg teb_inflation_dist_m)"/>
-      <arg name="teb_min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <arg name="teb_weight_viapoint" value="$(arg teb_weight_viapoint)"/>
       <arg name="teb_max_vel_x_backwards_mps" value="$(arg teb_max_vel_x_backwards_mps)"/>
+      <arg name="teb_max_vel_theta_rps" value="$(arg teb_max_vel_theta_rps)"/>
+      <arg name="teb_acc_lim_theta_rps2" value="$(arg teb_acc_lim_theta_rps2)"/>
       <arg name="teb_weight_forward_drive" value="$(arg teb_weight_forward_drive)"/>
     </include>
   </group>

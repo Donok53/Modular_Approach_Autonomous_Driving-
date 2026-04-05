@@ -29,28 +29,6 @@ class AStarPathToTebViaPoints(object):
         self.goal_lookahead_m = max(
             0.0, float(rospy.get_param("~goal_lookahead_m", 4.0))
         )
-        self.fallback_goal_lookahead_m = max(
-            0.0,
-            float(rospy.get_param("~fallback_goal_lookahead_m", self.goal_lookahead_m)),
-        )
-        self.local_goal_lookahead_m = max(
-            0.0,
-            float(
-                rospy.get_param(
-                    "~local_goal_lookahead_m",
-                    min(self.goal_lookahead_m, 1.0) if self.goal_lookahead_m > 1e-6 else 0.0,
-                )
-            ),
-        )
-        self.avoidance_goal_lookahead_m = max(
-            0.0,
-            float(
-                rospy.get_param(
-                    "~avoidance_goal_lookahead_m",
-                    min(self.goal_lookahead_m, 0.8) if self.goal_lookahead_m > 1e-6 else 0.0,
-                )
-            ),
-        )
         self.final_goal_switch_distance_m = max(
             0.0, float(rospy.get_param("~final_goal_switch_distance_m", 0.5))
         )
@@ -65,12 +43,6 @@ class AStarPathToTebViaPoints(object):
             0.0, float(rospy.get_param("~min_spacing_m", 0.50))
         )
         self.max_points = max(2, int(rospy.get_param("~max_points", 200)))
-        self.corner_preserve_angle_deg = max(
-            0.0, float(rospy.get_param("~corner_preserve_angle_deg", 25.0))
-        )
-        self.corner_anchor_distance_m = max(
-            0.0, float(rospy.get_param("~corner_anchor_distance_m", 0.18))
-        )
 
         self._last_sig = None
         self._last_key = None
@@ -121,23 +93,19 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead(f=%.2f,l=%.2f,a=%.2f)m final_switch=%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d corner=%.1fdeg/%.2fm",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
             self.odom_topic if self.odom_topic else "-",
             self.output_topic,
             self.goal_output_topic if self.goal_output_topic else "-",
-            self.fallback_goal_lookahead_m,
-            self.local_goal_lookahead_m,
-            self.avoidance_goal_lookahead_m,
+            self.goal_lookahead_m,
             self.final_goal_switch_distance_m,
             "on" if self.respect_local_hold else "off",
             "on" if self.hold_requires_avoidance_path else "off",
             self.min_spacing_m,
             self.max_points,
-            self.corner_preserve_angle_deg,
-            self.corner_anchor_distance_m,
         )
 
     def _watchdog_callback(self, _event):
@@ -221,142 +189,26 @@ class AStarPathToTebViaPoints(object):
         sig.append(round(float(last.pose.position.y), 2))
         return tuple(sig)
 
-    def _goal_lookahead_for_source(self, source):
-        if source == "avoidance":
-            return self.avoidance_goal_lookahead_m
-        if source == "local":
-            return self.local_goal_lookahead_m
-        if source == "fallback":
-            return self.fallback_goal_lookahead_m
-        return self.goal_lookahead_m
-
-    @staticmethod
-    def _copy_pose_with_xy(template_pose, x, y):
-        pose = copy.deepcopy(template_pose)
-        pose.pose.position.x = float(x)
-        pose.pose.position.y = float(y)
-        return pose
-
-    def _append_pose_if_far(self, out_poses, pose, min_dist_m):
-        if out_poses and self._dist(out_poses[-1], pose) < min_dist_m:
-            return
-        out_poses.append(pose)
-
-    def _corner_indices(self, msg):
-        if msg is None or len(msg.poses) < 3 or self.corner_preserve_angle_deg <= 1e-3:
-            return set()
-
-        threshold = math.radians(self.corner_preserve_angle_deg)
-        indices = set()
-        for idx in range(1, len(msg.poses) - 1):
-            yaw_in = self._segment_yaw(msg.poses[idx - 1], msg.poses[idx])
-            yaw_out = self._segment_yaw(msg.poses[idx], msg.poses[idx + 1])
-            if yaw_in is None or yaw_out is None:
-                continue
-            if abs(self._angle_diff(yaw_out, yaw_in)) >= threshold:
-                indices.add(idx)
-        return indices
-
-    def _anchor_pose_before_corner(self, prev_pose, corner_pose):
-        seg_len = self._dist(prev_pose, corner_pose)
-        if seg_len <= 1e-6:
-            return copy.deepcopy(corner_pose)
-        anchor_dist = min(self.corner_anchor_distance_m, seg_len)
-        if anchor_dist <= 1e-6:
-            return copy.deepcopy(corner_pose)
-        t = max(0.0, min(1.0, (seg_len - anchor_dist) / seg_len))
-        x0 = float(prev_pose.pose.position.x)
-        y0 = float(prev_pose.pose.position.y)
-        x1 = float(corner_pose.pose.position.x)
-        y1 = float(corner_pose.pose.position.y)
-        return self._copy_pose_with_xy(
-            corner_pose,
-            x0 + t * (x1 - x0),
-            y0 + t * (y1 - y0),
-        )
-
-    def _anchor_pose_after_corner(self, corner_pose, next_pose):
-        seg_len = self._dist(corner_pose, next_pose)
-        if seg_len <= 1e-6:
-            return copy.deepcopy(corner_pose)
-        anchor_dist = min(self.corner_anchor_distance_m, seg_len)
-        if anchor_dist <= 1e-6:
-            return copy.deepcopy(corner_pose)
-        t = max(0.0, min(1.0, anchor_dist / seg_len))
-        x0 = float(corner_pose.pose.position.x)
-        y0 = float(corner_pose.pose.position.y)
-        x1 = float(next_pose.pose.position.x)
-        y1 = float(next_pose.pose.position.y)
-        return self._copy_pose_with_xy(
-            corner_pose,
-            x0 + t * (x1 - x0),
-            y0 + t * (y1 - y0),
-        )
-
-    def _downsample(self, msg, source=None):
+    def _downsample(self, msg):
         out = Path()
         out.header = msg.header
         if len(msg.poses) <= 2 or self.min_spacing_m <= 1e-6:
             out.poses = [copy.deepcopy(pose) for pose in msg.poses[: self.max_points]]
             return self._orient_path(out)
 
-        corner_indices = self._corner_indices(msg)
-        preserve_indices = {0, len(msg.poses) - 1}
-        for idx in corner_indices:
-            preserve_indices.add(idx)
-            if idx - 1 >= 0:
-                preserve_indices.add(idx - 1)
-            if idx + 1 < len(msg.poses):
-                preserve_indices.add(idx + 1)
+        selected_poses = [msg.poses[0]]
+        last = msg.poses[0]
 
-        selected_indices = [0]
-        last_idx = 0
-        for idx in range(1, len(msg.poses) - 1):
-            pose = msg.poses[idx]
-            if idx in preserve_indices:
-                selected_indices.append(idx)
-                last_idx = idx
+        for pose in msg.poses[1:-1]:
+            if self._dist(last, pose) < self.min_spacing_m:
                 continue
-            if self._dist(msg.poses[last_idx], pose) < self.min_spacing_m:
-                continue
-            selected_indices.append(idx)
-            last_idx = idx
+            selected_poses.append(pose)
+            last = pose
+            if len(selected_poses) >= (self.max_points - 1):
+                break
 
-        if selected_indices[-1] != len(msg.poses) - 1:
-            selected_indices.append(len(msg.poses) - 1)
-        selected_indices = sorted(set(selected_indices))
-
-        dedupe_dist_m = max(0.02, 0.25 * self.min_spacing_m)
-        use_corner_guides = source in ("local", "avoidance")
-        selected_poses = []
-        for idx in selected_indices:
-            if (
-                use_corner_guides
-                and idx in corner_indices
-                and self.corner_anchor_distance_m > 1e-6
-                and idx > 0
-            ):
-                self._append_pose_if_far(
-                    selected_poses,
-                    self._anchor_pose_before_corner(msg.poses[idx - 1], msg.poses[idx]),
-                    dedupe_dist_m,
-                )
-            self._append_pose_if_far(
-                selected_poses,
-                copy.deepcopy(msg.poses[idx]),
-                dedupe_dist_m,
-            )
-            if (
-                use_corner_guides
-                and idx in corner_indices
-                and self.corner_anchor_distance_m > 1e-6
-                and idx + 1 < len(msg.poses)
-            ):
-                self._append_pose_if_far(
-                    selected_poses,
-                    self._anchor_pose_after_corner(msg.poses[idx], msg.poses[idx + 1]),
-                    dedupe_dist_m,
-                )
+        if selected_poses[-1] is not msg.poses[-1]:
+            selected_poses.append(msg.poses[-1])
 
         if len(selected_poses) > self.max_points:
             step = max(1, len(selected_poses) // max(1, self.max_points - 1))
@@ -365,9 +217,9 @@ class AStarPathToTebViaPoints(object):
                 reduced.append(selected_poses[-1])
             selected_poses = reduced[: self.max_points]
             if selected_poses[-1] is not msg.poses[-1]:
-                selected_poses[-1] = copy.deepcopy(msg.poses[-1])
+                selected_poses[-1] = msg.poses[-1]
 
-        out.poses = selected_poses
+        out.poses = [copy.deepcopy(pose) for pose in selected_poses]
         return self._orient_path(out)
 
     def _make_callback(self, source):
@@ -403,12 +255,11 @@ class AStarPathToTebViaPoints(object):
                 best_idx = idx
         return best_idx
 
-    def _goal_from_selected_path(self, msg, source=None):
+    def _goal_from_selected_path(self, msg):
         if msg is None or not msg.poses:
             return None, None
 
-        goal_lookahead_m = self._goal_lookahead_for_source(source)
-        if goal_lookahead_m <= 1e-6 or len(msg.poses) == 1:
+        if self.goal_lookahead_m <= 1e-6 or len(msg.poses) == 1:
             return msg.poses[-1], len(msg.poses) - 1
 
         start_idx = self._nearest_pose_index(msg)
@@ -424,7 +275,7 @@ class AStarPathToTebViaPoints(object):
         accum_m = 0.0
         for idx in range(start_idx + 1, len(msg.poses)):
             accum_m += self._dist(msg.poses[idx - 1], msg.poses[idx])
-            if accum_m >= goal_lookahead_m:
+            if accum_m >= self.goal_lookahead_m:
                 return msg.poses[idx], idx
         return msg.poses[-1], len(msg.poses) - 1
 
@@ -432,7 +283,7 @@ class AStarPathToTebViaPoints(object):
         if self.goal_pub is None or msg is None or not msg.poses:
             return
 
-        goal_pose, goal_idx = self._goal_from_selected_path(msg, source=source)
+        goal_pose, goal_idx = self._goal_from_selected_path(msg)
         if goal_pose is None:
             return
 
@@ -561,7 +412,7 @@ class AStarPathToTebViaPoints(object):
         if msg is None:
             return
 
-        via = self._downsample(msg, source=source)
+        via = self._downsample(msg)
         if not via.poses:
             rospy.logwarn_throttle(
                 2.0,
