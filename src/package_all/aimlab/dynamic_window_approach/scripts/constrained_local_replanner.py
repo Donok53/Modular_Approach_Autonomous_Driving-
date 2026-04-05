@@ -123,13 +123,13 @@ class ConstrainedLocalReplanner:
             0.0, float(rospy.get_param("~pointcloud_static_block_margin_m", 0.05))
         )
         self.obstacle_block_margin_m = max(
-            0.05, float(rospy.get_param("~obstacle_block_margin_m", 0.15))
+            0.0, float(rospy.get_param("~obstacle_block_margin_m", 0.15))
         )
         self.use_pointcloud_avoidance_trigger = bool(
             rospy.get_param("~use_pointcloud_avoidance_trigger", False)
         )
         self.avoidance_trigger_margin_m = max(
-            0.05, float(rospy.get_param("~avoidance_trigger_margin_m", 0.08))
+            0.0, float(rospy.get_param("~avoidance_trigger_margin_m", 0.08))
         )
         self.avoidance_trigger_ahead_m = max(
             1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
