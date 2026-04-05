@@ -1,18 +1,20 @@
 # Drivable area builder profile for post-mapping edit in LIO-Localizer stage.
 # Intended workflow:
-# 1) Build map with LIO-SAM
-# 2) Run LIO-Localizer + RViz top view
-# 3) Edit drivable area manually on 2D view and save
+# 1) Build the initial drivable area only during LIO-SAM mapping
+# 2) Run LIO-Localizer without changing the area automatically from odometry
+# 3) Apply manual edits only from explicit user actions (RViz Publish Point / editor tools)
+# 4) Save only when the operator explicitly requests it
 
 frame_id: map
 odom_topic: /lio_localizer/odometry/optimization
 
 grid_resolution_m: 0.20
 
-# Field-driving mode: keep expanding around the localized robot so free-area goals
-# can be reached without fully hand-painting the map first.
-auto_seed_from_odom: true
-force_trail_from_odom: true
+# Keep the loaded drivable area frozen against localization motion.
+# The localizer stage must never expand/overwrite the area automatically.
+read_only_mode: false
+auto_seed_from_odom: false
+force_trail_from_odom: false
 
 # Ground auto-filtering off in localizer edit mode (manual 2D correction workflow).
 use_ground_filter: false
@@ -43,4 +45,4 @@ track_risk_cells: false
 state_file_path: ~/.ros/lio_sam_drivable_area_state.json
 auto_load_state: true
 auto_save_state: false
-save_on_shutdown: true
+save_on_shutdown: false
