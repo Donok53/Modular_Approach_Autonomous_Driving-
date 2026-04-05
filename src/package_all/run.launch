@@ -59,9 +59,9 @@
   <arg name="teb_move_base_goal_lookahead_m" default="$(arg local_replan_lookahead_m)"/>
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_emergency_stop_front_margin" default="0.35"/>
-  <arg name="teb_emergency_stop_side_margin" default="0.10"/>
+  <arg name="teb_emergency_stop_side_margin" default="0.03"/>
   <arg name="teb_slowdown_front_margin" default="0.80"/>
-  <arg name="teb_slowdown_side_margin" default="0.20"/>
+  <arg name="teb_slowdown_side_margin" default="0.08"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_filter_max_range_m" default="8.0"/>
   <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
@@ -86,9 +86,10 @@
   <arg name="robot_width_m" default="0.55"/>
   <arg name="robot_length_m" default="0.60"/>
   <arg name="footprint_padding_m" default="0.0"/>
-  <arg name="path_blocking_radius_m" default="$(eval 0.5 * ((float(arg('robot_length_m')) ** 2 + float(arg('robot_width_m')) ** 2) ** 0.5) + float(arg('footprint_padding_m')))"/>
+  <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.04 + float(arg('footprint_padding_m')))"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
+  <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
@@ -111,12 +112,12 @@
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.20"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
-  <arg name="pointcloud_static_block_margin_m" default="0.05"/>
+  <arg name="pointcloud_static_block_margin_m" default="0.03"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.15"/>
-  <arg name="avoidance_trigger_margin_m" default="0.08"/>
+  <arg name="obstacle_block_margin_m" default="0.05"/>
+  <arg name="avoidance_trigger_margin_m" default="0.02"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="3"/>
   <arg name="pointcloud_block_confirm_points" default="3"/>
@@ -236,6 +237,7 @@
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
+        <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
       </include>
     </group>
@@ -250,6 +252,7 @@
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
+        <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
       </include>
     </group>

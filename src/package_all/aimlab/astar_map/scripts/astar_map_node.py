@@ -112,6 +112,15 @@ class AStarPlanner:
         self.global_path_clearance_m = max(
             0.0, float(rospy.get_param("~global_path_clearance_m", 0.02))
         )
+        self.global_path_clearance_model = str(
+            rospy.get_param("~global_path_clearance_model", "width")
+        ).strip().lower()
+        if self.global_path_clearance_model not in ("width", "circumscribed"):
+            rospy.logwarn(
+                "[astar] unsupported global_path_clearance_model=%s, falling back to width",
+                self.global_path_clearance_model,
+            )
+            self.global_path_clearance_model = "width"
         self.global_path_drivable_area_is_center_safe = bool(
             rospy.get_param("~global_path_drivable_area_is_center_safe", False)
         )
@@ -179,7 +188,11 @@ class AStarPlanner:
                 "[astar] global grid planner: %s, center_safe_radius=%.3f m, mask_mode=%s",
                 "Theta*" if self.global_path_use_any_angle else "A*",
                 self._global_path_clearance_radius_m(),
-                "as-is" if self.global_path_drivable_area_is_center_safe else "shrink-by-footprint",
+                (
+                    "as-is"
+                    if self.global_path_drivable_area_is_center_safe
+                    else "shrink-by-%s" % self.global_path_clearance_model
+                ),
             )
         if self.enable_map_reload:
             rospy.loginfo("[astar] map reload topic: %s", self.reload_topic)
@@ -598,10 +611,12 @@ class AStarPlanner:
         # at planning time instead of modifying the published map itself.
         if self.global_path_drivable_area_is_center_safe:
             base_radius = 0.0
-        else:
-            # Use the circumscribed radius so the planned centerline stays safe for
-            # the robot corners even on diagonal segments.
+        elif self.global_path_clearance_model == "circumscribed":
+            # Legacy conservative mode: keep the robot corners clear on diagonal segments.
             base_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
+        else:
+            # Prefer a width-based center corridor for narrow passages when localization is stable.
+            base_radius = 0.5 * self.robot_width_m
         return base_radius + self.footprint_padding_m + self.global_path_clearance_m
 
     def _publish_world_path_messages(self, world_points, stamp=None, simplify=True):
