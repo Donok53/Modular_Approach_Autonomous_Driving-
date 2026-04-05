@@ -186,7 +186,7 @@ class AStarPlanner:
             rospy.loginfo("[astar] global path source: drivable grid first (%s)", self.drivable_grid_topic)
             rospy.loginfo(
                 "[astar] global grid planner: %s, center_safe_radius=%.3f m, mask_mode=%s",
-                "Theta*" if self.global_path_use_any_angle else "A*",
+                "Theta*" if self.global_path_use_any_angle else "A* (cardinal)",
                 self._global_path_clearance_radius_m(),
                 (
                     "as-is"
@@ -852,9 +852,11 @@ class AStarPlanner:
     def _grid_heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
 
-    def _grid_neighbors(self, blocked, cell):
+    def _grid_neighbors(self, blocked, cell, allow_diagonal=True):
         cx, cy = cell
-        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        if allow_diagonal:
+            nbrs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
         out = []
         for dx, dy in nbrs:
             nx = cx + dx
@@ -930,7 +932,7 @@ class AStarPlanner:
             anchor_idx = farthest_idx
         return simplified
 
-    def _astar_on_grid(self, blocked, start_cell, goal_cell):
+    def _astar_on_grid(self, blocked, start_cell, goal_cell, allow_diagonal=True):
         if not blocked or not blocked[0]:
             return None
         if not self._blocked_cell_is_free(blocked, start_cell[0], start_cell[1]):
@@ -949,7 +951,7 @@ class AStarPlanner:
                 break
             if gc > g_cost.get(cur, float("inf")) + 1e-9:
                 continue
-            for nb in self._grid_neighbors(blocked, cur):
+            for nb in self._grid_neighbors(blocked, cur, allow_diagonal=allow_diagonal):
                 step = self._grid_heur(cur, nb)
                 ng = gc + step
                 if ng >= g_cost.get(nb, float("inf")):
@@ -1031,11 +1033,15 @@ class AStarPlanner:
         if self.global_path_use_any_angle:
             grid_path = self._theta_star_on_grid(blocked, start_cell, goal_cell)
             planner_name = "Theta*"
-        else:
-            grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
-            planner_name = "A*"
-        if grid_path:
             grid_path = self._simplify_grid_path(grid_path, blocked)
+        else:
+            grid_path = self._astar_on_grid(
+                blocked,
+                start_cell,
+                goal_cell,
+                allow_diagonal=False,
+            )
+            planner_name = "A* (cardinal)"
         if (not grid_path) and self.global_path_use_any_angle:
             grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
             if grid_path:
@@ -1066,7 +1072,7 @@ class AStarPlanner:
         world_points = [tuple(start_xy) if start_cell == start_raw else snapped_start_xy]
         for gx, gy in grid_path[1:-1]:
             world_points.append(self._grid_cell_to_world(g, gx, gy))
-        world_points.append(snapped_goal_xy)
+        world_points.append(tuple(goal_xy) if goal_cell == goal_raw else snapped_goal_xy)
         return self._dedupe_world_points(world_points)
 
     # -------------------- Visualization --------------------

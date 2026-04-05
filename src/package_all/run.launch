@@ -93,8 +93,8 @@
   <arg name="robot_length_m" default="0.60"/>
   <arg name="footprint_padding_m" default="0.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.04 + float(arg('footprint_padding_m')))"/>
-  <arg name="global_path_use_any_angle" default="true"/>
-  <arg name="global_path_clearance_m" default="0.02"/>
+  <arg name="global_path_use_any_angle" default="false"/>
+  <arg name="global_path_clearance_m" default="0.03"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="path_tracking_only" default="true"/>
