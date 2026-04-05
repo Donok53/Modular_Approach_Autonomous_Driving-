@@ -3,7 +3,7 @@
 # 1) Build the initial drivable area only during LIO-SAM mapping
 # 2) Run LIO-Localizer without changing the area automatically from odometry
 # 3) Apply manual edits only from explicit user actions (RViz Publish Point / editor tools)
-# 4) Save only when the operator explicitly requests it
+# 4) Persist only manual edits so the updated area is available next time
 
 frame_id: map
 odom_topic: /lio_localizer/odometry/optimization
@@ -42,7 +42,9 @@ publish_risk_marker: false
 track_risk_cells: false
 
 # Persistence: load last edited area automatically in localizer stage.
+# Since odom-based auto expansion is disabled, persistence here only affects
+# explicit manual edits such as RViz Publish Point / editor actions.
 state_file_path: ~/.ros/lio_sam_drivable_area_state.json
 auto_load_state: true
-auto_save_state: false
-save_on_shutdown: false
+auto_save_state: true
+save_on_shutdown: true
