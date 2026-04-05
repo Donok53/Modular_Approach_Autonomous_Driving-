@@ -392,12 +392,16 @@ class AStarPathToTebViaPoints(object):
         sig = self._path_signature(msg) if msg is not None else ()
         key = (source, sig)
         if key == self._last_key and sig == self._last_sig:
+            if source != "local_hold" and msg is not None:
+                self._publish_goal_for_selected_path(source, msg)
             return
         self._last_key = key
         self._last_sig = sig
 
         if source == "local_hold":
             self.pub.publish(self._empty_path_like(msg))
+            # Force a fresh goal sync when a valid path resumes after hold.
+            self._last_goal_sig = None
             rospy.loginfo_throttle(
                 1.0,
                 "astar_path_to_teb_via_points: source=%s published empty via path and paused goal updates",

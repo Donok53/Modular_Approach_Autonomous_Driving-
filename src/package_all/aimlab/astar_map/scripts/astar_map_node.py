@@ -124,6 +124,10 @@ class AStarPlanner:
         self.global_path_drivable_area_is_center_safe = bool(
             rospy.get_param("~global_path_drivable_area_is_center_safe", False)
         )
+        self.drivable_grid_graph_fallback_max_goal_gap_m = max(
+            0.0,
+            float(rospy.get_param("~drivable_grid_graph_fallback_max_goal_gap_m", 1.0)),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -159,6 +163,7 @@ class AStarPlanner:
         self._last_world_path_signature = None
         self._last_world_path = None
         self._last_snapped_goal_xy = None
+        self._last_graph_goal_snap_xy = None
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -1254,6 +1259,25 @@ class AStarPlanner:
             return None, x, y
         return chosen, px, py
 
+    def _allow_graph_fallback_for_goal(self):
+        if (not self.use_drivable_grid_global) or self.drivable_grid is None:
+            return True
+        if self._goal_display_xy is None or self._last_graph_goal_snap_xy is None:
+            return True
+        gap_m = math.hypot(
+            float(self._goal_display_xy[0]) - float(self._last_graph_goal_snap_xy[0]),
+            float(self._goal_display_xy[1]) - float(self._last_graph_goal_snap_xy[1]),
+        )
+        if gap_m <= self.drivable_grid_graph_fallback_max_goal_gap_m:
+            return True
+        rospy.logwarn_throttle(
+            1.0,
+            "[astar] skipping graph fallback: snapped graph goal is %.2f m away from clicked goal (limit=%.2f m)",
+            gap_m,
+            self.drivable_grid_graph_fallback_max_goal_gap_m,
+        )
+        return False
+
     def callback_start(self, data):
         n = self._snap_and_update_from_position(data.pose.pose.position)
         self._display_start_xy = (
@@ -1279,6 +1303,7 @@ class AStarPlanner:
         goal_y = data.pose.position.y
         self._goal_display_xy = (goal_x, goal_y)
         n, snap_x, snap_y = self._snap_goal_node_from_xy(goal_x, goal_y)
+        self._last_graph_goal_snap_xy = (float(snap_x), float(snap_y))
         if n:
             self.goal_id = n.id
         self.new_goal_flag = True
@@ -1312,6 +1337,7 @@ class AStarPlanner:
                 mx, my = self._xy_to_map(e, n)
             self._goal_display_xy = (mx, my)
             g, snap_x, snap_y = self._snap_goal_node_from_xy(mx, my)
+            self._last_graph_goal_snap_xy = (float(snap_x), float(snap_y))
             if g:
                 self.goal_id = g.id
             self.new_goal_flag = True
@@ -1393,7 +1419,7 @@ if __name__ == "__main__":
                     world_path = a._plan_with_drivable_grid(a._display_start_xy, a._goal_display_xy)
                     if world_path:
                         a.publish_world_path_if_changed(world_path)
-                if not world_path:
+                if (not world_path) and a._allow_graph_fallback_for_goal():
                     a.graph_setup()
                     path_nodes = a.planning(a.start_id, a.goal_id)
 

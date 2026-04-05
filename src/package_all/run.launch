@@ -97,6 +97,7 @@
   <arg name="global_path_clearance_m" default="0.03"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
+  <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -245,6 +246,7 @@
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
+        <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -260,6 +262,7 @@
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
+        <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
       </include>
     </group>
   </group>

@@ -21,6 +21,7 @@
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
+  <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -47,6 +48,7 @@
     <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
     <param name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
     <param name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
+    <param name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>
