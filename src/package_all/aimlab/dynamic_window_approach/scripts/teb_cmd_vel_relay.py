@@ -99,6 +99,9 @@ class TebCmdVelRelay(object):
         self.hold_requires_avoidance_path = bool(
             rospy.get_param("~hold_requires_avoidance_path", True)
         )
+        self.defer_local_hold_while_avoidance_active = bool(
+            rospy.get_param("~defer_local_hold_while_avoidance_active", True)
+        )
         self.robot_width_m = max(0.1, float(rospy.get_param("~robot_width_m", 0.55)))
         self.robot_length_m = max(0.1, float(rospy.get_param("~robot_length_m", 0.60)))
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
@@ -271,7 +274,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -286,6 +289,7 @@ class TebCmdVelRelay(object):
             "on" if self.enable_obstacle_slowdown else "off",
             "on" if self.enable_local_path_hold_stop else "off",
             "on" if self.hold_requires_avoidance_path else "off",
+            "on" if self.defer_local_hold_while_avoidance_active else "off",
             "on" if self.enable_cmd_smoothing else "off",
             self.max_linear_slew_mps2,
             self.max_angular_slew_rps2,
@@ -898,6 +902,11 @@ class TebCmdVelRelay(object):
             return False
         if self._has_fresh_near_goal_empty_local_path(now):
             return True
+        # During doorway / branch detours the nominal local path is expected to stay
+        # empty while the avoidance branch remains active. In that case we should
+        # keep following the avoidance branch instead of zeroing cmd_vel.
+        if self.defer_local_hold_while_avoidance_active and self.avoidance_path_active:
+            return False
         if self.hold_requires_avoidance_path and (not self.avoidance_path_active):
             return False
         if (
@@ -1099,6 +1108,38 @@ class TebCmdVelRelay(object):
             and (not ignore_stop)
             and self.closest_stop_obstacle_x <= self.emergency_stop_distance
         ):
+            if (
+                self.allow_in_place_rotation_near_obstacle
+                and (not final_segment_active)
+                and self._should_preserve_in_place_rotation(cmd)
+            ):
+                rotate_only = self._rotation_only_cmd(cmd)
+                stop_lateral_limit = self._forward_zone_lateral_limit(
+                    self.closest_stop_obstacle_x,
+                    self.emergency_stop_lateral_y,
+                    self.emergency_stop_far_lateral_ratio,
+                    self.emergency_stop_distance,
+                )
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: emergency obstacle -> rotate-only | obstacle=(%.2f,%.2f) m limit_y=%.2f cmd_w=%.3f",
+                    self.closest_stop_obstacle_x,
+                    self.closest_stop_obstacle_y,
+                    stop_lateral_limit,
+                    float(cmd.angular.z),
+                )
+                self._last_safety_reason = "obstacle_emergency_rotate"
+                return rotate_only, {
+                    "event_type": "CONTROL_ACTION_CHANGE",
+                    "trigger_reason": "front_obstacle_emergency",
+                    "action_taken": "emergency_rotate",
+                    "stop_commanded": False,
+                    "slowdown_commanded": True,
+                    "speed_limit_mps": 0.0,
+                    "closest_obstacle_dist_m": float(self.closest_stop_obstacle_x),
+                    "obstacle_lateral_offset_m": float(self.closest_stop_obstacle_y),
+                    "summary_text": "TEB relay suppressed forward motion and kept an in-place rotation because a close obstacle was detected ahead during a turning maneuver.",
+                }
             stopped = Twist()
             stop_lateral_limit = self._forward_zone_lateral_limit(
                 self.closest_stop_obstacle_x,

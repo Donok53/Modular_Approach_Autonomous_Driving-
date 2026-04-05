@@ -128,6 +128,10 @@ class AStarPlanner:
             0.0,
             float(rospy.get_param("~drivable_grid_graph_fallback_max_goal_gap_m", 1.0)),
         )
+        self.drivable_grid_goal_extension_max_gap_m = max(
+            0.0,
+            float(rospy.get_param("~drivable_grid_goal_extension_max_gap_m", 0.60)),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -1077,7 +1081,26 @@ class AStarPlanner:
         world_points = [tuple(start_xy) if start_cell == start_raw else snapped_start_xy]
         for gx, gy in grid_path[1:-1]:
             world_points.append(self._grid_cell_to_world(g, gx, gy))
-        world_points.append(tuple(goal_xy) if goal_cell == goal_raw else snapped_goal_xy)
+        goal_gap_m = math.hypot(
+            float(goal_xy[0]) - float(snapped_goal_xy[0]),
+            float(goal_xy[1]) - float(snapped_goal_xy[1]),
+        )
+        extend_to_clicked_goal = (
+            goal_cell == goal_raw
+            or goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
+        )
+        if (
+            extend_to_clicked_goal
+            and goal_cell != goal_raw
+            and self.debug_log_enable
+        ):
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] extending drivable-grid path from snapped goal to clicked goal (gap=%.2f m, limit=%.2f m)",
+                goal_gap_m,
+                self.drivable_grid_goal_extension_max_gap_m,
+            )
+        world_points.append(tuple(goal_xy) if extend_to_clicked_goal else snapped_goal_xy)
         return self._dedupe_world_points(world_points)
 
     # -------------------- Visualization --------------------

@@ -49,8 +49,9 @@
   <arg name="teb_enable_emergency_stop" default="true"/>
   <arg name="teb_enable_obstacle_slowdown" default="false"/>
   <arg name="teb_enable_local_path_hold_stop" default="true"/>
-  <arg name="teb_allow_in_place_rotation_near_obstacle" default="false"/>
-  <arg name="teb_allow_in_place_rotation_during_local_hold" default="false"/>
+  <arg name="teb_allow_in_place_rotation_near_obstacle" default="true"/>
+  <arg name="teb_allow_in_place_rotation_during_local_hold" default="true"/>
+  <arg name="teb_defer_local_hold_while_avoidance_active" default="true"/>
   <arg name="teb_min_in_place_rotation_angular_speed" default="0.05"/>
   <arg name="teb_reverse_replacement_speed_mps" default="0.03"/>
   <arg name="teb_enable_tiny_reverse_forward_crawl" default="true"/>
@@ -92,12 +93,13 @@
   <arg name="robot_width_m" default="0.55"/>
   <arg name="robot_length_m" default="0.60"/>
   <arg name="footprint_padding_m" default="0.0"/>
-  <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.04 + float(arg('footprint_padding_m')))"/>
+  <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.015 + float(arg('footprint_padding_m')))"/>
   <arg name="global_path_use_any_angle" default="false"/>
   <arg name="global_path_clearance_m" default="0.03"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
+  <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -247,6 +249,7 @@
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
         <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
+        <arg name="drivable_grid_goal_extension_max_gap_m" value="$(arg drivable_grid_goal_extension_max_gap_m)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -263,6 +266,7 @@
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
         <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
+        <arg name="drivable_grid_goal_extension_max_gap_m" value="$(arg drivable_grid_goal_extension_max_gap_m)"/>
       </include>
     </group>
   </group>
@@ -457,6 +461,7 @@
       <arg name="enable_emergency_stop" value="$(arg teb_enable_emergency_stop)"/>
       <arg name="enable_obstacle_slowdown" value="$(arg teb_enable_obstacle_slowdown)"/>
       <arg name="enable_local_path_hold_stop" value="$(arg teb_enable_local_path_hold_stop)"/>
+      <arg name="defer_local_hold_while_avoidance_active" value="$(arg teb_defer_local_hold_while_avoidance_active)"/>
       <arg name="allow_in_place_rotation_near_obstacle" value="$(arg teb_allow_in_place_rotation_near_obstacle)"/>
       <arg name="allow_in_place_rotation_during_local_hold" value="$(arg teb_allow_in_place_rotation_during_local_hold)"/>
       <arg name="min_in_place_rotation_angular_speed" value="$(arg teb_min_in_place_rotation_angular_speed)"/>
