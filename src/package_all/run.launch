@@ -53,6 +53,10 @@
   <arg name="teb_allow_in_place_rotation_during_local_hold" default="false"/>
   <arg name="teb_min_in_place_rotation_angular_speed" default="0.05"/>
   <arg name="teb_reverse_replacement_speed_mps" default="0.03"/>
+  <arg name="teb_enable_tiny_reverse_forward_crawl" default="true"/>
+  <arg name="teb_tiny_reverse_forward_crawl_speed_mps" default="0.04"/>
+  <arg name="teb_tiny_reverse_forward_crawl_clearance_m" default="0.95"/>
+  <arg name="teb_tiny_reverse_forward_crawl_max_angular_speed" default="0.35"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
@@ -452,6 +456,10 @@
       <arg name="allow_in_place_rotation_during_local_hold" value="$(arg teb_allow_in_place_rotation_during_local_hold)"/>
       <arg name="min_in_place_rotation_angular_speed" value="$(arg teb_min_in_place_rotation_angular_speed)"/>
       <arg name="reverse_replacement_speed_mps" value="$(arg teb_reverse_replacement_speed_mps)"/>
+      <arg name="enable_tiny_reverse_forward_crawl" value="$(arg teb_enable_tiny_reverse_forward_crawl)"/>
+      <arg name="tiny_reverse_forward_crawl_speed_mps" value="$(arg teb_tiny_reverse_forward_crawl_speed_mps)"/>
+      <arg name="tiny_reverse_forward_crawl_clearance_m" value="$(arg teb_tiny_reverse_forward_crawl_clearance_m)"/>
+      <arg name="tiny_reverse_forward_crawl_max_angular_speed" value="$(arg teb_tiny_reverse_forward_crawl_max_angular_speed)"/>
       <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
       <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
       <arg name="local_hold_timeout_s" value="$(arg teb_local_hold_timeout_s)"/>

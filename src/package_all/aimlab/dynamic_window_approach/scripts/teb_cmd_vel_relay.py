@@ -152,6 +152,35 @@ class TebCmdVelRelay(object):
         self.emergency_stop_lateral_y = self.robot_half_width + self.emergency_stop_side_margin
         self.slowdown_distance = self.robot_half_length + self.slowdown_front_margin
         self.slowdown_lateral_y = self.robot_half_width + self.slowdown_side_margin
+        self.enable_tiny_reverse_forward_crawl = bool(
+            rospy.get_param("~enable_tiny_reverse_forward_crawl", True)
+        )
+        self.tiny_reverse_forward_crawl_speed = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~tiny_reverse_forward_crawl_speed",
+                    max(self.reverse_replacement_speed, self.min_abs_linear_speed),
+                )
+            ),
+        )
+        self.tiny_reverse_forward_crawl_clearance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~tiny_reverse_forward_crawl_clearance_m",
+                    self.emergency_stop_distance + 0.30,
+                )
+            ),
+        )
+        self.tiny_reverse_forward_crawl_max_angular_speed = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~tiny_reverse_forward_crawl_max_angular_speed", 0.35
+                )
+            ),
+        )
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
@@ -403,6 +432,18 @@ class TebCmdVelRelay(object):
                 float(cmd.angular.z),
             )
             out.linear.x = 0.0
+        if (
+            abs(float(cmd.linear.x)) <= 1e-4
+            and abs(float(cmd.angular.z)) <= 1e-4
+            and abs(float(out.angular.z)) > 1e-4
+        ):
+            smooth_flags.append("cut_angular")
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: cutting angular carry for zero target prev_w=%.3f",
+                float(self.last_publish_cmd.angular.z),
+            )
+            out.angular.z = 0.0
         if abs(out.linear.x - float(cmd.linear.x)) > 1e-4:
             if abs(float(cmd.linear.x)) <= 1e-4 and abs(float(out.linear.x)) > 1e-4:
                 smooth_flags.append("carry_linear")
@@ -479,6 +520,22 @@ class TebCmdVelRelay(object):
                     out.angular.z,
                 )
                 return self._coast_forward_cmd(out)
+            if self._should_replace_tiny_reverse_with_forward_crawl(
+                out,
+                now,
+                final_brake_active=final_brake_active,
+                fresh_empty_local_path=fresh_empty_local_path,
+            ):
+                self._last_sanitize_reason = "tiny_reverse_to_forward_crawl"
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: replacing tiny reverse with forward crawl v=%.3f -> %.3f (w=%.3f stop_x=%.2f)",
+                    out.linear.x,
+                    self.tiny_reverse_forward_crawl_speed,
+                    out.angular.z,
+                    self.closest_stop_obstacle_x,
+                )
+                return self._forward_crawl_cmd(out)
             if self._should_convert_small_reverse_to_rotation(out):
                 self._last_sanitize_reason = "tiny_reverse_to_rotation"
                 rospy.loginfo_throttle(
@@ -577,6 +634,19 @@ class TebCmdVelRelay(object):
     def _coast_forward_cmd(self, cmd):
         out = Twist()
         out.linear.x = max(0.0, float(self.last_publish_cmd.linear.x))
+        out.angular.z = float(cmd.angular.z)
+        return out
+
+    def _forward_crawl_cmd(self, cmd):
+        out = Twist()
+        crawl_speed = max(
+            0.0,
+            float(self.tiny_reverse_forward_crawl_speed),
+            float(self.reverse_replacement_speed),
+        )
+        if self.enforce_min_linear_speed:
+            crawl_speed = max(crawl_speed, float(self.min_abs_linear_speed))
+        out.linear.x = crawl_speed
         out.angular.z = float(cmd.angular.z)
         return out
 
@@ -685,6 +755,41 @@ class TebCmdVelRelay(object):
             <= max(self.reverse_deadband_mps, self.min_abs_linear_speed)
             and self._should_preserve_in_place_rotation(cmd)
         )
+
+    def _should_replace_tiny_reverse_with_forward_crawl(
+        self,
+        cmd,
+        now,
+        final_brake_active=False,
+        fresh_empty_local_path=False,
+    ):
+        if (not self.enable_tiny_reverse_forward_crawl) or (not self.forward_only):
+            return False
+        if final_brake_active or fresh_empty_local_path:
+            return False
+        if float(cmd.linear.x) >= 0.0:
+            return False
+        if abs(float(cmd.linear.x)) > max(
+            self.reverse_deadband_mps, self.min_abs_linear_speed
+        ):
+            return False
+        if abs(float(cmd.angular.z)) > self.tiny_reverse_forward_crawl_max_angular_speed:
+            return False
+        if (
+            self.local_path_pose_count > 0
+            and self.local_path_pose_count <= (self.final_path_pose_threshold + 1)
+        ):
+            return False
+        if (
+            math.isfinite(self.local_path_remaining_m)
+            and self.local_path_remaining_m <= self.ignore_local_hold_near_goal_distance_m
+        ):
+            return False
+        if not self._has_fresh_obstacle_data(now):
+            return False
+        if math.isfinite(self.closest_stop_obstacle_x):
+            return self.closest_stop_obstacle_x > self.tiny_reverse_forward_crawl_clearance_m
+        return True
 
     def _should_coast_through_tiny_reverse(
         self, cmd, final_brake_active=False, fresh_empty_local_path=False
