@@ -76,6 +76,8 @@
   <arg name="robot_width_m" default="0.55"/>
   <arg name="robot_length_m" default="0.60"/>
   <arg name="footprint_padding_m" default="0.0"/>
+  <arg name="trim_published_path_to_robot_front" default="true"/>
+  <arg name="path_start_front_offset_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="robot_half_length_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="robot_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="neg_robot_half_length_m" default="$(eval -1.0 * float(arg('robot_half_length_m')))"/>
@@ -266,6 +268,8 @@
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+      <param name="trim_published_path_to_robot_front" value="$(arg trim_published_path_to_robot_front)"/>
+      <param name="path_start_front_offset_m" value="$(arg path_start_front_offset_m)"/>
       <param name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <param name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <param name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>

@@ -128,6 +128,9 @@ class AStarPlanner:
             0.0,
             float(rospy.get_param("~drivable_grid_graph_fallback_max_goal_gap_m", 1.0)),
         )
+        self.enable_graph_fallback = bool(
+            rospy.get_param("~enable_graph_fallback", False)
+        )
         self.drivable_grid_goal_extension_max_gap_m = max(
             0.0,
             float(rospy.get_param("~drivable_grid_goal_extension_max_gap_m", 0.60)),
@@ -792,6 +795,25 @@ class AStarPlanner:
             if self.debug_log_enable:
                 rospy.loginfo("[astar] drivable-grid path republished (periodic)")
 
+    def clear_published_path(self, stamp=None):
+        if self._last_path_nodes is None and self._last_world_path_signature is None:
+            return
+        if stamp is None:
+            stamp = rospy.Time.now()
+        empty = Path()
+        empty.header.frame_id = "map"
+        empty.header.stamp = stamp
+        self.pub_path.publish(empty)
+        self.pub_path_display.publish(empty)
+        self.pub_path_wgs84.publish(empty)
+        self.pub_path_node_id_list.publish(Int32MultiArray(data=[]))
+        self._last_path_nodes = None
+        self._last_world_path_signature = None
+        self._last_world_path = None
+        self._last_path_pub_t = 0.0
+        if self.debug_log_enable:
+            rospy.loginfo("[astar] cleared published path")
+
     def validate_or_blacklist(self, path_ids):
         if not self.jump_guard_enable or len(path_ids) < 2: return path_ids
         thr = self.jump_guard_max_step_m
@@ -1416,6 +1438,8 @@ class AStarPlanner:
         return chosen, px, py
 
     def _allow_graph_fallback_for_goal(self):
+        if not self.enable_graph_fallback:
+            return False
         if (not self.use_drivable_grid_global) or self.drivable_grid is None:
             return True
         if self._goal_display_xy is None or self._last_graph_goal_snap_xy is None:
@@ -1561,6 +1585,7 @@ if __name__ == "__main__":
                 if a.reload_map():
                     path_nodes = []
                     world_path = None
+                    a.clear_published_path()
             a.visualize_graph()
             a.show_clicked_goal_marker()
             a.show_server_dst_nodes()
@@ -1594,6 +1619,7 @@ if __name__ == "__main__":
                 elif path_nodes:
                     a.publish_path_if_changed(path_nodes)
                 else:
+                    a.clear_published_path(stamp=rospy.Time.now())
                     rospy.logwarn("[astar] path not found")
 
             if world_path and a.path_repub_period > 0.0:

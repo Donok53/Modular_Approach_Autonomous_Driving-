@@ -99,6 +99,7 @@
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
+  <arg name="global_path_enable_graph_fallback" default="false"/>
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="global_path_continuous_replan" default="true"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.15"/>
@@ -252,6 +253,7 @@
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
         <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
+        <arg name="enable_graph_fallback" value="$(arg global_path_enable_graph_fallback)"/>
         <arg name="drivable_grid_goal_extension_max_gap_m" value="$(arg drivable_grid_goal_extension_max_gap_m)"/>
         <arg name="continuous_replan" value="$(arg global_path_continuous_replan)"/>
         <arg name="replan_min_start_shift_m" value="$(arg global_path_replan_min_start_shift_m)"/>
@@ -272,6 +274,7 @@
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
         <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
+        <arg name="enable_graph_fallback" value="$(arg global_path_enable_graph_fallback)"/>
         <arg name="drivable_grid_goal_extension_max_gap_m" value="$(arg drivable_grid_goal_extension_max_gap_m)"/>
         <arg name="continuous_replan" value="$(arg global_path_continuous_replan)"/>
         <arg name="replan_min_start_shift_m" value="$(arg global_path_replan_min_start_shift_m)"/>

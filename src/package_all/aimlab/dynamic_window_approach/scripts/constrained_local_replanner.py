@@ -66,6 +66,18 @@ class ConstrainedLocalReplanner:
         self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.footprint_clearance_radius_m = self.robot_radius + self.footprint_padding_m
+        self.trim_published_path_to_robot_front = bool(
+            rospy.get_param("~trim_published_path_to_robot_front", True)
+        )
+        self.path_start_front_offset_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_start_front_offset_m",
+                    0.5 * self.robot_length_m + self.footprint_padding_m,
+                )
+            ),
+        )
         self.default_path_blocking_radius_m = (
             0.5 * self.robot_width_m + self.footprint_padding_m + 0.04
         )
@@ -731,6 +743,7 @@ class ConstrainedLocalReplanner:
             start_xy=start_xy,
             end_xy=end_xy,
         )
+        world_points = self._trim_world_points_from_robot_front(world_points)
 
         if len(world_points) < 2:
             return
@@ -768,6 +781,41 @@ class ConstrainedLocalReplanner:
                     y0 + t * (y1 - y0),
                 ))
         return sampled_points
+
+    def _trim_world_points_from_start(self, world_points, trim_m):
+        if len(world_points) < 2 or trim_m <= 1e-6:
+            return list(world_points)
+        if self._world_path_length(world_points) <= trim_m + 1e-6:
+            return list(world_points)
+
+        trimmed = [(float(x), float(y)) for x, y in world_points]
+        remain = float(trim_m)
+        while len(trimmed) >= 2 and remain > 1e-6:
+            x0, y0 = trimmed[0]
+            x1, y1 = trimmed[1]
+            seg_len = math.hypot(x1 - x0, y1 - y0)
+            if seg_len <= 1e-9:
+                trimmed.pop(0)
+                continue
+            if remain < seg_len:
+                t = remain / seg_len
+                trimmed[0] = (
+                    x0 + t * (x1 - x0),
+                    y0 + t * (y1 - y0),
+                )
+                remain = 0.0
+                break
+            remain -= seg_len
+            trimmed.pop(0)
+        return trimmed
+
+    def _trim_world_points_from_robot_front(self, world_points):
+        if not self.trim_published_path_to_robot_front:
+            return list(world_points)
+        return self._trim_world_points_from_start(
+            world_points,
+            self.path_start_front_offset_m,
+        )
 
     @staticmethod
     def _set_pose_yaw(pose_stamped, yaw):
@@ -950,6 +998,8 @@ class ConstrainedLocalReplanner:
         self._publish_path_history_markers()
 
     def _publish_local_path(self, grid_path, dg, stamp, start_xy=None, end_xy=None):
+        if start_xy is None and self.have_odom:
+            start_xy = (self.odom_x, self.odom_y)
         sampled_points, frame_id = self._publish_grid_path(
             self.pub_local_path,
             grid_path,
@@ -960,6 +1010,8 @@ class ConstrainedLocalReplanner:
         )
 
     def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None, start_xy=None, end_xy=None, record_history=True):
+        if start_xy is None and self.have_odom:
+            start_xy = (self.odom_x, self.odom_y)
         sampled_points, frame_id = self._publish_grid_path(
             self.pub_avoidance_path,
             grid_path,
@@ -977,6 +1029,7 @@ class ConstrainedLocalReplanner:
             )
 
     def _publish_world_path(self, world_points, frame_id, stamp):
+        world_points = self._trim_world_points_from_robot_front(world_points)
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = frame_id if frame_id else "map"
@@ -1120,6 +1173,7 @@ class ConstrainedLocalReplanner:
             self.last_avoidance_grid_path,
             dg,
             stamp,
+            start_xy=(self.odom_x, self.odom_y),
             record_history=False,
         )
         self.avoidance_active = True
@@ -1679,6 +1733,7 @@ class ConstrainedLocalReplanner:
             dg,
             stamp,
             history_points=branch_history_points,
+            start_xy=(self.odom_x, self.odom_y),
         )
         avoid_direction, lateral_offset = self._infer_avoid_direction(dg, avoid_path)
         self.avoidance_clear_count = 0
