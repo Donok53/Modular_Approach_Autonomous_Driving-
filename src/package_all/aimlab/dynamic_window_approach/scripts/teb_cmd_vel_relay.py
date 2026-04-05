@@ -522,7 +522,9 @@ class TebCmdVelRelay(object):
         out.angular.z = float(cmd.angular.z)
         now = rospy.get_time()
         final_brake_active = self._is_final_goal_brake_active()
-        fresh_empty_local_path = self._has_fresh_empty_local_path(now)
+        fresh_empty_local_path = (
+            self._has_fresh_empty_local_path(now) and (not self.avoidance_path_active)
+        )
         sanitize_flags = []
         if self._should_force_goal_stop(out, final_brake_active):
             self._last_sanitize_reason = "force_goal_stop"

@@ -132,6 +132,13 @@ class AStarPlanner:
             0.0,
             float(rospy.get_param("~drivable_grid_goal_extension_max_gap_m", 0.60)),
         )
+        self.continuous_replan = bool(rospy.get_param("~continuous_replan", True))
+        self.replan_min_start_shift_m = max(
+            0.0, float(rospy.get_param("~replan_min_start_shift_m", 0.15))
+        )
+        self.replan_min_interval_s = max(
+            0.0, float(rospy.get_param("~replan_min_interval_s", 0.40))
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -169,6 +176,12 @@ class AStarPlanner:
         self._last_snapped_goal_xy = None
         self._last_graph_goal_snap_xy = None
         self._goal_marker_xy = None
+        self._last_planned_start_xy = None
+        self._last_planned_goal_xy = None
+        self._last_planned_start_id = None
+        self._last_planned_goal_id = None
+        self._last_plan_stamp_s = 0.0
+        self._last_plan_success = False
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -235,11 +248,83 @@ class AStarPlanner:
             self._last_path_nodes = None
             self._last_world_path_signature = None
             self._last_world_path = None
+            self._last_planned_start_xy = None
+            self._last_planned_goal_xy = None
+            self._last_planned_start_id = None
+            self._last_planned_goal_id = None
+            self._last_plan_stamp_s = 0.0
+            self._last_plan_success = False
             rospy.loginfo("[astar] map reloaded from %s", self._osm_file)
             return True
         except Exception as e:
             rospy.logwarn("[astar] map reload failed: %s", str(e))
             return False
+
+    @staticmethod
+    def _xy_distance(a, b):
+        if a is None or b is None:
+            return float("inf")
+        return math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1]))
+
+    def _has_active_goal_context(self):
+        if not self.start_init_flag:
+            return False
+        if self.goal_id is not None:
+            return True
+        return (
+            self.use_drivable_grid_global
+            and self._display_start_xy is not None
+            and self._goal_display_xy is not None
+        )
+
+    def _mark_plan_context(self, success):
+        self._last_planned_start_xy = (
+            tuple(self._display_start_xy) if self._display_start_xy is not None else None
+        )
+        self._last_planned_goal_xy = (
+            tuple(self._goal_display_xy) if self._goal_display_xy is not None else None
+        )
+        self._last_planned_start_id = self.start_id
+        self._last_planned_goal_id = self.goal_id
+        self._last_plan_stamp_s = rospy.get_time()
+        self._last_plan_success = bool(success)
+
+    def _should_replan_active_goal(self):
+        if not self._has_active_goal_context():
+            return False
+        if self.new_goal_flag or self._last_plan_stamp_s <= 0.0:
+            return True
+        if not self.continuous_replan:
+            return False
+
+        now = rospy.get_time()
+        if (now - self._last_plan_stamp_s) < self.replan_min_interval_s:
+            return False
+        if not self._last_plan_success:
+            return True
+        if self.start_id != self._last_planned_start_id:
+            return True
+        if self.goal_id != self._last_planned_goal_id:
+            return True
+        if (self._display_start_xy is None) != (self._last_planned_start_xy is None):
+            return True
+        if (self._goal_display_xy is None) != (self._last_planned_goal_xy is None):
+            return True
+        if (
+            self._display_start_xy is not None
+            and self._last_planned_start_xy is not None
+            and self._xy_distance(self._display_start_xy, self._last_planned_start_xy)
+            >= self.replan_min_start_shift_m
+        ):
+            return True
+        if (
+            self._goal_display_xy is not None
+            and self._last_planned_goal_xy is not None
+            and self._xy_distance(self._goal_display_xy, self._last_planned_goal_xy)
+            >= 0.05
+        ):
+            return True
+        return False
 
     # ---------- ENU helpers ----------
     _A = 6378137.0
@@ -1480,7 +1565,7 @@ if __name__ == "__main__":
             a.show_clicked_goal_marker()
             a.show_server_dst_nodes()
 
-            if a.start_init_flag and a.new_goal_flag:
+            if a._should_replan_active_goal():
                 world_path = None
                 path_nodes = []
                 if (
@@ -1503,6 +1588,7 @@ if __name__ == "__main__":
                             path_nodes = validated; break
                         a.graph_setup(); path_nodes = a.planning(a.start_id, a.goal_id); attempt += 1
                 a.new_goal_flag = False
+                a._mark_plan_context(bool(world_path or path_nodes))
                 if world_path:
                     pass
                 elif path_nodes:
