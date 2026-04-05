@@ -120,6 +120,13 @@ class TebCmdVelRelay(object):
         self.emergency_stop_side_margin = max(
             0.0, float(rospy.get_param("~emergency_stop_side_margin", 0.10))
         )
+        self.emergency_stop_far_lateral_ratio = max(
+            0.0,
+            min(
+                1.0,
+                float(rospy.get_param("~emergency_stop_far_lateral_ratio", 0.55)),
+            ),
+        )
         self.slowdown_front_margin = max(
             self.emergency_stop_front_margin + 0.05,
             float(rospy.get_param("~slowdown_front_margin", 0.80)),
@@ -127,6 +134,13 @@ class TebCmdVelRelay(object):
         self.slowdown_side_margin = max(
             self.emergency_stop_side_margin,
             float(rospy.get_param("~slowdown_side_margin", 0.20)),
+        )
+        self.slowdown_far_lateral_ratio = max(
+            self.emergency_stop_far_lateral_ratio,
+            min(
+                1.0,
+                float(rospy.get_param("~slowdown_far_lateral_ratio", 0.75)),
+            ),
         )
         self.allow_in_place_rotation_near_obstacle = bool(
             rospy.get_param("~allow_in_place_rotation_near_obstacle", True)
@@ -257,7 +271,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm slow=%.2fm/%.2fm final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -279,8 +293,10 @@ class TebCmdVelRelay(object):
             self.robot_width_m + 2.0 * self.footprint_padding_m,
             self.emergency_stop_distance,
             self.emergency_stop_lateral_y,
+            self.emergency_stop_far_lateral_ratio,
             self.slowdown_distance,
             self.slowdown_lateral_y,
+            self.slowdown_far_lateral_ratio,
             self.final_brake_distance_m,
             self.ignore_local_hold_near_goal_distance_m,
             "on" if self.allow_in_place_rotation_near_obstacle else "off",
@@ -307,6 +323,24 @@ class TebCmdVelRelay(object):
         out.angular.y = float(cmd.angular.y)
         out.angular.z = float(cmd.angular.z)
         return out
+
+    def _forward_zone_lateral_limit(
+        self, obstacle_x, base_lateral_y, far_lateral_ratio, zone_distance
+    ):
+        limit_y = max(0.0, float(base_lateral_y))
+        if limit_y <= 0.0:
+            return 0.0
+
+        x = max(0.0, float(obstacle_x))
+        taper_start_x = min(max(0.0, self.robot_half_length), float(zone_distance))
+        if x <= taper_start_x:
+            return limit_y
+
+        span = max(1e-3, float(zone_distance) - taper_start_x)
+        progress = max(0.0, min(1.0, (x - taper_start_x) / span))
+        far_ratio = max(0.0, min(1.0, float(far_lateral_ratio)))
+        scale = 1.0 - ((1.0 - far_ratio) * progress)
+        return limit_y * scale
 
     @staticmethod
     def _join_diag_flags(flags):
@@ -660,11 +694,23 @@ class TebCmdVelRelay(object):
             if x <= 0.0:
                 continue
             abs_y = abs(float(y))
-            if abs_y <= self.slowdown_lateral_y:
+            slow_lateral_limit = self._forward_zone_lateral_limit(
+                x,
+                self.slowdown_lateral_y,
+                self.slowdown_far_lateral_ratio,
+                self.slowdown_distance,
+            )
+            if abs_y <= slow_lateral_limit:
                 if float(x) < slow_min_x:
                     slow_min_x = float(x)
                     slow_min_y = float(y)
-            if abs_y <= self.emergency_stop_lateral_y:
+            stop_lateral_limit = self._forward_zone_lateral_limit(
+                x,
+                self.emergency_stop_lateral_y,
+                self.emergency_stop_far_lateral_ratio,
+                self.emergency_stop_distance,
+            )
+            if abs_y <= stop_lateral_limit:
                 if float(x) < stop_min_x:
                     stop_min_x = float(x)
                     stop_min_y = float(y)
@@ -1054,10 +1100,18 @@ class TebCmdVelRelay(object):
             and self.closest_stop_obstacle_x <= self.emergency_stop_distance
         ):
             stopped = Twist()
+            stop_lateral_limit = self._forward_zone_lateral_limit(
+                self.closest_stop_obstacle_x,
+                self.emergency_stop_lateral_y,
+                self.emergency_stop_far_lateral_ratio,
+                self.emergency_stop_distance,
+            )
             rospy.logwarn_throttle(
                 self.log_period_s,
-                "teb_cmd_vel_relay: emergency stop | obstacle_x=%.2f m cmd_v=%.3f cmd_w=%.3f",
+                "teb_cmd_vel_relay: emergency stop | obstacle=(%.2f,%.2f) m limit_y=%.2f cmd_v=%.3f cmd_w=%.3f",
                 self.closest_stop_obstacle_x,
+                self.closest_stop_obstacle_y,
+                stop_lateral_limit,
                 float(cmd.linear.x),
                 float(cmd.angular.z),
             )

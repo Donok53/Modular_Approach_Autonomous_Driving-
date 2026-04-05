@@ -120,8 +120,10 @@
   <arg name="teb_global_plan_overwrite_orientation" default="true"/>
   <arg name="emergency_stop_front_margin" default="0.35"/>
   <arg name="emergency_stop_side_margin" default="0.10"/>
+  <arg name="emergency_stop_far_lateral_ratio" default="0.55"/>
   <arg name="slowdown_front_margin" default="0.80"/>
   <arg name="slowdown_side_margin" default="0.20"/>
+  <arg name="slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_local_costmap_width_m" default="12.0"/>
   <arg name="teb_local_costmap_height_m" default="12.0"/>
   <arg name="teb_local_obstacle_range_m" default="8.0"/>
@@ -339,8 +341,10 @@
     <param name="local_hold_timeout_s" value="$(arg local_hold_timeout_s)"/>
     <param name="emergency_stop_front_margin" value="$(arg emergency_stop_front_margin)"/>
     <param name="emergency_stop_side_margin" value="$(arg emergency_stop_side_margin)"/>
+    <param name="emergency_stop_far_lateral_ratio" value="$(arg emergency_stop_far_lateral_ratio)"/>
     <param name="slowdown_front_margin" value="$(arg slowdown_front_margin)"/>
     <param name="slowdown_side_margin" value="$(arg slowdown_side_margin)"/>
+    <param name="slowdown_far_lateral_ratio" value="$(arg slowdown_far_lateral_ratio)"/>
   </node>
 
   <node if="$(arg use_pointcloud_obstacles)" pkg="dynamic_window_approach" type="teb_obstacle_cloud_filter.py" name="teb_obstacle_cloud_filter" output="screen">

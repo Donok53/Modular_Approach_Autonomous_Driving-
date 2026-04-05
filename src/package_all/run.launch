@@ -64,8 +64,10 @@
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_emergency_stop_front_margin" default="0.35"/>
   <arg name="teb_emergency_stop_side_margin" default="0.03"/>
+  <arg name="teb_emergency_stop_far_lateral_ratio" default="0.55"/>
   <arg name="teb_slowdown_front_margin" default="0.80"/>
   <arg name="teb_slowdown_side_margin" default="0.08"/>
+  <arg name="teb_slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_filter_max_range_m" default="8.0"/>
   <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
@@ -467,8 +469,10 @@
       <arg name="move_base_goal_update_min_dist_m" value="$(arg teb_move_base_goal_update_min_dist_m)"/>
       <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
       <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
+      <arg name="emergency_stop_far_lateral_ratio" value="$(arg teb_emergency_stop_far_lateral_ratio)"/>
       <arg name="slowdown_front_margin" value="$(arg teb_slowdown_front_margin)"/>
       <arg name="slowdown_side_margin" value="$(arg teb_slowdown_side_margin)"/>
+      <arg name="slowdown_far_lateral_ratio" value="$(arg teb_slowdown_far_lateral_ratio)"/>
       <arg name="move_base_goal_topic" value="$(arg teb_move_base_goal_topic)"/>
       <arg name="teb_filter_max_range" value="$(arg teb_filter_max_range_m)"/>
       <arg name="teb_filter_lateral_limit_y" value="$(arg teb_filter_lateral_limit_y_m)"/>
