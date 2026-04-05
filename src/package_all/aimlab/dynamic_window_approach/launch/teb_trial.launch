@@ -88,7 +88,7 @@
   <arg name="teb_filter_self_radius_y" default="$(eval float(arg('robot_half_width_m')) + float(arg('teb_filter_self_margin_m')))"/>
   <arg name="teb_filter_rear_limit_x" default="-0.10"/>
   <arg name="teb_filter_lateral_limit_y" default="3.5"/>
-  <arg name="teb_min_spacing_m" default="0.20"/>
+  <arg name="teb_min_spacing_m" default="0.12"/>
   <arg name="teb_max_via_points" default="200"/>
   <arg name="enable_emergency_stop" default="true"/>
   <arg name="enable_obstacle_slowdown" default="false"/>
@@ -114,9 +114,13 @@
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="behavior_cmd_timeout_s" default="0.8"/>
   <arg name="local_hold_timeout_s" default="1.0"/>
-  <arg name="move_base_goal_lookahead_m" default="1.5"/>
+  <arg name="move_base_goal_lookahead_m" default="1.0"/>
+  <arg name="local_goal_lookahead_m" default="0.90"/>
+  <arg name="avoidance_goal_lookahead_m" default="0.65"/>
   <arg name="final_goal_switch_distance_m" default="0.5"/>
-  <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
+  <arg name="move_base_goal_update_min_dist_m" default="0.15"/>
+  <arg name="corner_preserve_angle_deg" default="25.0"/>
+  <arg name="corner_anchor_distance_m" default="0.18"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
@@ -136,7 +140,7 @@
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
   <arg name="teb_min_obstacle_dist_m" default="0.04"/>
   <arg name="teb_inflation_dist_m" default="0.08"/>
-  <arg name="teb_weight_viapoint" default="200.0"/>
+  <arg name="teb_weight_viapoint" default="350.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
   <arg name="prediction_horizon_s" default="1.5"/>
@@ -287,10 +291,15 @@
       <param name="odom_topic" value="$(arg planning_pose_topic)"/>
       <param name="goal_output_topic" value="$(arg move_base_goal_topic)"/>
       <param name="goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
+      <param name="fallback_goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
+      <param name="local_goal_lookahead_m" value="$(arg local_goal_lookahead_m)"/>
+      <param name="avoidance_goal_lookahead_m" value="$(arg avoidance_goal_lookahead_m)"/>
       <param name="final_goal_switch_distance_m" value="$(arg final_goal_switch_distance_m)"/>
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
+      <param name="corner_preserve_angle_deg" value="$(arg corner_preserve_angle_deg)"/>
+      <param name="corner_anchor_distance_m" value="$(arg corner_anchor_distance_m)"/>
       <param name="hold_requires_avoidance_path" value="$(arg hold_requires_avoidance_path)"/>
     </node>
   </group>
