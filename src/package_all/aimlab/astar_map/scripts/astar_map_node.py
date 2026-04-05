@@ -168,6 +168,7 @@ class AStarPlanner:
         self._last_world_path = None
         self._last_snapped_goal_xy = None
         self._last_graph_goal_snap_xy = None
+        self._goal_marker_xy = None
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -1085,10 +1086,14 @@ class AStarPlanner:
             float(goal_xy[0]) - float(snapped_goal_xy[0]),
             float(goal_xy[1]) - float(snapped_goal_xy[1]),
         )
-        extend_to_clicked_goal = (
-            goal_cell == goal_raw
-            or goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
-        )
+        extend_to_clicked_goal = goal_cell == goal_raw
+        if (
+            (not extend_to_clicked_goal)
+            and goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
+            and self._blocked_cell_is_free(blocked, goal_raw[0], goal_raw[1])
+            and self._has_line_of_sight(blocked, goal_cell, goal_raw)
+        ):
+            extend_to_clicked_goal = True
         if (
             extend_to_clicked_goal
             and goal_cell != goal_raw
@@ -1100,7 +1105,20 @@ class AStarPlanner:
                 goal_gap_m,
                 self.drivable_grid_goal_extension_max_gap_m,
             )
-        world_points.append(tuple(goal_xy) if extend_to_clicked_goal else snapped_goal_xy)
+        self._goal_marker_xy = (
+            tuple(goal_xy) if extend_to_clicked_goal else snapped_goal_xy
+        )
+        if (not extend_to_clicked_goal) and self.debug_log_enable:
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] using snapped drivable-grid goal for display/path end (clicked=%.2f, %.2f snapped=%.2f, %.2f gap=%.2f m)",
+                float(goal_xy[0]),
+                float(goal_xy[1]),
+                float(snapped_goal_xy[0]),
+                float(snapped_goal_xy[1]),
+                goal_gap_m,
+            )
+        world_points.append(self._goal_marker_xy)
         return self._dedupe_world_points(world_points)
 
     # -------------------- Visualization --------------------
@@ -1146,9 +1164,10 @@ class AStarPlanner:
         self.pub_path_wgs84.publish(pw)
 
     def show_clicked_goal_marker(self):
-        if self._goal_display_xy is None:
+        if self._goal_display_xy is None and self._goal_marker_xy is None:
             return
-        gx, gy = self._goal_display_xy
+        marker_xy = self._goal_marker_xy if self._goal_marker_xy is not None else self._goal_display_xy
+        gx, gy = marker_xy
         m = Marker()
         m.header.frame_id = "map"
         m.header.stamp = rospy.Time.now()
@@ -1168,6 +1187,35 @@ class AStarPlanner:
         m.color.b = 1.0
         m.color.a = 0.95
         self.pub_goal_marker.publish(m)
+
+        requested = Marker()
+        requested.header.frame_id = "map"
+        requested.header.stamp = m.header.stamp
+        requested.ns = "astar_requested_goal"
+        requested.id = 1
+        requested.type = Marker.SPHERE
+        requested.pose.orientation.w = 1.0
+        if (
+            self._goal_display_xy is not None
+            and math.hypot(
+                float(self._goal_display_xy[0]) - float(gx),
+                float(self._goal_display_xy[1]) - float(gy),
+            ) > 0.05
+        ):
+            requested.action = Marker.ADD
+            requested.pose.position.x = float(self._goal_display_xy[0])
+            requested.pose.position.y = float(self._goal_display_xy[1])
+            requested.pose.position.z = 0.08
+            requested.scale.x = 0.18
+            requested.scale.y = 0.18
+            requested.scale.z = 0.18
+            requested.color.r = 0.8
+            requested.color.g = 0.8
+            requested.color.b = 0.8
+            requested.color.a = 0.45
+        else:
+            requested.action = Marker.DELETE
+        self.pub_goal_marker.publish(requested)
 
     def show_server_dst_nodes(self):
         npt = len(self.server_dst_node_list)
@@ -1325,6 +1373,7 @@ class AStarPlanner:
         goal_x = data.pose.position.x
         goal_y = data.pose.position.y
         self._goal_display_xy = (goal_x, goal_y)
+        self._goal_marker_xy = (goal_x, goal_y)
         n, snap_x, snap_y = self._snap_goal_node_from_xy(goal_x, goal_y)
         self._last_graph_goal_snap_xy = (float(snap_x), float(snap_y))
         if n:
@@ -1359,6 +1408,7 @@ class AStarPlanner:
                 e, n = self._ll_to_enu(data.Cmd_dest_lat, data.Cmd_dest_lon)
                 mx, my = self._xy_to_map(e, n)
             self._goal_display_xy = (mx, my)
+            self._goal_marker_xy = (mx, my)
             g, snap_x, snap_y = self._snap_goal_node_from_xy(mx, my)
             self._last_graph_goal_snap_xy = (float(snap_x), float(snap_y))
             if g:
