@@ -227,8 +227,11 @@ class TebCmdVelRelay(object):
         self.last_nonempty_local_path_remaining_m = float("inf")
         self.last_avoidance_path_time = 0.0
         self.avoidance_path_active = False
+        self.avoidance_turn_direction = "none"
+        self.avoidance_turn_lateral_m = 0.0
         self.odom_x = 0.0
         self.odom_y = 0.0
+        self.odom_yaw = 0.0
         self.have_odom = False
         self.closest_stop_obstacle_x = float("inf")
         self.closest_stop_obstacle_y = 0.0
@@ -403,7 +406,7 @@ class TebCmdVelRelay(object):
         )
         return (
             "relay reason={} action={} sanitize={} safety={} smooth={} raw(v={},w={}) sanitized(v={},w={}) target(v={},w={}) out(v={},w={}) "
-            "local(n={},empty={},remain={}) avoid={} hold={} final_brake={} "
+            "local(n={},empty={},remain={}) avoid={} dir={} hold={} final_brake={} "
             "behavior(stop={},limit={}) obs(stop_x={},slow_x={})"
         ).format(
             trigger_reason,
@@ -423,6 +426,7 @@ class TebCmdVelRelay(object):
             "yes" if self.local_path_empty else "no",
             self._fmt_debug_float(self.local_path_remaining_m),
             "on" if self.avoidance_path_active else "off",
+            self.avoidance_turn_direction,
             "on" if self._has_local_hold(now) else "off",
             "on" if self._is_final_goal_brake_active() else "off",
             "yes" if self.behavior_stop else "no",
@@ -677,11 +681,84 @@ class TebCmdVelRelay(object):
         dy = float(pose_stamped.pose.position.y) - float(y)
         return math.hypot(dx, dy)
 
+    def _pose_to_body_xy(self, pose_stamped):
+        dx = float(pose_stamped.pose.position.x) - float(self.odom_x)
+        dy = float(pose_stamped.pose.position.y) - float(self.odom_y)
+        c = math.cos(self.odom_yaw)
+        s = math.sin(self.odom_yaw)
+        return (c * dx + s * dy, -s * dx + c * dy)
+
+    def _infer_avoidance_turn_from_path(self, path_msg):
+        if (not self.have_odom) or path_msg is None or len(path_msg.poses) < 2:
+            return "none", 0.0
+
+        best_lateral = 0.0
+        best_score = 0.0
+        min_forward_x = max(0.12, 0.5 * self.robot_half_length)
+        max_considered_x = max(2.5, self.slowdown_distance + 0.5)
+        for pose in path_msg.poses[1:]:
+            x_local, y_local = self._pose_to_body_xy(pose)
+            if x_local < -0.10 or x_local > max_considered_x:
+                continue
+            score = abs(y_local)
+            if x_local >= min_forward_x:
+                score += 0.05
+            if score > best_score:
+                best_score = score
+                best_lateral = y_local
+
+        if abs(best_lateral) < 0.05 and len(path_msg.poses) >= 3:
+            sx, sy = self._pose_to_body_xy(path_msg.poses[0])
+            ex, ey = self._pose_to_body_xy(path_msg.poses[-1])
+            dx = float(ex) - float(sx)
+            dy = float(ey) - float(sy)
+            norm = math.hypot(dx, dy)
+            if norm > 1e-6:
+                signed_offset = 0.0
+                for pose in path_msg.poses[1:-1]:
+                    px, py = self._pose_to_body_xy(pose)
+                    signed = (dx * (float(py) - float(sy)) - dy * (float(px) - float(sx))) / norm
+                    if abs(signed) > abs(signed_offset):
+                        signed_offset = signed
+                if abs(signed_offset) > abs(best_lateral):
+                    best_lateral = signed_offset
+
+        if abs(best_lateral) < 0.05:
+            return "none", best_lateral
+        return ("left" if best_lateral > 0.0 else "right"), best_lateral
+
     def _should_preserve_in_place_rotation(self, cmd):
         return abs(float(cmd.angular.z)) >= self.min_in_place_rotation_angular_speed
 
+    def _preferred_avoidance_turn_direction(self):
+        if not self.avoidance_path_active:
+            return "none"
+        if self.avoidance_turn_direction in ("left", "right"):
+            return self.avoidance_turn_direction
+        if abs(float(self.closest_stop_obstacle_y)) < 1e-3:
+            return "none"
+        return "left" if float(self.closest_stop_obstacle_y) < 0.0 else "right"
+
+    def _preferred_avoidance_turn_sign(self):
+        direction = self._preferred_avoidance_turn_direction()
+        if direction == "left":
+            return 1.0
+        if direction == "right":
+            return -1.0
+        return 0.0
+
+    def _has_preferred_avoidance_turn(self):
+        return abs(self._preferred_avoidance_turn_sign()) > 0.0
+
+    def _effective_avoidance_angular_z(self, cmd):
+        raw_w = float(cmd.angular.z)
+        preferred_sign = self._preferred_avoidance_turn_sign()
+        if preferred_sign == 0.0:
+            return raw_w
+        return preferred_sign * max(abs(raw_w), self.min_in_place_rotation_angular_speed)
+
     def _is_turning_away_from_obstacle(self, cmd, obstacle_y):
-        angular_z = float(cmd.angular.z)
+        angular_z = self._effective_avoidance_angular_z(cmd)
         lateral_y = float(obstacle_y)
         return (
             abs(angular_z) >= self.min_in_place_rotation_angular_speed
@@ -693,6 +770,11 @@ class TebCmdVelRelay(object):
     def _rotation_only_cmd(cmd):
         out = Twist()
         out.angular.z = float(cmd.angular.z)
+        return out
+
+    def _preferred_rotation_only_cmd(self, cmd):
+        out = Twist()
+        out.angular.z = self._effective_avoidance_angular_z(cmd)
         return out
 
     def _coast_forward_cmd(self, cmd):
@@ -720,7 +802,7 @@ class TebCmdVelRelay(object):
             max(0.0, float(cmd.linear.x)),
             self.avoidance_close_crawl_speed,
         )
-        out.angular.z = float(cmd.angular.z)
+        out.angular.z = self._effective_avoidance_angular_z(cmd)
         return out
 
     def _should_allow_avoidance_close_crawl(self, cmd, final_segment_active):
@@ -776,6 +858,11 @@ class TebCmdVelRelay(object):
     def odom_callback(self, msg):
         self.odom_x = float(msg.pose.pose.position.x)
         self.odom_y = float(msg.pose.pose.position.y)
+        q = msg.pose.pose.orientation
+        self.odom_yaw = math.atan2(
+            2.0 * (q.w * q.z + q.x * q.y),
+            1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+        )
         self.have_odom = True
 
     def behavior_callback(self, msg):
@@ -815,6 +902,15 @@ class TebCmdVelRelay(object):
     def avoidance_path_callback(self, msg):
         self.last_avoidance_path_time = rospy.get_time()
         self.avoidance_path_active = len(msg.poses) >= 2
+        if not self.avoidance_path_active:
+            self.avoidance_turn_direction = "none"
+            self.avoidance_turn_lateral_m = 0.0
+            return
+
+        direction, lateral = self._infer_avoidance_turn_from_path(msg)
+        self.avoidance_turn_lateral_m = float(lateral)
+        if direction != "none":
+            self.avoidance_turn_direction = direction
 
     def _is_final_path_segment_active(self):
         return (
@@ -1000,6 +1096,7 @@ class TebCmdVelRelay(object):
         stamp=None,
         trigger_reason="",
         action_taken="",
+        avoid_direction="none",
         local_planning_active=False,
         stop_commanded=False,
         slowdown_commanded=False,
@@ -1017,7 +1114,7 @@ class TebCmdVelRelay(object):
         msg.decision_layer = "control_safety_layer"
         msg.trigger_reason = str(trigger_reason)
         msg.action_taken = str(action_taken)
-        msg.avoid_direction = "none"
+        msg.avoid_direction = str(avoid_direction)
         msg.local_planning_active = bool(local_planning_active)
         msg.stop_commanded = bool(stop_commanded)
         msg.slowdown_commanded = bool(slowdown_commanded)
@@ -1105,18 +1202,25 @@ class TebCmdVelRelay(object):
         if (
             self.allow_in_place_rotation_during_local_hold
             and self.avoidance_path_active
-            and self._should_preserve_in_place_rotation(cmd)
+            and (
+                self._should_preserve_in_place_rotation(cmd)
+                or self._has_preferred_avoidance_turn()
+            )
         ):
+            rotate_cmd = self._preferred_rotation_only_cmd(cmd)
             self._last_safety_reason = "local_hold_rotate"
             rospy.loginfo_throttle(
                 self.log_period_s,
-                "teb_cmd_vel_relay: local hold keeps in-place rotation | w=%.3f avoidance=active",
+                "teb_cmd_vel_relay: local hold keeps in-place rotation | raw_w=%.3f out_w=%.3f avoid_dir=%s",
                 float(cmd.angular.z),
+                float(rotate_cmd.angular.z),
+                self._preferred_avoidance_turn_direction(),
             )
-            return self._rotation_only_cmd(cmd), {
+            return rotate_cmd, {
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": "local_replanner_hold",
                 "action_taken": "hold_rotate",
+                "avoid_direction": self._preferred_avoidance_turn_direction(),
                 "stop_commanded": False,
                 "slowdown_commanded": True,
                 "speed_limit_mps": 0.0,
@@ -1174,7 +1278,7 @@ class TebCmdVelRelay(object):
                 crawl_cmd = self._avoidance_close_crawl_cmd(cmd)
                 rospy.loginfo_throttle(
                     self.log_period_s,
-                    "teb_cmd_vel_relay: keeping avoidance crawl | obstacle=(%.2f,%.2f) m center_box=%.2f/%.2f cmd(v=%.3f,w=%.3f) -> crawl_v=%.3f",
+                    "teb_cmd_vel_relay: keeping avoidance crawl | obstacle=(%.2f,%.2f) m center_box=%.2f/%.2f cmd(v=%.3f,w=%.3f) -> crawl(v=%.3f,w=%.3f) dir=%s",
                     self.closest_stop_obstacle_x,
                     self.closest_stop_obstacle_y,
                     self.avoidance_center_stop_distance,
@@ -1182,12 +1286,15 @@ class TebCmdVelRelay(object):
                     float(cmd.linear.x),
                     float(cmd.angular.z),
                     float(crawl_cmd.linear.x),
+                    float(crawl_cmd.angular.z),
+                    self._preferred_avoidance_turn_direction(),
                 )
                 self._last_safety_reason = "obstacle_avoidance_crawl"
                 return crawl_cmd, {
                     "event_type": "CONTROL_ACTION_CHANGE",
                     "trigger_reason": "front_obstacle_avoidance_crawl",
                     "action_taken": "avoidance_crawl",
+                    "avoid_direction": self._preferred_avoidance_turn_direction(),
                     "stop_commanded": False,
                     "slowdown_commanded": True,
                     "speed_limit_mps": float(crawl_cmd.linear.x),
@@ -1198,28 +1305,35 @@ class TebCmdVelRelay(object):
             if (
                 self.allow_in_place_rotation_near_obstacle
                 and (not final_segment_active)
-                and self._should_preserve_in_place_rotation(cmd)
+                and (
+                    self._should_preserve_in_place_rotation(cmd)
+                    or self._has_preferred_avoidance_turn()
+                )
             ):
-                rotate_only = self._rotation_only_cmd(cmd)
+                rotate_only = self._preferred_rotation_only_cmd(cmd)
                 stop_lateral_limit = self._forward_zone_lateral_limit(
                     self.closest_stop_obstacle_x,
                     self.emergency_stop_lateral_y,
                     self.emergency_stop_far_lateral_ratio,
                     self.emergency_stop_distance,
                 )
+                preferred_dir = self._preferred_avoidance_turn_direction()
                 rospy.loginfo_throttle(
                     self.log_period_s,
-                    "teb_cmd_vel_relay: emergency obstacle -> rotate-only | obstacle=(%.2f,%.2f) m limit_y=%.2f cmd_w=%.3f",
+                    "teb_cmd_vel_relay: emergency obstacle -> rotate-only | obstacle=(%.2f,%.2f) m limit_y=%.2f cmd_w=%.3f out_w=%.3f avoid_dir=%s",
                     self.closest_stop_obstacle_x,
                     self.closest_stop_obstacle_y,
                     stop_lateral_limit,
                     float(cmd.angular.z),
+                    float(rotate_only.angular.z),
+                    preferred_dir,
                 )
                 self._last_safety_reason = "obstacle_emergency_rotate"
                 return rotate_only, {
                     "event_type": "CONTROL_ACTION_CHANGE",
                     "trigger_reason": "front_obstacle_emergency",
                     "action_taken": "emergency_rotate",
+                    "avoid_direction": preferred_dir,
                     "stop_commanded": False,
                     "slowdown_commanded": True,
                     "speed_limit_mps": 0.0,
@@ -1248,6 +1362,7 @@ class TebCmdVelRelay(object):
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": "front_obstacle_emergency",
                 "action_taken": "emergency_stop",
+                "avoid_direction": self._preferred_avoidance_turn_direction(),
                 "stop_commanded": True,
                 "slowdown_commanded": False,
                 "speed_limit_mps": 0.0,
@@ -1275,16 +1390,22 @@ class TebCmdVelRelay(object):
                 if (
                     self.allow_in_place_rotation_near_obstacle
                     and (not final_segment_active)
-                    and self._should_preserve_in_place_rotation(cmd)
+                    and (
+                        self._should_preserve_in_place_rotation(cmd)
+                        or self._has_preferred_avoidance_turn()
+                    )
                 ):
+                    rotate_only = self._preferred_rotation_only_cmd(cmd)
                     rospy.loginfo_throttle(
                         self.log_period_s,
-                        "teb_cmd_vel_relay: converting obstacle slowdown to in-place rotation v=%.3f w=%.3f obstacle_x=%.2f",
+                        "teb_cmd_vel_relay: converting obstacle slowdown to in-place rotation v=%.3f w=%.3f -> %.3f obstacle_x=%.2f dir=%s",
                         slowed.linear.x,
                         cmd.angular.z,
+                        rotate_only.angular.z,
                         self.closest_slow_obstacle_x,
+                        self._preferred_avoidance_turn_direction(),
                     )
-                    slowed = self._rotation_only_cmd(cmd)
+                    slowed = rotate_only
                 else:
                     if abs(slowed.angular.z) > 1e-4:
                         rospy.loginfo_throttle(
@@ -1309,6 +1430,7 @@ class TebCmdVelRelay(object):
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": "front_obstacle_slowdown",
                 "action_taken": "slowdown",
+                "avoid_direction": self._preferred_avoidance_turn_direction(),
                 "stop_commanded": False,
                 "slowdown_commanded": True,
                 "speed_limit_mps": float(slowed.linear.x),
@@ -1410,6 +1532,7 @@ class TebCmdVelRelay(object):
                 event_type=explain.get("event_type", "CONTROL_ACTION_CHANGE"),
                 trigger_reason=explain.get("trigger_reason", ""),
                 action_taken=explain.get("action_taken", ""),
+                avoid_direction=explain.get("avoid_direction", "none"),
                 local_planning_active=bool(explain.get("local_planning_active", False)),
                 stop_commanded=bool(explain.get("stop_commanded", False)),
                 slowdown_commanded=bool(explain.get("slowdown_commanded", False)),
