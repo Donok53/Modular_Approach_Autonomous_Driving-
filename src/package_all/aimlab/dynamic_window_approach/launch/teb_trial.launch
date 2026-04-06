@@ -36,7 +36,7 @@
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="smooth_path_line_of_sight" default="true"/>
   <arg name="smooth_avoidance_line_of_sight" default="true"/>
-  <arg name="max_los_segment_m" default="1.0"/>
+  <arg name="max_los_segment_m" default="4.0"/>
   <arg name="published_path_spacing_m" default="0.25"/>
   <arg name="path_history_max_paths" default="12"/>
   <arg name="replan_hz" default="3.0"/>
@@ -108,7 +108,7 @@
   <arg name="reverse_replacement_speed_mps" default="0.03"/>
   <arg name="enable_tiny_reverse_forward_crawl" default="true"/>
   <arg name="tiny_reverse_forward_crawl_speed_mps" default="0.04"/>
-  <arg name="tiny_reverse_forward_crawl_clearance_m" default="0.95"/>
+  <arg name="tiny_reverse_forward_crawl_clearance_m" default="0.80"/>
   <arg name="tiny_reverse_forward_crawl_max_angular_speed" default="0.35"/>
   <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
@@ -122,7 +122,7 @@
   <arg name="final_goal_switch_distance_m" default="0.5"/>
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
-  <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
+  <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
   <arg name="teb_acc_lim_theta_rps2" default="0.60"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
@@ -142,7 +142,7 @@
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
   <arg name="teb_min_obstacle_dist_m" default="0.09"/>
   <arg name="teb_inflation_dist_m" default="0.18"/>
-  <arg name="teb_weight_viapoint" default="200.0"/>
+  <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.04)"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
   <arg name="prediction_horizon_s" default="1.5"/>
