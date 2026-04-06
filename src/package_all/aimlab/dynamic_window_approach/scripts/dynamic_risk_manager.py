@@ -103,14 +103,25 @@ class DynamicRiskManager:
             self.risk_grid_topic,
         )
 
+    @staticmethod
+    def _twist_to_world(msg, yaw):
+        vx = float(msg.twist.twist.linear.x)
+        vy = float(msg.twist.twist.linear.y)
+        header_frame = str(msg.header.frame_id).strip()
+        child_frame = str(msg.child_frame_id).strip()
+        if child_frame and child_frame != header_frame:
+            c = math.cos(yaw)
+            s = math.sin(yaw)
+            return c * vx - s * vy, s * vx + c * vy
+        return vx, vy
+
     def odom_callback(self, msg):
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
         self.odom_x = float(p.x)
         self.odom_y = float(p.y)
         self.odom_yaw = transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
-        self.odom_vx = float(msg.twist.twist.linear.x)
-        self.odom_vy = float(msg.twist.twist.linear.y)
+        self.odom_vx, self.odom_vy = self._twist_to_world(msg, self.odom_yaw)
         self.have_odom = True
 
     def objects_callback(self, msg):

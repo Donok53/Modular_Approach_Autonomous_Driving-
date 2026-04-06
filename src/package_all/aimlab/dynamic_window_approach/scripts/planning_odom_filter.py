@@ -65,9 +65,21 @@ class PlanningOdomFilter:
         self.input_topic = rospy.get_param(
             "~input_topic", "/lio_localizer/odometry/optimization"
         )
+        self.twist_topic = str(
+            rospy.get_param("~twist_topic", "/lio_localizer/odometry/lidar_incremental")
+        ).strip()
+        self.twist_linear_frame = str(
+            rospy.get_param("~twist_linear_frame", "auto")
+        ).strip().lower()
         self.output_topic = rospy.get_param(
             "~output_topic", "/lio_localizer/odometry/planning"
         )
+        self.twist_timeout_s = max(
+            0.0, float(rospy.get_param("~twist_timeout_s", 0.30))
+        )
+        self.output_child_frame_id = str(
+            rospy.get_param("~output_child_frame_id", "base_link")
+        ).strip()
         self.forward_tau_s = max(0.01, float(rospy.get_param("~forward_tau_s", 0.18)))
         self.lateral_tau_s = max(0.01, float(rospy.get_param("~lateral_tau_s", 0.70)))
         self.turning_lateral_tau_s = max(
@@ -112,14 +124,27 @@ class PlanningOdomFilter:
         self.fvy = 0.0
         self.fvz = 0.0
         self.fwz = 0.0
+        self.latest_twist_msg = None
+        self.latest_twist_stamp_s = 0.0
 
         self.pub = rospy.Publisher(self.output_topic, Odometry, queue_size=20)
-        self.sub = rospy.Subscriber(self.input_topic, Odometry, self.odom_callback, queue_size=50)
+        self.sub = rospy.Subscriber(
+            self.input_topic, Odometry, self.odom_callback, queue_size=50
+        )
+        self.sub_twist = None
+        if self.twist_topic and self.twist_topic != self.input_topic:
+            self.sub_twist = rospy.Subscriber(
+                self.twist_topic, Odometry, self.twist_callback, queue_size=50
+            )
 
         rospy.loginfo(
-            "planning_odom_filter started | in=%s out=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f)",
+            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f)",
             self.input_topic,
+            self.twist_topic if self.twist_topic else "-",
+            self.twist_linear_frame,
             self.output_topic,
+            self.twist_timeout_s,
+            self.output_child_frame_id if self.output_child_frame_id else "<inherit>",
             self.forward_tau_s,
             self.lateral_tau_s,
             self.turning_lateral_tau_s,
@@ -128,27 +153,95 @@ class PlanningOdomFilter:
             self.twist_tau_s,
         )
 
-    def _reset_state(self, msg, raw_roll, raw_pitch, raw_yaw):
+    @staticmethod
+    def _stamp_to_sec(msg):
+        stamp_s = msg.header.stamp.to_sec()
+        if stamp_s <= 0.0:
+            return rospy.Time.now().to_sec()
+        return stamp_s
+
+    def twist_callback(self, msg):
+        self.latest_twist_msg = msg
+        self.latest_twist_stamp_s = self._stamp_to_sec(msg)
+
+    def _select_twist_msg(self, pose_msg, pose_stamp_s):
+        if self.twist_topic and self.twist_topic != self.input_topic:
+            if self.latest_twist_msg is not None:
+                if self.twist_timeout_s <= 0.0:
+                    return self.latest_twist_msg
+                if abs(pose_stamp_s - self.latest_twist_stamp_s) <= self.twist_timeout_s:
+                    return self.latest_twist_msg
+        return pose_msg
+
+    def _resolved_child_frame_id(self, pose_msg, twist_msg):
+        if self.output_child_frame_id:
+            return self.output_child_frame_id
+        pose_child = str(pose_msg.child_frame_id).strip()
+        if pose_child:
+            return pose_child
+        if twist_msg is not None:
+            twist_child = str(twist_msg.child_frame_id).strip()
+            if twist_child:
+                return twist_child
+        return "base_link"
+
+    def _resolve_twist_linear_frame(self, pose_msg, twist_msg):
+        frame_mode = self.twist_linear_frame
+        if frame_mode in ("child", "body", "base"):
+            return "child"
+        if frame_mode in ("world", "map", "odom", "global", "pose"):
+            return "world"
+
+        pose_frame = str(pose_msg.header.frame_id).strip()
+        twist_frame = str(twist_msg.header.frame_id).strip()
+        twist_child = str(twist_msg.child_frame_id).strip()
+        output_child = self._resolved_child_frame_id(pose_msg, twist_msg)
+
+        if twist_child and output_child and twist_child == output_child:
+            return "child"
+        if pose_frame and twist_frame and pose_frame == twist_frame:
+            return "world"
+        return "child"
+
+    def _extract_body_twist(self, pose_msg, twist_msg, yaw):
+        raw_vx = float(twist_msg.twist.twist.linear.x)
+        raw_vy = float(twist_msg.twist.twist.linear.y)
+        raw_vz = float(twist_msg.twist.twist.linear.z)
+        raw_wz = float(twist_msg.twist.twist.angular.z)
+
+        if self._resolve_twist_linear_frame(pose_msg, twist_msg) == "world":
+            cy = math.cos(yaw)
+            sy = math.sin(yaw)
+            body_vx = cy * raw_vx + sy * raw_vy
+            body_vy = -sy * raw_vx + cy * raw_vy
+            return body_vx, body_vy, raw_vz, raw_wz
+
+        return raw_vx, raw_vy, raw_vz, raw_wz
+
+    def _reset_state(self, pose_msg, raw_roll, raw_pitch, raw_yaw, twist_msg):
+        msg = pose_msg
         p = msg.pose.pose.position
-        t = msg.twist.twist
+        raw_vx, raw_vy, raw_vz, raw_wz = self._extract_body_twist(
+            pose_msg, twist_msg, raw_yaw
+        )
         self.fx = float(p.x)
         self.fy = float(p.y)
         self.fz = float(p.z)
         self.froll = raw_roll
         self.fpitch = raw_pitch
         self.fyaw = raw_yaw
-        self.fvx = float(t.linear.x)
-        self.fvy = float(t.linear.y)
-        self.fvz = float(t.linear.z)
-        self.fwz = float(t.angular.z)
+        self.fvx = raw_vx
+        self.fvy = raw_vy
+        self.fvz = raw_vz
+        self.fwz = raw_wz
         self.have_state = True
 
-    def _publish_filtered(self, msg):
+    def _publish_filtered(self, pose_msg, twist_msg):
         out = Odometry()
-        out.header = msg.header
-        out.child_frame_id = msg.child_frame_id
-        out.pose = msg.pose
-        out.twist = msg.twist
+        out.header = pose_msg.header
+        out.child_frame_id = self._resolved_child_frame_id(pose_msg, twist_msg)
+        out.pose = pose_msg.pose
+        out.twist = twist_msg.twist
 
         out.pose.pose.position.x = self.fx
         out.pose.pose.position.y = self.fy
@@ -164,33 +257,31 @@ class PlanningOdomFilter:
         out.twist.twist.angular.z = self.fwz
         self.pub.publish(out)
 
-    def odom_callback(self, msg):
-        stamp_s = msg.header.stamp.to_sec()
-        if stamp_s <= 0.0:
-            stamp_s = rospy.Time.now().to_sec()
+    def odom_callback(self, pose_msg):
+        stamp_s = self._stamp_to_sec(pose_msg)
+        twist_msg = self._select_twist_msg(pose_msg, stamp_s)
 
-        raw_roll, raw_pitch, raw_yaw = quat_to_euler(msg.pose.pose.orientation)
+        raw_roll, raw_pitch, raw_yaw = quat_to_euler(pose_msg.pose.pose.orientation)
 
         if (not self.have_state) or (self.last_stamp_s is None):
-            self._reset_state(msg, raw_roll, raw_pitch, raw_yaw)
+            self._reset_state(pose_msg, raw_roll, raw_pitch, raw_yaw, twist_msg)
             self.last_stamp_s = stamp_s
-            self._publish_filtered(msg)
+            self._publish_filtered(pose_msg, twist_msg)
             return
 
         dt = stamp_s - self.last_stamp_s
         self.last_stamp_s = stamp_s
         if dt <= 0.0 or dt > self.reinit_gap_s:
-            self._reset_state(msg, raw_roll, raw_pitch, raw_yaw)
-            self._publish_filtered(msg)
+            self._reset_state(pose_msg, raw_roll, raw_pitch, raw_yaw, twist_msg)
+            self._publish_filtered(pose_msg, twist_msg)
             return
 
-        raw_x = float(msg.pose.pose.position.x)
-        raw_y = float(msg.pose.pose.position.y)
-        raw_z = float(msg.pose.pose.position.z)
-        raw_vx = float(msg.twist.twist.linear.x)
-        raw_vy = float(msg.twist.twist.linear.y)
-        raw_vz = float(msg.twist.twist.linear.z)
-        raw_wz = float(msg.twist.twist.angular.z)
+        raw_x = float(pose_msg.pose.pose.position.x)
+        raw_y = float(pose_msg.pose.pose.position.y)
+        raw_z = float(pose_msg.pose.pose.position.z)
+        raw_vx, raw_vy, raw_vz, raw_wz = self._extract_body_twist(
+            pose_msg, twist_msg, raw_yaw
+        )
         raw_speed = math.hypot(raw_vx, raw_vy)
         yaw_err = angle_diff(raw_yaw, self.fyaw)
         turning = (
@@ -238,7 +329,7 @@ class PlanningOdomFilter:
         self.fvz += alpha_twist * (raw_vz - self.fvz)
         self.fwz += alpha_twist * (raw_wz - self.fwz)
 
-        self._publish_filtered(msg)
+        self._publish_filtered(pose_msg, twist_msg)
 
 
 def main():

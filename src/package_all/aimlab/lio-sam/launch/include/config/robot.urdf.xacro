@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <robot name="lio" xmlns:xacro="http://tixiaoshan.github.io/">
   <xacro:property name="PI" value="3.1415926535897931" />
-  <xacro:property name="robot_length_m" value="0.60" />
-  <xacro:property name="robot_width_m" value="0.55" />
+  <xacro:property name="robot_length_m" value="0.612" />
+  <xacro:property name="robot_width_m" value="0.58" />
   <xacro:property name="robot_height_m" value="0.18" />
 
   <material name="robot_body_blue">

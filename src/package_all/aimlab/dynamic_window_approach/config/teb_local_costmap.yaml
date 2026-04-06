@@ -1,7 +1,7 @@
 local_costmap:
   global_frame: map
   robot_base_frame: base_link
-  footprint: [[0.30, 0.275], [0.30, -0.275], [-0.30, -0.275], [-0.30, 0.275]]
+  footprint: [[0.306, 0.29], [0.306, -0.29], [-0.306, -0.29], [-0.306, 0.29]]
   update_frequency: 10.0
   publish_frequency: 5.0
   transform_tolerance: 0.5

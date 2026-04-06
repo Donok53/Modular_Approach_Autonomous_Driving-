@@ -107,10 +107,10 @@ class DWAControl:
         self.obstacle_influence_distance = rospy.get_param("~obstacle_influence_distance", 1.8)
         legacy_robot_radius = float(rospy.get_param("~robot_radius", 0.35))
         self.robot_width_m = max(
-            0.05, float(rospy.get_param("~robot_width_m", 2.0 * legacy_robot_radius))
+            0.05, float(rospy.get_param("~robot_width_m", 0.58))
         )
         self.robot_length_m = max(
-            0.05, float(rospy.get_param("~robot_length_m", self.robot_width_m))
+            0.05, float(rospy.get_param("~robot_length_m", 0.612))
         )
         self.robot_half_width_m = 0.5 * self.robot_width_m
         self.robot_half_length_m = 0.5 * self.robot_length_m

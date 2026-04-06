@@ -105,8 +105,8 @@ class AStarPlanner:
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
         )
-        self.robot_width_m = max(0.0, float(rospy.get_param("~robot_width_m", 0.55)))
-        self.robot_length_m = max(0.0, float(rospy.get_param("~robot_length_m", 0.60)))
+        self.robot_width_m = max(0.0, float(rospy.get_param("~robot_width_m", 0.58)))
+        self.robot_length_m = max(0.0, float(rospy.get_param("~robot_length_m", 0.612)))
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.global_path_use_any_angle = bool(rospy.get_param("~global_path_use_any_angle", True))
         self.global_path_clearance_m = max(

@@ -5,6 +5,10 @@
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
   <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
+  <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
+  <arg name="pose_filter_twist_linear_frame" default="world"/>
+  <arg name="pose_filter_twist_timeout_s" default="0.30"/>
+  <arg name="pose_filter_output_child_frame_id" default="base_link"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="use_drivable_grid" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
@@ -93,8 +97,8 @@
   <arg name="stop_log_period_s" default="1.0"/>
   <arg name="use_pointcloud_obstacle_cost" default="false"/>
   <arg name="obstacle_collision_radius" default="0.0"/>
-  <arg name="robot_width_m" default="0.55"/>
-  <arg name="robot_length_m" default="0.60"/>
+  <arg name="robot_width_m" default="0.58"/>
+  <arg name="robot_length_m" default="0.612"/>
   <arg name="footprint_padding_m" default="0.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="global_path_use_any_angle" default="false"/>
@@ -289,6 +293,10 @@
   <group if="$(eval arg('local_planner_mode') == 'custom')">
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
+      <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
+      <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
+      <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
@@ -401,6 +409,10 @@
   <group if="$(eval arg('local_planner_mode') == 'teb')">
     <include file="$(find dynamic_window_approach)/launch/teb_trial.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
+      <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
+      <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
+      <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="/move_base/filtered_obstacles"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>

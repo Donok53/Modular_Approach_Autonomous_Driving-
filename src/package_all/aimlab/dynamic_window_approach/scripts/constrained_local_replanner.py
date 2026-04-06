@@ -58,10 +58,10 @@ class ConstrainedLocalReplanner:
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
         legacy_robot_radius = max(0.05, float(rospy.get_param("~robot_radius_m", 0.45)))
         self.robot_width_m = max(
-            0.05, float(rospy.get_param("~robot_width_m", 2.0 * legacy_robot_radius))
+            0.05, float(rospy.get_param("~robot_width_m", 0.58))
         )
         self.robot_length_m = max(
-            0.05, float(rospy.get_param("~robot_length_m", self.robot_width_m))
+            0.05, float(rospy.get_param("~robot_length_m", 0.612))
         )
         self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))

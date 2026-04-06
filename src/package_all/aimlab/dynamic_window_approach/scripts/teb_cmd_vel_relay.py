@@ -102,8 +102,8 @@ class TebCmdVelRelay(object):
         self.defer_local_hold_while_avoidance_active = bool(
             rospy.get_param("~defer_local_hold_while_avoidance_active", True)
         )
-        self.robot_width_m = max(0.1, float(rospy.get_param("~robot_width_m", 0.55)))
-        self.robot_length_m = max(0.1, float(rospy.get_param("~robot_length_m", 0.60)))
+        self.robot_width_m = max(0.1, float(rospy.get_param("~robot_width_m", 0.58)))
+        self.robot_length_m = max(0.1, float(rospy.get_param("~robot_length_m", 0.612)))
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
         self.obstacle_cloud_topic = rospy.get_param(
             "~obstacle_cloud_topic", "/move_base/filtered_obstacles"

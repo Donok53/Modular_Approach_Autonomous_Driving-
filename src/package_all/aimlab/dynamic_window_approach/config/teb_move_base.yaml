@@ -43,10 +43,10 @@ TebLocalPlannerROS:
   footprint_model:
     type: polygon
     vertices:
-      - [0.30, 0.275]
-      - [0.30, -0.275]
-      - [-0.30, -0.275]
-      - [-0.30, 0.275]
+      - [0.306, 0.29]
+      - [0.306, -0.29]
+      - [-0.306, -0.29]
+      - [-0.306, 0.29]
 
   min_obstacle_dist: 0.18
   inflation_dist: 0.25
