@@ -145,7 +145,7 @@ class ConstrainedLocalReplanner:
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
         )
         self.avoidance_reuse_on_failure_s = max(
-            0.0, float(rospy.get_param("~avoidance_reuse_on_failure_s", 0.5))
+            0.0, float(rospy.get_param("~avoidance_reuse_on_failure_s", 2.0))
         )
         self.avoidance_reuse_max_deviation_m = max(
             0.0, float(rospy.get_param("~avoidance_reuse_max_deviation_m", 0.8))
@@ -1156,9 +1156,13 @@ class ConstrainedLocalReplanner:
     def _republish_last_avoidance_path(self, dg, stamp):
         if self.last_avoidance_grid_path is None or len(self.last_avoidance_grid_path) < 2:
             return False
-        if self.last_avoidance_solution_sec <= 0.0:
+        reuse_reference_sec = max(
+            float(self.last_avoidance_solution_sec),
+            float(self.last_avoidance_publish_sec),
+        )
+        if reuse_reference_sec <= 0.0:
             return False
-        age_s = stamp.to_sec() - self.last_avoidance_solution_sec
+        age_s = stamp.to_sec() - reuse_reference_sec
         if age_s > self.avoidance_reuse_on_failure_s:
             return False
         deviation_m = self._grid_path_min_distance_to_xy(
