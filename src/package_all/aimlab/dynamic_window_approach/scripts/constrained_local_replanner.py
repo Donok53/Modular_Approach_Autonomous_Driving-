@@ -157,7 +157,7 @@ class ConstrainedLocalReplanner:
             0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
         )
         self.blocked_stop_before_avoidance_s = max(
-            0.0, float(rospy.get_param("~blocked_stop_before_avoidance_s", 3.0))
+            0.0, float(rospy.get_param("~blocked_stop_before_avoidance_s", 0.0))
         )
         self.near_goal_block_ignore_distance_m = max(
             0.0, float(rospy.get_param("~near_goal_block_ignore_distance_m", 1.0))
@@ -2022,36 +2022,52 @@ class ConstrainedLocalReplanner:
                 now_sec = stamp.to_sec()
                 if self.local_blocked_since_sec <= 0.0:
                     self.local_blocked_since_sec = now_sec
-                    rospy.loginfo(
-                        "constrained_local_replanner: nominal path blocked; holding %.1fs before avoidance",
-                        self.blocked_stop_before_avoidance_s,
-                    )
-                    self._publish_explainability(
-                        event_type="LOCAL_REPLAN_START",
-                        stamp=stamp,
-                        trigger_reason="nominal_path_blocked",
-                        action_taken="hold_stop",
-                        local_planning_active=True,
-                        stop_commanded=True,
-                        summary_text=(
-                            "Nominal local path became blocked, so local replanning started and the robot entered a hold state for %.1f seconds before avoidance."
+                    if self.blocked_stop_before_avoidance_s > 0.0:
+                        rospy.loginfo(
+                            "constrained_local_replanner: nominal path blocked; holding %.1fs before avoidance",
+                            self.blocked_stop_before_avoidance_s,
                         )
-                        % self.blocked_stop_before_avoidance_s,
-                    )
+                        self._publish_explainability(
+                            event_type="LOCAL_REPLAN_START",
+                            stamp=stamp,
+                            trigger_reason="nominal_path_blocked",
+                            action_taken="hold_stop",
+                            local_planning_active=True,
+                            stop_commanded=True,
+                            summary_text=(
+                                "Nominal local path became blocked, so local replanning started and the robot entered a hold state for %.1f seconds before avoidance."
+                            )
+                            % self.blocked_stop_before_avoidance_s,
+                        )
+                    else:
+                        rospy.loginfo(
+                            "constrained_local_replanner: nominal path blocked; evaluating avoidance immediately"
+                        )
+                        self._publish_explainability(
+                            event_type="LOCAL_REPLAN_START",
+                            stamp=stamp,
+                            trigger_reason="nominal_path_blocked",
+                            action_taken="avoid_immediate",
+                            local_planning_active=True,
+                            stop_commanded=False,
+                            summary_text=(
+                                "Nominal local path became blocked, so local replanning immediately evaluated an avoidance path without a hold delay."
+                            ),
+                        )
                 wait_s = now_sec - self.local_blocked_since_sec
-                self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
-                self._publish_debug_text(
-                    self._build_debug_text(
-                        "hold_wait",
-                        stamp,
-                        trigger_reason="nominal_path_blocked",
-                        wait_s=wait_s,
-                        path_len=len(nominal_path),
-                    ),
-                    stamp=stamp,
-                    force=True,
-                )
                 if wait_s < self.blocked_stop_before_avoidance_s:
+                    self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                    self._publish_debug_text(
+                        self._build_debug_text(
+                            "hold_wait",
+                            stamp,
+                            trigger_reason="nominal_path_blocked",
+                            wait_s=wait_s,
+                            path_len=len(nominal_path),
+                        ),
+                        stamp=stamp,
+                        force=True,
+                    )
                     if self._republish_last_avoidance_path(dg, stamp):
                         return
                     self._clear_avoidance_path(dg.header.frame_id, stamp)

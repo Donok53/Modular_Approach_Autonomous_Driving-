@@ -137,8 +137,8 @@
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.05"/>
-  <arg name="avoidance_trigger_margin_m" default="0.04"/>
+  <arg name="obstacle_block_margin_m" default="0.15"/>
+  <arg name="avoidance_trigger_margin_m" default="0.08"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="3"/>
   <arg name="pointcloud_block_confirm_points" default="3"/>
@@ -146,7 +146,7 @@
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
-  <arg name="blocked_stop_before_avoidance_s" default="0.2"/>
+  <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
