@@ -176,6 +176,10 @@ class TebCmdVelRelay(object):
             self.robot_half_length + 0.12,
             self.emergency_stop_distance - 0.15,
         )
+        self.avoidance_escape_crawl_distance = max(
+            self.robot_half_length + 0.08,
+            self.avoidance_center_stop_distance - 0.08,
+        )
         self.avoidance_center_lateral_y = max(
             0.06,
             min(self.emergency_stop_lateral_y, 0.20 * self.robot_half_width),
@@ -735,9 +739,7 @@ class TebCmdVelRelay(object):
             return "none"
         if self.avoidance_turn_direction in ("left", "right"):
             return self.avoidance_turn_direction
-        if abs(float(self.closest_stop_obstacle_y)) < 1e-3:
-            return "none"
-        return "left" if float(self.closest_stop_obstacle_y) < 0.0 else "right"
+        return "none"
 
     def _preferred_avoidance_turn_sign(self):
         direction = self._preferred_avoidance_turn_direction()
@@ -808,11 +810,13 @@ class TebCmdVelRelay(object):
     def _should_allow_avoidance_close_crawl(self, cmd, final_segment_active):
         if (not self.avoidance_path_active) or final_segment_active:
             return False
+        if not self._has_preferred_avoidance_turn():
+            return False
         if float(cmd.linear.x) <= 0.0:
             return False
         if not math.isfinite(self.closest_stop_obstacle_x):
             return False
-        if self.closest_stop_obstacle_x <= self.avoidance_center_stop_distance:
+        if self.closest_stop_obstacle_x <= self.avoidance_escape_crawl_distance:
             return False
         if abs(float(self.closest_stop_obstacle_y)) < self.avoidance_center_lateral_y:
             return False
@@ -901,6 +905,7 @@ class TebCmdVelRelay(object):
 
     def avoidance_path_callback(self, msg):
         self.last_avoidance_path_time = rospy.get_time()
+        was_active = bool(self.avoidance_path_active)
         self.avoidance_path_active = len(msg.poses) >= 2
         if not self.avoidance_path_active:
             self.avoidance_turn_direction = "none"
@@ -908,8 +913,11 @@ class TebCmdVelRelay(object):
             return
 
         direction, lateral = self._infer_avoidance_turn_from_path(msg)
-        self.avoidance_turn_lateral_m = float(lateral)
         if direction != "none":
+            self.avoidance_turn_lateral_m = float(lateral)
+        if (not was_active) and direction != "none":
+            self.avoidance_turn_direction = direction
+        elif self.avoidance_turn_direction == "none" and direction != "none":
             self.avoidance_turn_direction = direction
 
     def _is_final_path_segment_active(self):
