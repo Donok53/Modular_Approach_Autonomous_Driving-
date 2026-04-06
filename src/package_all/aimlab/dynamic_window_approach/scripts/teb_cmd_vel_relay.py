@@ -169,6 +169,18 @@ class TebCmdVelRelay(object):
         self.emergency_stop_lateral_y = self.robot_half_width + self.emergency_stop_side_margin
         self.slowdown_distance = self.robot_half_length + self.slowdown_front_margin
         self.slowdown_lateral_y = self.robot_half_width + self.slowdown_side_margin
+        # During an active avoidance branch we still need a hard center-front
+        # stop box, but we should not blanket-stop for every obstacle that sits
+        # slightly off-center while TEB is trying to arc around it.
+        self.avoidance_center_stop_distance = max(
+            self.robot_half_length + 0.12,
+            self.emergency_stop_distance - 0.15,
+        )
+        self.avoidance_center_lateral_y = max(
+            0.06,
+            min(self.emergency_stop_lateral_y, 0.20 * self.robot_half_width),
+        )
+        self.avoidance_close_crawl_speed = max(self.min_abs_linear_speed, 0.08)
         self.enable_tiny_reverse_forward_crawl = bool(
             rospy.get_param("~enable_tiny_reverse_forward_crawl", True)
         )
@@ -274,7 +286,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -298,6 +310,9 @@ class TebCmdVelRelay(object):
             self.emergency_stop_distance,
             self.emergency_stop_lateral_y,
             self.emergency_stop_far_lateral_ratio,
+            self.avoidance_center_stop_distance,
+            self.avoidance_center_lateral_y,
+            self.avoidance_close_crawl_speed,
             self.slowdown_distance,
             self.slowdown_lateral_y,
             self.slowdown_far_lateral_ratio,
@@ -665,6 +680,15 @@ class TebCmdVelRelay(object):
     def _should_preserve_in_place_rotation(self, cmd):
         return abs(float(cmd.angular.z)) >= self.min_in_place_rotation_angular_speed
 
+    def _is_turning_away_from_obstacle(self, cmd, obstacle_y):
+        angular_z = float(cmd.angular.z)
+        lateral_y = float(obstacle_y)
+        return (
+            abs(angular_z) >= self.min_in_place_rotation_angular_speed
+            and abs(lateral_y) >= 1e-3
+            and (angular_z * lateral_y) < 0.0
+        )
+
     @staticmethod
     def _rotation_only_cmd(cmd):
         out = Twist()
@@ -689,6 +713,28 @@ class TebCmdVelRelay(object):
         out.linear.x = crawl_speed
         out.angular.z = float(cmd.angular.z)
         return out
+
+    def _avoidance_close_crawl_cmd(self, cmd):
+        out = Twist()
+        out.linear.x = min(
+            max(0.0, float(cmd.linear.x)),
+            self.avoidance_close_crawl_speed,
+        )
+        out.angular.z = float(cmd.angular.z)
+        return out
+
+    def _should_allow_avoidance_close_crawl(self, cmd, final_segment_active):
+        if (not self.avoidance_path_active) or final_segment_active:
+            return False
+        if float(cmd.linear.x) <= 0.0:
+            return False
+        if not math.isfinite(self.closest_stop_obstacle_x):
+            return False
+        if self.closest_stop_obstacle_x <= self.avoidance_center_stop_distance:
+            return False
+        if abs(float(self.closest_stop_obstacle_y)) < self.avoidance_center_lateral_y:
+            return False
+        return self._is_turning_away_from_obstacle(cmd, self.closest_stop_obstacle_y)
 
     def obstacle_callback(self, msg):
         stop_min_x = float("inf")
@@ -1124,6 +1170,31 @@ class TebCmdVelRelay(object):
             and (not ignore_stop)
             and self.closest_stop_obstacle_x <= self.emergency_stop_distance
         ):
+            if self._should_allow_avoidance_close_crawl(cmd, final_segment_active):
+                crawl_cmd = self._avoidance_close_crawl_cmd(cmd)
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: keeping avoidance crawl | obstacle=(%.2f,%.2f) m center_box=%.2f/%.2f cmd(v=%.3f,w=%.3f) -> crawl_v=%.3f",
+                    self.closest_stop_obstacle_x,
+                    self.closest_stop_obstacle_y,
+                    self.avoidance_center_stop_distance,
+                    self.avoidance_center_lateral_y,
+                    float(cmd.linear.x),
+                    float(cmd.angular.z),
+                    float(crawl_cmd.linear.x),
+                )
+                self._last_safety_reason = "obstacle_avoidance_crawl"
+                return crawl_cmd, {
+                    "event_type": "CONTROL_ACTION_CHANGE",
+                    "trigger_reason": "front_obstacle_avoidance_crawl",
+                    "action_taken": "avoidance_crawl",
+                    "stop_commanded": False,
+                    "slowdown_commanded": True,
+                    "speed_limit_mps": float(crawl_cmd.linear.x),
+                    "closest_obstacle_dist_m": float(self.closest_stop_obstacle_x),
+                    "obstacle_lateral_offset_m": float(self.closest_stop_obstacle_y),
+                    "summary_text": "TEB relay kept a slow forward crawl because an active avoidance path was turning away from a close obstacle that was outside the center-front stop box.",
+                }
             if (
                 self.allow_in_place_rotation_near_obstacle
                 and (not final_segment_active)

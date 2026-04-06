@@ -2048,6 +2048,8 @@ class ConstrainedLocalReplanner:
                     force=True,
                 )
                 if wait_s < self.blocked_stop_before_avoidance_s:
+                    if self._republish_last_avoidance_path(dg, stamp):
+                        return
                     self._clear_avoidance_path(dg.header.frame_id, stamp)
                     return
                 self._update_avoidance_path(
