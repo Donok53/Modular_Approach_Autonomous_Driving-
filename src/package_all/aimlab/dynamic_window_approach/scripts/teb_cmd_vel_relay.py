@@ -173,15 +173,12 @@ class TebCmdVelRelay(object):
         # stop box, but we should not blanket-stop for every obstacle that sits
         # slightly off-center while TEB is trying to arc around it.
         self.avoidance_center_stop_distance = max(
-            self.robot_half_length + 0.08,
-            self.emergency_stop_distance - 0.22,
+            self.robot_half_length + 0.12,
+            self.emergency_stop_distance - 0.15,
         )
         self.avoidance_center_lateral_y = max(
             0.06,
             min(self.emergency_stop_lateral_y, 0.20 * self.robot_half_width),
-        )
-        self.avoidance_min_turning_angular_speed = max(
-            0.0, float(rospy.get_param("~avoidance_min_turning_angular_speed", 0.03))
         )
         self.avoidance_close_crawl_speed = max(self.min_abs_linear_speed, 0.08)
         self.enable_tiny_reverse_forward_crawl = bool(
@@ -687,7 +684,7 @@ class TebCmdVelRelay(object):
         angular_z = float(cmd.angular.z)
         lateral_y = float(obstacle_y)
         return (
-            abs(angular_z) >= self.avoidance_min_turning_angular_speed
+            abs(angular_z) >= self.min_in_place_rotation_angular_speed
             and abs(lateral_y) >= 1e-3
             and (angular_z * lateral_y) < 0.0
         )
