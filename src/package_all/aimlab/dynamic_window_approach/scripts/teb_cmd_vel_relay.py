@@ -887,6 +887,20 @@ class TebCmdVelRelay(object):
             <= self.ignore_local_hold_near_goal_distance_m
         )
 
+    def _should_hold_before_avoidance_path(self):
+        # constrained_local_replanner publishes an empty local path during the
+        # "hold before avoidance" phase. If we keep waiting for an avoidance
+        # path to appear before honoring that hold, stale TEB commands can keep
+        # driving the robot into the obstacle that triggered replanning.
+        if self.avoidance_path_active:
+            return False
+        if not math.isfinite(self.last_nonempty_local_path_remaining_m):
+            return False
+        return (
+            self.last_nonempty_local_path_remaining_m
+            > self.ignore_local_hold_near_goal_distance_m
+        )
+
     def _has_fresh_obstacle_data(self, now):
         return self.last_obstacle_time > 0.0 and (now - self.last_obstacle_time) <= self.obstacle_cloud_timeout_s
 
@@ -910,7 +924,7 @@ class TebCmdVelRelay(object):
         if self.defer_local_hold_while_avoidance_active and self.avoidance_path_active:
             return False
         if self.hold_requires_avoidance_path and (not self.avoidance_path_active):
-            return False
+            return self._should_hold_before_avoidance_path()
         if (
             (not self.avoidance_path_active)
             and math.isfinite(self.last_nonempty_local_path_remaining_m)
