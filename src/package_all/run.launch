@@ -77,16 +77,17 @@
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_filter_max_range_m" default="8.0"/>
   <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
-  <arg name="teb_filter_self_margin_m" default="0.18"/>
+  <arg name="teb_filter_self_margin_m" default="0.11"/>
+  <arg name="teb_filter_self_padding_m" default="0.03"/>
   <arg name="teb_local_costmap_width_m" default="12.0"/>
   <arg name="teb_local_costmap_height_m" default="12.0"/>
   <arg name="teb_local_obstacle_range_m" default="8.0"/>
   <arg name="teb_local_raytrace_range_m" default="8.5"/>
   <arg name="teb_local_observation_persistence_s" default="0.40"/>
-  <arg name="teb_local_inflation_radius_m" default="0.10"/>
+  <arg name="teb_local_inflation_radius_m" default="0.18"/>
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
-  <arg name="teb_min_obstacle_dist_m" default="0.04"/>
-  <arg name="teb_inflation_dist_m" default="0.08"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.09"/>
+  <arg name="teb_inflation_dist_m" default="0.18"/>
   <arg name="teb_weight_viapoint" default="200.0"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.01"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
@@ -100,7 +101,7 @@
   <arg name="robot_width_m" default="0.58"/>
   <arg name="robot_length_m" default="0.612"/>
   <arg name="footprint_padding_m" default="0.0"/>
-  <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
+  <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.04)"/>
   <arg name="global_path_use_any_angle" default="false"/>
   <arg name="global_path_clearance_m" default="0.01"/>
   <arg name="global_path_clearance_model" default="width"/>
@@ -136,8 +137,8 @@
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.01"/>
-  <arg name="avoidance_trigger_margin_m" default="0.00"/>
+  <arg name="obstacle_block_margin_m" default="0.05"/>
+  <arg name="avoidance_trigger_margin_m" default="0.04"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="3"/>
   <arg name="pointcloud_block_confirm_points" default="3"/>
@@ -513,6 +514,7 @@
       <arg name="teb_filter_max_range" value="$(arg teb_filter_max_range_m)"/>
       <arg name="teb_filter_lateral_limit_y" value="$(arg teb_filter_lateral_limit_y_m)"/>
       <arg name="teb_filter_self_margin_m" value="$(arg teb_filter_self_margin_m)"/>
+      <arg name="teb_filter_self_padding_m" value="$(arg teb_filter_self_padding_m)"/>
       <arg name="teb_local_costmap_width_m" value="$(arg teb_local_costmap_width_m)"/>
       <arg name="teb_local_costmap_height_m" value="$(arg teb_local_costmap_height_m)"/>
       <arg name="teb_local_obstacle_range_m" value="$(arg teb_local_obstacle_range_m)"/>
