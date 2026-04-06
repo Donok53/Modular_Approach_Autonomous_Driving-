@@ -68,11 +68,11 @@
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
   <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
-  <arg name="teb_emergency_stop_front_margin" default="0.35"/>
-  <arg name="teb_emergency_stop_side_margin" default="0.03"/>
+  <arg name="teb_emergency_stop_front_margin" default="0.40"/>
+  <arg name="teb_emergency_stop_side_margin" default="0.05"/>
   <arg name="teb_emergency_stop_far_lateral_ratio" default="0.55"/>
-  <arg name="teb_slowdown_front_margin" default="0.80"/>
-  <arg name="teb_slowdown_side_margin" default="0.06"/>
+  <arg name="teb_slowdown_front_margin" default="0.95"/>
+  <arg name="teb_slowdown_side_margin" default="0.08"/>
   <arg name="teb_slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_filter_max_range_m" default="8.0"/>
@@ -84,10 +84,10 @@
   <arg name="teb_local_obstacle_range_m" default="8.0"/>
   <arg name="teb_local_raytrace_range_m" default="8.5"/>
   <arg name="teb_local_observation_persistence_s" default="0.40"/>
-  <arg name="teb_local_inflation_radius_m" default="0.20"/>
+  <arg name="teb_local_inflation_radius_m" default="0.24"/>
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
-  <arg name="teb_min_obstacle_dist_m" default="0.11"/>
-  <arg name="teb_inflation_dist_m" default="0.20"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.14"/>
+  <arg name="teb_inflation_dist_m" default="0.24"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
@@ -100,7 +100,7 @@
   <arg name="obstacle_collision_radius" default="0.0"/>
   <arg name="robot_width_m" default="0.58"/>
   <arg name="robot_length_m" default="0.612"/>
-  <arg name="footprint_padding_m" default="0.03"/>
+  <arg name="footprint_padding_m" default="0.05"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.04)"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.01"/>
@@ -133,12 +133,12 @@
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.20"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
-  <arg name="pointcloud_static_block_margin_m" default="0.05"/>
+  <arg name="pointcloud_static_block_margin_m" default="0.08"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="4"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.18"/>
-  <arg name="avoidance_trigger_margin_m" default="0.10"/>
+  <arg name="obstacle_block_margin_m" default="0.22"/>
+  <arg name="avoidance_trigger_margin_m" default="0.14"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="3"/>
   <arg name="pointcloud_block_confirm_points" default="3"/>
@@ -152,12 +152,12 @@
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
   <arg name="prediction_horizon_s" default="1.5"/>
   <arg name="prediction_step_s" default="0.2"/>
-  <arg name="prediction_inflate_m" default="0.35"/>
-  <arg name="front_lateral_stop_m" default="0.65"/>
-  <arg name="front_lateral_caution_m" default="0.85"/>
-  <arg name="vehicle_stop_ttc_s" default="1.1"/>
-  <arg name="pedestrian_stop_ttc_s" default="2.0"/>
-  <arg name="caution_ttc_s" default="2.5"/>
+  <arg name="prediction_inflate_m" default="0.50"/>
+  <arg name="front_lateral_stop_m" default="0.85"/>
+  <arg name="front_lateral_caution_m" default="1.10"/>
+  <arg name="vehicle_stop_ttc_s" default="1.4"/>
+  <arg name="pedestrian_stop_ttc_s" default="2.8"/>
+  <arg name="caution_ttc_s" default="3.2"/>
   <arg name="behavior_stop_on_count" default="4"/>
   <arg name="behavior_stop_off_count" default="4"/>
   <arg name="behavior_stop_hold_s" default="0.25"/>
@@ -166,8 +166,8 @@
   <arg name="cloud_tracker_static_speed_thresh_mps" default="0.45"/>
   <arg name="cloud_tracker_dynamic_min_age" default="8"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.22"/>
-  <arg name="include_static_objects_in_behavior" default="false"/>
-  <arg name="include_static_objects_in_risk_grid" default="false"/>
+  <arg name="include_static_objects_in_behavior" default="true"/>
+  <arg name="include_static_objects_in_risk_grid" default="true"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
   <arg name="emergency_stop_distance" default="0.35"/>
