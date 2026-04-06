@@ -1,0 +1,49 @@
+<launch>
+  <arg name="input_topic" default="/ouster/points"/>
+  <arg name="process_every_n" default="3"/>
+  <arg name="input_decimation" default="6"/>
+  <arg name="min_range_m" default="0.6"/>
+  <arg name="max_range_m" default="12.0"/>
+  <arg name="min_ground_z_m" default="-2.0"/>
+  <arg name="max_ground_z_m" default="-0.03"/>
+  <arg name="self_exclusion_half_length_m" default="0.45"/>
+  <arg name="self_exclusion_half_width_m" default="0.40"/>
+  <arg name="max_abs_x_m" default="8.0"/>
+  <arg name="max_abs_y_m" default="8.0"/>
+  <arg name="voxel_size_m" default="0.05"/>
+  <arg name="ransac_iterations" default="180"/>
+  <arg name="ransac_inlier_threshold_m" default="0.025"/>
+  <arg name="max_plane_tilt_deg" default="8.0"/>
+  <arg name="min_candidate_points" default="250"/>
+  <arg name="min_inlier_points" default="120"/>
+  <arg name="history_size" default="15"/>
+  <arg name="stable_std_threshold_m" default="0.01"/>
+  <arg name="exit_when_stable" default="false"/>
+  <arg name="publish_ground_cloud" default="true"/>
+  <arg name="lowest_vertical_angle_deg" default=""/>
+
+  <node pkg="lidar_height_estimator" type="lidar_height_estimator.py" name="lidar_height_estimator" output="screen">
+    <param name="input_topic" value="$(arg input_topic)"/>
+    <param name="process_every_n" value="$(arg process_every_n)"/>
+    <param name="input_decimation" value="$(arg input_decimation)"/>
+    <param name="min_range_m" value="$(arg min_range_m)"/>
+    <param name="max_range_m" value="$(arg max_range_m)"/>
+    <param name="min_ground_z_m" value="$(arg min_ground_z_m)"/>
+    <param name="max_ground_z_m" value="$(arg max_ground_z_m)"/>
+    <param name="self_exclusion_half_length_m" value="$(arg self_exclusion_half_length_m)"/>
+    <param name="self_exclusion_half_width_m" value="$(arg self_exclusion_half_width_m)"/>
+    <param name="max_abs_x_m" value="$(arg max_abs_x_m)"/>
+    <param name="max_abs_y_m" value="$(arg max_abs_y_m)"/>
+    <param name="voxel_size_m" value="$(arg voxel_size_m)"/>
+    <param name="ransac_iterations" value="$(arg ransac_iterations)"/>
+    <param name="ransac_inlier_threshold_m" value="$(arg ransac_inlier_threshold_m)"/>
+    <param name="max_plane_tilt_deg" value="$(arg max_plane_tilt_deg)"/>
+    <param name="min_candidate_points" value="$(arg min_candidate_points)"/>
+    <param name="min_inlier_points" value="$(arg min_inlier_points)"/>
+    <param name="history_size" value="$(arg history_size)"/>
+    <param name="stable_std_threshold_m" value="$(arg stable_std_threshold_m)"/>
+    <param name="exit_when_stable" value="$(arg exit_when_stable)"/>
+    <param name="publish_ground_cloud" value="$(arg publish_ground_cloud)"/>
+    <param if="$(eval arg('lowest_vertical_angle_deg') != '')" name="lowest_vertical_angle_deg" value="$(arg lowest_vertical_angle_deg)"/>
+  </node>
+</launch>
