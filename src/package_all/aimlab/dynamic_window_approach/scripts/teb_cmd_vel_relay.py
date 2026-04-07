@@ -966,6 +966,31 @@ class TebCmdVelRelay(object):
             and self._should_preserve_in_place_rotation(cmd)
         )
 
+    def _is_near_goal_tiny_reverse_crawl_window(self):
+        if self.avoidance_path_active:
+            return False
+        if not math.isfinite(self.local_path_remaining_m):
+            return False
+
+        # Near the last few poses TEB sometimes asks for a tiny reverse even
+        # though the robot still has a short forward segment left. If we are
+        # outside the terminal brake zone, prefer a controlled forward crawl
+        # instead of zeroing the command and stalling short of the goal.
+        near_goal_pose_window = (
+            self.local_path_pose_count > 0
+            and self.local_path_pose_count <= (self.final_path_pose_threshold + 1)
+        )
+        near_goal_distance_window = (
+            self.local_path_remaining_m <= self.ignore_local_hold_near_goal_distance_m
+        )
+        if (not near_goal_pose_window) and (not near_goal_distance_window):
+            return False
+
+        return self.local_path_remaining_m > max(
+            self.final_brake_distance_m,
+            self._terminal_goal_stop_distance_m(),
+        )
+
     def _should_replace_tiny_reverse_with_forward_crawl(
         self,
         cmd,
@@ -985,14 +1010,17 @@ class TebCmdVelRelay(object):
             return False
         if abs(float(cmd.angular.z)) > self.tiny_reverse_forward_crawl_max_angular_speed:
             return False
+        near_goal_crawl_window = self._is_near_goal_tiny_reverse_crawl_window()
         if (
             self.local_path_pose_count > 0
             and self.local_path_pose_count <= (self.final_path_pose_threshold + 1)
+            and (not near_goal_crawl_window)
         ):
             return False
         if (
             math.isfinite(self.local_path_remaining_m)
             and self.local_path_remaining_m <= self.ignore_local_hold_near_goal_distance_m
+            and (not near_goal_crawl_window)
         ):
             return False
         if not self._has_fresh_obstacle_data(now):
