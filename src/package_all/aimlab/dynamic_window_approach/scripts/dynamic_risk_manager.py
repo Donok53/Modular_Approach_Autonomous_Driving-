@@ -25,6 +25,9 @@ class DynamicRiskManager:
         self.horizon_s = max(0.2, float(rospy.get_param("~prediction_horizon_s", 2.5)))
         self.step_s = max(0.05, float(rospy.get_param("~prediction_step_s", 0.2)))
         self.inflate_m = max(0.1, float(rospy.get_param("~prediction_inflate_m", 0.8)))
+        self.pedestrian_inflate_extra_m = max(
+            0.0, float(rospy.get_param("~pedestrian_inflate_extra_m", 0.0))
+        )
 
         self.vehicle_stop_ttc_s = max(0.1, float(rospy.get_param("~vehicle_stop_ttc_s", 2.8)))
         self.ped_stop_ttc_s = max(0.1, float(rospy.get_param("~pedestrian_stop_ttc_s", 3.5)))
@@ -402,12 +405,14 @@ class DynamicRiskManager:
         ox = float(g.info.origin.position.x)
         oy = float(g.info.origin.position.y)
         data = [0] * (w * h)
-        rad_cells = max(1, int(math.ceil(self.inflate_m / max(1e-3, res))))
-
         steps = max(1, int(math.floor(self.horizon_s / self.step_s)))
         for obj in self.objects:
             if (not self.include_static_in_risk_grid) and (not self._is_dynamic_object(obj)):
                 continue
+            obj_inflate_m = self.inflate_m
+            if self._is_pedestrian(obj.label):
+                obj_inflate_m += self.pedestrian_inflate_extra_m
+            rad_cells = max(1, int(math.ceil(obj_inflate_m / max(1e-3, res))))
             x0 = float(obj.pose.position.x)
             y0 = float(obj.pose.position.y)
             vx = float(obj.twist.linear.x)

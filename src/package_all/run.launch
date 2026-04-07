@@ -153,6 +153,7 @@
   <arg name="prediction_horizon_s" default="1.5"/>
   <arg name="prediction_step_s" default="0.2"/>
   <arg name="prediction_inflate_m" default="0.50"/>
+  <arg name="pedestrian_inflate_extra_m" default="0.12"/>
   <arg name="front_lateral_stop_m" default="0.85"/>
   <arg name="front_lateral_caution_m" default="1.10"/>
   <arg name="vehicle_stop_ttc_s" default="1.4"/>
@@ -360,6 +361,7 @@
       <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
       <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
       <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
+      <arg name="pedestrian_inflate_extra_m" value="$(arg pedestrian_inflate_extra_m)"/>
       <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
       <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
       <arg name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
@@ -467,6 +469,7 @@
       <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
       <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
       <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
+      <arg name="pedestrian_inflate_extra_m" value="$(arg pedestrian_inflate_extra_m)"/>
       <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
       <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
       <arg name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
