@@ -118,9 +118,9 @@
     <arg name="risk_block_confirm_cells" default="3"/>
     <arg name="pointcloud_block_confirm_points" default="3"/>
     <arg name="avoidance_hold_s" default="1.5"/>
-    <arg name="avoidance_clear_confirm_cycles" default="6"/>
+    <arg name="avoidance_clear_confirm_cycles" default="10"/>
     <arg name="avoidance_branch_backtrack_cells" default="2"/>
-    <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
+    <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
     <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
     <arg name="debug_avoidance_logging" default="true"/>
     <arg name="debug_avoidance_log_period_s" default="1.0"/>

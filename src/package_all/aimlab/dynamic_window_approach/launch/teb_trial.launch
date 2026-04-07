@@ -55,9 +55,9 @@
   <arg name="pointcloud_block_confirm_points" default="3"/>
   <arg name="obstacle_block_margin_m" default="0.22"/>
   <arg name="avoidance_hold_s" default="1.5"/>
-  <arg name="avoidance_clear_confirm_cycles" default="6"/>
+  <arg name="avoidance_clear_confirm_cycles" default="10"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
   <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
@@ -123,6 +123,8 @@
   <arg name="move_base_goal_lookahead_m" default="1.5"/>
   <arg name="final_goal_switch_distance_m" default="0.5"/>
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
+  <arg name="local_goal_tail_backoff_m" default="0.45"/>
+  <arg name="local_goal_tail_backoff_trigger_m" default="1.10"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
@@ -310,6 +312,8 @@
       <param name="goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
       <param name="final_goal_switch_distance_m" value="$(arg final_goal_switch_distance_m)"/>
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
+      <param name="local_goal_tail_backoff_m" value="$(arg local_goal_tail_backoff_m)"/>
+      <param name="local_goal_tail_backoff_trigger_m" value="$(arg local_goal_tail_backoff_trigger_m)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
       <param name="hold_requires_avoidance_path" value="$(arg hold_requires_avoidance_path)"/>

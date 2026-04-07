@@ -68,6 +68,8 @@
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
   <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
+  <arg name="teb_local_goal_tail_backoff_m" default="0.45"/>
+  <arg name="teb_local_goal_tail_backoff_trigger_m" default="1.10"/>
   <arg name="teb_emergency_stop_front_margin" default="0.40"/>
   <arg name="teb_emergency_stop_side_margin" default="0.05"/>
   <arg name="teb_emergency_stop_far_lateral_ratio" default="0.55"/>
@@ -143,9 +145,9 @@
   <arg name="risk_block_confirm_cells" default="3"/>
   <arg name="pointcloud_block_confirm_points" default="3"/>
   <arg name="avoidance_hold_s" default="1.5"/>
-  <arg name="avoidance_clear_confirm_cycles" default="6"/>
+  <arg name="avoidance_clear_confirm_cycles" default="10"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="1.0"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
@@ -516,6 +518,8 @@
       <arg name="local_hold_timeout_s" value="$(arg teb_local_hold_timeout_s)"/>
       <arg name="move_base_goal_lookahead_m" value="$(arg teb_move_base_goal_lookahead_m)"/>
       <arg name="move_base_goal_update_min_dist_m" value="$(arg teb_move_base_goal_update_min_dist_m)"/>
+      <arg name="local_goal_tail_backoff_m" value="$(arg teb_local_goal_tail_backoff_m)"/>
+      <arg name="local_goal_tail_backoff_trigger_m" value="$(arg teb_local_goal_tail_backoff_trigger_m)"/>
       <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
       <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
       <arg name="emergency_stop_far_lateral_ratio" value="$(arg teb_emergency_stop_far_lateral_ratio)"/>

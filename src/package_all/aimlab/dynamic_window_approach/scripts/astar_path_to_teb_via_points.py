@@ -35,6 +35,18 @@ class AStarPathToTebViaPoints(object):
         self.goal_update_min_dist_m = max(
             0.0, float(rospy.get_param("~goal_update_min_dist_m", 0.50))
         )
+        self.local_goal_tail_backoff_m = max(
+            0.0, float(rospy.get_param("~local_goal_tail_backoff_m", 0.0))
+        )
+        self.local_goal_tail_backoff_trigger_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~local_goal_tail_backoff_trigger_m",
+                    max(self.local_goal_tail_backoff_m, 0.0),
+                )
+            ),
+        )
         self.respect_local_hold = bool(rospy.get_param("~respect_local_hold", True))
         self.hold_requires_avoidance_path = bool(
             rospy.get_param("~hold_requires_avoidance_path", True)
@@ -93,7 +105,7 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
@@ -102,6 +114,8 @@ class AStarPathToTebViaPoints(object):
             self.goal_output_topic if self.goal_output_topic else "-",
             self.goal_lookahead_m,
             self.final_goal_switch_distance_m,
+            self.local_goal_tail_backoff_m,
+            self.local_goal_tail_backoff_trigger_m,
             "on" if self.respect_local_hold else "off",
             "on" if self.hold_requires_avoidance_path else "off",
             self.min_spacing_m,
@@ -255,35 +269,66 @@ class AStarPathToTebViaPoints(object):
                 best_idx = idx
         return best_idx
 
-    def _goal_from_selected_path(self, msg):
+    def _goal_idx_backed_off_from_tail(self, msg, start_idx):
+        if (
+            msg is None
+            or not msg.poses
+            or self.local_goal_tail_backoff_m <= 1e-6
+            or len(msg.poses) < 2
+        ):
+            return None
+
+        min_idx = min(len(msg.poses) - 1, max(0, start_idx + 1))
+        tail_idx = len(msg.poses) - 1
+        if min_idx >= tail_idx:
+            return tail_idx
+
+        accum_m = 0.0
+        chosen_idx = tail_idx
+        for idx in range(tail_idx, min_idx, -1):
+            accum_m += self._dist(msg.poses[idx - 1], msg.poses[idx])
+            chosen_idx = idx - 1
+            if accum_m >= self.local_goal_tail_backoff_m:
+                break
+        return max(min_idx, chosen_idx)
+
+    def _goal_from_selected_path(self, source, msg):
         if msg is None or not msg.poses:
-            return None, None
+            return None, None, "empty"
 
         if self.goal_lookahead_m <= 1e-6 or len(msg.poses) == 1:
-            return msg.poses[-1], len(msg.poses) - 1
+            return msg.poses[-1], len(msg.poses) - 1, "tail"
 
         start_idx = self._nearest_pose_index(msg)
         if start_idx >= len(msg.poses) - 1:
-            return msg.poses[-1], len(msg.poses) - 1
+            return msg.poses[-1], len(msg.poses) - 1, "tail"
 
         remain_m = 0.0
         for idx in range(start_idx, len(msg.poses) - 1):
             remain_m += self._dist(msg.poses[idx], msg.poses[idx + 1])
+        if (
+            source in ("local", "avoidance")
+            and self.local_goal_tail_backoff_m > 1e-6
+            and remain_m <= self.local_goal_tail_backoff_trigger_m
+        ):
+            backoff_idx = self._goal_idx_backed_off_from_tail(msg, start_idx)
+            if backoff_idx is not None and backoff_idx < len(msg.poses):
+                return msg.poses[backoff_idx], backoff_idx, "tail_backoff"
         if remain_m <= self.final_goal_switch_distance_m:
-            return msg.poses[-1], len(msg.poses) - 1
+            return msg.poses[-1], len(msg.poses) - 1, "tail"
 
         accum_m = 0.0
         for idx in range(start_idx + 1, len(msg.poses)):
             accum_m += self._dist(msg.poses[idx - 1], msg.poses[idx])
             if accum_m >= self.goal_lookahead_m:
-                return msg.poses[idx], idx
-        return msg.poses[-1], len(msg.poses) - 1
+                return msg.poses[idx], idx, "lookahead"
+        return msg.poses[-1], len(msg.poses) - 1, "tail"
 
     def _publish_goal_for_selected_path(self, source, msg):
         if self.goal_pub is None or msg is None or not msg.poses:
             return
 
-        goal_pose, goal_idx = self._goal_from_selected_path(msg)
+        goal_pose, goal_idx, goal_reason = self._goal_from_selected_path(source, msg)
         if goal_pose is None:
             return
 
@@ -310,9 +355,10 @@ class AStarPathToTebViaPoints(object):
         self.goal_pub.publish(goal)
         rospy.loginfo_throttle(
             1.0,
-            "astar_path_to_teb_via_points: synced move_base goal | topic=%s source=%s idx=%d x=%.2f y=%.2f",
+            "astar_path_to_teb_via_points: synced move_base goal | topic=%s source=%s reason=%s idx=%d x=%.2f y=%.2f",
             self.goal_output_topic,
             source,
+            goal_reason,
             goal_idx,
             goal_x,
             goal_y,
