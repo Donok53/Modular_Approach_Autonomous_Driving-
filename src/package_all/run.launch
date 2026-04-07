@@ -154,11 +154,18 @@
   <arg name="prediction_step_s" default="0.2"/>
   <arg name="prediction_inflate_m" default="0.50"/>
   <arg name="pedestrian_inflate_extra_m" default="0.12"/>
+  <arg name="pedestrian_personal_space_forward_m" default="1.25"/>
+  <arg name="pedestrian_personal_space_lateral_m" default="0.95"/>
+  <arg name="pedestrian_caution_speed_mps" default="0.15"/>
   <arg name="front_lateral_stop_m" default="0.85"/>
   <arg name="front_lateral_caution_m" default="1.10"/>
+  <arg name="pedestrian_front_lateral_stop_extra_m" default="0.20"/>
+  <arg name="pedestrian_front_lateral_caution_extra_m" default="0.35"/>
   <arg name="vehicle_stop_ttc_s" default="1.4"/>
   <arg name="pedestrian_stop_ttc_s" default="2.8"/>
   <arg name="caution_ttc_s" default="3.2"/>
+  <arg name="pedestrian_stop_distance_m" default="1.10"/>
+  <arg name="pedestrian_caution_distance_m" default="2.20"/>
   <arg name="behavior_stop_on_count" default="4"/>
   <arg name="behavior_stop_off_count" default="4"/>
   <arg name="behavior_stop_hold_s" default="0.25"/>
@@ -362,11 +369,18 @@
       <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
       <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
       <arg name="pedestrian_inflate_extra_m" value="$(arg pedestrian_inflate_extra_m)"/>
+      <arg name="pedestrian_personal_space_forward_m" value="$(arg pedestrian_personal_space_forward_m)"/>
+      <arg name="pedestrian_personal_space_lateral_m" value="$(arg pedestrian_personal_space_lateral_m)"/>
+      <arg name="pedestrian_caution_speed_mps" value="$(arg pedestrian_caution_speed_mps)"/>
       <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
       <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+      <arg name="pedestrian_front_lateral_stop_extra_m" value="$(arg pedestrian_front_lateral_stop_extra_m)"/>
+      <arg name="pedestrian_front_lateral_caution_extra_m" value="$(arg pedestrian_front_lateral_caution_extra_m)"/>
       <arg name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
       <arg name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
       <arg name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+      <arg name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
+      <arg name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
       <arg name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
       <arg name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
       <arg name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
@@ -470,11 +484,18 @@
       <arg name="prediction_step_s" value="$(arg prediction_step_s)"/>
       <arg name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
       <arg name="pedestrian_inflate_extra_m" value="$(arg pedestrian_inflate_extra_m)"/>
+      <arg name="pedestrian_personal_space_forward_m" value="$(arg pedestrian_personal_space_forward_m)"/>
+      <arg name="pedestrian_personal_space_lateral_m" value="$(arg pedestrian_personal_space_lateral_m)"/>
+      <arg name="pedestrian_caution_speed_mps" value="$(arg pedestrian_caution_speed_mps)"/>
       <arg name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
       <arg name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
+      <arg name="pedestrian_front_lateral_stop_extra_m" value="$(arg pedestrian_front_lateral_stop_extra_m)"/>
+      <arg name="pedestrian_front_lateral_caution_extra_m" value="$(arg pedestrian_front_lateral_caution_extra_m)"/>
       <arg name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
       <arg name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
       <arg name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+      <arg name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
+      <arg name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
       <arg name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
       <arg name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
       <arg name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
