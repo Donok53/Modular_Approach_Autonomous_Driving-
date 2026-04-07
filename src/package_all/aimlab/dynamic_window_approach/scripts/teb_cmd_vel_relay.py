@@ -163,6 +163,12 @@ class TebCmdVelRelay(object):
         self.obstacle_beyond_goal_slack_m = max(
             0.0, float(rospy.get_param("~obstacle_beyond_goal_slack_m", 0.05))
         )
+        self.near_goal_obstacle_ignore_after_avoidance_s = max(
+            0.0,
+            float(
+                rospy.get_param("~near_goal_obstacle_ignore_after_avoidance_s", 3.0)
+            ),
+        )
         self.robot_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m
         self.robot_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m
         self.emergency_stop_distance = self.robot_half_length + self.emergency_stop_front_margin
@@ -230,6 +236,7 @@ class TebCmdVelRelay(object):
         self.local_path_remaining_m = float("inf")
         self.last_nonempty_local_path_remaining_m = float("inf")
         self.last_avoidance_path_time = 0.0
+        self.last_avoidance_active_time = 0.0
         self.avoidance_path_active = False
         self.avoidance_turn_direction = "none"
         self.avoidance_turn_lateral_m = 0.0
@@ -911,6 +918,7 @@ class TebCmdVelRelay(object):
             self.avoidance_turn_direction = "none"
             self.avoidance_turn_lateral_m = 0.0
             return
+        self.last_avoidance_active_time = self.last_avoidance_path_time
 
         direction, lateral = self._infer_avoidance_turn_from_path(msg)
         if direction != "none":
@@ -1085,6 +1093,20 @@ class TebCmdVelRelay(object):
             return not self.avoidance_path_active
         return True
 
+    def _had_recent_avoidance_path(self, now=None):
+        if self.avoidance_path_active:
+            return True
+        if self.near_goal_obstacle_ignore_after_avoidance_s <= 0.0:
+            return False
+        last_active_time = float(self.last_avoidance_active_time)
+        if last_active_time <= 0.0:
+            return False
+        if now is None:
+            now = rospy.get_time()
+        return now > 0.0 and (
+            now - last_active_time
+        ) <= self.near_goal_obstacle_ignore_after_avoidance_s
+
     def _should_ignore_obstacle_for_local_goal(self, obstacle_x):
         if (not self.ignore_obstacles_beyond_local_goal) or (not self.have_odom):
             return False
@@ -1093,6 +1115,8 @@ class TebCmdVelRelay(object):
         if not math.isfinite(self.local_path_remaining_m):
             return False
         if self.local_path_remaining_m <= 1e-3:
+            return False
+        if self._had_recent_avoidance_path():
             return False
         if self.local_path_remaining_m > self.near_goal_obstacle_ignore_distance_m:
             return False

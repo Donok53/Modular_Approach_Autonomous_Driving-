@@ -61,6 +61,7 @@
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
   <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
+  <arg name="near_goal_block_ignore_after_avoidance_s" default="3.0"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
@@ -113,6 +114,7 @@
   <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
   <arg name="obstacle_beyond_goal_slack_m" default="0.05"/>
+  <arg name="near_goal_obstacle_ignore_after_avoidance_s" default="3.0"/>
   <arg name="final_brake_distance_m" default="0.18"/>
   <arg name="ignore_local_hold_near_goal_distance_m" default="0.45"/>
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
@@ -283,6 +285,7 @@
       <param name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
       <param name="near_goal_block_ignore_distance_m" value="$(arg near_goal_block_ignore_distance_m)"/>
       <param name="near_goal_tail_block_ignore_distance_m" value="$(arg near_goal_tail_block_ignore_distance_m)"/>
+      <param name="near_goal_block_ignore_after_avoidance_s" value="$(arg near_goal_block_ignore_after_avoidance_s)"/>
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -358,6 +361,7 @@
     <param name="ignore_obstacles_beyond_local_goal" value="$(arg ignore_obstacles_beyond_local_goal)"/>
     <param name="near_goal_obstacle_ignore_distance_m" value="$(arg near_goal_obstacle_ignore_distance_m)"/>
     <param name="obstacle_beyond_goal_slack_m" value="$(arg obstacle_beyond_goal_slack_m)"/>
+    <param name="near_goal_obstacle_ignore_after_avoidance_s" value="$(arg near_goal_obstacle_ignore_after_avoidance_s)"/>
     <param name="final_brake_distance_m" value="$(arg final_brake_distance_m)"/>
     <param name="ignore_local_hold_near_goal_distance_m" value="$(arg ignore_local_hold_near_goal_distance_m)"/>
     <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>

@@ -187,6 +187,10 @@ class ConstrainedLocalReplanner:
         self.near_goal_tail_block_ignore_distance_m = max(
             0.0, float(rospy.get_param("~near_goal_tail_block_ignore_distance_m", 0.45))
         )
+        self.near_goal_block_ignore_after_avoidance_s = max(
+            0.0,
+            float(rospy.get_param("~near_goal_block_ignore_after_avoidance_s", 3.0)),
+        )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
         )
@@ -224,6 +228,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.last_avoidance_active_sec = 0.0
         self.local_blocked_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
@@ -537,6 +542,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.last_avoidance_active_sec = 0.0
         self.local_blocked_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
@@ -1153,6 +1159,7 @@ class ConstrainedLocalReplanner:
             end_xy=end_xy,
         )
         self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
+        self.last_avoidance_active_sec = stamp.to_sec()
         if record_history:
             self._record_path_history(
                 "avoidance",
@@ -1643,10 +1650,26 @@ class ConstrainedLocalReplanner:
             remain_m += self._heur(path[idx], path[idx + 1]) * scale
         return remain_m
 
+    def _had_recent_avoidance_activity(self, now_sec=None):
+        if self.avoidance_active:
+            return True
+        if self.near_goal_block_ignore_after_avoidance_s <= 0.0:
+            return False
+        last_active_sec = float(self.last_avoidance_active_sec)
+        if last_active_sec <= 0.0:
+            return False
+        if now_sec is None:
+            now_sec = rospy.get_time()
+        return now_sec > 0.0 and (
+            now_sec - last_active_sec
+        ) <= self.near_goal_block_ignore_after_avoidance_s
+
     def _should_ignore_near_goal_block(self, path, blocked_idx, start_cell, dg):
         if blocked_idx is None or len(path) < 2:
             return False
         if self.near_goal_block_ignore_distance_m <= 0.0:
+            return False
+        if self._had_recent_avoidance_activity():
             return False
 
         start_idx = self._nearest_path_cell_index(path, start_cell)
@@ -2094,6 +2117,7 @@ class ConstrainedLocalReplanner:
                     and nominal_world is not None
                     and len(nominal_world) >= 2
                     and nominal_world_remain_m <= self.near_goal_block_ignore_distance_m
+                    and (not self._had_recent_avoidance_activity(stamp.to_sec()))
                 ):
                     rospy.loginfo_throttle(
                         1.0,
