@@ -78,7 +78,7 @@
     <arg name="obstacle_collision_radius" default="0.0"/>
     <arg name="robot_width_m" default="0.58"/>
     <arg name="robot_length_m" default="0.612"/>
-    <arg name="footprint_padding_m" default="0.05"/>
+    <arg name="footprint_padding_m" default="0.06"/>
     <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.04)"/>
     <arg name="path_tracking_only" default="true"/>
     <arg name="path_tracking_speed_cap" default="0.25"/>
@@ -108,12 +108,12 @@
     <arg name="min_forward_cmd_distance" default="0.60"/>
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
-    <arg name="pointcloud_static_block_margin_m" default="0.08"/>
-    <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
-    <arg name="pointcloud_min_cluster_points" default="4"/>
+    <arg name="pointcloud_static_block_margin_m" default="0.10"/>
+    <arg name="pointcloud_cluster_resolution_m" default="0.10"/>
+    <arg name="pointcloud_min_cluster_points" default="2"/>
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
-    <arg name="obstacle_block_margin_m" default="0.22"/>
-    <arg name="avoidance_trigger_margin_m" default="0.14"/>
+    <arg name="obstacle_block_margin_m" default="0.26"/>
+    <arg name="avoidance_trigger_margin_m" default="0.18"/>
     <arg name="avoidance_trigger_ahead_m" default="4.0"/>
     <arg name="risk_block_confirm_cells" default="3"/>
     <arg name="pointcloud_block_confirm_points" default="3"/>
