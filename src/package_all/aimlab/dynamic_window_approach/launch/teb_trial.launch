@@ -45,15 +45,15 @@
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
   <arg name="enable_avoidance_path" default="true"/>
   <arg name="use_pointcloud_static_blocking" default="false"/>
-  <arg name="pointcloud_static_block_margin_m" default="0.10"/>
-  <arg name="pointcloud_cluster_resolution_m" default="0.10"/>
-  <arg name="pointcloud_min_cluster_points" default="2"/>
+  <arg name="pointcloud_static_block_margin_m" default="0.08"/>
+  <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
+  <arg name="pointcloud_min_cluster_points" default="4"/>
   <arg name="use_pointcloud_avoidance_trigger" default="false"/>
-  <arg name="avoidance_trigger_margin_m" default="0.18"/>
+  <arg name="avoidance_trigger_margin_m" default="0.14"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
   <arg name="risk_block_confirm_cells" default="3"/>
   <arg name="pointcloud_block_confirm_points" default="3"/>
-  <arg name="obstacle_block_margin_m" default="0.26"/>
+  <arg name="obstacle_block_margin_m" default="0.22"/>
   <arg name="avoidance_hold_s" default="1.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="6"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
@@ -72,22 +72,22 @@
   <arg name="move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
   <arg name="teb_filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
-  <arg name="teb_filter_min_z" default="-0.08"/>
+  <arg name="teb_filter_min_z" default="-0.05"/>
   <arg name="teb_filter_max_z" default="1.50"/>
-  <arg name="teb_filter_min_range" default="0.06"/>
+  <arg name="teb_filter_min_range" default="0.10"/>
   <arg name="teb_filter_max_range" default="8.0"/>
-  <arg name="teb_filter_voxel_size" default="0.08"/>
+  <arg name="teb_filter_voxel_size" default="0.15"/>
   <arg name="robot_width_m" default="0.58"/>
   <arg name="robot_length_m" default="0.612"/>
-  <arg name="footprint_padding_m" default="0.06"/>
+  <arg name="footprint_padding_m" default="0.05"/>
   <arg name="trim_published_path_to_robot_front" default="true"/>
   <arg name="path_start_front_offset_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="robot_half_length_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="robot_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="neg_robot_half_length_m" default="$(eval -1.0 * float(arg('robot_half_length_m')))"/>
   <arg name="neg_robot_half_width_m" default="$(eval -1.0 * float(arg('robot_half_width_m')))"/>
-  <arg name="teb_filter_self_margin_m" default="0.08"/>
-  <arg name="teb_filter_self_padding_m" default="0.02"/>
+  <arg name="teb_filter_self_margin_m" default="0.11"/>
+  <arg name="teb_filter_self_padding_m" default="0.03"/>
   <arg name="teb_filter_self_radius_x" default="$(eval float(arg('robot_half_length_m')) + float(arg('teb_filter_self_margin_m')))"/>
   <arg name="teb_filter_self_radius_y" default="$(eval float(arg('robot_half_width_m')) + float(arg('teb_filter_self_margin_m')))"/>
   <arg name="teb_filter_rear_limit_x" default="-0.10"/>
@@ -101,7 +101,7 @@
   <arg name="hold_requires_avoidance_path" default="true"/>
   <arg name="enable_cmd_smoothing" default="true"/>
   <arg name="max_linear_slew_mps2" default="0.70"/>
-  <arg name="max_angular_slew_rps2" default="0.75"/>
+  <arg name="max_angular_slew_rps2" default="0.95"/>
   <arg name="allow_in_place_rotation_near_obstacle" default="true"/>
   <arg name="allow_in_place_rotation_during_local_hold" default="true"/>
   <arg name="min_in_place_rotation_angular_speed" default="0.05"/>
@@ -123,15 +123,15 @@
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
-  <arg name="teb_max_vel_theta_rps" default="0.30"/>
-  <arg name="teb_acc_lim_theta_rps2" default="0.50"/>
+  <arg name="teb_max_vel_theta_rps" default="0.35"/>
+  <arg name="teb_acc_lim_theta_rps2" default="0.60"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
   <arg name="teb_global_plan_overwrite_orientation" default="true"/>
   <arg name="emergency_stop_front_margin" default="0.40"/>
-  <arg name="emergency_stop_side_margin" default="0.08"/>
+  <arg name="emergency_stop_side_margin" default="0.05"/>
   <arg name="emergency_stop_far_lateral_ratio" default="0.55"/>
   <arg name="slowdown_front_margin" default="0.95"/>
-  <arg name="slowdown_side_margin" default="0.12"/>
+  <arg name="slowdown_side_margin" default="0.08"/>
   <arg name="slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_local_costmap_width_m" default="12.0"/>
   <arg name="teb_local_costmap_height_m" default="12.0"/>
@@ -140,8 +140,8 @@
   <arg name="teb_local_observation_persistence_s" default="0.40"/>
   <arg name="teb_local_inflation_radius_m" default="0.24"/>
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
-  <arg name="teb_min_obstacle_dist_m" default="0.18"/>
-  <arg name="teb_inflation_dist_m" default="0.30"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.14"/>
+  <arg name="teb_inflation_dist_m" default="0.24"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.04)"/>
   <arg name="dynamic_speed_thresh_mps" default="0.50"/>
