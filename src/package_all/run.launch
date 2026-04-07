@@ -69,16 +69,16 @@
   <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_emergency_stop_front_margin" default="0.40"/>
-  <arg name="teb_emergency_stop_side_margin" default="0.05"/>
+  <arg name="teb_emergency_stop_side_margin" default="0.06"/>
   <arg name="teb_emergency_stop_far_lateral_ratio" default="0.55"/>
   <arg name="teb_slowdown_front_margin" default="0.95"/>
-  <arg name="teb_slowdown_side_margin" default="0.08"/>
+  <arg name="teb_slowdown_side_margin" default="0.10"/>
   <arg name="teb_slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_filter_max_range_m" default="8.0"/>
   <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
-  <arg name="teb_filter_self_margin_m" default="0.11"/>
-  <arg name="teb_filter_self_padding_m" default="0.03"/>
+  <arg name="teb_filter_self_margin_m" default="0.09"/>
+  <arg name="teb_filter_self_padding_m" default="0.02"/>
   <arg name="teb_local_costmap_width_m" default="12.0"/>
   <arg name="teb_local_costmap_height_m" default="12.0"/>
   <arg name="teb_local_obstacle_range_m" default="8.0"/>
@@ -86,8 +86,8 @@
   <arg name="teb_local_observation_persistence_s" default="0.40"/>
   <arg name="teb_local_inflation_radius_m" default="0.24"/>
   <arg name="teb_global_inflation_radius_m" default="0.06"/>
-  <arg name="teb_min_obstacle_dist_m" default="0.14"/>
-  <arg name="teb_inflation_dist_m" default="0.24"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.16"/>
+  <arg name="teb_inflation_dist_m" default="0.28"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
@@ -134,8 +134,8 @@
   <arg name="avoidance_hard_stop_distance" default="0.20"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
   <arg name="pointcloud_static_block_margin_m" default="0.08"/>
-  <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
-  <arg name="pointcloud_min_cluster_points" default="4"/>
+  <arg name="pointcloud_cluster_resolution_m" default="0.12"/>
+  <arg name="pointcloud_min_cluster_points" default="3"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
   <arg name="obstacle_block_margin_m" default="0.22"/>
   <arg name="avoidance_trigger_margin_m" default="0.14"/>
