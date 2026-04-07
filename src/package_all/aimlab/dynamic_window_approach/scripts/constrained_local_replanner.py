@@ -116,6 +116,28 @@ class ConstrainedLocalReplanner:
         self.pointcloud_min_cluster_points = max(
             1, int(rospy.get_param("~pointcloud_min_cluster_points", 4))
         )
+        self.static_obstacle_memory_enabled = bool(
+            rospy.get_param("~static_obstacle_memory_enabled", True)
+        )
+        self.static_obstacle_memory_ttl_s = max(
+            0.0, float(rospy.get_param("~static_obstacle_memory_ttl_s", 2.5))
+        )
+        self.static_obstacle_memory_merge_radius_m = max(
+            0.05, float(rospy.get_param("~static_obstacle_memory_merge_radius_m", 0.22))
+        )
+        self.static_obstacle_memory_max_range_m = max(
+            0.5, float(rospy.get_param("~static_obstacle_memory_max_range_m", 4.0))
+        )
+        self.static_obstacle_memory_max_support = max(
+            self.pointcloud_min_cluster_points,
+            int(rospy.get_param("~static_obstacle_memory_max_support", 10)),
+        )
+        self.static_obstacle_memory_max_z_m = float(
+            rospy.get_param("~static_obstacle_memory_max_z_m", 0.75)
+        )
+        self.static_obstacle_memory_max_points = max(
+            0, int(rospy.get_param("~static_obstacle_memory_max_points", 80))
+        )
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
@@ -195,6 +217,8 @@ class ConstrainedLocalReplanner:
         self.obstacle_points_map = []
         self.obstacle_raw_point_count = 0
         self.obstacle_cluster_count = 0
+        self.obstacle_memory_points = []
+        self.obstacle_memory_count = 0
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
@@ -341,12 +365,88 @@ class ConstrainedLocalReplanner:
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
         return (int(math.floor(x / res)), int(math.floor(y / res)))
 
+    def _prune_obstacle_memory(self, now_sec):
+        if (
+            (not self.static_obstacle_memory_enabled)
+            or self.static_obstacle_memory_ttl_s <= 0.0
+            or self.static_obstacle_memory_max_points <= 0
+        ):
+            self.obstacle_memory_points = []
+            self.obstacle_memory_count = 0
+            return []
+
+        max_range_sq = self.static_obstacle_memory_max_range_m * self.static_obstacle_memory_max_range_m
+        kept = []
+        for wx, wy, seen_sec in self.obstacle_memory_points:
+            if (now_sec - seen_sec) > self.static_obstacle_memory_ttl_s:
+                continue
+            dx = wx - self.odom_x
+            dy = wy - self.odom_y
+            if (dx * dx + dy * dy) > max_range_sq:
+                continue
+            kept.append((wx, wy, seen_sec))
+
+        kept.sort(key=lambda item: item[2], reverse=True)
+        if len(kept) > self.static_obstacle_memory_max_points:
+            kept = kept[: self.static_obstacle_memory_max_points]
+
+        self.obstacle_memory_points = kept
+        self.obstacle_memory_count = len(kept)
+        return [(wx, wy) for wx, wy, _ in kept]
+
+    def _update_obstacle_memory(self, candidates_map, now_sec):
+        remembered_points = self._prune_obstacle_memory(now_sec)
+        if (not self.static_obstacle_memory_enabled) or (not candidates_map):
+            return remembered_points
+
+        merge_radius_sq = (
+            self.static_obstacle_memory_merge_radius_m * self.static_obstacle_memory_merge_radius_m
+        )
+        memory = list(self.obstacle_memory_points)
+        for wx, wy in candidates_map:
+            best_idx = None
+            best_d2 = merge_radius_sq
+            for idx, (mx, my, _) in enumerate(memory):
+                d2 = (wx - mx) * (wx - mx) + (wy - my) * (wy - my)
+                if d2 <= best_d2:
+                    best_d2 = d2
+                    best_idx = idx
+            if best_idx is None:
+                memory.append((wx, wy, now_sec))
+            else:
+                memory[best_idx] = (wx, wy, now_sec)
+
+        self.obstacle_memory_points = memory
+        return self._prune_obstacle_memory(now_sec)
+
+    def _merge_obstacle_memory_points(self, current_points_map, remembered_points_map):
+        if not remembered_points_map:
+            return list(current_points_map)
+        if not current_points_map:
+            return list(remembered_points_map)
+
+        merge_radius_sq = (
+            self.static_obstacle_memory_merge_radius_m * self.static_obstacle_memory_merge_radius_m
+        )
+        merged = list(current_points_map)
+        for wx, wy in remembered_points_map:
+            duplicate = False
+            for cx, cy in merged:
+                d2 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)
+                if d2 <= merge_radius_sq:
+                    duplicate = True
+                    break
+            if not duplicate:
+                merged.append((wx, wy))
+        return merged
+
     def cloud_callback(self, msg):
         if not self.have_odom:
             return
         raw_pts = []
         cluster_counts = {}
         cluster_sums = {}
+        cluster_max_z = {}
         rr = self.obstacle_max_range_m * self.obstacle_max_range_m
         i = 0
         try:
@@ -368,9 +468,10 @@ class ConstrainedLocalReplanner:
                 cluster_counts[cell] = cluster_counts.get(cell, 0) + 1
                 sx, sy = cluster_sums.get(cell, (0.0, 0.0))
                 cluster_sums[cell] = (sx + x, sy + y)
+                cluster_max_z[cell] = max(cluster_max_z.get(cell, z), z)
 
             self.obstacle_raw_point_count = len(raw_pts)
-            filtered_pts = []
+            filtered_clusters = []
             for (cx, cy), count in cluster_counts.items():
                 support = 0
                 for dx in (-1, 0, 1):
@@ -379,10 +480,39 @@ class ConstrainedLocalReplanner:
                 if support < self.pointcloud_min_cluster_points:
                     continue
                 sx, sy = cluster_sums[(cx, cy)]
-                filtered_pts.append((sx / float(count), sy / float(count)))
+                fx = sx / float(count)
+                fy = sy / float(count)
+                filtered_clusters.append(
+                    {
+                        "x": fx,
+                        "y": fy,
+                        "support": support,
+                        "z_max": cluster_max_z.get((cx, cy), self.obstacle_max_z),
+                    }
+                )
 
-            self.obstacle_cluster_count = len(filtered_pts)
-            self.obstacle_points_map = [self._local_to_map(x, y) for x, y in filtered_pts]
+            self.obstacle_cluster_count = len(filtered_clusters)
+            current_points_map = [self._local_to_map(item["x"], item["y"]) for item in filtered_clusters]
+
+            stamp_sec = msg.header.stamp.to_sec()
+            if stamp_sec <= 0.0:
+                stamp_sec = rospy.Time.now().to_sec()
+
+            memory_candidates_map = []
+            max_range_sq = self.static_obstacle_memory_max_range_m * self.static_obstacle_memory_max_range_m
+            for item in filtered_clusters:
+                if item["support"] > self.static_obstacle_memory_max_support:
+                    continue
+                if item["z_max"] > self.static_obstacle_memory_max_z_m:
+                    continue
+                if (item["x"] * item["x"] + item["y"] * item["y"]) > max_range_sq:
+                    continue
+                memory_candidates_map.append(self._local_to_map(item["x"], item["y"]))
+
+            remembered_points = self._update_obstacle_memory(memory_candidates_map, stamp_sec)
+            self.obstacle_points_map = self._merge_obstacle_memory_points(
+                current_points_map, remembered_points
+            )
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
 
@@ -410,6 +540,8 @@ class ConstrainedLocalReplanner:
         self.local_blocked_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
+        self.obstacle_memory_points = []
+        self.obstacle_memory_count = 0
         self._clear_path_history()
         self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
@@ -1204,7 +1336,7 @@ class ConstrainedLocalReplanner:
         overlay_points = int(kwargs.get("overlay_points", 0))
         return (
             "local_replanner state={} reason={} avoid={} dir={} wait={}/{} "
-            "path_len={} raw_pts={} clustered={} overlay_pts={} blocked_since={}"
+            "path_len={} raw_pts={} clustered={} memory_pts={} overlay_pts={} blocked_since={}"
         ).format(
             state,
             trigger_reason,
@@ -1215,6 +1347,7 @@ class ConstrainedLocalReplanner:
             path_len,
             int(self.obstacle_raw_point_count),
             int(self.obstacle_cluster_count),
+            int(self.obstacle_memory_count),
             overlay_points,
             self._fmt_debug_float(self.local_blocked_since_sec),
         )
@@ -1622,9 +1755,9 @@ class ConstrainedLocalReplanner:
         if (not predicted_overlap) and self.use_pointcloud_avoidance_trigger:
             pointcloud_overlap = self._path_blocked_by_obstacles(nominal_path, dg, start_cell)
 
-        clustered_point_count = len(self.obstacle_points_map)
+        clustered_point_count = self.obstacle_cluster_count
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} pointcloud_enabled={} pointcloud_overlap={} raw_points={} clustered_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} pointcloud_enabled={} pointcloud_overlap={} raw_points={} clustered_points={} memory_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
@@ -1632,6 +1765,7 @@ class ConstrainedLocalReplanner:
                 "yes" if pointcloud_overlap else "no",
                 self.obstacle_raw_point_count,
                 clustered_point_count,
+                self.obstacle_memory_count,
                 obstacle_count,
                 self.avoidance_trigger_ahead_m,
             )
