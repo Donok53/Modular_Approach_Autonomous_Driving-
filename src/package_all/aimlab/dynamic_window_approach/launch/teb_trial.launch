@@ -154,6 +154,9 @@
   <arg name="vehicle_stop_ttc_s" default="1.4"/>
   <arg name="pedestrian_stop_ttc_s" default="2.8"/>
   <arg name="caution_ttc_s" default="3.2"/>
+  <arg name="pedestrian_caution_speed_mps" default="0.15"/>
+  <arg name="pedestrian_stop_distance_m" default="1.05"/>
+  <arg name="pedestrian_caution_distance_m" default="2.00"/>
   <arg name="behavior_stop_on_count" default="4"/>
   <arg name="behavior_stop_off_count" default="4"/>
   <arg name="behavior_stop_hold_s" default="0.25"/>
@@ -228,6 +231,9 @@
       <param name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>
       <param name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
       <param name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
+      <param name="pedestrian_caution_speed_mps" value="$(arg pedestrian_caution_speed_mps)"/>
+      <param name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
+      <param name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
       <param name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
       <param name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
       <param name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>

@@ -33,9 +33,23 @@ class DynamicRiskManager:
         self.ped_stop_ttc_s = max(0.1, float(rospy.get_param("~pedestrian_stop_ttc_s", 3.5)))
         self.caution_ttc_s = max(0.1, float(rospy.get_param("~caution_ttc_s", 5.0)))
         self.caution_speed_mps = max(0.05, float(rospy.get_param("~caution_speed_mps", 0.25)))
+        self.pedestrian_caution_speed_mps = max(
+            0.05,
+            min(
+                self.caution_speed_mps,
+                float(rospy.get_param("~pedestrian_caution_speed_mps", 0.15)),
+            ),
+        )
         self.default_speed_mps = max(0.05, float(rospy.get_param("~default_speed_mps", 0.55)))
         self.front_lateral_stop_m = max(0.1, float(rospy.get_param("~front_lateral_stop_m", 1.8)))
         self.front_lateral_caution_m = max(0.1, float(rospy.get_param("~front_lateral_caution_m", 2.5)))
+        self.pedestrian_stop_distance_m = max(
+            0.1, float(rospy.get_param("~pedestrian_stop_distance_m", 1.05))
+        )
+        self.pedestrian_caution_distance_m = max(
+            self.pedestrian_stop_distance_m,
+            float(rospy.get_param("~pedestrian_caution_distance_m", 2.00)),
+        )
         self.dynamic_speed_thresh_mps = max(
             0.01, float(rospy.get_param("~dynamic_speed_thresh_mps", 0.15))
         )
@@ -229,6 +243,9 @@ class DynamicRiskManager:
         elif state == "caution":
             cmd.stop = False
             cmd.speed_limit = min(cmd.speed_limit, self.caution_speed_mps)
+            lower_reason = (reason or "").lower()
+            if ("ped" in lower_reason) or ("person" in lower_reason):
+                cmd.speed_limit = min(cmd.speed_limit, self.pedestrian_caution_speed_mps)
         return cmd
 
     def _publish_explainability(
@@ -298,12 +315,15 @@ class DynamicRiskManager:
         stop_obj_label = ""
         stop_rx = -1.0
         stop_ry = 0.0
+        stop_dist = -1.0
         caution = False
+        caution_reason = ""
         caution_ttc = None
         caution_obj_id = -1
         caution_obj_label = ""
         caution_rx = -1.0
         caution_ry = 0.0
+        caution_dist = -1.0
 
         for obj in self.objects:
             if (not self.include_static_in_behavior) and (not self._is_dynamic_object(obj)):
@@ -321,30 +341,53 @@ class DynamicRiskManager:
             rvy = ovy - self.odom_vy
             dist = max(1e-3, math.hypot(ox - self.odom_x, oy - self.odom_y))
             closing = -((ox - self.odom_x) * rvx + (oy - self.odom_y) * rvy) / dist
-            if closing <= 1e-3:
-                continue
-            ttc = dist / closing
             is_ped = self._is_pedestrian(obj.label)
+            ttc = float("inf")
+            if closing > 1e-3:
+                ttc = dist / closing
             stop_ttc = self.ped_stop_ttc_s if is_ped else self.vehicle_stop_ttc_s
             lateral_stop = self.front_lateral_stop_m
             lateral_caution = self.front_lateral_caution_m
 
-            if rx >= 0.0 and abs(ry) <= lateral_stop and ttc <= stop_ttc:
+            stop_hit = rx >= 0.0 and abs(ry) <= lateral_stop and (
+                ttc <= stop_ttc or (is_ped and dist <= self.pedestrian_stop_distance_m)
+            )
+            caution_hit = rx >= 0.0 and abs(ry) <= lateral_caution and (
+                ttc <= self.caution_ttc_s or (is_ped and dist <= self.pedestrian_caution_distance_m)
+            )
+
+            if stop_hit:
                 if (best_ttc is None) or (ttc < best_ttc):
                     best_ttc = ttc
-                    stop_reason = "ttc_stop:{}:{:.2f}s".format(obj.label if obj.label else "obj", ttc)
+                    if is_ped and dist <= self.pedestrian_stop_distance_m and ttc > stop_ttc:
+                        stop_reason = "ped_distance_stop:{:.2f}m".format(dist)
+                    elif is_ped and not math.isfinite(ttc):
+                        stop_reason = "ped_distance_stop:{:.2f}m".format(dist)
+                    else:
+                        stop_reason = "ttc_stop:{}:{:.2f}s".format(
+                            obj.label if obj.label else "obj", ttc
+                        )
                     stop_obj_id = int(obj.id)
                     stop_obj_label = str(obj.label)
                     stop_rx = float(rx)
                     stop_ry = float(ry)
-            elif rx >= 0.0 and abs(ry) <= lateral_caution and ttc <= self.caution_ttc_s:
+                    stop_dist = float(dist)
+            elif caution_hit:
                 caution = True
+                if is_ped and dist <= self.pedestrian_caution_distance_m and ttc > self.caution_ttc_s:
+                    candidate_caution_reason = "ped_distance_caution:{:.2f}m".format(dist)
+                elif is_ped and not math.isfinite(ttc):
+                    candidate_caution_reason = "ped_distance_caution:{:.2f}m".format(dist)
+                else:
+                    candidate_caution_reason = "ttc_caution"
                 if caution_ttc is None or ttc < caution_ttc:
                     caution_ttc = ttc
+                    caution_reason = candidate_caution_reason
                     caution_obj_id = int(obj.id)
                     caution_obj_label = str(obj.label)
                     caution_rx = float(rx)
                     caution_ry = float(ry)
+                    caution_dist = float(dist)
 
         raw_state = "clear"
         raw_reason = "clear"
@@ -353,7 +396,7 @@ class DynamicRiskManager:
             raw_reason = stop_reason
         elif caution:
             raw_state = "caution"
-            raw_reason = "ttc_caution"
+            raw_reason = caution_reason if caution_reason else "ttc_caution"
 
         self._update_behavior_state(raw_state, raw_reason)
         cmd = self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason)
@@ -368,11 +411,13 @@ class DynamicRiskManager:
             "stop_obj_label": stop_obj_label,
             "stop_rx": stop_rx,
             "stop_ry": stop_ry,
+            "stop_dist": stop_dist,
             "caution_ttc": float(caution_ttc) if caution_ttc is not None else -1.0,
             "caution_obj_id": caution_obj_id,
             "caution_obj_label": caution_obj_label,
             "caution_rx": caution_rx,
             "caution_ry": caution_ry,
+            "caution_dist": caution_dist,
         }
         return cmd, event_meta
 
@@ -436,6 +481,21 @@ class DynamicRiskManager:
             if event_meta is not None:
                 behavior_state = str(event_meta["behavior_state"])
                 if behavior_state == "stop":
+                    stop_reason = str(event_meta["behavior_reason"])
+                    if stop_reason.startswith("ped_distance_stop:"):
+                        summary_text = (
+                            "Dynamic risk manager requested a stop because '{}' entered the pedestrian distance stop zone at {:.2f}m."
+                        ).format(
+                            event_meta["stop_obj_label"] if event_meta["stop_obj_label"] else "pedestrian",
+                            max(0.0, float(event_meta["stop_dist"])),
+                        )
+                    else:
+                        summary_text = (
+                            "Dynamic risk manager requested a stop because '{}' reached TTC {:.2f}s."
+                        ).format(
+                            event_meta["stop_obj_label"] if event_meta["stop_obj_label"] else "object",
+                            max(0.0, float(event_meta["stop_ttc"])),
+                        )
                     self._publish_explainability(
                         event_type="BEHAVIOR_STATE_CHANGE",
                         stamp=cmd.header.stamp,
@@ -448,14 +508,23 @@ class DynamicRiskManager:
                         ttc_s=float(event_meta["stop_ttc"]),
                         tracked_object_id=int(event_meta["stop_obj_id"]),
                         tracked_object_label=event_meta["stop_obj_label"],
-                        summary_text=(
-                            "Dynamic risk manager requested a stop because '{}' reached TTC {:.2f}s."
-                        ).format(
-                            event_meta["stop_obj_label"] if event_meta["stop_obj_label"] else "object",
-                            max(0.0, float(event_meta["stop_ttc"])),
-                        ),
+                        summary_text=summary_text,
                     )
                 elif behavior_state == "caution":
+                    caution_reason = str(event_meta["behavior_reason"])
+                    if caution_reason.startswith("ped_distance_caution:"):
+                        summary_text = (
+                            "Dynamic risk manager requested a slowdown because '{}' entered the pedestrian distance caution zone at {:.2f}m."
+                        ).format(
+                            event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "pedestrian",
+                            max(0.0, float(event_meta["caution_dist"])),
+                        )
+                    else:
+                        summary_text = (
+                            "Dynamic risk manager requested a slowdown because '{}' entered the caution TTC zone."
+                        ).format(
+                            event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "object"
+                        )
                     self._publish_explainability(
                         event_type="BEHAVIOR_STATE_CHANGE",
                         stamp=cmd.header.stamp,
@@ -468,11 +537,7 @@ class DynamicRiskManager:
                         ttc_s=float(event_meta["caution_ttc"]),
                         tracked_object_id=int(event_meta["caution_obj_id"]),
                         tracked_object_label=event_meta["caution_obj_label"],
-                        summary_text=(
-                            "Dynamic risk manager requested a slowdown because '{}' entered the caution TTC zone."
-                        ).format(
-                            event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "object"
-                        ),
+                        summary_text=summary_text,
                     )
                 else:
                     self._publish_explainability(
