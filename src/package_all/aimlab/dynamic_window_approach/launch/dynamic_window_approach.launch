@@ -124,11 +124,17 @@
     <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
     <arg name="debug_avoidance_logging" default="true"/>
     <arg name="debug_avoidance_log_period_s" default="1.0"/>
-    <arg name="dynamic_speed_thresh_mps" default="0.50"/>
-    <arg name="prediction_horizon_s" default="1.5"/>
+    <arg name="dynamic_speed_thresh_mps" default="0.12"/>
+    <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.08"/>
+    <arg name="prediction_horizon_s" default="2.2"/>
     <arg name="prediction_step_s" default="0.2"/>
-    <arg name="prediction_inflate_m" default="0.50"/>
-    <arg name="pedestrian_inflate_extra_m" default="0.12"/>
+    <arg name="prediction_inflate_m" default="0.55"/>
+    <arg name="pedestrian_inflate_extra_m" default="0.20"/>
+    <arg name="prediction_speed_inflate_gain_s" default="0.35"/>
+    <arg name="pedestrian_prediction_speed_inflate_gain_s" default="0.65"/>
+    <arg name="prediction_speed_horizon_gain_s" default="0.80"/>
+    <arg name="pedestrian_prediction_speed_horizon_gain_s" default="1.20"/>
+    <arg name="prediction_max_horizon_s" default="3.5"/>
     <arg name="front_lateral_stop_m" default="0.85"/>
     <arg name="front_lateral_caution_m" default="1.10"/>
     <arg name="vehicle_stop_ttc_s" default="1.4"/>
@@ -142,11 +148,13 @@
     <arg name="behavior_stop_hold_s" default="0.25"/>
     <arg name="cloud_tracker_max_assoc_dist_m" default="1.0"/>
     <arg name="cloud_tracker_vel_alpha" default="0.25"/>
-    <arg name="cloud_tracker_static_speed_thresh_mps" default="0.45"/>
-    <arg name="cloud_tracker_dynamic_min_age" default="8"/>
-    <arg name="cloud_tracker_position_jitter_m" default="0.22"/>
+    <arg name="cloud_tracker_static_speed_thresh_mps" default="0.12"/>
+    <arg name="cloud_tracker_dynamic_min_age" default="3"/>
+    <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" default="0.08"/>
+    <arg name="cloud_tracker_pedestrian_dynamic_min_age" default="2"/>
+    <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
     <arg name="include_static_objects_in_behavior" default="true"/>
-    <arg name="include_static_objects_in_risk_grid" default="true"/>
+    <arg name="include_static_objects_in_risk_grid" default="false"/>
     <arg name="debug_dynamic_risk_logging" default="true"/>
     <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
     <arg name="emergency_stop_distance" default="0.35"/>
@@ -180,6 +188,8 @@
             <param name="vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
             <param name="static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
             <param name="dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+            <param name="pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
+            <param name="pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
             <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
         </node>
     </group>
@@ -192,10 +202,16 @@
             <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
             <param name="risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
             <param name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
+            <param name="pedestrian_dynamic_speed_thresh_mps" value="$(arg pedestrian_dynamic_speed_thresh_mps)"/>
             <param name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>
             <param name="prediction_step_s" value="$(arg prediction_step_s)"/>
             <param name="prediction_inflate_m" value="$(arg prediction_inflate_m)"/>
             <param name="pedestrian_inflate_extra_m" value="$(arg pedestrian_inflate_extra_m)"/>
+            <param name="prediction_speed_inflate_gain_s" value="$(arg prediction_speed_inflate_gain_s)"/>
+            <param name="pedestrian_prediction_speed_inflate_gain_s" value="$(arg pedestrian_prediction_speed_inflate_gain_s)"/>
+            <param name="prediction_speed_horizon_gain_s" value="$(arg prediction_speed_horizon_gain_s)"/>
+            <param name="pedestrian_prediction_speed_horizon_gain_s" value="$(arg pedestrian_prediction_speed_horizon_gain_s)"/>
+            <param name="prediction_max_horizon_s" value="$(arg prediction_max_horizon_s)"/>
             <param name="front_lateral_stop_m" value="$(arg front_lateral_stop_m)"/>
             <param name="front_lateral_caution_m" value="$(arg front_lateral_caution_m)"/>
             <param name="vehicle_stop_ttc_s" value="$(arg vehicle_stop_ttc_s)"/>

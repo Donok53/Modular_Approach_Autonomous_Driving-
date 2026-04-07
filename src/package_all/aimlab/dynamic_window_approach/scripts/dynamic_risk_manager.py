@@ -28,6 +28,32 @@ class DynamicRiskManager:
         self.pedestrian_inflate_extra_m = max(
             0.0, float(rospy.get_param("~pedestrian_inflate_extra_m", 0.0))
         )
+        self.prediction_speed_inflate_gain_s = max(
+            0.0, float(rospy.get_param("~prediction_speed_inflate_gain_s", 0.35))
+        )
+        self.pedestrian_prediction_speed_inflate_gain_s = max(
+            self.prediction_speed_inflate_gain_s,
+            float(
+                rospy.get_param(
+                    "~pedestrian_prediction_speed_inflate_gain_s", 0.65
+                )
+            ),
+        )
+        self.prediction_speed_horizon_gain_s = max(
+            0.0, float(rospy.get_param("~prediction_speed_horizon_gain_s", 0.8))
+        )
+        self.pedestrian_prediction_speed_horizon_gain_s = max(
+            self.prediction_speed_horizon_gain_s,
+            float(
+                rospy.get_param(
+                    "~pedestrian_prediction_speed_horizon_gain_s", 1.2
+                )
+            ),
+        )
+        self.prediction_max_horizon_s = max(
+            self.horizon_s,
+            float(rospy.get_param("~prediction_max_horizon_s", 3.5)),
+        )
 
         self.vehicle_stop_ttc_s = max(0.1, float(rospy.get_param("~vehicle_stop_ttc_s", 2.8)))
         self.ped_stop_ttc_s = max(0.1, float(rospy.get_param("~pedestrian_stop_ttc_s", 3.5)))
@@ -52,6 +78,17 @@ class DynamicRiskManager:
         )
         self.dynamic_speed_thresh_mps = max(
             0.01, float(rospy.get_param("~dynamic_speed_thresh_mps", 0.15))
+        )
+        self.pedestrian_dynamic_speed_thresh_mps = max(
+            0.01,
+            min(
+                self.dynamic_speed_thresh_mps,
+                float(
+                    rospy.get_param(
+                        "~pedestrian_dynamic_speed_thresh_mps", 0.10
+                    )
+                ),
+            ),
         )
         self.behavior_stop_on_count = max(
             1, int(rospy.get_param("~behavior_stop_on_count", 2))
@@ -164,11 +201,30 @@ class DynamicRiskManager:
     def _object_speed(obj):
         return math.hypot(float(obj.twist.linear.x), float(obj.twist.linear.y))
 
+    def _dynamic_speed_threshold_for_object(self, obj):
+        if self._is_pedestrian(obj.label):
+            return self.pedestrian_dynamic_speed_thresh_mps
+        return self.dynamic_speed_thresh_mps
+
     def _is_dynamic_object(self, obj):
-        label = (obj.label or "").lower()
-        if label.startswith("static_"):
-            return False
-        return self._object_speed(obj) >= self.dynamic_speed_thresh_mps
+        return self._object_speed(obj) >= self._dynamic_speed_threshold_for_object(obj)
+
+    def _object_prediction_inflate_m(self, obj):
+        speed = self._object_speed(obj)
+        inflate_m = self.inflate_m + speed * self.prediction_speed_inflate_gain_s
+        if self._is_pedestrian(obj.label):
+            inflate_m += (
+                self.pedestrian_inflate_extra_m
+                + speed * self.pedestrian_prediction_speed_inflate_gain_s
+            )
+        return max(self.inflate_m, inflate_m)
+
+    def _object_prediction_horizon_s(self, obj):
+        speed = self._object_speed(obj)
+        horizon_s = self.horizon_s + speed * self.prediction_speed_horizon_gain_s
+        if self._is_pedestrian(obj.label):
+            horizon_s += speed * self.pedestrian_prediction_speed_horizon_gain_s
+        return min(self.prediction_max_horizon_s, max(self.step_s, horizon_s))
 
     @staticmethod
     def _behavior_priority(state):
@@ -450,13 +506,12 @@ class DynamicRiskManager:
         ox = float(g.info.origin.position.x)
         oy = float(g.info.origin.position.y)
         data = [0] * (w * h)
-        steps = max(1, int(math.floor(self.horizon_s / self.step_s)))
         for obj in self.objects:
             if (not self.include_static_in_risk_grid) and (not self._is_dynamic_object(obj)):
                 continue
-            obj_inflate_m = self.inflate_m
-            if self._is_pedestrian(obj.label):
-                obj_inflate_m += self.pedestrian_inflate_extra_m
+            obj_horizon_s = self._object_prediction_horizon_s(obj)
+            steps = max(1, int(math.floor(obj_horizon_s / self.step_s)))
+            obj_inflate_m = self._object_prediction_inflate_m(obj)
             rad_cells = max(1, int(math.ceil(obj_inflate_m / max(1e-3, res))))
             x0 = float(obj.pose.position.x)
             y0 = float(obj.pose.position.y)
@@ -468,7 +523,7 @@ class DynamicRiskManager:
                 y = y0 + vy * t
                 gx = int(math.floor((x - ox) / res))
                 gy = int(math.floor((y - oy) / res))
-                value = max(20, 100 - int(80.0 * (t / max(1e-3, self.horizon_s))))
+                value = max(20, 100 - int(80.0 * (t / max(1e-3, obj_horizon_s))))
                 self._mark_disk(data, w, h, gx, gy, rad_cells, value)
 
         out.data = data

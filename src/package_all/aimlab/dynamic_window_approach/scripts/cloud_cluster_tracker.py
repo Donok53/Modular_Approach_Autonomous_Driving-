@@ -32,6 +32,20 @@ class CloudClusterTracker:
         self.publish_static = bool(rospy.get_param("~publish_static", True))
         self.static_speed_thresh_mps = max(0.01, float(rospy.get_param("~static_speed_thresh_mps", 0.15)))
         self.dynamic_min_age = max(1, int(rospy.get_param("~dynamic_min_age", 4)))
+        self.pedestrian_static_speed_thresh_mps = max(
+            0.01,
+            min(
+                self.static_speed_thresh_mps,
+                float(rospy.get_param("~pedestrian_static_speed_thresh_mps", 0.10)),
+            ),
+        )
+        self.pedestrian_dynamic_min_age = max(
+            1,
+            min(
+                self.dynamic_min_age,
+                int(rospy.get_param("~pedestrian_dynamic_min_age", 2)),
+            ),
+        )
         self.position_jitter_m = max(0.0, float(rospy.get_param("~position_jitter_m", 0.12)))
 
         self.odom_x = 0.0
@@ -219,6 +233,11 @@ class CloudClusterTracker:
             return "pedestrian" if speed > 0.15 else "static_person"
         return "unknown"
 
+    @staticmethod
+    def _is_person_like_label(label):
+        text = (label or "").lower()
+        return ("ped" in text) or ("person" in text) or ("walker" in text)
+
     def cloud_callback(self, msg):
         try:
             now_sec = msg.header.stamp.to_sec() if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now().to_sec()
@@ -234,18 +253,30 @@ class CloudClusterTracker:
         out.header.frame_id = "map"
         for tid, t in self.tracks.items():
             speed = math.hypot(t["vx"], t["vy"])
+            raw_label = self._label_track(t["size_x"], t["size_y"], speed)
+            is_person_like = self._is_person_like_label(raw_label)
+            dynamic_min_age = (
+                self.pedestrian_dynamic_min_age
+                if is_person_like
+                else self.dynamic_min_age
+            )
+            static_speed_thresh = (
+                self.pedestrian_static_speed_thresh_mps
+                if is_person_like
+                else self.static_speed_thresh_mps
+            )
             effective_vx = float(t["vx"])
             effective_vy = float(t["vy"])
             effective_speed = speed
-            if t["age"] < self.dynamic_min_age and effective_speed < (2.0 * self.static_speed_thresh_mps):
+            if t["age"] < dynamic_min_age and effective_speed < (2.0 * static_speed_thresh):
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
-            if effective_speed < self.static_speed_thresh_mps:
+            if effective_speed < static_speed_thresh:
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
-            if (not self.publish_static) and effective_speed < self.static_speed_thresh_mps:
+            if (not self.publish_static) and effective_speed < static_speed_thresh:
                 continue
             obj = TrackedObject()
             obj.id = int(tid)
