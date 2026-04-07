@@ -109,8 +109,8 @@
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
     <arg name="pointcloud_static_block_margin_m" default="0.08"/>
-    <arg name="pointcloud_cluster_resolution_m" default="0.12"/>
-    <arg name="pointcloud_min_cluster_points" default="3"/>
+    <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
+    <arg name="pointcloud_min_cluster_points" default="4"/>
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
     <arg name="obstacle_block_margin_m" default="0.22"/>
     <arg name="avoidance_trigger_margin_m" default="0.14"/>
