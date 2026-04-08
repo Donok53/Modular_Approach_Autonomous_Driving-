@@ -215,6 +215,7 @@
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
+  <arg name="include_static_pedestrians_in_risk_grid" default="true"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
   <arg name="emergency_stop_distance" default="0.35"/>
@@ -469,6 +470,7 @@
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+      <arg name="include_static_pedestrians_in_risk_grid" value="$(arg include_static_pedestrians_in_risk_grid)"/>
       <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
       <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
       <arg name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
@@ -616,6 +618,7 @@
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+      <arg name="include_static_pedestrians_in_risk_grid" value="$(arg include_static_pedestrians_in_risk_grid)"/>
       <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
       <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
       <arg name="publish_astar_via_points" value="$(arg teb_publish_astar_via_points)"/>

@@ -147,6 +147,9 @@ class DynamicRiskManager:
         self.include_static_in_risk_grid = bool(
             rospy.get_param("~include_static_objects_in_risk_grid", False)
         )
+        self.include_static_pedestrians_in_risk_grid = bool(
+            rospy.get_param("~include_static_pedestrians_in_risk_grid", True)
+        )
         self.debug_risk_logging = bool(rospy.get_param("~debug_risk_logging", True))
         self.debug_risk_log_period_s = max(
             0.1, float(rospy.get_param("~debug_risk_log_period_s", 1.0))
@@ -637,7 +640,13 @@ class DynamicRiskManager:
         oy = float(g.info.origin.position.y)
         data = [0] * (w * h)
         for obj in self.objects:
-            if (not self.include_static_in_risk_grid) and (not self._is_dynamic_object(obj)):
+            is_dynamic = self._is_dynamic_object(obj)
+            is_static_pedestrian = (not is_dynamic) and self._is_pedestrian(obj.label)
+            if (
+                (not self.include_static_in_risk_grid)
+                and (not is_dynamic)
+                and (not (self.include_static_pedestrians_in_risk_grid and is_static_pedestrian))
+            ):
                 continue
             obj_horizon_s = self._object_prediction_horizon_s(obj)
             steps = max(1, int(math.floor(obj_horizon_s / self.step_s)))
