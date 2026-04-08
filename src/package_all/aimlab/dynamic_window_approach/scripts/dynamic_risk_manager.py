@@ -85,6 +85,21 @@ class DynamicRiskManager:
         self.rear_vehicle_caution_speed_mps = max(
             0.05, float(rospy.get_param("~rear_vehicle_caution_speed_mps", self.default_speed_mps))
         )
+        self.cross_path_vehicle_caution_enabled = bool(
+            rospy.get_param("~cross_path_vehicle_caution_enabled", True)
+        )
+        self.cross_path_vehicle_forward_distance_m = max(
+            0.5, float(rospy.get_param("~cross_path_vehicle_forward_distance_m", 10.0))
+        )
+        self.cross_path_vehicle_lateral_distance_m = max(
+            0.1, float(rospy.get_param("~cross_path_vehicle_lateral_distance_m", 1.6))
+        )
+        self.cross_path_vehicle_caution_ttc_s = max(
+            0.1, float(rospy.get_param("~cross_path_vehicle_caution_ttc_s", 3.5))
+        )
+        self.cross_path_vehicle_min_relative_speed_mps = max(
+            0.05, float(rospy.get_param("~cross_path_vehicle_min_relative_speed_mps", 0.5))
+        )
         self.front_lateral_stop_m = max(0.1, float(rospy.get_param("~front_lateral_stop_m", 1.8)))
         self.front_lateral_caution_m = max(0.1, float(rospy.get_param("~front_lateral_caution_m", 2.5)))
         self.pedestrian_stop_distance_m = max(
@@ -211,6 +226,13 @@ class DynamicRiskManager:
         ry = -s * dx + c * dy
         return rx, ry
 
+    def _world_vector_to_robot(self, vx, vy):
+        c = math.cos(self.odom_yaw)
+        s = math.sin(self.odom_yaw)
+        rvx = c * vx + s * vy
+        rvy = -s * vx + c * vy
+        return rvx, rvy
+
     def _is_pedestrian(self, label):
         t = (label or "").lower()
         return ("ped" in t) or ("person" in t) or ("walker" in t)
@@ -226,6 +248,25 @@ class DynamicRiskManager:
     @staticmethod
     def _object_speed(obj):
         return math.hypot(float(obj.twist.linear.x), float(obj.twist.linear.y))
+
+    def _time_to_cross_path_corridor(self, rx, ry, rvx_robot, rvy_robot):
+        if not self.cross_path_vehicle_caution_enabled:
+            return float("inf")
+        lateral_limit = self.cross_path_vehicle_lateral_distance_m
+        if abs(ry) <= lateral_limit:
+            return float("inf")
+        if abs(rvy_robot) <= 1e-3 or (ry * rvy_robot) >= 0.0:
+            return float("inf")
+        rel_speed = math.hypot(rvx_robot, rvy_robot)
+        if rel_speed < self.cross_path_vehicle_min_relative_speed_mps:
+            return float("inf")
+        t_enter = max(0.0, (abs(ry) - lateral_limit) / abs(rvy_robot))
+        if t_enter > self.cross_path_vehicle_caution_ttc_s:
+            return float("inf")
+        x_enter = rx + rvx_robot * t_enter
+        if x_enter < 0.0 or x_enter > self.cross_path_vehicle_forward_distance_m:
+            return float("inf")
+        return t_enter
 
     def _dynamic_speed_threshold_for_object(self, obj):
         if self._is_pedestrian(obj.label):
@@ -419,19 +460,22 @@ class DynamicRiskManager:
         rear_caution_dist = -1.0
 
         for obj in self.objects:
-            if (not self.include_static_in_behavior) and (not self._is_dynamic_object(obj)):
+            is_dynamic = self._is_dynamic_object(obj)
+            if (not self.include_static_in_behavior) and (not is_dynamic):
                 continue
             ox = float(obj.pose.position.x)
             oy = float(obj.pose.position.y)
             ovx = float(obj.twist.linear.x)
             ovy = float(obj.twist.linear.y)
             rx, ry = self._world_to_robot(ox, oy)
-            if rx < -1.0:
+            rear_eval_min_rx = -self.rear_vehicle_max_distance_m if self.rear_vehicle_caution_enabled else -1.0
+            if rx < rear_eval_min_rx:
                 continue
 
             # Relative velocity in world; project towards object line-of-sight.
             rvx = ovx - self.odom_vx
             rvy = ovy - self.odom_vy
+            rvx_robot, rvy_robot = self._world_vector_to_robot(rvx, rvy)
             dist = max(1e-3, math.hypot(ox - self.odom_x, oy - self.odom_y))
             closing = -((ox - self.odom_x) * rvx + (oy - self.odom_y) * rvy) / dist
             is_ped = self._is_pedestrian(obj.label)
@@ -449,9 +493,16 @@ class DynamicRiskManager:
             caution_hit = rx >= 0.0 and abs(ry) <= lateral_caution and (
                 ttc <= self.caution_ttc_s or (is_ped and dist <= self.pedestrian_caution_distance_m)
             )
+            cross_path_ttc = float("inf")
+            if self.cross_path_vehicle_caution_enabled and is_vehicle and is_dynamic:
+                cross_path_ttc = self._time_to_cross_path_corridor(
+                    rx, ry, rvx_robot, rvy_robot
+                )
+            cross_path_hit = math.isfinite(cross_path_ttc)
             rear_caution_hit = (
                 self.rear_vehicle_caution_enabled
                 and is_vehicle
+                and is_dynamic
                 and rx < 0.0
                 and abs(ry) <= self.rear_vehicle_lateral_caution_m
                 and dist <= self.rear_vehicle_max_distance_m
@@ -476,16 +527,26 @@ class DynamicRiskManager:
                     stop_rx = float(rx)
                     stop_ry = float(ry)
                     stop_dist = float(dist)
-            elif caution_hit:
+            elif caution_hit or cross_path_hit:
                 caution = True
-                if is_ped and dist <= self.pedestrian_caution_distance_m and ttc > self.caution_ttc_s:
+                candidate_caution_ttc = ttc
+                if cross_path_hit and (
+                    (not caution_hit)
+                    or (not math.isfinite(candidate_caution_ttc))
+                    or cross_path_ttc < candidate_caution_ttc
+                ):
+                    candidate_caution_ttc = cross_path_ttc
+                    candidate_caution_reason = "path_intersection_caution:{}:{:.2f}s".format(
+                        obj.label if obj.label else "vehicle", cross_path_ttc
+                    )
+                elif is_ped and dist <= self.pedestrian_caution_distance_m and ttc > self.caution_ttc_s:
                     candidate_caution_reason = "ped_distance_caution:{:.2f}m".format(dist)
                 elif is_ped and not math.isfinite(ttc):
                     candidate_caution_reason = "ped_distance_caution:{:.2f}m".format(dist)
                 else:
                     candidate_caution_reason = "ttc_caution"
-                if caution_ttc is None or ttc < caution_ttc:
-                    caution_ttc = ttc
+                if caution_ttc is None or candidate_caution_ttc < caution_ttc:
+                    caution_ttc = candidate_caution_ttc
                     caution_reason = candidate_caution_reason
                     caution_obj_id = int(obj.id)
                     caution_obj_label = str(obj.label)
@@ -642,6 +703,14 @@ class DynamicRiskManager:
                         action_taken = "rear_approach_caution"
                         summary_text = (
                             "Dynamic risk manager entered rear-approach caution because '{}' is closing from behind with TTC {:.2f}s."
+                        ).format(
+                            event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "vehicle",
+                            max(0.0, float(event_meta["caution_ttc"])),
+                        )
+                    elif caution_reason.startswith("path_intersection_caution:"):
+                        action_taken = "cross_path_caution"
+                        summary_text = (
+                            "Dynamic risk manager requested a slowdown because '{}' is predicted to intersect the forward driving corridor in {:.2f}s."
                         ).format(
                             event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "vehicle",
                             max(0.0, float(event_meta["caution_ttc"])),

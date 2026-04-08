@@ -120,23 +120,23 @@ class ConstrainedLocalReplanner:
             rospy.get_param("~static_obstacle_memory_enabled", True)
         )
         self.static_obstacle_memory_ttl_s = max(
-            0.0, float(rospy.get_param("~static_obstacle_memory_ttl_s", 2.5))
+            0.0, float(rospy.get_param("~static_obstacle_memory_ttl_s", 1.2))
         )
         self.static_obstacle_memory_merge_radius_m = max(
             0.05, float(rospy.get_param("~static_obstacle_memory_merge_radius_m", 0.22))
         )
         self.static_obstacle_memory_max_range_m = max(
-            0.5, float(rospy.get_param("~static_obstacle_memory_max_range_m", 4.0))
+            0.5, float(rospy.get_param("~static_obstacle_memory_max_range_m", 3.0))
         )
         self.static_obstacle_memory_max_support = max(
             self.pointcloud_min_cluster_points,
-            int(rospy.get_param("~static_obstacle_memory_max_support", 10)),
+            int(rospy.get_param("~static_obstacle_memory_max_support", 8)),
         )
         self.static_obstacle_memory_max_z_m = float(
             rospy.get_param("~static_obstacle_memory_max_z_m", 0.75)
         )
         self.static_obstacle_memory_max_points = max(
-            0, int(rospy.get_param("~static_obstacle_memory_max_points", 80))
+            0, int(rospy.get_param("~static_obstacle_memory_max_points", 40))
         )
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
@@ -189,7 +189,11 @@ class ConstrainedLocalReplanner:
         )
         self.near_goal_block_ignore_after_avoidance_s = max(
             0.0,
-            float(rospy.get_param("~near_goal_block_ignore_after_avoidance_s", 3.0)),
+            float(rospy.get_param("~near_goal_block_ignore_after_avoidance_s", 1.0)),
+        )
+        self.near_goal_recent_avoidance_release_distance_m = max(
+            0.0,
+            float(rospy.get_param("~near_goal_recent_avoidance_release_distance_m", 0.30)),
         )
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
@@ -1664,12 +1668,19 @@ class ConstrainedLocalReplanner:
             now_sec - last_active_sec
         ) <= self.near_goal_block_ignore_after_avoidance_s
 
+    def _can_use_near_goal_shortcut(self, remaining_to_goal_m, now_sec=None):
+        if remaining_to_goal_m > self.near_goal_block_ignore_distance_m:
+            return False
+        if not self._had_recent_avoidance_activity(now_sec):
+            return True
+        if self.avoidance_active:
+            return False
+        return remaining_to_goal_m <= self.near_goal_recent_avoidance_release_distance_m
+
     def _should_ignore_near_goal_block(self, path, blocked_idx, start_cell, dg):
         if blocked_idx is None or len(path) < 2:
             return False
         if self.near_goal_block_ignore_distance_m <= 0.0:
-            return False
-        if self._had_recent_avoidance_activity():
             return False
 
         start_idx = self._nearest_path_cell_index(path, start_cell)
@@ -1678,7 +1689,7 @@ class ConstrainedLocalReplanner:
         blocked_idx = max(start_idx, min(blocked_idx, len(path) - 1))
         remaining_to_goal_m = self._path_remaining_distance_m(path, dg, start_idx)
         blocked_tail_m = self._path_remaining_distance_m(path, dg, blocked_idx)
-        if remaining_to_goal_m > self.near_goal_block_ignore_distance_m:
+        if not self._can_use_near_goal_shortcut(remaining_to_goal_m):
             return False
         return blocked_tail_m <= self.near_goal_tail_block_ignore_distance_m
 
@@ -2117,7 +2128,7 @@ class ConstrainedLocalReplanner:
                     and nominal_world is not None
                     and len(nominal_world) >= 2
                     and nominal_world_remain_m <= self.near_goal_block_ignore_distance_m
-                    and (not self._had_recent_avoidance_activity(stamp.to_sec()))
+                    and self._can_use_near_goal_shortcut(nominal_world_remain_m, stamp.to_sec())
                 ):
                     rospy.loginfo_throttle(
                         1.0,

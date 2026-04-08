@@ -61,7 +61,13 @@
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
   <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
-  <arg name="near_goal_block_ignore_after_avoidance_s" default="3.0"/>
+  <arg name="near_goal_block_ignore_after_avoidance_s" default="1.0"/>
+  <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
+  <arg name="static_obstacle_memory_enabled" default="true"/>
+  <arg name="static_obstacle_memory_ttl_s" default="1.2"/>
+  <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
+  <arg name="static_obstacle_memory_max_support" default="8"/>
+  <arg name="static_obstacle_memory_max_points" default="40"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
@@ -163,9 +169,9 @@
   <arg name="prediction_speed_horizon_gain_s" default="0.80"/>
   <arg name="pedestrian_prediction_speed_horizon_gain_s" default="1.20"/>
   <arg name="prediction_max_horizon_s" default="3.5"/>
-  <arg name="front_lateral_stop_m" default="0.85"/>
-  <arg name="front_lateral_caution_m" default="1.10"/>
-  <arg name="vehicle_stop_ttc_s" default="1.4"/>
+  <arg name="front_lateral_stop_m" default="0.95"/>
+  <arg name="front_lateral_caution_m" default="1.40"/>
+  <arg name="vehicle_stop_ttc_s" default="1.8"/>
   <arg name="pedestrian_stop_ttc_s" default="2.8"/>
   <arg name="caution_ttc_s" default="3.2"/>
   <arg name="pedestrian_caution_speed_mps" default="0.15"/>
@@ -174,7 +180,12 @@
   <arg name="rear_vehicle_lateral_caution_m" default="1.40"/>
   <arg name="rear_vehicle_caution_ttc_s" default="2.8"/>
   <arg name="rear_vehicle_min_closing_speed_mps" default="0.60"/>
-  <arg name="rear_vehicle_caution_speed_mps" default="0.55"/>
+  <arg name="rear_vehicle_caution_speed_mps" default="0.30"/>
+  <arg name="cross_path_vehicle_caution_enabled" default="true"/>
+  <arg name="cross_path_vehicle_forward_distance_m" default="10.0"/>
+  <arg name="cross_path_vehicle_lateral_distance_m" default="1.60"/>
+  <arg name="cross_path_vehicle_caution_ttc_s" default="3.5"/>
+  <arg name="cross_path_vehicle_min_relative_speed_mps" default="0.50"/>
   <arg name="pedestrian_stop_distance_m" default="1.05"/>
   <arg name="pedestrian_caution_distance_m" default="2.00"/>
   <arg name="behavior_stop_on_count" default="4"/>
@@ -268,6 +279,11 @@
       <param name="rear_vehicle_caution_ttc_s" value="$(arg rear_vehicle_caution_ttc_s)"/>
       <param name="rear_vehicle_min_closing_speed_mps" value="$(arg rear_vehicle_min_closing_speed_mps)"/>
       <param name="rear_vehicle_caution_speed_mps" value="$(arg rear_vehicle_caution_speed_mps)"/>
+      <param name="cross_path_vehicle_caution_enabled" value="$(arg cross_path_vehicle_caution_enabled)"/>
+      <param name="cross_path_vehicle_forward_distance_m" value="$(arg cross_path_vehicle_forward_distance_m)"/>
+      <param name="cross_path_vehicle_lateral_distance_m" value="$(arg cross_path_vehicle_lateral_distance_m)"/>
+      <param name="cross_path_vehicle_caution_ttc_s" value="$(arg cross_path_vehicle_caution_ttc_s)"/>
+      <param name="cross_path_vehicle_min_relative_speed_mps" value="$(arg cross_path_vehicle_min_relative_speed_mps)"/>
       <param name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
       <param name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
       <param name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
@@ -306,6 +322,11 @@
       <param name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
       <param name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
       <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
+      <param name="static_obstacle_memory_enabled" value="$(arg static_obstacle_memory_enabled)"/>
+      <param name="static_obstacle_memory_ttl_s" value="$(arg static_obstacle_memory_ttl_s)"/>
+      <param name="static_obstacle_memory_max_range_m" value="$(arg static_obstacle_memory_max_range_m)"/>
+      <param name="static_obstacle_memory_max_support" value="$(arg static_obstacle_memory_max_support)"/>
+      <param name="static_obstacle_memory_max_points" value="$(arg static_obstacle_memory_max_points)"/>
       <param name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
       <param name="obstacle_block_margin_m" value="$(arg obstacle_block_margin_m)"/>
       <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
@@ -320,6 +341,7 @@
       <param name="near_goal_block_ignore_distance_m" value="$(arg near_goal_block_ignore_distance_m)"/>
       <param name="near_goal_tail_block_ignore_distance_m" value="$(arg near_goal_tail_block_ignore_distance_m)"/>
       <param name="near_goal_block_ignore_after_avoidance_s" value="$(arg near_goal_block_ignore_after_avoidance_s)"/>
+      <param name="near_goal_recent_avoidance_release_distance_m" value="$(arg near_goal_recent_avoidance_release_distance_m)"/>
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
