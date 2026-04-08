@@ -1919,11 +1919,7 @@ class ConstrainedLocalReplanner:
             )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return
-            # When no avoidance branch exists, publish an empty local path so the
-            # cmd_vel relay enters local hold instead of continuing along a stale
-            # nominal path toward the detected obstacle.
-            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
-            self._clear_avoidance_path(frame_id, stamp, force=True)
+            self._clear_avoidance_path(frame_id, stamp)
             return
 
         if len(avoid_path) < 2:
@@ -1940,8 +1936,7 @@ class ConstrainedLocalReplanner:
             )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return
-            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
-            self._clear_avoidance_path(frame_id, stamp, force=True)
+            self._clear_avoidance_path(frame_id, stamp)
             return
 
         self._publish_avoidance_path(
