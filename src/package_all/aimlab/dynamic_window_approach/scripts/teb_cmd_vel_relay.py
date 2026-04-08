@@ -114,6 +114,18 @@ class TebCmdVelRelay(object):
         self.behavior_cmd_timeout_s = max(
             0.1, float(rospy.get_param("~behavior_cmd_timeout_s", 0.8))
         )
+        self.rear_approach_conservative_enabled = bool(
+            rospy.get_param("~rear_approach_conservative_enabled", True)
+        )
+        self.rear_approach_max_angular_speed = max(
+            0.0, float(rospy.get_param("~rear_approach_max_angular_speed", 0.12))
+        )
+        self.rear_approach_spin_linear_threshold_mps = max(
+            0.0, float(rospy.get_param("~rear_approach_spin_linear_threshold_mps", 0.05))
+        )
+        self.rear_approach_no_reverse = bool(
+            rospy.get_param("~rear_approach_no_reverse", True)
+        )
         self.local_hold_timeout_s = max(
             0.1, float(rospy.get_param("~local_hold_timeout_s", 1.0))
         )
@@ -356,6 +368,36 @@ class TebCmdVelRelay(object):
         out.angular.y = float(cmd.angular.y)
         out.angular.z = float(cmd.angular.z)
         return out
+
+    @staticmethod
+    def _is_rear_approach_reason(reason):
+        return str(reason).strip().lower().startswith("rear_vehicle_approach")
+
+    def _apply_rear_approach_conservative(self, cmd):
+        out = self._copy_cmd(cmd)
+        flags = []
+
+        if self.rear_approach_no_reverse and out.linear.x < 0.0:
+            out.linear.x = 0.0
+            flags.append("block_reverse")
+
+        if (
+            self.rear_approach_max_angular_speed > 0.0
+            and abs(float(out.angular.z)) > self.rear_approach_max_angular_speed
+        ):
+            out.angular.z = math.copysign(
+                self.rear_approach_max_angular_speed, float(out.angular.z)
+            )
+            flags.append("limit_angular")
+
+        if (
+            abs(float(out.linear.x)) <= self.rear_approach_spin_linear_threshold_mps
+            and abs(float(out.angular.z)) > 1e-4
+        ):
+            out.angular.z = 0.0
+            flags.append("suppress_spin")
+
+        return out, flags
 
     def _forward_zone_lateral_limit(
         self, obstacle_x, base_lateral_y, far_lateral_ratio, zone_distance
@@ -1229,30 +1271,76 @@ class TebCmdVelRelay(object):
                 "summary_text": "TEB relay applied a full stop because the behavior layer requested a stop.",
             }
 
-        if self.behavior_speed_limit < float("inf") and abs(cmd.linear.x) > self.behavior_speed_limit:
-            limited = Twist()
-            limited.linear.x = math.copysign(self.behavior_speed_limit, cmd.linear.x)
-            limited.linear.y = cmd.linear.y
-            limited.linear.z = cmd.linear.z
-            limited.angular.x = cmd.angular.x
-            limited.angular.y = cmd.angular.y
-            limited.angular.z = cmd.angular.z
+        limited = self._copy_cmd(cmd)
+        changed = False
+        slowdown_commanded = False
+        speed_limit_mps = -1.0
+        action_taken = "follow_teb"
+        summary_parts = []
+        rear_flags = []
+
+        if self.behavior_speed_limit < float("inf") and abs(limited.linear.x) > self.behavior_speed_limit:
+            raw_linear = float(limited.linear.x)
+            limited.linear.x = math.copysign(self.behavior_speed_limit, raw_linear)
             rospy.logwarn_throttle(
                 self.log_period_s,
                 "teb_cmd_vel_relay: behavior speed limit | reason=%s v=%.3f -> %.3f",
                 self.behavior_reason,
-                float(cmd.linear.x),
+                raw_linear,
                 float(limited.linear.x),
             )
-            self._last_safety_reason = "behavior_limit"
+            changed = True
+            slowdown_commanded = True
+            speed_limit_mps = float(self.behavior_speed_limit)
+            action_taken = "slowdown"
+            summary_parts.append(
+                "TEB relay reduced the linear speed because the behavior layer requested a speed limit."
+            )
+
+        if (
+            self.rear_approach_conservative_enabled
+            and self._is_rear_approach_reason(self.behavior_reason)
+        ):
+            adjusted, rear_flags = self._apply_rear_approach_conservative(limited)
+            if rear_flags:
+                rospy.loginfo_throttle(
+                    self.log_period_s,
+                    "teb_cmd_vel_relay: rear-approach conservative | reason=%s flags=%s cmd(v=%.3f,w=%.3f) -> out(v=%.3f,w=%.3f)",
+                    self.behavior_reason,
+                    ",".join(rear_flags),
+                    float(limited.linear.x),
+                    float(limited.angular.z),
+                    float(adjusted.linear.x),
+                    float(adjusted.angular.z),
+                )
+                limited = adjusted
+                changed = True
+                action_taken = (
+                    "slowdown+rear_approach_conservative"
+                    if slowdown_commanded
+                    else "rear_approach_conservative"
+                )
+                summary_parts.append(
+                    "TEB relay kept the command conservative for a rear vehicle approach ({}).".format(
+                        ",".join(rear_flags)
+                    )
+                )
+
+        if changed:
+            if rear_flags and slowdown_commanded:
+                self._last_safety_reason = "behavior_limit+rear_approach"
+            elif rear_flags:
+                self._last_safety_reason = "behavior_rear_approach"
+            else:
+                self._last_safety_reason = "behavior_limit"
             return limited, {
                 "event_type": "CONTROL_ACTION_CHANGE",
                 "trigger_reason": self.behavior_reason,
-                "action_taken": "slowdown",
+                "action_taken": action_taken,
                 "stop_commanded": False,
-                "slowdown_commanded": True,
-                "speed_limit_mps": float(self.behavior_speed_limit),
-                "summary_text": "TEB relay reduced the speed because the behavior layer requested a speed limit.",
+                "slowdown_commanded": slowdown_commanded,
+                "speed_limit_mps": speed_limit_mps,
+                "summary_text": " ".join(summary_parts),
             }
         return cmd, None
 

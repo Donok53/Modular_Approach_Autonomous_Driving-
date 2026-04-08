@@ -119,6 +119,10 @@
   <arg name="ignore_local_hold_near_goal_distance_m" default="0.45"/>
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="behavior_cmd_timeout_s" default="0.8"/>
+  <arg name="rear_approach_conservative_enabled" default="true"/>
+  <arg name="rear_approach_max_angular_speed" default="0.12"/>
+  <arg name="rear_approach_spin_linear_threshold_mps" default="0.05"/>
+  <arg name="rear_approach_no_reverse" default="true"/>
   <arg name="local_hold_timeout_s" default="1.0"/>
   <arg name="move_base_goal_lookahead_m" default="1.5"/>
   <arg name="final_goal_switch_distance_m" default="0.5"/>
@@ -165,6 +169,12 @@
   <arg name="pedestrian_stop_ttc_s" default="2.8"/>
   <arg name="caution_ttc_s" default="3.2"/>
   <arg name="pedestrian_caution_speed_mps" default="0.15"/>
+  <arg name="rear_vehicle_caution_enabled" default="true"/>
+  <arg name="rear_vehicle_max_distance_m" default="8.0"/>
+  <arg name="rear_vehicle_lateral_caution_m" default="1.40"/>
+  <arg name="rear_vehicle_caution_ttc_s" default="2.8"/>
+  <arg name="rear_vehicle_min_closing_speed_mps" default="0.60"/>
+  <arg name="rear_vehicle_caution_speed_mps" default="0.55"/>
   <arg name="pedestrian_stop_distance_m" default="1.05"/>
   <arg name="pedestrian_caution_distance_m" default="2.00"/>
   <arg name="behavior_stop_on_count" default="4"/>
@@ -252,6 +262,12 @@
       <param name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
       <param name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
       <param name="pedestrian_caution_speed_mps" value="$(arg pedestrian_caution_speed_mps)"/>
+      <param name="rear_vehicle_caution_enabled" value="$(arg rear_vehicle_caution_enabled)"/>
+      <param name="rear_vehicle_max_distance_m" value="$(arg rear_vehicle_max_distance_m)"/>
+      <param name="rear_vehicle_lateral_caution_m" value="$(arg rear_vehicle_lateral_caution_m)"/>
+      <param name="rear_vehicle_caution_ttc_s" value="$(arg rear_vehicle_caution_ttc_s)"/>
+      <param name="rear_vehicle_min_closing_speed_mps" value="$(arg rear_vehicle_min_closing_speed_mps)"/>
+      <param name="rear_vehicle_caution_speed_mps" value="$(arg rear_vehicle_caution_speed_mps)"/>
       <param name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
       <param name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
       <param name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
@@ -386,6 +402,10 @@
     <param name="ignore_local_hold_near_goal_distance_m" value="$(arg ignore_local_hold_near_goal_distance_m)"/>
     <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>
     <param name="behavior_cmd_timeout_s" value="$(arg behavior_cmd_timeout_s)"/>
+    <param name="rear_approach_conservative_enabled" value="$(arg rear_approach_conservative_enabled)"/>
+    <param name="rear_approach_max_angular_speed" value="$(arg rear_approach_max_angular_speed)"/>
+    <param name="rear_approach_spin_linear_threshold_mps" value="$(arg rear_approach_spin_linear_threshold_mps)"/>
+    <param name="rear_approach_no_reverse" value="$(arg rear_approach_no_reverse)"/>
     <param name="local_hold_timeout_s" value="$(arg local_hold_timeout_s)"/>
     <param name="emergency_stop_front_margin" value="$(arg emergency_stop_front_margin)"/>
     <param name="emergency_stop_side_margin" value="$(arg emergency_stop_side_margin)"/>

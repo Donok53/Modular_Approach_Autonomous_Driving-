@@ -67,6 +67,24 @@ class DynamicRiskManager:
             ),
         )
         self.default_speed_mps = max(0.05, float(rospy.get_param("~default_speed_mps", 0.55)))
+        self.rear_vehicle_caution_enabled = bool(
+            rospy.get_param("~rear_vehicle_caution_enabled", True)
+        )
+        self.rear_vehicle_max_distance_m = max(
+            0.5, float(rospy.get_param("~rear_vehicle_max_distance_m", 8.0))
+        )
+        self.rear_vehicle_lateral_caution_m = max(
+            0.1, float(rospy.get_param("~rear_vehicle_lateral_caution_m", 1.4))
+        )
+        self.rear_vehicle_caution_ttc_s = max(
+            0.1, float(rospy.get_param("~rear_vehicle_caution_ttc_s", 2.8))
+        )
+        self.rear_vehicle_min_closing_speed_mps = max(
+            0.05, float(rospy.get_param("~rear_vehicle_min_closing_speed_mps", 0.6))
+        )
+        self.rear_vehicle_caution_speed_mps = max(
+            0.05, float(rospy.get_param("~rear_vehicle_caution_speed_mps", self.default_speed_mps))
+        )
         self.front_lateral_stop_m = max(0.1, float(rospy.get_param("~front_lateral_stop_m", 1.8)))
         self.front_lateral_caution_m = max(0.1, float(rospy.get_param("~front_lateral_caution_m", 2.5)))
         self.pedestrian_stop_distance_m = max(
@@ -198,6 +216,14 @@ class DynamicRiskManager:
         return ("ped" in t) or ("person" in t) or ("walker" in t)
 
     @staticmethod
+    def _is_vehicle_like(label):
+        text = (label or "").lower()
+        return any(
+            token in text
+            for token in ("vehicle", "car", "truck", "bus", "van", "motor", "bike", "scooter")
+        )
+
+    @staticmethod
     def _object_speed(obj):
         return math.hypot(float(obj.twist.linear.x), float(obj.twist.linear.y))
 
@@ -298,8 +324,11 @@ class DynamicRiskManager:
             cmd.speed_limit = 0.0
         elif state == "caution":
             cmd.stop = False
-            cmd.speed_limit = min(cmd.speed_limit, self.caution_speed_mps)
             lower_reason = (reason or "").lower()
+            if lower_reason.startswith("rear_vehicle_approach"):
+                cmd.speed_limit = min(cmd.speed_limit, self.rear_vehicle_caution_speed_mps)
+            else:
+                cmd.speed_limit = min(cmd.speed_limit, self.caution_speed_mps)
             if ("ped" in lower_reason) or ("person" in lower_reason):
                 cmd.speed_limit = min(cmd.speed_limit, self.pedestrian_caution_speed_mps)
         return cmd
@@ -380,6 +409,14 @@ class DynamicRiskManager:
         caution_rx = -1.0
         caution_ry = 0.0
         caution_dist = -1.0
+        rear_caution = False
+        rear_caution_reason = ""
+        rear_caution_ttc = None
+        rear_caution_obj_id = -1
+        rear_caution_obj_label = ""
+        rear_caution_rx = -1.0
+        rear_caution_ry = 0.0
+        rear_caution_dist = -1.0
 
         for obj in self.objects:
             if (not self.include_static_in_behavior) and (not self._is_dynamic_object(obj)):
@@ -398,6 +435,7 @@ class DynamicRiskManager:
             dist = max(1e-3, math.hypot(ox - self.odom_x, oy - self.odom_y))
             closing = -((ox - self.odom_x) * rvx + (oy - self.odom_y) * rvy) / dist
             is_ped = self._is_pedestrian(obj.label)
+            is_vehicle = self._is_vehicle_like(obj.label)
             ttc = float("inf")
             if closing > 1e-3:
                 ttc = dist / closing
@@ -410,6 +448,16 @@ class DynamicRiskManager:
             )
             caution_hit = rx >= 0.0 and abs(ry) <= lateral_caution and (
                 ttc <= self.caution_ttc_s or (is_ped and dist <= self.pedestrian_caution_distance_m)
+            )
+            rear_caution_hit = (
+                self.rear_vehicle_caution_enabled
+                and is_vehicle
+                and rx < 0.0
+                and abs(ry) <= self.rear_vehicle_lateral_caution_m
+                and dist <= self.rear_vehicle_max_distance_m
+                and closing >= self.rear_vehicle_min_closing_speed_mps
+                and math.isfinite(ttc)
+                and ttc <= self.rear_vehicle_caution_ttc_s
             )
 
             if stop_hit:
@@ -444,6 +492,18 @@ class DynamicRiskManager:
                     caution_rx = float(rx)
                     caution_ry = float(ry)
                     caution_dist = float(dist)
+            elif rear_caution_hit:
+                rear_caution = True
+                if rear_caution_ttc is None or ttc < rear_caution_ttc:
+                    rear_caution_ttc = ttc
+                    rear_caution_reason = "rear_vehicle_approach:{}:{:.2f}s".format(
+                        obj.label if obj.label else "vehicle", ttc
+                    )
+                    rear_caution_obj_id = int(obj.id)
+                    rear_caution_obj_label = str(obj.label)
+                    rear_caution_rx = float(rx)
+                    rear_caution_ry = float(ry)
+                    rear_caution_dist = float(dist)
 
         raw_state = "clear"
         raw_reason = "clear"
@@ -453,6 +513,15 @@ class DynamicRiskManager:
         elif caution:
             raw_state = "caution"
             raw_reason = caution_reason if caution_reason else "ttc_caution"
+        elif rear_caution:
+            raw_state = "caution"
+            raw_reason = rear_caution_reason if rear_caution_reason else "rear_vehicle_approach"
+            caution_ttc = rear_caution_ttc
+            caution_obj_id = rear_caution_obj_id
+            caution_obj_label = rear_caution_obj_label
+            caution_rx = rear_caution_rx
+            caution_ry = rear_caution_ry
+            caution_dist = rear_caution_dist
 
         self._update_behavior_state(raw_state, raw_reason)
         cmd = self._make_behavior_cmd(self.behavior_state, self.behavior_state_reason)
@@ -567,7 +636,17 @@ class DynamicRiskManager:
                     )
                 elif behavior_state == "caution":
                     caution_reason = str(event_meta["behavior_reason"])
-                    if caution_reason.startswith("ped_distance_caution:"):
+                    slowdown_commanded = float(cmd.speed_limit) < (self.default_speed_mps - 1e-3)
+                    action_taken = "slowdown" if slowdown_commanded else "caution"
+                    if caution_reason.startswith("rear_vehicle_approach"):
+                        action_taken = "rear_approach_caution"
+                        summary_text = (
+                            "Dynamic risk manager entered rear-approach caution because '{}' is closing from behind with TTC {:.2f}s."
+                        ).format(
+                            event_meta["caution_obj_label"] if event_meta["caution_obj_label"] else "vehicle",
+                            max(0.0, float(event_meta["caution_ttc"])),
+                        )
+                    elif caution_reason.startswith("ped_distance_caution:"):
                         summary_text = (
                             "Dynamic risk manager requested a slowdown because '{}' entered the pedestrian distance caution zone at {:.2f}m."
                         ).format(
@@ -584,8 +663,8 @@ class DynamicRiskManager:
                         event_type="BEHAVIOR_STATE_CHANGE",
                         stamp=cmd.header.stamp,
                         trigger_reason=event_meta["behavior_reason"],
-                        action_taken="slowdown",
-                        slowdown_commanded=True,
+                        action_taken=action_taken,
+                        slowdown_commanded=slowdown_commanded,
                         speed_limit_mps=float(cmd.speed_limit),
                         closest_obstacle_dist_m=float(event_meta["caution_rx"]),
                         obstacle_lateral_offset_m=float(event_meta["caution_ry"]),

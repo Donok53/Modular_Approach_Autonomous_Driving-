@@ -141,6 +141,12 @@
     <arg name="pedestrian_stop_ttc_s" default="2.8"/>
     <arg name="caution_ttc_s" default="3.2"/>
     <arg name="pedestrian_caution_speed_mps" default="0.15"/>
+    <arg name="rear_vehicle_caution_enabled" default="true"/>
+    <arg name="rear_vehicle_max_distance_m" default="8.0"/>
+    <arg name="rear_vehicle_lateral_caution_m" default="1.40"/>
+    <arg name="rear_vehicle_caution_ttc_s" default="2.8"/>
+    <arg name="rear_vehicle_min_closing_speed_mps" default="0.60"/>
+    <arg name="rear_vehicle_caution_speed_mps" default="0.55"/>
     <arg name="pedestrian_stop_distance_m" default="1.05"/>
     <arg name="pedestrian_caution_distance_m" default="2.00"/>
     <arg name="behavior_stop_on_count" default="4"/>
@@ -218,6 +224,12 @@
             <param name="pedestrian_stop_ttc_s" value="$(arg pedestrian_stop_ttc_s)"/>
             <param name="caution_ttc_s" value="$(arg caution_ttc_s)"/>
             <param name="pedestrian_caution_speed_mps" value="$(arg pedestrian_caution_speed_mps)"/>
+            <param name="rear_vehicle_caution_enabled" value="$(arg rear_vehicle_caution_enabled)"/>
+            <param name="rear_vehicle_max_distance_m" value="$(arg rear_vehicle_max_distance_m)"/>
+            <param name="rear_vehicle_lateral_caution_m" value="$(arg rear_vehicle_lateral_caution_m)"/>
+            <param name="rear_vehicle_caution_ttc_s" value="$(arg rear_vehicle_caution_ttc_s)"/>
+            <param name="rear_vehicle_min_closing_speed_mps" value="$(arg rear_vehicle_min_closing_speed_mps)"/>
+            <param name="rear_vehicle_caution_speed_mps" value="$(arg rear_vehicle_caution_speed_mps)"/>
             <param name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
             <param name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
             <param name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
