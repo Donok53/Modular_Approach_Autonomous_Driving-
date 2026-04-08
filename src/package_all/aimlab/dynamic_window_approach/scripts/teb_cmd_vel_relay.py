@@ -611,6 +611,30 @@ class TebCmdVelRelay(object):
         reverse_clamped_to_stop = False
         if out.linear.x < 0.0 and abs(out.linear.x) <= self.reverse_deadband_mps:
             if final_brake_active or fresh_empty_local_path:
+                if (
+                    (not fresh_empty_local_path)
+                    and self._should_replace_tiny_reverse_with_final_brake_crawl(out, now)
+                ):
+                    self._last_sanitize_reason = "tiny_reverse_final_brake_crawl"
+                    rospy.loginfo_throttle(
+                        self.log_period_s,
+                        "teb_cmd_vel_relay: replacing tiny reverse near final brake with forward crawl v=%.3f -> %.3f (w=%.3f remain=%.2f stop_x=%.2f)",
+                        out.linear.x,
+                        self.tiny_reverse_forward_crawl_speed,
+                        out.angular.z,
+                        self.local_path_remaining_m,
+                        self.closest_stop_obstacle_x,
+                    )
+                    return self._forward_crawl_cmd(out)
+                if (not fresh_empty_local_path) and self._should_convert_small_reverse_to_rotation(out):
+                    self._last_sanitize_reason = "tiny_reverse_goal_rotate"
+                    rospy.loginfo_throttle(
+                        self.log_period_s,
+                        "teb_cmd_vel_relay: converting tiny reverse near goal to rotation-only v=%.3f w=%.3f",
+                        out.linear.x,
+                        out.angular.z,
+                    )
+                    return self._rotation_only_cmd(out)
                 self._last_sanitize_reason = "tiny_reverse_goal_stop"
                 rospy.loginfo_throttle(
                     self.log_period_s,
@@ -1070,6 +1094,30 @@ class TebCmdVelRelay(object):
         if math.isfinite(self.closest_stop_obstacle_x):
             return self.closest_stop_obstacle_x > self.tiny_reverse_forward_crawl_clearance_m
         return True
+
+    def _should_replace_tiny_reverse_with_final_brake_crawl(self, cmd, now):
+        if (not self.enable_tiny_reverse_forward_crawl) or (not self.forward_only):
+            return False
+        if not self._is_final_goal_brake_active():
+            return False
+        if not math.isfinite(self.local_path_remaining_m):
+            return False
+        if self.local_path_remaining_m <= self._terminal_goal_stop_distance_m():
+            return False
+        if float(cmd.linear.x) >= 0.0:
+            return False
+        if abs(float(cmd.linear.x)) > max(
+            self.reverse_deadband_mps, self.min_abs_linear_speed
+        ):
+            return False
+        if abs(float(cmd.angular.z)) > self.tiny_reverse_forward_crawl_max_angular_speed:
+            return False
+        if not self._has_fresh_obstacle_data(now):
+            return False
+        return bool(
+            self._should_ignore_obstacle_for_local_goal(self.closest_stop_obstacle_x)
+            or self._should_ignore_obstacle_for_local_goal(self.closest_slow_obstacle_x)
+        )
 
     def _should_coast_through_tiny_reverse(
         self, cmd, final_brake_active=False, fresh_empty_local_path=False
