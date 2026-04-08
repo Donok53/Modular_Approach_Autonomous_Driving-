@@ -1171,7 +1171,11 @@ class TebCmdVelRelay(object):
         if self.avoidance_path_active:
             return False
         if not math.isfinite(self.last_nonempty_local_path_remaining_m):
-            return False
+            # When the local replanner blocks immediately after a new goal, it can
+            # publish an empty local path before we've ever measured a non-empty
+            # remaining distance. Treat that fresh empty path as an explicit hold
+            # request so stale TEB commands do not leak through.
+            return True
         return (
             self.last_nonempty_local_path_remaining_m
             > self.ignore_local_hold_near_goal_distance_m
