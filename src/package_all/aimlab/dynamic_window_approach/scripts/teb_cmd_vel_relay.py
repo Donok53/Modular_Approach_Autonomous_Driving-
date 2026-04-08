@@ -8,7 +8,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry, Path
 from sensor_msgs import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 from dynamic_window_approach.msg import BehaviorCommand, ExplainabilityEvent
 
@@ -40,6 +40,9 @@ class TebCmdVelRelay(object):
         ).strip()
         self.local_path_topic = str(
             rospy.get_param("~local_path_topic", "/planning/local_path")
+        ).strip()
+        self.local_hold_state_topic = str(
+            rospy.get_param("~local_hold_state_topic", "/planning/local_hold_active")
         ).strip()
         self.avoidance_path_topic = str(
             rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
@@ -246,6 +249,8 @@ class TebCmdVelRelay(object):
         self.local_path_empty = False
         self.local_path_pose_count = 0
         self.local_path_remaining_m = float("inf")
+        self.last_local_hold_state_time = 0.0
+        self.local_hold_active = False
         self.last_nonempty_local_path_remaining_m = float("inf")
         self.last_avoidance_path_time = 0.0
         self.last_avoidance_active_time = 0.0
@@ -294,6 +299,11 @@ class TebCmdVelRelay(object):
         if self.local_path_topic:
             self.local_path_sub = rospy.Subscriber(
                 self.local_path_topic, Path, self.local_path_callback, queue_size=5
+            )
+        self.local_hold_state_sub = None
+        if self.local_hold_state_topic:
+            self.local_hold_state_sub = rospy.Subscriber(
+                self.local_hold_state_topic, Bool, self.local_hold_state_callback, queue_size=5
             )
         self.avoidance_path_sub = None
         if self.avoidance_path_topic:
@@ -994,6 +1004,10 @@ class TebCmdVelRelay(object):
         elif self.avoidance_turn_direction == "none" and direction != "none":
             self.avoidance_turn_direction = direction
 
+    def local_hold_state_callback(self, msg):
+        self.last_local_hold_state_time = rospy.get_time()
+        self.local_hold_active = bool(msg.data)
+
     def _is_final_path_segment_active(self):
         return (
             self.local_path_pose_count > 0
@@ -1163,6 +1177,13 @@ class TebCmdVelRelay(object):
             <= self.ignore_local_hold_near_goal_distance_m
         )
 
+    def _has_fresh_local_hold_state(self, now=None):
+        now_sec = rospy.get_time() if now is None else float(now)
+        return (
+            self.last_local_hold_state_time > 0.0
+            and (now_sec - self.last_local_hold_state_time) <= self.local_hold_timeout_s
+        )
+
     def _should_hold_before_avoidance_path(self):
         # constrained_local_replanner publishes an empty local path during the
         # "hold before avoidance" phase. If we keep waiting for an avoidance
@@ -1171,11 +1192,7 @@ class TebCmdVelRelay(object):
         if self.avoidance_path_active:
             return False
         if not math.isfinite(self.last_nonempty_local_path_remaining_m):
-            # When the local replanner blocks immediately after a new goal, it can
-            # publish an empty local path before we've ever measured a non-empty
-            # remaining distance. Treat that fresh empty path as an explicit hold
-            # request so stale TEB commands do not leak through.
-            return True
+            return False
         return (
             self.last_nonempty_local_path_remaining_m
             > self.ignore_local_hold_near_goal_distance_m
@@ -1198,6 +1215,8 @@ class TebCmdVelRelay(object):
             return False
         if self._has_fresh_near_goal_empty_local_path(now):
             return True
+        if self._has_fresh_local_hold_state(now):
+            return bool(self.local_hold_active)
         # During doorway / branch detours the nominal local path is expected to stay
         # empty while the avoidance branch remains active. In that case we should
         # keep following the avoidance branch instead of zeroing cmd_vel.
