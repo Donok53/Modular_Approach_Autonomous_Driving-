@@ -79,7 +79,7 @@ class ConstrainedLocalReplanner:
             ),
         )
         self.default_path_blocking_radius_m = (
-            0.5 * self.robot_width_m + self.footprint_padding_m + 0.04
+            0.5 * self.robot_width_m + self.footprint_padding_m + 0.16
         )
         self.path_blocking_radius_m = max(
             0.05,
@@ -145,22 +145,22 @@ class ConstrainedLocalReplanner:
             0.0, float(rospy.get_param("~pointcloud_static_block_margin_m", 0.05))
         )
         self.obstacle_block_margin_m = max(
-            0.0, float(rospy.get_param("~obstacle_block_margin_m", 0.15))
+            0.0, float(rospy.get_param("~obstacle_block_margin_m", 0.30))
         )
         self.use_pointcloud_avoidance_trigger = bool(
             rospy.get_param("~use_pointcloud_avoidance_trigger", False)
         )
         self.avoidance_trigger_margin_m = max(
-            0.0, float(rospy.get_param("~avoidance_trigger_margin_m", 0.08))
+            0.0, float(rospy.get_param("~avoidance_trigger_margin_m", 0.25))
         )
         self.avoidance_trigger_ahead_m = max(
             1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
         )
         self.risk_block_confirm_cells = max(
-            1, int(rospy.get_param("~risk_block_confirm_cells", 3))
+            1, int(rospy.get_param("~risk_block_confirm_cells", 2))
         )
         self.pointcloud_block_confirm_points = max(
-            1, int(rospy.get_param("~pointcloud_block_confirm_points", 3))
+            1, int(rospy.get_param("~pointcloud_block_confirm_points", 2))
         )
         self.avoidance_hold_s = max(0.0, float(rospy.get_param("~avoidance_hold_s", 1.5)))
         self.avoidance_clear_confirm_cycles = max(
