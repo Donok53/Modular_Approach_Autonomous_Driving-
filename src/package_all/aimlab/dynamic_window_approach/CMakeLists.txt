@@ -219,6 +219,7 @@ include_directories(
 catkin_install_python(PROGRAMS 
   scripts/astar_path_to_teb_via_points.py
   scripts/cloud_cluster_tracker.py
+  scripts/crossing_portal_manager.py
   scripts/constrained_local_replanner.py
   scripts/dynamic_risk_manager.py
   scripts/dynamicwindowapproach.py
@@ -227,4 +228,8 @@ catkin_install_python(PROGRAMS
   scripts/test2.py
   scripts/new2.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(DIRECTORY launch config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

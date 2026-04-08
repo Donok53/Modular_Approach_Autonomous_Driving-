@@ -61,6 +61,9 @@
     <arg name="use_dynamic_risk_grid" default="true"/>
     <arg name="use_direct_goal" default="false"/>
     <arg name="direct_goal_topic" default="/move_base_simple/goal"/>
+    <arg name="direct_goal_timeout_s" default="0.0"/>
+    <arg name="direct_goal_refresh_distance_m" default="0.05"/>
+    <arg name="direct_goal_refresh_yaw_deg" default="5.0"/>
     <arg name="goal_tolerance_m" default="0.35"/>
     <arg name="snap_search_radius_cells" default="30"/>
     <arg name="freeze_path_on_first_plan" default="true"/>
@@ -273,6 +276,9 @@
             <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
             <param name="use_direct_goal" value="$(arg use_direct_goal)"/>
             <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
+            <param name="direct_goal_timeout_s" value="$(arg direct_goal_timeout_s)"/>
+            <param name="direct_goal_refresh_distance_m" value="$(arg direct_goal_refresh_distance_m)"/>
+            <param name="direct_goal_refresh_yaw_deg" value="$(arg direct_goal_refresh_yaw_deg)"/>
             <param name="goal_tolerance_m" value="$(arg goal_tolerance_m)"/>
             <param name="snap_search_radius_cells" value="$(arg snap_search_radius_cells)"/>
             <param name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>

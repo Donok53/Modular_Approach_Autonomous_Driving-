@@ -27,6 +27,15 @@
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_free_area_goal" default="false"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
+  <arg name="enable_crossing_portal_manager" default="false"/>
+  <arg name="crossing_portal_config_file" default="$(find dynamic_window_approach)/config/crossing_portals.yaml"/>
+  <arg name="crossing_portal_odom_topic" default="$(arg pose_topic)"/>
+  <arg name="crossing_portal_goal_topic" default="/planning/crossing_direct_goal"/>
+  <arg name="crossing_portal_status_topic" default="/planning/crossing_portal_status"/>
+  <arg name="crossing_portal_publish_hz" default="5.0"/>
+  <arg name="crossing_portal_direct_goal_timeout_s" default="1.0"/>
+  <arg name="crossing_portal_direct_goal_refresh_distance_m" default="0.20"/>
+  <arg name="crossing_portal_direct_goal_refresh_yaw_deg" default="8.0"/>
   <arg name="freeze_path_on_first_plan" default="true"/>
   <arg name="smooth_path_line_of_sight" default="true"/>
   <arg name="smooth_avoidance_line_of_sight" default="true"/>
@@ -329,6 +338,21 @@
     </group>
   </group>
 
+  <group if="$(arg enable_crossing_portal_manager)">
+    <node pkg="dynamic_window_approach" type="crossing_portal_manager.py" name="crossing_portal_manager" output="screen" respawn="false">
+      <param name="config_path" value="$(arg crossing_portal_config_file)"/>
+      <param name="odom_topic" value="$(arg crossing_portal_odom_topic)"/>
+      <param name="global_path_topic" value="/astar/path"/>
+      <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+      <param name="direct_goal_topic" value="$(arg crossing_portal_goal_topic)"/>
+      <param name="status_topic" value="$(arg crossing_portal_status_topic)"/>
+      <param name="publish_hz" value="$(arg crossing_portal_publish_hz)"/>
+      <param name="robot_width_m" value="$(arg robot_width_m)"/>
+      <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+    </node>
+  </group>
+
   <group if="$(eval arg('local_planner_mode') == 'custom')">
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
@@ -453,8 +477,11 @@
       <arg name="emergency_passable_width_m" value="$(arg emergency_passable_width_m)"/>
       <arg name="block_on_count" value="$(arg block_on_count)"/>
       <arg name="block_off_count" value="$(arg block_off_count)"/>
-      <arg name="use_direct_goal" value="$(arg use_free_area_goal)"/>
-      <arg name="direct_goal_topic" value="$(arg free_area_goal_topic)"/>
+      <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
+      <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
+      <arg name="direct_goal_timeout_s" value="$(eval arg('crossing_portal_direct_goal_timeout_s') if arg('enable_crossing_portal_manager') == 'true' else '0.0')"/>
+      <arg name="direct_goal_refresh_distance_m" value="$(arg crossing_portal_direct_goal_refresh_distance_m)"/>
+      <arg name="direct_goal_refresh_yaw_deg" value="$(arg crossing_portal_direct_goal_refresh_yaw_deg)"/>
       <arg name="freeze_path_on_first_plan" value="$(arg freeze_path_on_first_plan)"/>
       <arg name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
       <arg name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
@@ -500,6 +527,11 @@
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+      <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
+      <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
+      <arg name="direct_goal_timeout_s" value="$(eval arg('crossing_portal_direct_goal_timeout_s') if arg('enable_crossing_portal_manager') == 'true' else '0.0')"/>
+      <arg name="direct_goal_refresh_distance_m" value="$(arg crossing_portal_direct_goal_refresh_distance_m)"/>
+      <arg name="direct_goal_refresh_yaw_deg" value="$(arg crossing_portal_direct_goal_refresh_yaw_deg)"/>
       <arg name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
       <arg name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
       <arg name="max_los_segment_m" value="$(arg max_los_segment_m)"/>

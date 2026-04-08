@@ -32,6 +32,15 @@ class ConstrainedLocalReplanner:
         )
         self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
+        self.direct_goal_timeout_s = max(
+            0.0, float(rospy.get_param("~direct_goal_timeout_s", 0.0))
+        )
+        self.direct_goal_refresh_distance_m = max(
+            0.0, float(rospy.get_param("~direct_goal_refresh_distance_m", 0.05))
+        )
+        self.direct_goal_refresh_yaw_deg = max(
+            0.0, float(rospy.get_param("~direct_goal_refresh_yaw_deg", 5.0))
+        )
         self.goal_tolerance_m = max(0.05, float(rospy.get_param("~goal_tolerance_m", 0.35)))
         self.snap_search_radius_cells = max(1, int(rospy.get_param("~snap_search_radius_cells", 30)))
         self.freeze_path_on_first_plan = bool(rospy.get_param("~freeze_path_on_first_plan", True))
@@ -214,6 +223,7 @@ class ConstrainedLocalReplanner:
         self.drivable_grid = None
         self.risk_grid = None
         self.direct_goal = None
+        self.direct_goal_stamp_sec = 0.0
         self.cached_direct_goal_cell = None
         self.frozen_direct_goal_cell = None
         self.frozen_direct_grid_path = None
@@ -532,7 +542,24 @@ class ConstrainedLocalReplanner:
         )
 
     def direct_goal_callback(self, msg):
+        now_sec = rospy.Time.now().to_sec()
+        if self.direct_goal is not None:
+            prev_x = float(self.direct_goal.pose.position.x)
+            prev_y = float(self.direct_goal.pose.position.y)
+            new_x = float(msg.pose.position.x)
+            new_y = float(msg.pose.position.y)
+            prev_yaw = self._pose_yaw(self.direct_goal.pose)
+            new_yaw = self._pose_yaw(msg.pose)
+            if (
+                math.hypot(new_x - prev_x, new_y - prev_y) <= self.direct_goal_refresh_distance_m
+                and abs(self._angle_diff(new_yaw, prev_yaw))
+                <= math.radians(self.direct_goal_refresh_yaw_deg)
+            ):
+                self.direct_goal = msg
+                self.direct_goal_stamp_sec = now_sec
+                return
         self.direct_goal = msg
+        self.direct_goal_stamp_sec = now_sec
         self.cached_direct_goal_cell = None
         self.frozen_direct_goal_cell = None
         self.frozen_direct_grid_path = None
@@ -965,6 +992,18 @@ class ConstrainedLocalReplanner:
         pose_stamped.pose.orientation.y = 0.0
         pose_stamped.pose.orientation.z = math.sin(0.5 * yaw)
         pose_stamped.pose.orientation.w = math.cos(0.5 * yaw)
+
+    @staticmethod
+    def _pose_yaw(pose_msg):
+        q = pose_msg.orientation
+        return math.atan2(
+            2.0 * (q.w * q.z + q.x * q.y),
+            1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+        )
+
+    @staticmethod
+    def _angle_diff(a, b):
+        return math.atan2(math.sin(a - b), math.cos(a - b))
 
     @staticmethod
     def _path_yaws(points):
@@ -1955,6 +1994,13 @@ class ConstrainedLocalReplanner:
 
     def _plan_direct_goal(self, dg, rg, stamp):
         if self.direct_goal is None:
+            self._clear_avoidance_path(dg.header.frame_id, stamp)
+            return False
+        if (
+            self.direct_goal_timeout_s > 0.0
+            and self.direct_goal_stamp_sec > 0.0
+            and (stamp.to_sec() - self.direct_goal_stamp_sec) > self.direct_goal_timeout_s
+        ):
             self._clear_avoidance_path(dg.header.frame_id, stamp)
             return False
 

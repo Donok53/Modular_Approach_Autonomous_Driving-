@@ -34,6 +34,11 @@
   <arg name="enable_dynamic_risk_manager" default="true"/>
   <arg name="enable_local_replanner" default="true"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
+  <arg name="use_direct_goal" default="false"/>
+  <arg name="direct_goal_topic" default="/move_base_simple/goal"/>
+  <arg name="direct_goal_timeout_s" default="0.0"/>
+  <arg name="direct_goal_refresh_distance_m" default="0.05"/>
+  <arg name="direct_goal_refresh_yaw_deg" default="5.0"/>
   <arg name="smooth_path_line_of_sight" default="true"/>
   <arg name="smooth_avoidance_line_of_sight" default="true"/>
   <arg name="max_los_segment_m" default="4.0"/>
@@ -308,6 +313,11 @@
       <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
       <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
+      <param name="use_direct_goal" value="$(arg use_direct_goal)"/>
+      <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
+      <param name="direct_goal_timeout_s" value="$(arg direct_goal_timeout_s)"/>
+      <param name="direct_goal_refresh_distance_m" value="$(arg direct_goal_refresh_distance_m)"/>
+      <param name="direct_goal_refresh_yaw_deg" value="$(arg direct_goal_refresh_yaw_deg)"/>
       <param name="smooth_path_line_of_sight" value="$(arg smooth_path_line_of_sight)"/>
       <param name="smooth_avoidance_line_of_sight" value="$(arg smooth_avoidance_line_of_sight)"/>
       <param name="max_los_segment_m" value="$(arg max_los_segment_m)"/>

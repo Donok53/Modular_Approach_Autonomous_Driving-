@@ -1,0 +1,77 @@
+# Bidirectional crossing-portal layout for short road segments.
+#
+# Editing guide:
+# 1. Add one crossing block per physical narrow gate.
+# 2. portal.normal_deg points from side_a to side_b.
+# 3. Put multiple exit_candidates on both sides so the robot can switch when
+#    the preferred target is blocked by parked cars, cones, or other clutter.
+# 4. This file is hot-reloaded by crossing_portal_manager.py while the node is running.
+#
+# The shipped sample entries are disabled on purpose. Copy one, set enabled: true,
+# and replace the coordinates with real map-frame values.
+
+defaults:
+  activation_radius_m: 4.0
+  commit_distance_m: 0.80
+  completion_radius_m: 0.75
+  side_deadband_m: 0.15
+  width_m: 1.40
+  approach_offset_m: 1.30
+  post_offset_m: 1.10
+  portal_check_length_m: 0.80
+  corridor_half_width_m: 0.55
+  candidate_clearance_radius_m: 0.65
+  candidate_corridor_half_width_m: 0.55
+  candidate_score_threshold: 220.0
+  candidate_switch_margin: 35.0
+
+crossings:
+  - id: crossing_sample_1
+    enabled: false
+    portal:
+      center: {x: 0.0, y: 0.0}
+      normal_deg: 0.0
+      width_m: 1.40
+      approach_offset_m: 1.40
+      post_offset_m: 1.10
+    side_a:
+      name: sidewalk_a
+      exit_candidates:
+        - id: a_main
+          pose: {x: -1.60, y: 0.00, yaw_deg: 180.0}
+        - id: a_alt_left
+          pose: {x: -1.90, y: 0.45, yaw_deg: 175.0}
+        - id: a_alt_right
+          pose: {x: -1.90, y: -0.45, yaw_deg: 185.0}
+    side_b:
+      name: sidewalk_b
+      exit_candidates:
+        - id: b_main
+          pose: {x: 1.60, y: 0.00, yaw_deg: 0.0}
+        - id: b_alt_left
+          pose: {x: 1.90, y: 0.45, yaw_deg: -5.0}
+        - id: b_alt_right
+          pose: {x: 1.90, y: -0.45, yaw_deg: 5.0}
+
+  - id: crossing_sample_2
+    enabled: false
+    portal:
+      center: {x: 10.0, y: 5.0}
+      normal_deg: 90.0
+      width_m: 1.20
+      approach_offset_m: 1.20
+      post_offset_m: 1.00
+    side_a:
+      name: south_side
+      exit_candidates:
+        - id: south_main
+          pose: {x: 10.00, y: 3.60, yaw_deg: 270.0}
+        - id: south_alt
+          pose: {x: 10.35, y: 3.80, yaw_deg: 265.0}
+    side_b:
+      name: north_side
+      exit_candidates:
+        - id: north_main
+          pose: {x: 10.00, y: 6.40, yaw_deg: 90.0}
+        - id: north_alt
+          pose: {x: 9.65, y: 6.20, yaw_deg: 95.0}
