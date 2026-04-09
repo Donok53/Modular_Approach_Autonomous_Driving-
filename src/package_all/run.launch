@@ -173,6 +173,16 @@
   <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
   <arg name="static_obstacle_memory_max_support" default="8"/>
   <arg name="static_obstacle_memory_max_points" default="40"/>
+  <arg name="tracked_object_virtual_obstacles_enabled" default="true"/>
+  <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
+  <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
+  <arg name="tracked_object_prediction_step_s" default="0.3"/>
+  <arg name="tracked_object_virtual_margin_m" default="0.20"/>
+  <arg name="near_field_object_memory_enabled" default="true"/>
+  <arg name="near_field_object_memory_ttl_s" default="1.5"/>
+  <arg name="near_field_object_memory_max_range_m" default="2.5"/>
+  <arg name="near_field_object_memory_merge_radius_m" default="0.30"/>
+  <arg name="near_field_object_memory_max_points" default="120"/>
   <arg name="enable_global_pointcloud_overlay" default="true"/>
   <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
   <arg name="global_obstacle_overlay_threshold" default="50"/>
@@ -460,6 +470,16 @@
       <arg name="static_obstacle_memory_max_range_m" value="$(arg static_obstacle_memory_max_range_m)"/>
       <arg name="static_obstacle_memory_max_support" value="$(arg static_obstacle_memory_max_support)"/>
       <arg name="static_obstacle_memory_max_points" value="$(arg static_obstacle_memory_max_points)"/>
+      <arg name="tracked_object_virtual_obstacles_enabled" value="$(arg tracked_object_virtual_obstacles_enabled)"/>
+      <arg name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
+      <arg name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
+      <arg name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
+      <arg name="tracked_object_virtual_margin_m" value="$(arg tracked_object_virtual_margin_m)"/>
+      <arg name="near_field_object_memory_enabled" value="$(arg near_field_object_memory_enabled)"/>
+      <arg name="near_field_object_memory_ttl_s" value="$(arg near_field_object_memory_ttl_s)"/>
+      <arg name="near_field_object_memory_max_range_m" value="$(arg near_field_object_memory_max_range_m)"/>
+      <arg name="near_field_object_memory_merge_radius_m" value="$(arg near_field_object_memory_merge_radius_m)"/>
+      <arg name="near_field_object_memory_max_points" value="$(arg near_field_object_memory_max_points)"/>
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
       <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
       <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
@@ -614,6 +634,16 @@
       <arg name="static_obstacle_memory_max_range_m" value="$(arg static_obstacle_memory_max_range_m)"/>
       <arg name="static_obstacle_memory_max_support" value="$(arg static_obstacle_memory_max_support)"/>
       <arg name="static_obstacle_memory_max_points" value="$(arg static_obstacle_memory_max_points)"/>
+      <arg name="tracked_object_virtual_obstacles_enabled" value="$(arg tracked_object_virtual_obstacles_enabled)"/>
+      <arg name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
+      <arg name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
+      <arg name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
+      <arg name="tracked_object_virtual_margin_m" value="$(arg tracked_object_virtual_margin_m)"/>
+      <arg name="near_field_object_memory_enabled" value="$(arg near_field_object_memory_enabled)"/>
+      <arg name="near_field_object_memory_ttl_s" value="$(arg near_field_object_memory_ttl_s)"/>
+      <arg name="near_field_object_memory_max_range_m" value="$(arg near_field_object_memory_max_range_m)"/>
+      <arg name="near_field_object_memory_merge_radius_m" value="$(arg near_field_object_memory_merge_radius_m)"/>
+      <arg name="near_field_object_memory_max_points" value="$(arg near_field_object_memory_max_points)"/>
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
       <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
       <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>

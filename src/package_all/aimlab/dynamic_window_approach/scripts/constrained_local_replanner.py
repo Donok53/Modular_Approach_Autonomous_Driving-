@@ -13,7 +13,7 @@ from sensor_msgs import point_cloud2
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 
-from dynamic_window_approach.msg import ExplainabilityEvent
+from dynamic_window_approach.msg import ExplainabilityEvent, TrackedObjectArray
 
 
 class ConstrainedLocalReplanner:
@@ -29,6 +29,9 @@ class ConstrainedLocalReplanner:
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.obstacle_pointcloud_topic = rospy.get_param(
             "~obstacle_pointcloud_topic", self.pointcloud_topic
+        )
+        self.tracked_objects_topic = rospy.get_param(
+            "~tracked_objects_topic", "/perception/tracked_objects"
         )
         self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
@@ -146,6 +149,36 @@ class ConstrainedLocalReplanner:
         )
         self.static_obstacle_memory_max_points = max(
             0, int(rospy.get_param("~static_obstacle_memory_max_points", 40))
+        )
+        self.tracked_object_virtual_obstacles_enabled = bool(
+            rospy.get_param("~tracked_object_virtual_obstacles_enabled", True)
+        )
+        self.tracked_object_virtual_max_range_m = max(
+            0.5, float(rospy.get_param("~tracked_object_virtual_max_range_m", 4.0))
+        )
+        self.tracked_object_prediction_horizon_s = max(
+            0.0, float(rospy.get_param("~tracked_object_prediction_horizon_s", 1.2))
+        )
+        self.tracked_object_prediction_step_s = max(
+            0.1, float(rospy.get_param("~tracked_object_prediction_step_s", 0.3))
+        )
+        self.tracked_object_virtual_margin_m = max(
+            0.0, float(rospy.get_param("~tracked_object_virtual_margin_m", 0.20))
+        )
+        self.near_field_object_memory_enabled = bool(
+            rospy.get_param("~near_field_object_memory_enabled", True)
+        )
+        self.near_field_object_memory_ttl_s = max(
+            0.0, float(rospy.get_param("~near_field_object_memory_ttl_s", 1.5))
+        )
+        self.near_field_object_memory_max_range_m = max(
+            0.5, float(rospy.get_param("~near_field_object_memory_max_range_m", 2.5))
+        )
+        self.near_field_object_memory_merge_radius_m = max(
+            0.05, float(rospy.get_param("~near_field_object_memory_merge_radius_m", 0.30))
+        )
+        self.near_field_object_memory_max_points = max(
+            0, int(rospy.get_param("~near_field_object_memory_max_points", 120))
         )
         self.enable_global_pointcloud_overlay = bool(
             rospy.get_param("~enable_global_pointcloud_overlay", False)
@@ -265,6 +298,11 @@ class ConstrainedLocalReplanner:
         self.obstacle_cluster_count = 0
         self.obstacle_memory_points = []
         self.obstacle_memory_count = 0
+        self.current_tracked_object_points_map = []
+        self.tracked_object_points_map = []
+        self.tracked_object_memory_points = []
+        self.tracked_object_memory_count = 0
+        self.tracked_object_count = 0
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_points_map = []
         self.global_obstacle_overlay_candidate_count = 0
@@ -328,6 +366,12 @@ class ConstrainedLocalReplanner:
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
         self.sub_risk = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=3)
+        self.sub_tracked_objects = rospy.Subscriber(
+            self.tracked_objects_topic,
+            TrackedObjectArray,
+            self.tracked_objects_callback,
+            queue_size=3,
+        )
         self.sub_cloud = rospy.Subscriber(
             self.obstacle_pointcloud_topic,
             PointCloud2,
@@ -364,6 +408,19 @@ class ConstrainedLocalReplanner:
                 self.global_pointcloud_overlay_max_range_m,
                 self.global_pointcloud_overlay_lookahead_m,
                 self.global_pointcloud_overlay_corridor_margin_m,
+            )
+        if self.tracked_object_virtual_obstacles_enabled or self.near_field_object_memory_enabled:
+            rospy.loginfo(
+                "constrained_local_replanner tracked objects | topic=%s virtual=%s range=%.1fm horizon=%.1fs step=%.2fs margin=%.2fm memory=%s ttl=%.1fs near_range=%.1fm",
+                self.tracked_objects_topic,
+                "on" if self.tracked_object_virtual_obstacles_enabled else "off",
+                self.tracked_object_virtual_max_range_m,
+                self.tracked_object_prediction_horizon_s,
+                self.tracked_object_prediction_step_s,
+                self.tracked_object_virtual_margin_m,
+                "on" if self.near_field_object_memory_enabled else "off",
+                self.near_field_object_memory_ttl_s,
+                self.near_field_object_memory_max_range_m,
             )
 
     @staticmethod
@@ -431,6 +488,202 @@ class ConstrainedLocalReplanner:
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
         return (int(math.floor(x / res)), int(math.floor(y / res)))
 
+    def _dedupe_world_points(self, points_map):
+        if not points_map:
+            return []
+        deduped = {}
+        for wx, wy in points_map:
+            deduped[self._pointcloud_cluster_cell(wx, wy)] = (wx, wy)
+        return list(deduped.values())
+
+    @staticmethod
+    def _sample_axis_values(half_extent, spacing):
+        if half_extent <= max(1e-6, 0.5 * spacing):
+            return [0.0]
+        values = {-half_extent, 0.0, half_extent}
+        pos = -half_extent + spacing
+        while pos < half_extent:
+            values.add(round(pos, 4))
+            pos += spacing
+        return sorted(values)
+
+    def _sample_oriented_box_points(self, center_x, center_y, half_x, half_y, yaw, spacing):
+        c = math.cos(yaw)
+        s = math.sin(yaw)
+        sampled = []
+        xs = self._sample_axis_values(max(0.0, half_x), spacing)
+        ys = self._sample_axis_values(max(0.0, half_y), spacing)
+        for lx in xs:
+            for ly in ys:
+                sampled.append((
+                    center_x + c * lx - s * ly,
+                    center_y + s * lx + c * ly,
+                ))
+        return sampled
+
+    def _build_tracked_object_virtual_points(self, obj):
+        center_x = float(obj.pose.position.x)
+        center_y = float(obj.pose.position.y)
+        if (not math.isfinite(center_x)) or (not math.isfinite(center_y)):
+            return []
+        dx = center_x - self.odom_x
+        dy = center_y - self.odom_y
+        max_range_sq = self.tracked_object_virtual_max_range_m * self.tracked_object_virtual_max_range_m
+        if (dx * dx + dy * dy) > max_range_sq:
+            return []
+
+        size_x = float(obj.size.x)
+        size_y = float(obj.size.y)
+        vx = float(obj.twist.linear.x)
+        vy = float(obj.twist.linear.y)
+        if (not math.isfinite(size_x)) or size_x <= 0.0:
+            size_x = 0.25
+        if (not math.isfinite(size_y)) or size_y <= 0.0:
+            size_y = 0.25
+        if not math.isfinite(vx):
+            vx = 0.0
+        if not math.isfinite(vy):
+            vy = 0.0
+        half_x = 0.5 * size_x + self.tracked_object_virtual_margin_m
+        half_y = 0.5 * size_y + self.tracked_object_virtual_margin_m
+        speed = math.hypot(vx, vy)
+        yaw = math.atan2(vy, vx) if speed > 0.05 else 0.0
+        spacing = max(0.15, self.pointcloud_cluster_resolution_m)
+        horizon_s = max(0.0, self.tracked_object_prediction_horizon_s)
+        step_s = max(1e-3, self.tracked_object_prediction_step_s)
+        num_steps = max(1, int(math.ceil(horizon_s / step_s)) + 1)
+        points = []
+        for step_idx in range(num_steps):
+            dt = min(horizon_s, float(step_idx) * step_s)
+            px = center_x + vx * dt
+            py = center_y + vy * dt
+            pdx = px - self.odom_x
+            pdy = py - self.odom_y
+            if (pdx * pdx + pdy * pdy) > max_range_sq:
+                continue
+            points.extend(
+                self._sample_oriented_box_points(px, py, half_x, half_y, yaw, spacing)
+            )
+        return self._dedupe_world_points(points)
+
+    def _prune_tracked_object_memory(self, now_sec):
+        if (
+            (not self.near_field_object_memory_enabled)
+            or self.near_field_object_memory_ttl_s <= 0.0
+            or self.near_field_object_memory_max_points <= 0
+        ):
+            self.tracked_object_memory_points = []
+            self.tracked_object_memory_count = 0
+            return []
+
+        max_range_sq = self.near_field_object_memory_max_range_m * self.near_field_object_memory_max_range_m
+        kept = []
+        for wx, wy, seen_sec in self.tracked_object_memory_points:
+            if (now_sec - seen_sec) > self.near_field_object_memory_ttl_s:
+                continue
+            dx = wx - self.odom_x
+            dy = wy - self.odom_y
+            if (dx * dx + dy * dy) > max_range_sq:
+                continue
+            kept.append((wx, wy, seen_sec))
+
+        kept.sort(key=lambda item: item[2], reverse=True)
+        if len(kept) > self.near_field_object_memory_max_points:
+            kept = kept[: self.near_field_object_memory_max_points]
+
+        self.tracked_object_memory_points = kept
+        self.tracked_object_memory_count = len(kept)
+        return [(wx, wy) for wx, wy, _ in kept]
+
+    def _update_tracked_object_memory(self, candidates_map, now_sec):
+        remembered_points = self._prune_tracked_object_memory(now_sec)
+        if (not self.near_field_object_memory_enabled) or (not candidates_map):
+            return remembered_points
+
+        merge_radius_sq = (
+            self.near_field_object_memory_merge_radius_m
+            * self.near_field_object_memory_merge_radius_m
+        )
+        memory = list(self.tracked_object_memory_points)
+        for wx, wy in candidates_map:
+            best_idx = None
+            best_d2 = merge_radius_sq
+            for idx, (mx, my, _) in enumerate(memory):
+                d2 = (wx - mx) * (wx - mx) + (wy - my) * (wy - my)
+                if d2 <= best_d2:
+                    best_d2 = d2
+                    best_idx = idx
+            if best_idx is None:
+                memory.append((wx, wy, now_sec))
+            else:
+                memory[best_idx] = (wx, wy, now_sec)
+
+        self.tracked_object_memory_points = memory
+        return self._prune_tracked_object_memory(now_sec)
+
+    def _merge_point_sets(self, primary_points, extra_points, merge_radius_m):
+        if not extra_points:
+            return list(primary_points)
+        if not primary_points:
+            return list(extra_points)
+
+        merge_radius_sq = merge_radius_m * merge_radius_m
+        merged = list(primary_points)
+        for wx, wy in extra_points:
+            duplicate = False
+            for cx, cy in merged:
+                d2 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)
+                if d2 <= merge_radius_sq:
+                    duplicate = True
+                    break
+            if not duplicate:
+                merged.append((wx, wy))
+        return merged
+
+    def tracked_objects_callback(self, msg):
+        if not self.have_odom:
+            return
+
+        stamp_sec = msg.header.stamp.to_sec()
+        if stamp_sec <= 0.0:
+            stamp_sec = rospy.Time.now().to_sec()
+
+        if not self.tracked_object_virtual_obstacles_enabled:
+            self.tracked_object_count = 0
+            self.current_tracked_object_points_map = []
+            self.tracked_object_points_map = []
+            self.tracked_object_memory_points = []
+            self.tracked_object_memory_count = 0
+            return
+
+        current_points = []
+        memory_candidates = []
+        near_field_range_sq = (
+            self.near_field_object_memory_max_range_m
+            * self.near_field_object_memory_max_range_m
+        )
+        tracked_count = 0
+        for obj in msg.objects:
+            object_points = self._build_tracked_object_virtual_points(obj)
+            if not object_points:
+                continue
+            tracked_count += 1
+            current_points.extend(object_points)
+            dx = float(obj.pose.position.x) - self.odom_x
+            dy = float(obj.pose.position.y) - self.odom_y
+            if (dx * dx + dy * dy) <= near_field_range_sq:
+                memory_candidates.extend(object_points)
+
+        current_points = self._dedupe_world_points(current_points)
+        remembered_points = self._update_tracked_object_memory(memory_candidates, stamp_sec)
+        self.current_tracked_object_points_map = current_points
+        self.tracked_object_points_map = self._merge_point_sets(
+            current_points,
+            remembered_points,
+            self.near_field_object_memory_merge_radius_m,
+        )
+        self.tracked_object_count = tracked_count
+
     def _prune_obstacle_memory(self, now_sec):
         if (
             (not self.static_obstacle_memory_enabled)
@@ -486,25 +739,24 @@ class ConstrainedLocalReplanner:
         return self._prune_obstacle_memory(now_sec)
 
     def _merge_obstacle_memory_points(self, current_points_map, remembered_points_map):
-        if not remembered_points_map:
-            return list(current_points_map)
-        if not current_points_map:
-            return list(remembered_points_map)
-
-        merge_radius_sq = (
-            self.static_obstacle_memory_merge_radius_m * self.static_obstacle_memory_merge_radius_m
+        return self._merge_point_sets(
+            current_points_map,
+            remembered_points_map,
+            self.static_obstacle_memory_merge_radius_m,
         )
-        merged = list(current_points_map)
-        for wx, wy in remembered_points_map:
-            duplicate = False
-            for cx, cy in merged:
-                d2 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)
-                if d2 <= merge_radius_sq:
-                    duplicate = True
-                    break
-            if not duplicate:
-                merged.append((wx, wy))
-        return merged
+
+    def _combined_dynamic_obstacle_points(self):
+        if not self.tracked_object_points_map:
+            return list(self.current_obstacle_points_map)
+        merge_radius_m = max(
+            self.pointcloud_cluster_resolution_m,
+            self.near_field_object_memory_merge_radius_m,
+        )
+        return self._merge_point_sets(
+            self.current_obstacle_points_map,
+            self.tracked_object_points_map,
+            merge_radius_m,
+        )
 
     def _select_global_overlay_candidate_points(self, current_points_map):
         if (
@@ -1575,7 +1827,7 @@ class ConstrainedLocalReplanner:
         overlay_points = int(kwargs.get("overlay_points", 0))
         return (
             "local_replanner state={} reason={} avoid={} dir={} wait={}/{} "
-            "path_len={} raw_pts={} clustered={} memory_pts={} overlay_pts={} blocked_since={}"
+            "path_len={} raw_pts={} clustered={} memory_pts={} tracked_objs={} tracked_pts={} tracked_mem={} overlay_pts={} blocked_since={}"
         ).format(
             state,
             trigger_reason,
@@ -1587,6 +1839,9 @@ class ConstrainedLocalReplanner:
             int(self.obstacle_raw_point_count),
             int(self.obstacle_cluster_count),
             int(self.obstacle_memory_count),
+            int(self.tracked_object_count),
+            len(self.current_tracked_object_points_map),
+            int(self.tracked_object_memory_count),
             overlay_points,
             self._fmt_debug_float(self.local_blocked_since_sec),
         )
@@ -1719,14 +1974,18 @@ class ConstrainedLocalReplanner:
         return out, marked_sources
 
     def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None):
-        # Dynamic avoidance should react to live returns, not remembered static points.
+        # Dynamic avoidance should react to live returns plus short-lived tracked-object memory.
+        dynamic_points = self._combined_dynamic_obstacle_points()
         return self._overlay_pointcloud_obstacles(
             blocked,
             dg,
             keep_cells=keep_cells,
-            enabled=self.use_pointcloud_avoidance_trigger,
+            enabled=(
+                self.use_pointcloud_avoidance_trigger
+                or self.tracked_object_virtual_obstacles_enabled
+            ),
             margin_m=self.obstacle_block_margin_m,
-            points_map=self.current_obstacle_points_map,
+            points_map=dynamic_points,
         )
 
     def _path_blocked_ahead(self, path, blocked, start_cell, grid_resolution_m, max_check_m=None):
@@ -2007,6 +2266,7 @@ class ConstrainedLocalReplanner:
             )
             return
 
+        dynamic_points_map = self._combined_dynamic_obstacle_points()
         dynamic_blocked, obstacle_count = self._overlay_dynamic_obstacles(
             base_blocked,
             dg,
@@ -2019,26 +2279,33 @@ class ConstrainedLocalReplanner:
             float(dg.info.resolution),
             max_check_m=self.avoidance_trigger_ahead_m,
         )
-        pointcloud_overlap = False
-        if (not predicted_overlap) and self.use_pointcloud_avoidance_trigger:
-            pointcloud_overlap = self._path_blocked_by_obstacles(
+        direct_points_overlap = False
+        direct_points_enabled = (
+            self.use_pointcloud_avoidance_trigger
+            or self.tracked_object_virtual_obstacles_enabled
+        )
+        if (not predicted_overlap) and direct_points_enabled:
+            direct_points_overlap = self._path_blocked_by_obstacles(
                 nominal_path,
                 dg,
                 start_cell,
-                points_map=self.current_obstacle_points_map,
+                points_map=dynamic_points_map,
             )
 
         clustered_point_count = self.obstacle_cluster_count
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} pointcloud_enabled={} pointcloud_overlap={} raw_points={} clustered_points={} memory_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} direct_points_enabled={} direct_points_overlap={} raw_points={} clustered_points={} memory_points={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
-                "on" if self.use_pointcloud_avoidance_trigger else "off",
-                "yes" if pointcloud_overlap else "no",
+                "on" if direct_points_enabled else "off",
+                "yes" if direct_points_overlap else "no",
                 self.obstacle_raw_point_count,
                 clustered_point_count,
                 self.obstacle_memory_count,
+                self.tracked_object_count,
+                len(self.current_tracked_object_points_map),
+                self.tracked_object_memory_count,
                 obstacle_count,
                 self.avoidance_trigger_ahead_m,
             )
@@ -2047,8 +2314,8 @@ class ConstrainedLocalReplanner:
         trigger_reason = None
         if predicted_overlap:
             trigger_reason = "predicted_overlap"
-        elif pointcloud_overlap:
-            trigger_reason = "pointcloud_overlap"
+        elif direct_points_overlap:
+            trigger_reason = "dynamic_points_overlap"
 
         if trigger_reason is None:
             self._clear_avoidance_path(frame_id, stamp)
@@ -2070,7 +2337,7 @@ class ConstrainedLocalReplanner:
             start_cell,
             dg,
             max_check_m=self.avoidance_trigger_ahead_m,
-            include_pointcloud=self.use_pointcloud_avoidance_trigger,
+            include_pointcloud=direct_points_enabled,
         )
         if self._should_ignore_near_goal_block(nominal_path, blocked_idx, start_cell, dg):
             rospy.loginfo_throttle(
