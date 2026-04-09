@@ -2160,6 +2160,49 @@ class ConstrainedLocalReplanner:
                 label,
                 trigger_reason,
             )
+            risk_only_passthrough = (
+                trigger_reason == "predicted_overlap"
+                and (not pointcloud_overlap)
+                and obstacle_count <= 0
+                and self.obstacle_raw_point_count <= 0
+                and clustered_point_count <= 0
+            )
+            if risk_only_passthrough:
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: risk-only %s block has no avoidance branch; keeping nominal local path and deferring stop/slowdown to behavior layer",
+                    label,
+                )
+                self._publish_explainability(
+                    event_type="LOCAL_REPLAN_NO_SOLUTION",
+                    stamp=stamp,
+                    trigger_reason="risk_only_passthrough",
+                    action_taken="defer_to_behavior",
+                    local_planning_active=True,
+                    stop_commanded=False,
+                    summary_text=(
+                        "Local replanning saw a risk-grid-only overlap on the {} path but had no concrete obstacle cloud or avoidance branch, so it kept the nominal path and deferred stop/slowdown to the behavior layer."
+                    ).format(label),
+                )
+                self._publish_local_path(
+                    nominal_path,
+                    dg,
+                    stamp,
+                    start_xy=(self.odom_x, self.odom_y),
+                )
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "follow_nominal_risk_only",
+                        stamp,
+                        trigger_reason="risk_only_passthrough",
+                        path_len=len(nominal_path),
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
+                return
             self._publish_explainability(
                 event_type="LOCAL_REPLAN_NO_SOLUTION",
                 stamp=stamp,
