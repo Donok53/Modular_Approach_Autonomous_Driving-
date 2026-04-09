@@ -55,6 +55,15 @@ class AStarPathToTebViaPoints(object):
             0.0, float(rospy.get_param("~min_spacing_m", 0.50))
         )
         self.max_points = max(2, int(rospy.get_param("~max_points", 200)))
+        self.path_progress_backtrack_m = max(
+            0.0, float(rospy.get_param("~path_progress_backtrack_m", 0.8))
+        )
+        self.path_progress_forward_search_m = max(
+            0.5, float(rospy.get_param("~path_progress_forward_search_m", 3.0))
+        )
+        self.path_progress_recovery_distance_m = max(
+            0.2, float(rospy.get_param("~path_progress_recovery_distance_m", 1.5))
+        )
 
         self._last_sig = None
         self._last_key = None
@@ -68,6 +77,8 @@ class AStarPathToTebViaPoints(object):
         self._odom_x = 0.0
         self._odom_y = 0.0
         self._have_odom = False
+        self._progress_sig = {"fallback": None, "local": None, "avoidance": None}
+        self._progress_idx = {"fallback": 0, "local": 0, "avoidance": 0}
 
         self.pub = rospy.Publisher(self.output_topic, Path, queue_size=1, latch=True)
         self.goal_pub = None
@@ -203,6 +214,21 @@ class AStarPathToTebViaPoints(object):
         sig.append(round(float(last.pose.position.y), 2))
         return tuple(sig)
 
+    @staticmethod
+    def _tracking_signature(msg):
+        if msg is None or not msg.poses:
+            return ()
+        poses = msg.poses[2:] if len(msg.poses) > 4 else (msg.poses[1:] if len(msg.poses) > 2 else msg.poses)
+        sig = [len(msg.poses)]
+        stride = max(1, len(poses) // 16)
+        for pose in poses[::stride]:
+            sig.append(round(float(pose.pose.position.x), 2))
+            sig.append(round(float(pose.pose.position.y), 2))
+        last = poses[-1]
+        sig.append(round(float(last.pose.position.x), 2))
+        sig.append(round(float(last.pose.position.y), 2))
+        return tuple(sig)
+
     def _downsample(self, msg):
         out = Path()
         out.header = msg.header
@@ -252,22 +278,71 @@ class AStarPathToTebViaPoints(object):
 
         return _callback
 
-    def _nearest_pose_index(self, msg):
+    @staticmethod
+    def _nearest_pose_index_in_window(msg, start_idx, end_idx, odom_x, odom_y):
+        best_idx = max(0, min(int(start_idx), len(msg.poses) - 1))
+        best_dist_sq = float("inf")
+        for idx in range(max(0, int(start_idx)), min(len(msg.poses) - 1, int(end_idx)) + 1):
+            pose = msg.poses[idx]
+            dx = float(pose.pose.position.x) - odom_x
+            dy = float(pose.pose.position.y) - odom_y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_idx = idx
+        return best_idx, math.sqrt(best_dist_sq) if best_dist_sq < float("inf") else float("inf")
+
+    def _nearest_pose_index(self, source, msg):
         if msg is None or not msg.poses:
             return 0
         if not self._have_odom:
             return 0
 
-        best_idx = 0
-        best_dist_sq = float("inf")
-        for idx, pose in enumerate(msg.poses):
-            dx = float(pose.pose.position.x) - self._odom_x
-            dy = float(pose.pose.position.y) - self._odom_y
-            dist_sq = dx * dx + dy * dy
-            if dist_sq < best_dist_sq:
-                best_dist_sq = dist_sq
-                best_idx = idx
+        if source not in self._progress_sig:
+            source = "fallback"
+
+        sig = self._tracking_signature(msg)
+        if sig != self._progress_sig[source]:
+            self._progress_sig[source] = sig
+            self._progress_idx[source] = 0
+
+        last_idx = max(0, min(int(self._progress_idx[source]), len(msg.poses) - 1))
+        start_idx = last_idx
+        backtrack_m = 0.0
+        while start_idx > 0 and backtrack_m < self.path_progress_backtrack_m:
+            backtrack_m += self._dist(msg.poses[start_idx - 1], msg.poses[start_idx])
+            start_idx -= 1
+
+        end_idx = last_idx
+        forward_m = 0.0
+        while end_idx + 1 < len(msg.poses) and forward_m < self.path_progress_forward_search_m:
+            forward_m += self._dist(msg.poses[end_idx], msg.poses[end_idx + 1])
+            end_idx += 1
+
+        best_idx, dist_m = self._nearest_pose_index_in_window(
+            msg,
+            start_idx,
+            end_idx,
+            self._odom_x,
+            self._odom_y,
+        )
+        if dist_m > self.path_progress_recovery_distance_m:
+            best_idx, _dist_m = self._nearest_pose_index_in_window(
+                msg,
+                0,
+                len(msg.poses) - 1,
+                self._odom_x,
+                self._odom_y,
+            )
+
+        self._progress_sig[source] = sig
+        self._progress_idx[source] = best_idx
         return best_idx
+
+    def _reset_progress_if_needed(self, source):
+        if source in self._progress_sig:
+            self._progress_sig[source] = None
+            self._progress_idx[source] = 0
 
     def _goal_idx_backed_off_from_tail(self, msg, start_idx):
         if (
@@ -299,7 +374,7 @@ class AStarPathToTebViaPoints(object):
         if self.goal_lookahead_m <= 1e-6 or len(msg.poses) == 1:
             return msg.poses[-1], len(msg.poses) - 1, "tail"
 
-        start_idx = self._nearest_pose_index(msg)
+        start_idx = self._nearest_pose_index(source, msg)
         if start_idx >= len(msg.poses) - 1:
             return msg.poses[-1], len(msg.poses) - 1, "tail"
 
@@ -448,6 +523,8 @@ class AStarPathToTebViaPoints(object):
             self.pub.publish(self._empty_path_like(msg))
             # Force a fresh goal sync when a valid path resumes after hold.
             self._last_goal_sig = None
+            self._reset_progress_if_needed("local")
+            self._reset_progress_if_needed("avoidance")
             rospy.loginfo_throttle(
                 1.0,
                 "astar_path_to_teb_via_points: source=%s published empty via path and paused goal updates",
