@@ -142,6 +142,9 @@ class AStarPlanner:
         self.global_path_drivable_area_is_center_safe = bool(
             rospy.get_param("~global_path_drivable_area_is_center_safe", False)
         )
+        self.global_path_goal_tail_clearance_radius_m = float(
+            rospy.get_param("~global_path_goal_tail_clearance_radius_m", -1.0)
+        )
         self.drivable_grid_graph_fallback_max_goal_gap_m = max(
             0.0,
             float(rospy.get_param("~drivable_grid_graph_fallback_max_goal_gap_m", 1.0)),
@@ -263,9 +266,10 @@ class AStarPlanner:
                     self.global_obstacle_overlay_threshold,
                 )
             rospy.loginfo(
-                "[astar] global grid planner: %s, center_safe_radius=%.3f m, mask_mode=%s",
+                "[astar] global grid planner: %s, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s",
                 "Theta*" if self.global_path_use_any_angle else "A* (cardinal)",
                 self._global_path_clearance_radius_m(),
+                self._global_path_goal_tail_clearance_radius(),
                 (
                     "as-is"
                     if self.global_path_drivable_area_is_center_safe
@@ -807,6 +811,12 @@ class AStarPlanner:
             base_radius = 0.5 * self.robot_width_m
         return base_radius + self.footprint_padding_m + self.global_path_clearance_m
 
+    def _global_path_goal_tail_clearance_radius(self):
+        body_radius = self._global_path_clearance_radius_m()
+        if self.global_path_goal_tail_clearance_radius_m < 0.0:
+            return body_radius
+        return min(body_radius, max(0.0, self.global_path_goal_tail_clearance_radius_m))
+
     def _publish_world_path_messages(self, world_points, stamp=None, simplify=True):
         if not world_points:
             return
@@ -1017,7 +1027,7 @@ class AStarPlanner:
             return True
         return prev_data != cur_data
 
-    def _build_blocked_grid(self, g):
+    def _build_blocked_grid(self, g, clearance_radius_m=None):
         w = int(g.info.width)
         h = int(g.info.height)
         blocked = [[False for _ in range(w)] for _ in range(h)]
@@ -1076,8 +1086,13 @@ class AStarPlanner:
                     occupied.append((gx, gy))
 
         # This is equivalent to shrinking the drivable region by the robot center margin.
+        clearance_radius_m = (
+            self._global_path_clearance_radius_m()
+            if clearance_radius_m is None
+            else max(0.0, float(clearance_radius_m))
+        )
         inflate_radius_cells = int(
-            math.ceil(self._global_path_clearance_radius_m() / max(1e-6, float(g.info.resolution)))
+            math.ceil(clearance_radius_m / max(1e-6, float(g.info.resolution)))
         )
         if inflate_radius_cells <= 0:
             for gx, gy in occupied:
@@ -1294,6 +1309,13 @@ class AStarPlanner:
         if int(g.info.width) <= 0 or int(g.info.height) <= 0:
             return None
         blocked = self._build_blocked_grid(g)
+        goal_tail_clearance_radius = self._global_path_goal_tail_clearance_radius()
+        if goal_tail_clearance_radius + 1e-6 < self._global_path_clearance_radius_m():
+            goal_tail_blocked = self._build_blocked_grid(
+                g, clearance_radius_m=goal_tail_clearance_radius
+            )
+        else:
+            goal_tail_blocked = blocked
 
         start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
         goal_raw = self._world_to_grid_cell(g, goal_xy[0], goal_xy[1])
@@ -1360,8 +1382,8 @@ class AStarPlanner:
         if (
             (not extend_to_clicked_goal)
             and goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
-            and self._blocked_cell_is_free(blocked, goal_raw[0], goal_raw[1])
-            and self._has_line_of_sight(blocked, goal_cell, goal_raw)
+            and self._blocked_cell_is_free(goal_tail_blocked, goal_raw[0], goal_raw[1])
+            and self._has_line_of_sight(goal_tail_blocked, goal_cell, goal_raw)
         ):
             extend_to_clicked_goal = True
         if (

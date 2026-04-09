@@ -102,6 +102,15 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        self.near_goal_relaxed_path_blocking_radius_m = max(
+            0.05,
+            float(
+                rospy.get_param(
+                    "~near_goal_relaxed_path_blocking_radius_m",
+                    0.5 * self.robot_width_m + self.footprint_padding_m + 0.02,
+                )
+            ),
+        )
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
@@ -1093,11 +1102,16 @@ class ConstrainedLocalReplanner:
                 return True
         return False
 
-    def _inflate_blocked(self, dg, rg):
+    def _inflate_blocked(self, dg, rg, radius_override_m=None):
         w = int(dg.info.width)
         h = int(dg.info.height)
         res = float(dg.info.resolution)
-        inflate_m = max(0.05, self.path_blocking_radius_m)
+        inflate_m = max(
+            0.05,
+            self.path_blocking_radius_m
+            if radius_override_m is None
+            else float(radius_override_m),
+        )
         inflate_cells = max(1, int(math.ceil(inflate_m / max(1e-3, res))))
         base = [[False for _ in range(w)] for _ in range(h)]
         for y in range(h):
@@ -2170,7 +2184,23 @@ class ConstrainedLocalReplanner:
             return False
         return remaining_to_goal_m <= self.near_goal_recent_avoidance_release_distance_m
 
-    def _should_ignore_near_goal_block(self, path, blocked_idx, start_cell, dg):
+    def _path_segment_blocked(self, path, blocked, start_idx):
+        if not path or start_idx >= len(path):
+            return False
+        blocked_run = 0
+        for i in range(max(0, start_idx), len(path)):
+            gx, gy = path[i]
+            cell_blocked = (not self._in_bounds_blocked(blocked, gx, gy)) or blocked[gy][gx]
+            seg_blocked = i + 1 < len(path) and (not self._has_line_of_sight(blocked, path[i], path[i + 1]))
+            if cell_blocked or seg_blocked:
+                blocked_run += 1
+                if blocked_run >= self.risk_block_confirm_cells:
+                    return True
+            else:
+                blocked_run = 0
+        return False
+
+    def _should_ignore_near_goal_block(self, path, blocked_idx, start_cell, dg, relaxed_blocked=None):
         if blocked_idx is None or len(path) < 2:
             return False
         if self.near_goal_block_ignore_distance_m <= 0.0:
@@ -2184,7 +2214,11 @@ class ConstrainedLocalReplanner:
         blocked_tail_m = self._path_remaining_distance_m(path, dg, blocked_idx)
         if not self._can_use_near_goal_shortcut(remaining_to_goal_m):
             return False
-        return blocked_tail_m <= self.near_goal_tail_block_ignore_distance_m
+        if blocked_tail_m > self.near_goal_tail_block_ignore_distance_m:
+            return False
+        if relaxed_blocked is None:
+            return True
+        return not self._path_segment_blocked(path, relaxed_blocked, blocked_idx)
 
     def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg):
         if len(nominal_path) < 2:
@@ -2696,15 +2730,30 @@ class ConstrainedLocalReplanner:
                 include_pointcloud=self.use_pointcloud_static_blocking,
             )
             nominal_blocked = blocked_idx is not None
-            if nominal_blocked and self._should_ignore_near_goal_block(
-                nominal_path, blocked_idx, start_cell, dg
-            ):
-                rospy.loginfo_throttle(
-                    1.0,
-                    "constrained_local_replanner: ignoring near-goal nominal block at path tail (blocked_idx=%d)",
-                    int(blocked_idx),
-                )
-                nominal_blocked = False
+            if nominal_blocked:
+                relaxed_blocked = None
+                if (
+                    self.near_goal_relaxed_path_blocking_radius_m + 1e-6
+                    < self.path_blocking_radius_m
+                ):
+                    relaxed_blocked = self._inflate_blocked(
+                        dg,
+                        rg,
+                        radius_override_m=self.near_goal_relaxed_path_blocking_radius_m,
+                    )
+                if self._should_ignore_near_goal_block(
+                    nominal_path,
+                    blocked_idx,
+                    start_cell,
+                    dg,
+                    relaxed_blocked=relaxed_blocked,
+                ):
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: ignoring near-goal nominal block at path tail (blocked_idx=%d)",
+                        int(blocked_idx),
+                    )
+                    nominal_blocked = False
             if nominal_blocked:
                 now_sec = stamp.to_sec()
                 if self.local_blocked_since_sec <= 0.0:

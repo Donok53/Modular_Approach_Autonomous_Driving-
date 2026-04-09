@@ -182,6 +182,7 @@
   <arg name="teb_inflation_dist_m" default="0.24"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.16)"/>
+  <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="dynamic_speed_thresh_mps" default="0.12"/>
   <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.08"/>
   <arg name="prediction_horizon_s" default="2.2"/>
@@ -405,6 +406,7 @@
       <param name="trim_published_path_to_robot_front" value="$(arg trim_published_path_to_robot_front)"/>
       <param name="path_start_front_offset_m" value="$(arg path_start_front_offset_m)"/>
       <param name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
+      <param name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
       <param name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <param name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
     </node>

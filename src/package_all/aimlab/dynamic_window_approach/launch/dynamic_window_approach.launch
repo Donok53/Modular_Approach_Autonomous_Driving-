@@ -83,6 +83,7 @@
     <arg name="robot_length_m" default="0.612"/>
     <arg name="footprint_padding_m" default="0.05"/>
     <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.16)"/>
+    <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
     <arg name="path_tracking_only" default="true"/>
     <arg name="path_tracking_speed_cap" default="0.25"/>
     <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -369,6 +370,7 @@
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
             <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
             <param name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
+            <param name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
         </node>
     </group>
 
