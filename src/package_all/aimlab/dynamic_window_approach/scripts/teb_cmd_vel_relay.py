@@ -129,9 +129,6 @@ class TebCmdVelRelay(object):
         self.local_hold_timeout_s = max(
             0.1, float(rospy.get_param("~local_hold_timeout_s", 1.0))
         )
-        self.hold_without_avoidance_timeout_s = max(
-            0.0, float(rospy.get_param("~hold_without_avoidance_timeout_s", 2.0))
-        )
         self.emergency_stop_front_margin = max(
             0.0, float(rospy.get_param("~emergency_stop_front_margin", 0.35))
         )
@@ -250,7 +247,6 @@ class TebCmdVelRelay(object):
         self.local_path_pose_count = 0
         self.local_path_remaining_m = float("inf")
         self.last_nonempty_local_path_remaining_m = float("inf")
-        self.local_hold_without_avoidance_since = 0.0
         self.last_avoidance_path_time = 0.0
         self.last_avoidance_active_time = 0.0
         self.avoidance_path_active = False
@@ -957,8 +953,6 @@ class TebCmdVelRelay(object):
         self.local_path_pose_count = len(msg.poses)
         self.local_path_empty = len(msg.poses) < 2
         self.local_path_remaining_m = float("inf")
-        if not self.local_path_empty:
-            self.local_hold_without_avoidance_since = 0.0
         if len(msg.poses) < 2 or (not self.have_odom):
             return
 
@@ -990,7 +984,6 @@ class TebCmdVelRelay(object):
             self.avoidance_turn_direction = "none"
             self.avoidance_turn_lateral_m = 0.0
             return
-        self.local_hold_without_avoidance_since = 0.0
         self.last_avoidance_active_time = self.last_avoidance_path_time
 
         direction, lateral = self._infer_avoidance_turn_from_path(msg)
@@ -1192,44 +1185,22 @@ class TebCmdVelRelay(object):
 
     def _has_local_hold(self, now):
         if not self.enable_local_path_hold_stop:
-            self.local_hold_without_avoidance_since = 0.0
             return False
         if self.last_local_path_time <= 0.0:
-            self.local_hold_without_avoidance_since = 0.0
             return False
         if (now - self.last_local_path_time) > self.local_hold_timeout_s:
-            self.local_hold_without_avoidance_since = 0.0
             return False
         if not self.local_path_empty:
-            self.local_hold_without_avoidance_since = 0.0
             return False
         if self._has_fresh_near_goal_empty_local_path(now):
-            self.local_hold_without_avoidance_since = 0.0
             return True
         # During doorway / branch detours the nominal local path is expected to stay
         # empty while the avoidance branch remains active. In that case we should
         # keep following the avoidance branch instead of zeroing cmd_vel.
         if self.defer_local_hold_while_avoidance_active and self.avoidance_path_active:
-            self.local_hold_without_avoidance_since = 0.0
             return False
         if self.hold_requires_avoidance_path and (not self.avoidance_path_active):
-            if not self._should_hold_before_avoidance_path():
-                self.local_hold_without_avoidance_since = 0.0
-                return False
-            if self.hold_without_avoidance_timeout_s > 0.0:
-                if self.local_hold_without_avoidance_since <= 0.0:
-                    self.local_hold_without_avoidance_since = now
-                elif (
-                    now - self.local_hold_without_avoidance_since
-                ) > self.hold_without_avoidance_timeout_s:
-                    rospy.logwarn_throttle(
-                        1.0,
-                        "teb_cmd_vel_relay: releasing local hold after %.1fs without an avoidance path",
-                        self.hold_without_avoidance_timeout_s,
-                    )
-                    return False
-            return True
-        self.local_hold_without_avoidance_since = 0.0
+            return self._should_hold_before_avoidance_path()
         if (
             (not self.avoidance_path_active)
             and math.isfinite(self.last_nonempty_local_path_remaining_m)
