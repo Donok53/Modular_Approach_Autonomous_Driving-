@@ -33,32 +33,9 @@
     <origin xyz="0 0 0" rpy="0 0 0" />
   </joint>
 
-  <!-- Keep Ouster sensor frames connected to base_link so downstream nodes can
-       transform /ouster/points even when the driver publishes os_sensor. -->
-  <link name="os_sensor"> </link>
-  <joint name="os_sensor_joint" type="fixed">
-    <parent link="chassis_link" />
-    <child link="os_sensor" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
-  </joint>
-
-  <link name="os_lidar"> </link>
-  <joint name="os_lidar_joint" type="fixed">
-    <parent link="os_sensor" />
-    <child link="os_lidar" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
-  </joint>
-
-  <link name="os_imu"> </link>
-  <joint name="os_imu_joint" type="fixed">
-    <parent link="os_sensor" />
-    <child link="os_imu" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
-  </joint>
-
   <link name="velodyne"> </link>
   <joint name="velodyne_joint" type="fixed">
-    <parent link="os_lidar" />
+    <parent link="chassis_link" />
     <child link="velodyne" />
     <origin xyz="0 0 0" rpy="0 0 0" />
   </joint>
