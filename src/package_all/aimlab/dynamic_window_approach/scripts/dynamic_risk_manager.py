@@ -147,8 +147,17 @@ class DynamicRiskManager:
         self.include_static_in_risk_grid = bool(
             rospy.get_param("~include_static_objects_in_risk_grid", False)
         )
+        self.include_large_static_objects_in_risk_grid = bool(
+            rospy.get_param("~include_large_static_objects_in_risk_grid", True)
+        )
         self.include_static_pedestrians_in_risk_grid = bool(
             rospy.get_param("~include_static_pedestrians_in_risk_grid", True)
+        )
+        self.static_risk_min_span_m = max(
+            0.1, float(rospy.get_param("~static_risk_min_span_m", 1.4))
+        )
+        self.static_risk_min_area_m2 = max(
+            0.1, float(rospy.get_param("~static_risk_min_area_m2", 1.2))
         )
         self.debug_risk_logging = bool(rospy.get_param("~debug_risk_logging", True))
         self.debug_risk_log_period_s = max(
@@ -625,6 +634,24 @@ class DynamicRiskManager:
                 if value > data[idx]:
                     data[idx] = value
 
+    def _is_large_static_object_for_risk_grid(self, obj):
+        size_x = max(0.0, float(obj.size.x))
+        size_y = max(0.0, float(obj.size.y))
+        span = max(size_x, size_y)
+        area = size_x * size_y
+        return (span >= self.static_risk_min_span_m) or (area >= self.static_risk_min_area_m2)
+
+    def _include_object_in_risk_grid(self, obj, is_dynamic, is_static_pedestrian):
+        if is_dynamic:
+            return True
+        if self.include_static_in_risk_grid:
+            return True
+        if self.include_static_pedestrians_in_risk_grid and is_static_pedestrian:
+            return True
+        if self.include_large_static_objects_in_risk_grid and self._is_large_static_object_for_risk_grid(obj):
+            return True
+        return False
+
     def _build_risk_grid(self):
         if self.grid_msg is None:
             return None
@@ -642,11 +669,7 @@ class DynamicRiskManager:
         for obj in self.objects:
             is_dynamic = self._is_dynamic_object(obj)
             is_static_pedestrian = (not is_dynamic) and self._is_pedestrian(obj.label)
-            if (
-                (not self.include_static_in_risk_grid)
-                and (not is_dynamic)
-                and (not (self.include_static_pedestrians_in_risk_grid and is_static_pedestrian))
-            ):
+            if not self._include_object_in_risk_grid(obj, is_dynamic, is_static_pedestrian):
                 continue
             obj_horizon_s = self._object_prediction_horizon_s(obj)
             steps = max(1, int(math.floor(obj_horizon_s / self.step_s)))
@@ -766,13 +789,19 @@ class DynamicRiskManager:
             if self.debug_risk_logging:
                 moving_count = sum(1 for obj in self.objects if self._is_dynamic_object(obj))
                 static_count = max(0, len(self.objects) - moving_count)
+                if self.include_static_in_risk_grid:
+                    risk_static_mode = "all"
+                elif self.include_large_static_objects_in_risk_grid:
+                    risk_static_mode = "large"
+                else:
+                    risk_static_mode = "off"
                 rospy.loginfo_throttle(
                     self.debug_risk_log_period_s,
                     "dynamic_risk_manager: objects=%d moving=%d static=%d risk_static=%s behavior_static=%s raw=%s(%d) latched=%s stop=%s speed_limit=%.2f reason=%s",
                     len(self.objects),
                     moving_count,
                     static_count,
-                    "on" if self.include_static_in_risk_grid else "off",
+                    risk_static_mode,
                     "on" if self.include_static_in_behavior else "off",
                     self.behavior_raw_state,
                     self.behavior_raw_count,
