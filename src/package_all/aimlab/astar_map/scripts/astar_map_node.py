@@ -1776,36 +1776,70 @@ if __name__ == "__main__":
             a.show_server_dst_nodes()
 
             if a._should_replan_active_goal():
-                world_path = None
-                path_nodes = []
+                prev_world_path = (
+                    list(world_path)
+                    if world_path
+                    else (list(a._last_world_path) if a._last_world_path else None)
+                )
+                prev_path_nodes = (
+                    list(path_nodes)
+                    if path_nodes
+                    else (list(a._last_path_nodes) if a._last_path_nodes else [])
+                )
+                new_world_path = None
+                new_path_nodes = []
                 if (
                     a.use_drivable_grid_global
                     and a.drivable_grid is not None
                     and a._display_start_xy is not None
                     and a._goal_display_xy is not None
                 ):
-                    world_path = a._plan_with_drivable_grid(a._display_start_xy, a._goal_display_xy)
-                    if world_path:
-                        a.publish_world_path_if_changed(world_path)
-                if (not world_path) and a._allow_graph_fallback_for_goal():
+                    new_world_path = a._plan_with_drivable_grid(
+                        a._display_start_xy, a._goal_display_xy
+                    )
+                if (not new_world_path) and a._allow_graph_fallback_for_goal():
                     a.graph_setup()
-                    path_nodes = a.planning(a.start_id, a.goal_id)
+                    new_path_nodes = a.planning(a.start_id, a.goal_id)
 
                     attempt = 0
-                    while a.jump_guard_enable and path_nodes and attempt < a.jump_guard_max_attempts:
-                        validated = a.validate_or_blacklist(path_nodes)
+                    while (
+                        a.jump_guard_enable
+                        and new_path_nodes
+                        and attempt < a.jump_guard_max_attempts
+                    ):
+                        validated = a.validate_or_blacklist(new_path_nodes)
                         if validated is not None:
-                            path_nodes = validated; break
-                        a.graph_setup(); path_nodes = a.planning(a.start_id, a.goal_id); attempt += 1
+                            new_path_nodes = validated
+                            break
+                        a.graph_setup()
+                        new_path_nodes = a.planning(a.start_id, a.goal_id)
+                        attempt += 1
                 a.new_goal_flag = False
-                a._mark_plan_context(bool(world_path or path_nodes))
-                if world_path:
-                    pass
-                elif path_nodes:
+                replan_success = bool(new_world_path or new_path_nodes)
+                a._mark_plan_context(replan_success)
+                if new_world_path:
+                    world_path = list(new_world_path)
+                    path_nodes = []
+                    a.publish_world_path_if_changed(world_path)
+                elif new_path_nodes:
+                    world_path = None
+                    path_nodes = list(new_path_nodes)
                     a.publish_path_if_changed(path_nodes)
+                elif prev_world_path or prev_path_nodes:
+                    world_path = prev_world_path
+                    path_nodes = prev_path_nodes
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "[astar] replanning failed; keeping last valid global path until replacement is ready",
+                    )
                 else:
+                    world_path = None
+                    path_nodes = []
                     a.clear_published_path(stamp=rospy.Time.now())
-                    rospy.logwarn("[astar] path not found")
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "[astar] path not found and no previous global path is available",
+                    )
 
             if world_path and a.path_repub_period > 0.0:
                 a.publish_world_path_if_changed(world_path)
