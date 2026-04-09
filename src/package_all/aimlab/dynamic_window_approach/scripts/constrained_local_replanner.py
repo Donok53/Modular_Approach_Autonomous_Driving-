@@ -6,11 +6,13 @@ import math
 from collections import deque
 
 import rospy
+import tf2_ros
 from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 from std_msgs.msg import String
+from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
 from visualization_msgs.msg import Marker, MarkerArray
 
 from dynamic_window_approach.msg import ExplainabilityEvent
@@ -29,6 +31,12 @@ class ConstrainedLocalReplanner:
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.obstacle_pointcloud_topic = rospy.get_param(
             "~obstacle_pointcloud_topic", self.pointcloud_topic
+        )
+        self.obstacle_pointcloud_target_frame = str(
+            rospy.get_param("~obstacle_pointcloud_target_frame", "base_link")
+        ).strip()
+        self.obstacle_pointcloud_tf_timeout_s = max(
+            0.01, float(rospy.get_param("~obstacle_pointcloud_tf_timeout_s", 0.08))
         )
         self.use_direct_goal = bool(rospy.get_param("~use_direct_goal", False))
         self.direct_goal_topic = rospy.get_param("~direct_goal_topic", "/move_base_simple/goal")
@@ -327,6 +335,11 @@ class ConstrainedLocalReplanner:
             self.pub_debug_text = rospy.Publisher(
                 self.debug_text_topic, String, queue_size=20
             )
+        self.tf_buffer = None
+        self.tf_listener = None
+        if self.obstacle_pointcloud_target_frame:
+            self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(10.0))
+            self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
@@ -345,12 +358,14 @@ class ConstrainedLocalReplanner:
         self._clear_travel_history()
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
-            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
+            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s obs_cloud=%s->%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
             self.global_path_topic,
             self.drivable_grid_topic,
             self.dynamic_risk_grid_topic,
             self.local_path_topic,
             self.avoidance_path_topic,
+            self.obstacle_pointcloud_topic,
+            self.obstacle_pointcloud_target_frame if self.obstacle_pointcloud_target_frame else "<passthrough>",
             "on" if self.use_direct_goal else "off",
             self.direct_goal_topic,
             self.robot_length_m,
@@ -648,8 +663,48 @@ class ConstrainedLocalReplanner:
         out.data = data
         self.pub_global_obstacle_overlay.publish(out)
 
+    def _cloud_in_local_frame(self, msg):
+        target = self.obstacle_pointcloud_target_frame
+        if msg is None:
+            return None
+        if not target:
+            return msg
+        source = str(msg.header.frame_id).strip()
+        if (not source) or source == target:
+            return msg
+        if self.tf_buffer is None:
+            return None
+        stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time(0)
+        try:
+            tf_msg = self.tf_buffer.lookup_transform(
+                target,
+                source,
+                stamp,
+                rospy.Duration(self.obstacle_pointcloud_tf_timeout_s),
+            )
+            out = do_transform_cloud(msg, tf_msg)
+            if out.header.stamp.to_sec() == 0.0 and msg.header.stamp.to_sec() > 0.0:
+                out.header.stamp = msg.header.stamp
+            return out
+        except (
+            tf2_ros.LookupException,
+            tf2_ros.ExtrapolationException,
+            tf2_ros.ConnectivityException,
+        ) as exc:
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner: dropping obstacle cloud, TF %s->%s unavailable (%s)",
+                source,
+                target,
+                str(exc),
+            )
+            return None
+
     def cloud_callback(self, msg):
         if not self.have_odom:
+            return
+        cloud_msg = self._cloud_in_local_frame(msg)
+        if cloud_msg is None:
             return
         raw_pts = []
         cluster_counts = {}
@@ -658,7 +713,7 @@ class ConstrainedLocalReplanner:
         rr = self.obstacle_max_range_m * self.obstacle_max_range_m
         i = 0
         try:
-            for p in point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+            for p in point_cloud2.read_points(cloud_msg, field_names=("x", "y", "z"), skip_nans=True):
                 i += 1
                 if self.obstacle_downsample > 1 and (i % self.obstacle_downsample != 0):
                     continue
@@ -703,7 +758,7 @@ class ConstrainedLocalReplanner:
             current_points_map = [self._local_to_map(item["x"], item["y"]) for item in filtered_clusters]
             self.current_obstacle_points_map = list(current_points_map)
 
-            stamp_sec = msg.header.stamp.to_sec()
+            stamp_sec = cloud_msg.header.stamp.to_sec()
             if stamp_sec <= 0.0:
                 stamp_sec = rospy.Time.now().to_sec()
 
@@ -727,7 +782,7 @@ class ConstrainedLocalReplanner:
             )
             self.global_obstacle_overlay_candidate_count = len(global_overlay_candidates)
             self._update_global_obstacle_overlay_memory(global_overlay_candidates, stamp_sec)
-            self._publish_global_obstacle_overlay(msg.header.stamp)
+            self._publish_global_obstacle_overlay(cloud_msg.header.stamp)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
 

@@ -47,6 +47,9 @@ class AStarPathToTebViaPoints(object):
                 )
             ),
         )
+        self.apply_tail_backoff_on_local_path = bool(
+            rospy.get_param("~apply_tail_backoff_on_local_path", False)
+        )
         self.respect_local_hold = bool(rospy.get_param("~respect_local_hold", True))
         self.hold_requires_avoidance_path = bool(
             rospy.get_param("~hold_requires_avoidance_path", True)
@@ -105,7 +108,7 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_tail_backoff=%s local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
@@ -116,6 +119,7 @@ class AStarPathToTebViaPoints(object):
             self.final_goal_switch_distance_m,
             self.local_goal_tail_backoff_m,
             self.local_goal_tail_backoff_trigger_m,
+            "on" if self.apply_tail_backoff_on_local_path else "off",
             "on" if self.respect_local_hold else "off",
             "on" if self.hold_requires_avoidance_path else "off",
             self.min_spacing_m,
@@ -306,8 +310,11 @@ class AStarPathToTebViaPoints(object):
         remain_m = 0.0
         for idx in range(start_idx, len(msg.poses) - 1):
             remain_m += self._dist(msg.poses[idx], msg.poses[idx + 1])
+        allow_tail_backoff = source == "avoidance" or (
+            source == "local" and self.apply_tail_backoff_on_local_path
+        )
         if (
-            source in ("local", "avoidance")
+            allow_tail_backoff
             and self.local_goal_tail_backoff_m > 1e-6
             and remain_m <= self.local_goal_tail_backoff_trigger_m
         ):
@@ -336,15 +343,23 @@ class AStarPathToTebViaPoints(object):
         goal_y = float(goal_pose.pose.position.y)
         goal_yaw = self._path_pose_yaw(msg, goal_idx)
         if self._last_goal_sig is not None:
-            prev_source, prev_frame, prev_x, prev_y, prev_yaw = self._last_goal_sig
+            prev_source, prev_frame, prev_x, prev_y, prev_yaw, prev_reason = self._last_goal_sig
             if (
                 prev_source == source
                 and prev_frame == msg.header.frame_id
+                and prev_reason == goal_reason
                 and math.hypot(goal_x - prev_x, goal_y - prev_y) < self.goal_update_min_dist_m
                 and abs(self._angle_diff(goal_yaw, prev_yaw)) < math.radians(10.0)
             ):
                 return
-        self._last_goal_sig = (source, msg.header.frame_id, goal_x, goal_y, goal_yaw)
+        self._last_goal_sig = (
+            source,
+            msg.header.frame_id,
+            goal_x,
+            goal_y,
+            goal_yaw,
+            goal_reason,
+        )
 
         goal = PoseStamped()
         goal.header = msg.header

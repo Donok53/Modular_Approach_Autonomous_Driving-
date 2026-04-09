@@ -83,6 +83,7 @@
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_local_goal_tail_backoff_m" default="0.45"/>
   <arg name="teb_local_goal_tail_backoff_trigger_m" default="1.10"/>
+  <arg name="teb_apply_tail_backoff_on_local_path" default="false"/>
   <arg name="teb_emergency_stop_front_margin" default="0.40"/>
   <arg name="teb_emergency_stop_side_margin" default="0.05"/>
   <arg name="teb_emergency_stop_far_lateral_ratio" default="0.55"/>
@@ -710,6 +711,7 @@
       <arg name="move_base_goal_update_min_dist_m" value="$(arg teb_move_base_goal_update_min_dist_m)"/>
       <arg name="local_goal_tail_backoff_m" value="$(arg teb_local_goal_tail_backoff_m)"/>
       <arg name="local_goal_tail_backoff_trigger_m" value="$(arg teb_local_goal_tail_backoff_trigger_m)"/>
+      <arg name="apply_tail_backoff_on_local_path" value="$(arg teb_apply_tail_backoff_on_local_path)"/>
       <arg name="emergency_stop_front_margin" value="$(arg teb_emergency_stop_front_margin)"/>
       <arg name="emergency_stop_side_margin" value="$(arg teb_emergency_stop_side_margin)"/>
       <arg name="emergency_stop_far_lateral_ratio" value="$(arg teb_emergency_stop_far_lateral_ratio)"/>
