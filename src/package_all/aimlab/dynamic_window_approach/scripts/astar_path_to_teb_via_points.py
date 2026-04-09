@@ -422,9 +422,6 @@ class AStarPathToTebViaPoints(object):
         if self._has_fresh_local_hold():
             return "local_hold", self._local_msg
 
-        if self._has_fresh_empty_local_path():
-            return "local_hold", self._local_msg
-
         if self._fallback_msg is not None and len(self._fallback_msg.poses) >= 2:
             return "fallback", self._fallback_msg
 
