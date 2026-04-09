@@ -110,6 +110,15 @@ class AStarPlanner:
         self.dynamic_risk_occupied_threshold = max(
             1, min(100, int(rospy.get_param("~dynamic_risk_occupied_threshold", 45)))
         )
+        self.use_global_obstacle_overlay = bool(
+            rospy.get_param("~use_global_obstacle_overlay", False)
+        )
+        self.global_obstacle_overlay_topic = rospy.get_param(
+            "~global_obstacle_overlay_topic", "/planning/global_obstacle_overlay"
+        )
+        self.global_obstacle_overlay_threshold = max(
+            1, min(100, int(rospy.get_param("~global_obstacle_overlay_threshold", 50)))
+        )
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
@@ -195,6 +204,7 @@ class AStarPlanner:
         self._last_plan_stamp_s = 0.0
         self._last_plan_success = False
         self.dynamic_risk_grid = None
+        self.global_obstacle_overlay = None
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -222,6 +232,14 @@ class AStarPlanner:
                 self.dynamic_risk_grid_callback,
                 queue_size=3,
             )
+        self.sub_global_obstacle_overlay = None
+        if self.use_drivable_grid_global and self.use_global_obstacle_overlay:
+            self.sub_global_obstacle_overlay = rospy.Subscriber(
+                self.global_obstacle_overlay_topic,
+                OccupancyGrid,
+                self.global_obstacle_overlay_callback,
+                queue_size=3,
+            )
         self.sub_reload = None
         if self.enable_map_reload:
             self.sub_reload = rospy.Subscriber(self.reload_topic, Empty, self.callback_reload_map, queue_size=2)
@@ -233,6 +251,12 @@ class AStarPlanner:
                     "[astar] global dynamic risk overlay: %s (threshold=%d)",
                     self.dynamic_risk_grid_topic,
                     self.dynamic_risk_occupied_threshold,
+                )
+            if self.use_global_obstacle_overlay:
+                rospy.loginfo(
+                    "[astar] global pointcloud obstacle overlay: %s (threshold=%d)",
+                    self.global_obstacle_overlay_topic,
+                    self.global_obstacle_overlay_threshold,
                 )
             rospy.loginfo(
                 "[astar] global grid planner: %s, center_safe_radius=%.3f m, mask_mode=%s",
@@ -247,6 +271,10 @@ class AStarPlanner:
         elif self.use_dynamic_risk_grid_global:
             rospy.logwarn(
                 "[astar] use_dynamic_risk_grid_global=true ignored because use_drivable_grid_global=false"
+            )
+        elif self.use_global_obstacle_overlay:
+            rospy.logwarn(
+                "[astar] use_global_obstacle_overlay=true ignored because use_drivable_grid_global=false"
             )
         if self.enable_map_reload:
             rospy.loginfo("[astar] map reload topic: %s", self.reload_topic)
@@ -263,6 +291,9 @@ class AStarPlanner:
 
     def dynamic_risk_grid_callback(self, msg):
         self.dynamic_risk_grid = msg
+
+    def global_obstacle_overlay_callback(self, msg):
+        self.global_obstacle_overlay = msg
 
     def consume_reload_request(self):
         if not self._reload_requested:
@@ -951,6 +982,7 @@ class AStarPlanner:
         blocked = [[False for _ in range(w)] for _ in range(h)]
         occupied = []
         risk_data = None
+        global_obstacle_overlay_data = None
 
         if self.use_dynamic_risk_grid_global and self.dynamic_risk_grid is not None:
             if self._grid_layout_matches(g, self.dynamic_risk_grid):
@@ -966,6 +998,20 @@ class AStarPlanner:
                     5.0,
                     "[astar] dynamic risk grid layout mismatch; ignoring global overlay",
                 )
+        if self.use_global_obstacle_overlay and self.global_obstacle_overlay is not None:
+            if self._grid_layout_matches(g, self.global_obstacle_overlay):
+                if len(self.global_obstacle_overlay.data) == (w * h):
+                    global_obstacle_overlay_data = self.global_obstacle_overlay.data
+                else:
+                    rospy.logwarn_throttle(
+                        5.0,
+                        "[astar] global obstacle overlay size mismatch; ignoring overlay",
+                    )
+            else:
+                rospy.logwarn_throttle(
+                    5.0,
+                    "[astar] global obstacle overlay layout mismatch; ignoring overlay",
+                )
 
         for gy in range(h):
             row_offset = gy * w
@@ -974,9 +1020,16 @@ class AStarPlanner:
                 risk_occupied = False
                 if risk_data is not None:
                     risk_occupied = int(risk_data[row_offset + gx]) >= self.dynamic_risk_occupied_threshold
+                pointcloud_overlay_occupied = False
+                if global_obstacle_overlay_data is not None:
+                    pointcloud_overlay_occupied = (
+                        int(global_obstacle_overlay_data[row_offset + gx])
+                        >= self.global_obstacle_overlay_threshold
+                    )
                 is_free = (
                     ((val == 0) or (val < 0 and (not self.grid_unknown_is_occupied)))
                     and (not risk_occupied)
+                    and (not pointcloud_overlay_occupied)
                 )
                 if not is_free:
                     occupied.append((gx, gy))

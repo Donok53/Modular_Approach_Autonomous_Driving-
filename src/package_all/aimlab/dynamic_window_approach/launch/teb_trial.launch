@@ -73,6 +73,15 @@
   <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
   <arg name="static_obstacle_memory_max_support" default="8"/>
   <arg name="static_obstacle_memory_max_points" default="40"/>
+  <arg name="enable_global_pointcloud_overlay" default="false"/>
+  <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
+  <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
+  <arg name="global_pointcloud_overlay_ttl_s" default="2.0"/>
+  <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
+  <arg name="global_pointcloud_overlay_max_range_m" default="8.0"/>
+  <arg name="global_pointcloud_overlay_lookahead_m" default="8.0"/>
+  <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.0"/>
+  <arg name="global_pointcloud_overlay_max_points" default="200"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
@@ -205,7 +214,10 @@
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
+  <arg name="include_large_static_objects_in_risk_grid" default="true"/>
   <arg name="include_static_pedestrians_in_risk_grid" default="true"/>
+  <arg name="static_risk_min_span_m" default="1.4"/>
+  <arg name="static_risk_min_area_m2" default="1.2"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
 
@@ -297,7 +309,10 @@
       <param name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
       <param name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <param name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
+      <param name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
       <param name="include_static_pedestrians_in_risk_grid" value="$(arg include_static_pedestrians_in_risk_grid)"/>
+      <param name="static_risk_min_span_m" value="$(arg static_risk_min_span_m)"/>
+      <param name="static_risk_min_area_m2" value="$(arg static_risk_min_area_m2)"/>
       <param name="debug_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
       <param name="debug_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
     </node>
@@ -339,6 +354,15 @@
       <param name="static_obstacle_memory_max_range_m" value="$(arg static_obstacle_memory_max_range_m)"/>
       <param name="static_obstacle_memory_max_support" value="$(arg static_obstacle_memory_max_support)"/>
       <param name="static_obstacle_memory_max_points" value="$(arg static_obstacle_memory_max_points)"/>
+      <param name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
+      <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <param name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
+      <param name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
+      <param name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
+      <param name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
+      <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
+      <param name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
+      <param name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <param name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
       <param name="obstacle_block_margin_m" value="$(arg obstacle_block_margin_m)"/>
       <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
