@@ -205,6 +205,10 @@ class AStarPlanner:
         self._last_plan_success = False
         self.dynamic_risk_grid = None
         self.global_obstacle_overlay = None
+        self._dynamic_risk_grid_change_seq = 0
+        self._global_obstacle_overlay_change_seq = 0
+        self._last_planned_dynamic_risk_grid_change_seq = 0
+        self._last_planned_global_obstacle_overlay_change_seq = 0
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -290,9 +294,13 @@ class AStarPlanner:
         self.drivable_grid = msg
 
     def dynamic_risk_grid_callback(self, msg):
+        if self._grid_message_differs(self.dynamic_risk_grid, msg):
+            self._dynamic_risk_grid_change_seq += 1
         self.dynamic_risk_grid = msg
 
     def global_obstacle_overlay_callback(self, msg):
+        if self._grid_message_differs(self.global_obstacle_overlay, msg):
+            self._global_obstacle_overlay_change_seq += 1
         self.global_obstacle_overlay = msg
 
     def consume_reload_request(self):
@@ -319,6 +327,10 @@ class AStarPlanner:
             self._last_planned_goal_id = None
             self._last_plan_stamp_s = 0.0
             self._last_plan_success = False
+            self._last_planned_dynamic_risk_grid_change_seq = self._dynamic_risk_grid_change_seq
+            self._last_planned_global_obstacle_overlay_change_seq = (
+                self._global_obstacle_overlay_change_seq
+            )
             rospy.loginfo("[astar] map reloaded from %s", self._osm_file)
             return True
         except Exception as e:
@@ -353,6 +365,10 @@ class AStarPlanner:
         self._last_planned_goal_id = self.goal_id
         self._last_plan_stamp_s = rospy.get_time()
         self._last_plan_success = bool(success)
+        self._last_planned_dynamic_risk_grid_change_seq = self._dynamic_risk_grid_change_seq
+        self._last_planned_global_obstacle_overlay_change_seq = (
+            self._global_obstacle_overlay_change_seq
+        )
 
     def _should_replan_active_goal(self):
         if not self._has_active_goal_context():
@@ -366,6 +382,18 @@ class AStarPlanner:
         if (now - self._last_plan_stamp_s) < self.replan_min_interval_s:
             return False
         if not self._last_plan_success:
+            return True
+        if (
+            self.use_dynamic_risk_grid_global
+            and self._dynamic_risk_grid_change_seq
+            != self._last_planned_dynamic_risk_grid_change_seq
+        ):
+            return True
+        if (
+            self.use_global_obstacle_overlay
+            and self._global_obstacle_overlay_change_seq
+            != self._last_planned_global_obstacle_overlay_change_seq
+        ):
             return True
         if self.start_id != self._last_planned_start_id:
             return True
@@ -975,6 +1003,19 @@ class AStarPlanner:
             and abs(float(a.info.origin.position.y) - float(b.info.origin.position.y)) <= tol
             and str(a.header.frame_id).strip() == str(b.header.frame_id).strip()
         )
+
+    def _grid_message_differs(self, previous, current):
+        if previous is None or current is None:
+            return previous is not current
+        if not self._grid_layout_matches(previous, current):
+            return True
+        prev_data = getattr(previous, "data", None)
+        cur_data = getattr(current, "data", None)
+        if prev_data is None or cur_data is None:
+            return True
+        if len(prev_data) != len(cur_data):
+            return True
+        return prev_data != cur_data
 
     def _build_blocked_grid(self, g):
         w = int(g.info.width)
