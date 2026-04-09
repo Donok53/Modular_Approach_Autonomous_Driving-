@@ -12,6 +12,9 @@
   <arg name="pose_topic" default="lio_localizer/odometry/optimization"/>
   <arg name="use_drivable_grid_global" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+  <arg name="use_dynamic_risk_grid_global" default="false"/>
+  <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
+  <arg name="dynamic_risk_occupied_threshold" default="45"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="grid_snap_search_radius_cells" default="30"/>
   <arg name="robot_width_m" default="0.58"/>
@@ -44,6 +47,9 @@
     <param name="pose_topic" value="$(arg pose_topic)"/>
     <param name="use_drivable_grid_global" value="$(arg use_drivable_grid_global)"/>
     <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+    <param name="use_dynamic_risk_grid_global" value="$(arg use_dynamic_risk_grid_global)"/>
+    <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
+    <param name="dynamic_risk_occupied_threshold" value="$(arg dynamic_risk_occupied_threshold)"/>
     <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
     <param name="grid_snap_search_radius_cells" value="$(arg grid_snap_search_radius_cells)"/>
     <param name="robot_width_m" value="$(arg robot_width_m)"/>

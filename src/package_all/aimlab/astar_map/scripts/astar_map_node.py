@@ -101,6 +101,15 @@ class AStarPlanner:
         self.pose_topic = rospy.get_param("~pose_topic", "lio_localizer/odometry/optimization")
         self.use_drivable_grid_global = bool(rospy.get_param("~use_drivable_grid_global", True))
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
+        self.use_dynamic_risk_grid_global = bool(
+            rospy.get_param("~use_dynamic_risk_grid_global", False)
+        )
+        self.dynamic_risk_grid_topic = rospy.get_param(
+            "~dynamic_risk_grid_topic", "/planning/dynamic_risk_grid"
+        )
+        self.dynamic_risk_occupied_threshold = max(
+            1, min(100, int(rospy.get_param("~dynamic_risk_occupied_threshold", 45)))
+        )
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
@@ -185,6 +194,7 @@ class AStarPlanner:
         self._last_planned_goal_id = None
         self._last_plan_stamp_s = 0.0
         self._last_plan_success = False
+        self.dynamic_risk_grid = None
 
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
@@ -204,12 +214,26 @@ class AStarPlanner:
             self.sub_drivable_grid = rospy.Subscriber(
                 self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3
             )
+        self.sub_dynamic_risk_grid = None
+        if self.use_drivable_grid_global and self.use_dynamic_risk_grid_global:
+            self.sub_dynamic_risk_grid = rospy.Subscriber(
+                self.dynamic_risk_grid_topic,
+                OccupancyGrid,
+                self.dynamic_risk_grid_callback,
+                queue_size=3,
+            )
         self.sub_reload = None
         if self.enable_map_reload:
             self.sub_reload = rospy.Subscriber(self.reload_topic, Empty, self.callback_reload_map, queue_size=2)
         rospy.loginfo("[astar] pose topic: %s", self.pose_topic)
         if self.use_drivable_grid_global:
             rospy.loginfo("[astar] global path source: drivable grid first (%s)", self.drivable_grid_topic)
+            if self.use_dynamic_risk_grid_global:
+                rospy.loginfo(
+                    "[astar] global dynamic risk overlay: %s (threshold=%d)",
+                    self.dynamic_risk_grid_topic,
+                    self.dynamic_risk_occupied_threshold,
+                )
             rospy.loginfo(
                 "[astar] global grid planner: %s, center_safe_radius=%.3f m, mask_mode=%s",
                 "Theta*" if self.global_path_use_any_angle else "A* (cardinal)",
@@ -219,6 +243,10 @@ class AStarPlanner:
                     if self.global_path_drivable_area_is_center_safe
                     else "shrink-by-%s" % self.global_path_clearance_model
                 ),
+            )
+        elif self.use_dynamic_risk_grid_global:
+            rospy.logwarn(
+                "[astar] use_dynamic_risk_grid_global=true ignored because use_drivable_grid_global=false"
             )
         if self.enable_map_reload:
             rospy.loginfo("[astar] map reload topic: %s", self.reload_topic)
@@ -232,6 +260,9 @@ class AStarPlanner:
 
     def drivable_grid_callback(self, msg):
         self.drivable_grid = msg
+
+    def dynamic_risk_grid_callback(self, msg):
+        self.dynamic_risk_grid = msg
 
     def consume_reload_request(self):
         if not self._reload_requested:
@@ -900,17 +931,53 @@ class AStarPlanner:
             return True
         return False
 
+    @staticmethod
+    def _grid_layout_matches(a, b):
+        if a is None or b is None:
+            return False
+        tol = 1e-6
+        return (
+            int(a.info.width) == int(b.info.width)
+            and int(a.info.height) == int(b.info.height)
+            and abs(float(a.info.resolution) - float(b.info.resolution)) <= tol
+            and abs(float(a.info.origin.position.x) - float(b.info.origin.position.x)) <= tol
+            and abs(float(a.info.origin.position.y) - float(b.info.origin.position.y)) <= tol
+            and str(a.header.frame_id).strip() == str(b.header.frame_id).strip()
+        )
+
     def _build_blocked_grid(self, g):
         w = int(g.info.width)
         h = int(g.info.height)
         blocked = [[False for _ in range(w)] for _ in range(h)]
         occupied = []
+        risk_data = None
+
+        if self.use_dynamic_risk_grid_global and self.dynamic_risk_grid is not None:
+            if self._grid_layout_matches(g, self.dynamic_risk_grid):
+                if len(self.dynamic_risk_grid.data) == (w * h):
+                    risk_data = self.dynamic_risk_grid.data
+                else:
+                    rospy.logwarn_throttle(
+                        5.0,
+                        "[astar] dynamic risk grid size mismatch; ignoring global overlay",
+                    )
+            else:
+                rospy.logwarn_throttle(
+                    5.0,
+                    "[astar] dynamic risk grid layout mismatch; ignoring global overlay",
+                )
 
         for gy in range(h):
             row_offset = gy * w
             for gx in range(w):
                 val = int(g.data[row_offset + gx])
-                is_free = (val == 0) or (val < 0 and (not self.grid_unknown_is_occupied))
+                risk_occupied = False
+                if risk_data is not None:
+                    risk_occupied = int(risk_data[row_offset + gx]) >= self.dynamic_risk_occupied_threshold
+                is_free = (
+                    ((val == 0) or (val < 0 and (not self.grid_unknown_is_occupied)))
+                    and (not risk_occupied)
+                )
                 if not is_free:
                     occupied.append((gx, gy))
 
