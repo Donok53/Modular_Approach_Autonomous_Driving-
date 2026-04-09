@@ -8,7 +8,6 @@ import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Bool
 
 
 class AStarPathToTebViaPoints(object):
@@ -16,9 +15,6 @@ class AStarPathToTebViaPoints(object):
         self.input_topic = rospy.get_param("~input_topic", "/astar/path")
         self.local_input_topic = str(rospy.get_param("~local_input_topic", "")).strip()
         self.avoidance_input_topic = str(rospy.get_param("~avoidance_input_topic", "")).strip()
-        self.local_hold_state_topic = str(
-            rospy.get_param("~local_hold_state_topic", "/planning/local_hold_active")
-        ).strip()
         self.local_path_timeout_s = max(
             0.1, float(rospy.get_param("~local_path_timeout_s", 4.0))
         )
@@ -69,8 +65,6 @@ class AStarPathToTebViaPoints(object):
         self._local_rx_time = 0.0
         self._avoidance_msg = None
         self._avoidance_rx_time = 0.0
-        self._local_hold_active = False
-        self._local_hold_rx_time = 0.0
         self._odom_x = 0.0
         self._odom_y = 0.0
         self._have_odom = False
@@ -100,14 +94,6 @@ class AStarPathToTebViaPoints(object):
                 self._make_callback("avoidance"),
                 queue_size=2,
             )
-        self.sub_local_hold = None
-        if self.local_hold_state_topic:
-            self.sub_local_hold = rospy.Subscriber(
-                self.local_hold_state_topic,
-                Bool,
-                self._local_hold_callback,
-                queue_size=5,
-            )
         self.sub_odom = None
         if self.odom_topic:
             self.sub_odom = rospy.Subscriber(
@@ -119,11 +105,10 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s hold_state=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
-            self.local_hold_state_topic if self.local_hold_state_topic else "-",
             self.odom_topic if self.odom_topic else "-",
             self.output_topic,
             self.goal_output_topic if self.goal_output_topic else "-",
@@ -203,10 +188,6 @@ class AStarPathToTebViaPoints(object):
         self._odom_x = float(msg.pose.pose.position.x)
         self._odom_y = float(msg.pose.pose.position.y)
         self._have_odom = True
-
-    def _local_hold_callback(self, msg):
-        self._local_hold_active = bool(msg.data)
-        self._local_hold_rx_time = rospy.get_time()
 
     @staticmethod
     def _path_signature(msg):
@@ -400,12 +381,16 @@ class AStarPathToTebViaPoints(object):
     def _has_fresh_local_hold(self):
         if not self._has_fresh_empty_local_path():
             return False
-        if not (
-            self.local_hold_state_topic
-            and self._is_fresh(self._local_hold_rx_time, self.local_path_timeout_s)
-        ):
-            return False
-        return self._local_hold_active
+
+        if not self.hold_requires_avoidance_path:
+            return True
+
+        return (
+            bool(self.avoidance_input_topic)
+            and self._avoidance_msg is not None
+            and len(self._avoidance_msg.poses) >= 2
+            and self._is_fresh(self._avoidance_rx_time, self.avoidance_path_timeout_s)
+        )
 
     @staticmethod
     def _empty_path_like(msg):
@@ -435,6 +420,9 @@ class AStarPathToTebViaPoints(object):
             return "local", self._local_msg
 
         if self._has_fresh_local_hold():
+            return "local_hold", self._local_msg
+
+        if self._has_fresh_empty_local_path():
             return "local_hold", self._local_msg
 
         if self._fallback_msg is not None and len(self._fallback_msg.poses) >= 2:
