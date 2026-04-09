@@ -232,6 +232,7 @@ class ConstrainedLocalReplanner:
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
+        self.current_obstacle_points_map = []
         self.obstacle_points_map = []
         self.obstacle_raw_point_count = 0
         self.obstacle_cluster_count = 0
@@ -512,6 +513,7 @@ class ConstrainedLocalReplanner:
 
             self.obstacle_cluster_count = len(filtered_clusters)
             current_points_map = [self._local_to_map(item["x"], item["y"]) for item in filtered_clusters]
+            self.current_obstacle_points_map = list(current_points_map)
 
             stamp_sec = msg.header.stamp.to_sec()
             if stamp_sec <= 0.0:
@@ -1495,8 +1497,11 @@ class ConstrainedLocalReplanner:
                 best_i = i
         return best_i
 
-    def _overlay_pointcloud_obstacles(self, blocked, dg, keep_cells=None, enabled=True, margin_m=None):
-        if (not enabled) or (not self.obstacle_points_map):
+    def _overlay_pointcloud_obstacles(
+        self, blocked, dg, keep_cells=None, enabled=True, margin_m=None, points_map=None
+    ):
+        obstacle_points = self.obstacle_points_map if points_map is None else points_map
+        if (not enabled) or (not obstacle_points):
             return [row[:] for row in blocked], 0
 
         res = max(1e-3, float(dg.info.resolution))
@@ -1508,7 +1513,7 @@ class ConstrainedLocalReplanner:
         keep = set(keep_cells or [])
         marked_sources = 0
 
-        for wx, wy in self.obstacle_points_map:
+        for wx, wy in obstacle_points:
             gx, gy = self._world_to_grid(dg, wx, wy)
             if not self._in_bounds_blocked(out, gx, gy):
                 continue
@@ -1527,12 +1532,14 @@ class ConstrainedLocalReplanner:
         return out, marked_sources
 
     def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None):
+        # Dynamic avoidance should react to live returns, not remembered static points.
         return self._overlay_pointcloud_obstacles(
             blocked,
             dg,
             keep_cells=keep_cells,
             enabled=self.use_pointcloud_avoidance_trigger,
             margin_m=self.obstacle_block_margin_m,
+            points_map=self.current_obstacle_points_map,
         )
 
     def _path_blocked_ahead(self, path, blocked, start_cell, grid_resolution_m, max_check_m=None):
@@ -1578,8 +1585,9 @@ class ConstrainedLocalReplanner:
         dy = py - proj_y
         return dx * dx + dy * dy
 
-    def _path_blocked_by_obstacles(self, path, dg, start_cell):
-        if not path or not self.obstacle_points_map:
+    def _path_blocked_by_obstacles(self, path, dg, start_cell, points_map=None):
+        obstacle_points = self.obstacle_points_map if points_map is None else points_map
+        if not path or not obstacle_points:
             return False
 
         start_idx = self._nearest_path_cell_index(path, start_cell)
@@ -1601,7 +1609,7 @@ class ConstrainedLocalReplanner:
             if seg_len <= 1e-6:
                 continue
             remain_m += seg_len
-            for obs_idx, (ox, oy) in enumerate(self.obstacle_points_map):
+            for obs_idx, (ox, oy) in enumerate(obstacle_points):
                 if obs_idx in hit_indices:
                     continue
                 if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
@@ -1826,7 +1834,12 @@ class ConstrainedLocalReplanner:
         )
         pointcloud_overlap = False
         if (not predicted_overlap) and self.use_pointcloud_avoidance_trigger:
-            pointcloud_overlap = self._path_blocked_by_obstacles(nominal_path, dg, start_cell)
+            pointcloud_overlap = self._path_blocked_by_obstacles(
+                nominal_path,
+                dg,
+                start_cell,
+                points_map=self.current_obstacle_points_map,
+            )
 
         clustered_point_count = self.obstacle_cluster_count
         self._debug_avoidance_log(
