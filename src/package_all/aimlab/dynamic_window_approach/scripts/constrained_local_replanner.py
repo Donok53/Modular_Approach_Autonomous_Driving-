@@ -150,6 +150,9 @@ class ConstrainedLocalReplanner:
         self.static_obstacle_memory_max_points = max(
             0, int(rospy.get_param("~static_obstacle_memory_max_points", 40))
         )
+        self.use_memory_points_for_blocking = bool(
+            rospy.get_param("~use_memory_points_for_blocking", False)
+        )
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
@@ -235,6 +238,7 @@ class ConstrainedLocalReplanner:
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
+        self.obstacle_live_points_map = []
         self.obstacle_points_map = []
         self.obstacle_raw_point_count = 0
         self.obstacle_cluster_count = 0
@@ -523,6 +527,7 @@ class ConstrainedLocalReplanner:
 
             self.obstacle_cluster_count = len(filtered_clusters)
             current_points_map = [self._local_to_map(item["x"], item["y"]) for item in filtered_clusters]
+            self.obstacle_live_points_map = list(current_points_map)
 
             stamp_sec = msg.header.stamp.to_sec()
             if stamp_sec <= 0.0:
@@ -540,9 +545,12 @@ class ConstrainedLocalReplanner:
                 memory_candidates_map.append(self._local_to_map(item["x"], item["y"]))
 
             remembered_points = self._update_obstacle_memory(memory_candidates_map, stamp_sec)
-            self.obstacle_points_map = self._merge_obstacle_memory_points(
-                current_points_map, remembered_points
-            )
+            if self.use_memory_points_for_blocking:
+                self.obstacle_points_map = self._merge_obstacle_memory_points(
+                    current_points_map, remembered_points
+                )
+            else:
+                self.obstacle_points_map = list(current_points_map)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
 
@@ -1851,6 +1859,20 @@ class ConstrainedLocalReplanner:
             return best_effort_candidate[0], best_effort_candidate[1], False
         return None, None, False
 
+    def _build_safe_nominal_prefix_path(self, nominal_path, start_cell, blocked_idx):
+        if not nominal_path or blocked_idx is None:
+            return None
+
+        start_idx = self._nearest_path_cell_index(nominal_path, start_cell)
+        safe_end_idx = min(len(nominal_path) - 1, max(start_idx + 1, blocked_idx - 1))
+        if safe_end_idx <= start_idx:
+            return None
+
+        prefix = []
+        self._append_path_segment(prefix, [start_cell])
+        self._append_path_segment(prefix, nominal_path[start_idx:safe_end_idx + 1])
+        return prefix if len(prefix) >= 2 else None
+
     def _update_avoidance_path(self, nominal_path, base_blocked, start_cell, goal_cell, dg, stamp, label):
         frame_id = dg.header.frame_id if dg.header.frame_id else "map"
         if not self.enable_avoidance_path or len(nominal_path) < 2:
@@ -1943,6 +1965,48 @@ class ConstrainedLocalReplanner:
             dg,
         )
         if avoid_path is None:
+            safe_prefix_path = None
+            if self.allow_best_effort_path:
+                safe_prefix_path = self._build_safe_nominal_prefix_path(
+                    nominal_path, start_cell, blocked_idx
+                )
+            if safe_prefix_path is not None:
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: no %s branch solution; following safe nominal prefix to %s",
+                    trigger_reason,
+                    str(safe_prefix_path[-1]),
+                )
+                self._publish_local_path(
+                    safe_prefix_path,
+                    dg,
+                    stamp,
+                    start_xy=(self.odom_x, self.odom_y),
+                )
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                self._publish_explainability(
+                    event_type="LOCAL_REPLAN_NO_SOLUTION",
+                    stamp=stamp,
+                    trigger_reason=trigger_reason,
+                    action_taken="follow_safe_prefix",
+                    local_planning_active=True,
+                    stop_commanded=False,
+                    summary_text=(
+                        "Local replanning detected '{}' on the {} path, but no valid branch was found, so it is following the last safe prefix of the nominal path."
+                    ).format(trigger_reason, label),
+                )
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "avoid_prefix_only",
+                        stamp,
+                        trigger_reason=trigger_reason,
+                        path_len=len(safe_prefix_path),
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
+                return
             rospy.logwarn_throttle(
                 1.0,
                 "constrained_local_replanner: obstacle detected on %s path (%s) but no branch-rejoin avoidance found",
