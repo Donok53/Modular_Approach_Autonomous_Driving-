@@ -80,6 +80,7 @@
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
   <arg name="global_pointcloud_overlay_max_range_m" default="8.0"/>
   <arg name="global_pointcloud_overlay_lookahead_m" default="8.0"/>
+  <arg name="global_pointcloud_overlay_min_distance_m" default="2.0"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.0"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
   <arg name="debug_avoidance_logging" default="true"/>
@@ -361,6 +362,7 @@
       <param name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <param name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
+      <param name="global_pointcloud_overlay_min_distance_m" value="$(arg global_pointcloud_overlay_min_distance_m)"/>
       <param name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <param name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <param name="use_pointcloud_avoidance_trigger" value="$(arg use_pointcloud_avoidance_trigger)"/>
