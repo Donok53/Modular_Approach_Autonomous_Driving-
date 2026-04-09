@@ -777,11 +777,8 @@ class ConstrainedLocalReplanner:
             self.obstacle_points_map = self._merge_obstacle_memory_points(
                 current_points_map, remembered_points
             )
-            # Feed remembered static obstacles into the global overlay path corridor
-            # selection too, so short lidar blind spots do not immediately reopen the
-            # same blocked area in the global planner.
             global_overlay_candidates = self._select_global_overlay_candidate_points(
-                self.obstacle_points_map
+                current_points_map
             )
             self.global_obstacle_overlay_candidate_count = len(global_overlay_candidates)
             self._update_global_obstacle_overlay_memory(global_overlay_candidates, stamp_sec)

@@ -69,18 +69,18 @@
   <arg name="near_goal_block_ignore_after_avoidance_s" default="1.0"/>
   <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
   <arg name="static_obstacle_memory_enabled" default="true"/>
-  <arg name="static_obstacle_memory_ttl_s" default="8.0"/>
-  <arg name="static_obstacle_memory_max_range_m" default="8.0"/>
+  <arg name="static_obstacle_memory_ttl_s" default="1.2"/>
+  <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
   <arg name="static_obstacle_memory_max_support" default="8"/>
   <arg name="static_obstacle_memory_max_points" default="40"/>
   <arg name="enable_global_pointcloud_overlay" default="false"/>
   <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
   <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
-  <arg name="global_pointcloud_overlay_ttl_s" default="8.0"/>
+  <arg name="global_pointcloud_overlay_ttl_s" default="2.0"/>
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
   <arg name="global_pointcloud_overlay_max_range_m" default="8.0"/>
   <arg name="global_pointcloud_overlay_lookahead_m" default="8.0"/>
-  <arg name="global_pointcloud_overlay_min_distance_m" default="0.5"/>
+  <arg name="global_pointcloud_overlay_min_distance_m" default="2.0"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.0"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
   <arg name="debug_avoidance_logging" default="true"/>
