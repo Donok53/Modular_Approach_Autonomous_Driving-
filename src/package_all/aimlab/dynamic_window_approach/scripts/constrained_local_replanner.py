@@ -1759,7 +1759,7 @@ class ConstrainedLocalReplanner:
 
     def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg):
         if len(nominal_path) < 2:
-            return None, None, False
+            return None, None
 
         start_idx = self._nearest_path_cell_index(nominal_path, start_cell)
         blocked_idx = self._first_blocked_path_index(
@@ -1771,7 +1771,7 @@ class ConstrainedLocalReplanner:
             include_pointcloud=self.use_pointcloud_avoidance_trigger,
         )
         if blocked_idx is None:
-            return None, None, False
+            return None, None
 
         branch_start_idx = max(start_idx, blocked_idx - self.avoidance_branch_backtrack_cells)
         while branch_start_idx > start_idx:
@@ -1785,8 +1785,6 @@ class ConstrainedLocalReplanner:
             1, int(math.ceil(self.avoidance_rejoin_min_distance_m / max(1e-3, float(dg.info.resolution))))
         )
         first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
-        best_effort_candidate = None
-        best_effort_score = None
 
         for rejoin_idx in range(first_rejoin_idx, len(nominal_path)):
             rejoin_cell = nominal_path[rejoin_idx]
@@ -1797,7 +1795,7 @@ class ConstrainedLocalReplanner:
                 dynamic_blocked,
                 branch_start,
                 rejoin_cell,
-                allow_best_effort=self.allow_best_effort_path,
+                allow_best_effort=False,
             )
             if detour is None or len(detour) < 2:
                 continue
@@ -1815,41 +1813,14 @@ class ConstrainedLocalReplanner:
             self._append_path_segment(composed, [start_cell])
             self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
             self._append_path_segment(composed, detour[1:])
-            if detour[-1] == rejoin_cell:
-                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
-                branch_history_points = self._sample_world_points(
-                    [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
-                )
-                return composed, branch_history_points, True
-
-            if not self.allow_best_effort_path:
-                continue
-            if not self._best_effort_path_is_acceptable(rejoin_cell, detour, dg, "avoidance"):
-                continue
-
-            if self._has_line_of_sight(dynamic_blocked, detour[-1], rejoin_cell):
-                self._append_path_segment(composed, [rejoin_cell])
-                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
-                branch_history_points = self._sample_world_points(
-                    [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
-                )
-                return composed, branch_history_points, True
+            self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
 
             branch_history_points = self._sample_world_points(
-                [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
+                [self._grid_to_world(dg, gx, gy) for gx, gy in detour]
             )
-            candidate_score = (
-                rejoin_idx,
-                -self._heur(detour[-1], rejoin_cell),
-                len(detour),
-            )
-            if best_effort_score is None or candidate_score > best_effort_score:
-                best_effort_score = candidate_score
-                best_effort_candidate = (composed, branch_history_points)
+            return composed, branch_history_points
 
-        if best_effort_candidate is not None:
-            return best_effort_candidate[0], best_effort_candidate[1], False
-        return None, None, False
+        return None, None
 
     def _update_avoidance_path(self, nominal_path, base_blocked, start_cell, goal_cell, dg, stamp, label):
         frame_id = dg.header.frame_id if dg.header.frame_id else "map"
@@ -1936,7 +1907,7 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp)
             return
 
-        avoid_path, branch_history_points, avoidance_rejoined = self._build_branch_avoidance_path(
+        avoid_path, branch_history_points = self._build_branch_avoidance_path(
             nominal_path,
             dynamic_blocked,
             start_cell,
@@ -2022,10 +1993,9 @@ class ConstrainedLocalReplanner:
             )
         if not self.avoidance_active:
             rospy.loginfo(
-                "constrained_local_replanner: avoidance path active | base=%s reason=%s branch_rejoin=%s obstacle_points=%d cells=%d",
+                "constrained_local_replanner: avoidance path active | base=%s reason=%s obstacle_points=%d cells=%d",
                 label,
                 trigger_reason,
-                "yes" if avoidance_rejoined else "partial",
                 clustered_point_count,
                 len(avoid_path),
             )
