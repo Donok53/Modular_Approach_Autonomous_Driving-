@@ -181,7 +181,6 @@
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
   <arg name="global_pointcloud_overlay_max_range_m" default="8.0"/>
   <arg name="global_pointcloud_overlay_lookahead_m" default="8.0"/>
-  <arg name="global_pointcloud_overlay_min_distance_m" default="2.0"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.0"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
   <arg name="dynamic_speed_thresh_mps" default="0.12"/>
@@ -409,7 +408,6 @@
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
-      <arg name="global_pointcloud_overlay_min_distance_m" value="$(arg global_pointcloud_overlay_min_distance_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
@@ -469,7 +467,6 @@
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
-      <arg name="global_pointcloud_overlay_min_distance_m" value="$(arg global_pointcloud_overlay_min_distance_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
@@ -624,7 +621,6 @@
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
-      <arg name="global_pointcloud_overlay_min_distance_m" value="$(arg global_pointcloud_overlay_min_distance_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>

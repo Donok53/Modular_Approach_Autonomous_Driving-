@@ -168,9 +168,6 @@ class ConstrainedLocalReplanner:
         self.global_pointcloud_overlay_lookahead_m = max(
             0.5, float(rospy.get_param("~global_pointcloud_overlay_lookahead_m", 8.0))
         )
-        self.global_pointcloud_overlay_min_distance_m = max(
-            0.0, float(rospy.get_param("~global_pointcloud_overlay_min_distance_m", 2.0))
-        )
         self.global_pointcloud_overlay_corridor_margin_m = max(
             0.0, float(rospy.get_param("~global_pointcloud_overlay_corridor_margin_m", 1.0))
         )
@@ -360,13 +357,12 @@ class ConstrainedLocalReplanner:
         )
         if self.enable_global_pointcloud_overlay and self.global_obstacle_overlay_topic:
             rospy.loginfo(
-                "constrained_local_replanner global obstacle overlay | topic=%s persist=%d ttl=%.1fs range=%.1fm lookahead=%.1fm min_dist=%.1fm corridor_margin=%.2fm",
+                "constrained_local_replanner global obstacle overlay | topic=%s persist=%d ttl=%.1fs range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
                 self.global_obstacle_overlay_topic,
                 self.global_pointcloud_overlay_persistence_frames,
                 self.global_pointcloud_overlay_ttl_s,
                 self.global_pointcloud_overlay_max_range_m,
                 self.global_pointcloud_overlay_lookahead_m,
-                self.global_pointcloud_overlay_min_distance_m,
                 self.global_pointcloud_overlay_corridor_margin_m,
             )
 
@@ -529,7 +525,6 @@ class ConstrainedLocalReplanner:
             return []
 
         max_range_sq = self.global_pointcloud_overlay_max_range_m * self.global_pointcloud_overlay_max_range_m
-        min_range_sq = self.global_pointcloud_overlay_min_distance_m * self.global_pointcloud_overlay_min_distance_m
         corridor_half = self._pointcloud_corridor_half_width_m(
             self.global_pointcloud_overlay_corridor_margin_m
         )
@@ -539,8 +534,6 @@ class ConstrainedLocalReplanner:
             dx = wx - self.odom_x
             dy = wy - self.odom_y
             if (dx * dx + dy * dy) > max_range_sq:
-                continue
-            if (dx * dx + dy * dy) < min_range_sq:
                 continue
             for idx in range(len(path_slice) - 1):
                 x0, y0 = path_slice[idx]
