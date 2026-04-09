@@ -127,7 +127,6 @@
   <arg name="global_path_continuous_replan" default="true"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.15"/>
   <arg name="global_path_replan_min_interval_s" default="0.40"/>
-  <arg name="global_path_continuous_replan_min_travel_m" default="1.0"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -334,7 +333,6 @@
         <arg name="continuous_replan" value="$(arg global_path_continuous_replan)"/>
         <arg name="replan_min_start_shift_m" value="$(arg global_path_replan_min_start_shift_m)"/>
         <arg name="replan_min_interval_s" value="$(arg global_path_replan_min_interval_s)"/>
-        <arg name="continuous_replan_min_travel_m" value="$(arg global_path_continuous_replan_min_travel_m)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -361,7 +359,6 @@
         <arg name="continuous_replan" value="$(arg global_path_continuous_replan)"/>
         <arg name="replan_min_start_shift_m" value="$(arg global_path_replan_min_start_shift_m)"/>
         <arg name="replan_min_interval_s" value="$(arg global_path_replan_min_interval_s)"/>
-        <arg name="continuous_replan_min_travel_m" value="$(arg global_path_continuous_replan_min_travel_m)"/>
       </include>
     </group>
   </group>

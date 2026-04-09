@@ -160,9 +160,6 @@ class AStarPlanner:
         self.replan_min_interval_s = max(
             0.0, float(rospy.get_param("~replan_min_interval_s", 0.40))
         )
-        self.continuous_replan_min_travel_m = max(
-            0.0, float(rospy.get_param("~continuous_replan_min_travel_m", 1.0))
-        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -206,8 +203,6 @@ class AStarPlanner:
         self._last_planned_goal_id = None
         self._last_plan_stamp_s = 0.0
         self._last_plan_success = False
-        self._continuous_replan_travel_m = 0.0
-        self._last_pose_for_replan_gate_xy = None
         self.dynamic_risk_grid = None
         self.global_obstacle_overlay = None
         self._dynamic_risk_grid_change_seq = 0
@@ -277,13 +272,6 @@ class AStarPlanner:
                     else "shrink-by-%s" % self.global_path_clearance_model
                 ),
             )
-        if self.continuous_replan:
-            rospy.loginfo(
-                "[astar] continuous replan | min_start_shift=%.2fm min_interval=%.2fs min_travel=%.2fm",
-                self.replan_min_start_shift_m,
-                self.replan_min_interval_s,
-                self.continuous_replan_min_travel_m,
-            )
         elif self.use_dynamic_risk_grid_global:
             rospy.logwarn(
                 "[astar] use_dynamic_risk_grid_global=true ignored because use_drivable_grid_global=false"
@@ -339,8 +327,6 @@ class AStarPlanner:
             self._last_planned_goal_id = None
             self._last_plan_stamp_s = 0.0
             self._last_plan_success = False
-            self._continuous_replan_travel_m = 0.0
-            self._last_pose_for_replan_gate_xy = None
             self._last_planned_dynamic_risk_grid_change_seq = self._dynamic_risk_grid_change_seq
             self._last_planned_global_obstacle_overlay_change_seq = (
                 self._global_obstacle_overlay_change_seq
@@ -356,16 +342,6 @@ class AStarPlanner:
         if a is None or b is None:
             return float("inf")
         return math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1]))
-
-    def _record_continuous_replan_travel(self, xy):
-        if xy is None:
-            return
-        xy = (float(xy[0]), float(xy[1]))
-        if self._last_pose_for_replan_gate_xy is not None:
-            self._continuous_replan_travel_m += self._xy_distance(
-                xy, self._last_pose_for_replan_gate_xy
-            )
-        self._last_pose_for_replan_gate_xy = xy
 
     def _has_active_goal_context(self):
         if not self.start_init_flag:
@@ -389,10 +365,6 @@ class AStarPlanner:
         self._last_planned_goal_id = self.goal_id
         self._last_plan_stamp_s = rospy.get_time()
         self._last_plan_success = bool(success)
-        self._continuous_replan_travel_m = 0.0
-        self._last_pose_for_replan_gate_xy = (
-            tuple(self._display_start_xy) if self._display_start_xy is not None else None
-        )
         self._last_planned_dynamic_risk_grid_change_seq = self._dynamic_risk_grid_change_seq
         self._last_planned_global_obstacle_overlay_change_seq = (
             self._global_obstacle_overlay_change_seq
@@ -410,6 +382,18 @@ class AStarPlanner:
         if (now - self._last_plan_stamp_s) < self.replan_min_interval_s:
             return False
         if not self._last_plan_success:
+            return True
+        if (
+            self.use_dynamic_risk_grid_global
+            and self._dynamic_risk_grid_change_seq
+            != self._last_planned_dynamic_risk_grid_change_seq
+        ):
+            return True
+        if (
+            self.use_global_obstacle_overlay
+            and self._global_obstacle_overlay_change_seq
+            != self._last_planned_global_obstacle_overlay_change_seq
+        ):
             return True
         if self.start_id != self._last_planned_start_id:
             return True
@@ -433,45 +417,7 @@ class AStarPlanner:
             >= 0.05
         ):
             return True
-        start_shifted = (
-            self._display_start_xy is not None
-            and self._last_planned_start_xy is not None
-            and self._xy_distance(self._display_start_xy, self._last_planned_start_xy)
-            >= self.replan_min_start_shift_m
-        )
-        dynamic_overlay_dirty = (
-            self.use_dynamic_risk_grid_global
-            and self._dynamic_risk_grid_change_seq
-            != self._last_planned_dynamic_risk_grid_change_seq
-        )
-        obstacle_overlay_dirty = (
-            self.use_global_obstacle_overlay
-            and self._global_obstacle_overlay_change_seq
-            != self._last_planned_global_obstacle_overlay_change_seq
-        )
-        if not (start_shifted or dynamic_overlay_dirty or obstacle_overlay_dirty):
-            return False
-        if (
-            self.continuous_replan_min_travel_m > 0.0
-            and self._continuous_replan_travel_m < self.continuous_replan_min_travel_m
-        ):
-            if self.debug_log_enable:
-                reasons = []
-                if start_shifted:
-                    reasons.append("start_shift")
-                if dynamic_overlay_dirty:
-                    reasons.append("risk_overlay")
-                if obstacle_overlay_dirty:
-                    reasons.append("pointcloud_overlay")
-                rospy.loginfo_throttle(
-                    1.0,
-                    "[astar] deferred continuous replan (%s): travel=%.2f/%.2fm",
-                    "+".join(reasons) if reasons else "unknown",
-                    self._continuous_replan_travel_m,
-                    self.continuous_replan_min_travel_m,
-                )
-            return False
-        return True
+        return False
 
     # ---------- ENU helpers ----------
     _A = 6378137.0
@@ -1687,12 +1633,6 @@ class AStarPlanner:
                 rospy.loginfo(f"[astar] start set by /initialpose -> node {n.id}")
 
     def pose_callback(self, data):
-        self._record_continuous_replan_travel(
-            (
-                float(data.pose.pose.position.x),
-                float(data.pose.pose.position.y),
-            )
-        )
         n = self._snap_and_update_from_position(data.pose.pose.position)
         self._display_start_xy = (
             float(data.pose.pose.position.x),
