@@ -177,6 +177,15 @@ class ConstrainedLocalReplanner:
         self.global_pointcloud_overlay_max_points = max(
             0, int(rospy.get_param("~global_pointcloud_overlay_max_points", 200))
         )
+        self.global_path_progress_backtrack_m = max(
+            0.0, float(rospy.get_param("~global_path_progress_backtrack_m", 0.8))
+        )
+        self.global_path_progress_forward_search_m = max(
+            0.5, float(rospy.get_param("~global_path_progress_forward_search_m", 3.0))
+        )
+        self.global_path_progress_recovery_distance_m = max(
+            0.2, float(rospy.get_param("~global_path_progress_recovery_distance_m", 1.5))
+        )
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
@@ -272,6 +281,8 @@ class ConstrainedLocalReplanner:
         self.global_obstacle_overlay_points_map = []
         self.global_obstacle_overlay_candidate_count = 0
         self.global_obstacle_overlay_confirmed_count = 0
+        self.global_path_progress_sig = None
+        self.global_path_progress_idx = 0
         self.avoidance_active = False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
@@ -417,6 +428,9 @@ class ConstrainedLocalReplanner:
 
     def global_path_callback(self, msg):
         self.global_path = msg
+        if msg is None or len(msg.poses) < 2:
+            self.global_path_progress_sig = None
+            self.global_path_progress_idx = 0
 
     def drivable_grid_callback(self, msg):
         self.drivable_grid = msg
@@ -1232,6 +1246,73 @@ class ConstrainedLocalReplanner:
     @staticmethod
     def _path_signature_from_points(points):
         return tuple((round(float(x), 2), round(float(y), 2)) for x, y in points)
+
+    @staticmethod
+    def _tracking_signature_from_points(points):
+        if not points:
+            return ()
+        stable_points = points[2:] if len(points) > 4 else (points[1:] if len(points) > 2 else points)
+        sig = [len(points)]
+        stride = max(1, len(stable_points) // 16)
+        for x, y in stable_points[::stride]:
+            sig.append(round(float(x), 2))
+            sig.append(round(float(y), 2))
+        sig.append(round(float(stable_points[-1][0]), 2))
+        sig.append(round(float(stable_points[-1][1]), 2))
+        return tuple(sig)
+
+    @staticmethod
+    def _nearest_idx_in_window(points, x, y, start_idx, end_idx):
+        best_i = max(0, min(int(start_idx), len(points) - 1))
+        best_d2 = float("inf")
+        for i in range(max(0, int(start_idx)), min(len(points) - 1, int(end_idx)) + 1):
+            px, py = points[i]
+            d2 = (px - x) * (px - x) + (py - y) * (py - y)
+            if d2 < best_d2:
+                best_d2 = d2
+                best_i = i
+        return best_i, math.sqrt(best_d2) if best_d2 < float("inf") else float("inf")
+
+    def _select_progress_locked_global_path_index(self, points):
+        if not points:
+            self.global_path_progress_sig = None
+            self.global_path_progress_idx = 0
+            return 0
+
+        sig = self._tracking_signature_from_points(points)
+        if sig != self.global_path_progress_sig:
+            idx = self._nearest_idx(points, self.odom_x, self.odom_y)
+            self.global_path_progress_sig = sig
+            self.global_path_progress_idx = idx
+            return idx
+
+        last_idx = max(0, min(int(self.global_path_progress_idx), len(points) - 1))
+
+        start_idx = last_idx
+        backtrack_m = 0.0
+        while start_idx > 0 and backtrack_m < self.global_path_progress_backtrack_m:
+            backtrack_m += self._heur(points[start_idx - 1], points[start_idx])
+            start_idx -= 1
+
+        end_idx = last_idx
+        forward_m = 0.0
+        while end_idx + 1 < len(points) and forward_m < self.global_path_progress_forward_search_m:
+            forward_m += self._heur(points[end_idx], points[end_idx + 1])
+            end_idx += 1
+
+        idx, dist_m = self._nearest_idx_in_window(
+            points,
+            self.odom_x,
+            self.odom_y,
+            start_idx,
+            end_idx,
+        )
+        if dist_m > self.global_path_progress_recovery_distance_m:
+            idx = self._nearest_idx(points, self.odom_x, self.odom_y)
+
+        self.global_path_progress_sig = sig
+        self.global_path_progress_idx = idx
+        return idx
 
     def _publish_path_history_markers(self):
         markers = MarkerArray()
@@ -2349,7 +2430,7 @@ class ConstrainedLocalReplanner:
                 )
                 return
             pts = self._path_points(self.global_path)
-            i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
+            i0 = self._select_progress_locked_global_path_index(pts)
             ig = self._accum_distance(pts, i0, self.lookahead_m)
             start_xy = (self.odom_x, self.odom_y)
             goal_xy = pts[ig]
