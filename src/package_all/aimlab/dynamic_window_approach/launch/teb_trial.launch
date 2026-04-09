@@ -150,7 +150,6 @@
   <arg name="move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="local_goal_tail_backoff_m" default="0.45"/>
   <arg name="local_goal_tail_backoff_trigger_m" default="1.10"/>
-  <arg name="apply_tail_backoff_on_local_path" default="false"/>
   <arg name="teb_xy_goal_tolerance_m" default="0.24"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
@@ -407,7 +406,6 @@
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>
       <param name="local_goal_tail_backoff_m" value="$(arg local_goal_tail_backoff_m)"/>
       <param name="local_goal_tail_backoff_trigger_m" value="$(arg local_goal_tail_backoff_trigger_m)"/>
-      <param name="apply_tail_backoff_on_local_path" value="$(arg apply_tail_backoff_on_local_path)"/>
       <param name="min_spacing_m" value="$(arg teb_min_spacing_m)"/>
       <param name="max_points" value="$(arg teb_max_via_points)"/>
       <param name="hold_requires_avoidance_path" value="$(arg hold_requires_avoidance_path)"/>
