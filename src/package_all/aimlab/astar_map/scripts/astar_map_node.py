@@ -1194,6 +1194,8 @@ class AStarPlanner:
             x0, y0 = nx, ny
 
     def _simplify_grid_path(self, path, blocked):
+        if not path:
+            return path
         if len(path) <= 2:
             return path
         simplified = [path[0]]
