@@ -43,7 +43,7 @@ import rospy, math, sys, time, csv, colorsys, struct, heapq, xml.etree.ElementTr
 from geometry_msgs.msg import Point, PoseStamped, Quaternion, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker
-from std_msgs.msg import ColorRGBA, Header, Int32MultiArray, Empty
+from std_msgs.msg import ColorRGBA, Header, Int32MultiArray, Empty, Bool
 from sensor_msgs.msg import PointCloud2, PointField
 from astar_map.msg import server_to_robot
 import utm
@@ -163,6 +163,16 @@ class AStarPlanner:
         self.replan_min_interval_s = max(
             0.0, float(rospy.get_param("~replan_min_interval_s", 0.40))
         )
+        self.keep_last_path_on_replan_failure = bool(
+            rospy.get_param("~keep_last_path_on_replan_failure", True)
+        )
+        self.keep_last_path_goal_tolerance_m = max(
+            0.0, float(rospy.get_param("~keep_last_path_goal_tolerance_m", 0.05))
+        )
+        self.keep_last_path_max_start_path_deviation_m = max(
+            0.0,
+            float(rospy.get_param("~keep_last_path_max_start_path_deviation_m", 0.80)),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -200,6 +210,13 @@ class AStarPlanner:
         self._last_snapped_goal_xy = None
         self._last_graph_goal_snap_xy = None
         self._goal_marker_xy = None
+        self._last_published_start_xy = None
+        self._last_published_goal_xy = None
+        self._last_published_start_id = None
+        self._last_published_goal_id = None
+        self._last_published_start_reset_seq = 0
+        self._manual_start_reset_seq = 0
+        self._path_is_fallback = False
         self._last_planned_start_xy = None
         self._last_planned_goal_xy = None
         self._last_planned_start_id = None
@@ -220,6 +237,7 @@ class AStarPlanner:
         self.pub_path_display = rospy.Publisher('/astar/path_display', Path, queue_size=10)
         self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10)
         self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10)
+        self.pub_path_is_fallback = rospy.Publisher('/astar/path_is_fallback', Bool, queue_size=10)
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
 
         self.sub_start_from_rviz = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.callback_start)
@@ -322,9 +340,6 @@ class AStarPlanner:
             self.load_osm_data(self._osm_file, self._ref_file)
             self.start_init_flag = False
             self.new_goal_flag = False
-            self._last_path_nodes = None
-            self._last_world_path_signature = None
-            self._last_world_path = None
             self._last_planned_start_xy = None
             self._last_planned_goal_xy = None
             self._last_planned_start_id = None
@@ -707,6 +722,16 @@ class AStarPlanner:
         proj_y = ay + t * vy
         return math.hypot(px - proj_x, py - proj_y)
 
+    def _distance_point_to_polyline(self, pt, points):
+        if not points:
+            return float("inf")
+        if len(points) == 1:
+            return math.hypot(float(pt[0]) - float(points[0][0]), float(pt[1]) - float(points[0][1]))
+        best = float("inf")
+        for idx in range(len(points) - 1):
+            best = min(best, self._point_line_distance(pt, points[idx], points[idx + 1]))
+        return best
+
     def _rdp(self, points, epsilon):
         if len(points) <= 2 or epsilon <= 0.0:
             return list(points)
@@ -862,6 +887,78 @@ class AStarPlanner:
         ids_msg.data = []
         self.pub_path_node_id_list.publish(ids_msg)
 
+    def _publish_path_fallback_state(self, is_fallback, force=False):
+        is_fallback = bool(is_fallback)
+        if (not force) and self._path_is_fallback == is_fallback:
+            return
+        self._path_is_fallback = is_fallback
+        self.pub_path_is_fallback.publish(Bool(data=is_fallback))
+
+    def _capture_published_path_context(self):
+        self._last_published_start_xy = (
+            tuple(self._display_start_xy) if self._display_start_xy is not None else None
+        )
+        self._last_published_goal_xy = (
+            tuple(self._goal_display_xy) if self._goal_display_xy is not None else None
+        )
+        self._last_published_start_id = self.start_id
+        self._last_published_goal_id = self.goal_id
+        self._last_published_start_reset_seq = self._manual_start_reset_seq
+
+    def _clear_published_path_context(self):
+        self._last_published_start_xy = None
+        self._last_published_goal_xy = None
+        self._last_published_start_id = None
+        self._last_published_goal_id = None
+        self._last_published_start_reset_seq = self._manual_start_reset_seq
+
+    def _current_published_path_world_points(self):
+        if self._last_world_path:
+            return list(self._last_world_path)
+        if not self._last_path_nodes:
+            return []
+        points = []
+        for nid in self._last_path_nodes:
+            n = self.findNodeById(nid)
+            if n is None:
+                continue
+            points.append(self._xy_to_map(n.east, n.north))
+        return points
+
+    def _can_keep_last_path_on_replan_failure(self):
+        if not self.keep_last_path_on_replan_failure:
+            return False, "disabled"
+        if self._last_path_nodes is None and self._last_world_path_signature is None:
+            return False, "no_previous_path"
+        if (
+            self._last_published_goal_id is not None
+            and self.goal_id is not None
+            and self.goal_id != self._last_published_goal_id
+        ):
+            return False, "goal_changed"
+        if (self._goal_display_xy is None) != (self._last_published_goal_xy is None):
+            return False, "goal_changed"
+        if (
+            self._goal_display_xy is not None
+            and self._last_published_goal_xy is not None
+            and self._xy_distance(self._goal_display_xy, self._last_published_goal_xy)
+            > self.keep_last_path_goal_tolerance_m
+        ):
+            return False, "goal_changed"
+        if self._manual_start_reset_seq != self._last_published_start_reset_seq:
+            return False, "manual_start_reset"
+        if self._display_start_xy is None:
+            return False, "missing_start"
+        path_points = self._current_published_path_world_points()
+        if not path_points:
+            return False, "missing_path_geometry"
+        if (
+            self._distance_point_to_polyline(self._display_start_xy, path_points)
+            > self.keep_last_path_max_start_path_deviation_m
+        ):
+            return False, "start_off_path"
+        return True, "ok"
+
     def publish_world_path_if_changed(self, world_points):
         now = rospy.Time.now()
         signature = self._world_path_signature(world_points)
@@ -878,6 +975,8 @@ class AStarPlanner:
             self._last_world_path = list(world_points)
             self._last_path_nodes = None
             self._last_path_pub_t = time.monotonic()
+            self._capture_published_path_context()
+            self._publish_path_fallback_state(False, force=True)
             self._publish_world_path_messages(world_points, stamp=now, simplify=False)
             if self.debug_log_enable:
                 goal_txt = ""
@@ -891,12 +990,23 @@ class AStarPlanner:
                     goal_txt,
                 )
         elif do_periodic:
+            self._capture_published_path_context()
+            self._publish_path_fallback_state(False)
             self._publish_world_path_messages(world_points, stamp=now, simplify=False)
             if self.debug_log_enable:
                 rospy.loginfo("[astar] drivable-grid path republished (periodic)")
+        elif self._path_is_fallback:
+            self._capture_published_path_context()
+            self._publish_path_fallback_state(False)
+            self._last_path_pub_t = time.monotonic()
+            self._publish_world_path_messages(world_points, stamp=now, simplify=False)
+            if self.debug_log_enable:
+                rospy.loginfo("[astar] drivable-grid path republished (fallback cleared)")
 
     def clear_published_path(self, stamp=None):
         if self._last_path_nodes is None and self._last_world_path_signature is None:
+            self._clear_published_path_context()
+            self._publish_path_fallback_state(False, force=True)
             return
         if stamp is None:
             stamp = rospy.Time.now()
@@ -911,6 +1021,8 @@ class AStarPlanner:
         self._last_world_path_signature = None
         self._last_world_path = None
         self._last_path_pub_t = 0.0
+        self._clear_published_path_context()
+        self._publish_path_fallback_state(False, force=True)
         if self.debug_log_enable:
             rospy.loginfo("[astar] cleared published path")
 
@@ -1644,6 +1756,7 @@ class AStarPlanner:
         return False
 
     def callback_start(self, data):
+        self._manual_start_reset_seq += 1
         n = self._snap_and_update_from_position(data.pose.pose.position)
         self._display_start_xy = (
             float(data.pose.pose.position.x),
@@ -1735,15 +1848,26 @@ class AStarPlanner:
             self._last_world_path_signature = None
             self._last_world_path = None
             self._last_path_pub_t = time.monotonic()
+            self._capture_published_path_context()
+            self._publish_path_fallback_state(False, force=True)
             msg = Int32MultiArray(); msg.data = path_nodes
             self.pub_path_node_id_list.publish(msg)
             self.show_path(path_nodes, stamp=now)
             if self.debug_log_enable:
                 rospy.loginfo(f"[astar] path published ({len(path_nodes)} nodes) [mode={self.mode}]")
         elif do_periodic:
+            self._capture_published_path_context()
+            self._publish_path_fallback_state(False)
             self.show_path(path_nodes, stamp=now)
             if self.debug_log_enable:
                 rospy.loginfo("[astar] path republished (periodic)")
+        elif self._path_is_fallback:
+            self._capture_published_path_context()
+            self._publish_path_fallback_state(False)
+            self._last_path_pub_t = time.monotonic()
+            self.show_path(path_nodes, stamp=now)
+            if self.debug_log_enable:
+                rospy.loginfo("[astar] path republished (fallback cleared)")
 
 # -------------------- Main --------------------
 if __name__ == "__main__":
@@ -1825,25 +1949,29 @@ if __name__ == "__main__":
                     world_path = None
                     path_nodes = list(new_path_nodes)
                     a.publish_path_if_changed(path_nodes)
-                elif prev_world_path or prev_path_nodes:
-                    world_path = prev_world_path
-                    path_nodes = prev_path_nodes
-                    rospy.logwarn_throttle(
-                        1.0,
-                        "[astar] replanning failed; keeping last valid global path until replacement is ready",
-                    )
                 else:
-                    world_path = None
-                    path_nodes = []
-                    a.clear_published_path(stamp=rospy.Time.now())
-                    rospy.logwarn_throttle(
-                        1.0,
-                        "[astar] path not found and no previous global path is available",
-                    )
+                    keep_prev_path, keep_reason = a._can_keep_last_path_on_replan_failure()
+                    if keep_prev_path and (prev_world_path or prev_path_nodes):
+                        world_path = prev_world_path
+                        path_nodes = prev_path_nodes
+                        a._publish_path_fallback_state(True)
+                        rospy.logwarn_throttle(
+                            1.0,
+                            "[astar] replanning failed; keeping last valid global path until replacement is ready",
+                        )
+                    else:
+                        world_path = None
+                        path_nodes = []
+                        a.clear_published_path(stamp=rospy.Time.now())
+                        rospy.logwarn_throttle(
+                            1.0,
+                            "[astar] path not found; previous global path dropped (%s)",
+                            keep_reason,
+                        )
 
-            if world_path and a.path_repub_period > 0.0:
+            if (not a._path_is_fallback) and world_path and a.path_repub_period > 0.0:
                 a.publish_world_path_if_changed(world_path)
-            elif path_nodes and a.path_repub_period > 0.0:
+            elif (not a._path_is_fallback) and path_nodes and a.path_repub_period > 0.0:
                 a.publish_path_if_changed(path_nodes)
 
             rate.sleep()
