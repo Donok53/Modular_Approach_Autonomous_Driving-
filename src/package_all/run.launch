@@ -76,7 +76,7 @@
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_enable_blind_zone_turn_guard" default="true"/>
   <arg name="teb_blind_zone_turn_guard_radius_m" default="1.40"/>
-  <arg name="teb_blind_zone_turn_guard_ttl_s" default="3.0"/>
+  <arg name="teb_blind_zone_turn_guard_ttl_s" default="0.45"/>
   <arg name="teb_blind_zone_turn_guard_linear_cap_mps" default="0.12"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_rear_approach_conservative_enabled" default="true"/>

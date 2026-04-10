@@ -118,7 +118,7 @@ class TebCmdVelRelay(object):
             0.0, float(rospy.get_param("~blind_zone_turn_guard_radius_m", 1.40))
         )
         self.blind_zone_turn_guard_ttl_s = max(
-            0.0, float(rospy.get_param("~blind_zone_turn_guard_ttl_s", 3.0))
+            0.0, float(rospy.get_param("~blind_zone_turn_guard_ttl_s", 0.45))
         )
         self.blind_zone_turn_guard_side_margin_m = max(
             0.0, float(rospy.get_param("~blind_zone_turn_guard_side_margin_m", 0.08))
@@ -1796,42 +1796,13 @@ class TebCmdVelRelay(object):
         guarded.angular.x = 0.0
         guarded.angular.y = 0.0
 
-        close_side_obstacle = obstacle_x <= (
-            self.robot_half_length + self.blind_zone_turn_guard_front_margin_m
-        )
         slowed = False
-        if close_side_obstacle:
-            guarded.linear.x = 0.0
-        elif (
+        if (
             self.blind_zone_turn_guard_linear_cap_mps > 0.0
             and float(guarded.linear.x) > self.blind_zone_turn_guard_linear_cap_mps
         ):
             guarded.linear.x = self.blind_zone_turn_guard_linear_cap_mps
             slowed = True
-
-        if float(guarded.linear.x) <= 1e-4:
-            self._last_safety_reason = "blind_zone_turn_stop"
-            rospy.logwarn_throttle(
-                self.log_period_s,
-                "teb_cmd_vel_relay: blind-zone turn stop | obstacle=(%.2f,%.2f) age=%.2fs cmd(v=%.3f,w=%.3f)",
-                obstacle_x,
-                obstacle_y,
-                age_s,
-                float(cmd.linear.x),
-                float(cmd.angular.z),
-            )
-            return Twist(), {
-                "event_type": "CONTROL_ACTION_CHANGE",
-                "trigger_reason": "blind_zone_obstacle_memory",
-                "action_taken": "blind_zone_hold_stop",
-                "avoid_direction": turn_away_direction,
-                "stop_commanded": True,
-                "slowdown_commanded": False,
-                "speed_limit_mps": 0.0,
-                "closest_obstacle_dist_m": float(memory["range_m"]),
-                "obstacle_lateral_offset_m": obstacle_y,
-                "summary_text": "TEB relay blocked a turn toward a recently observed side obstacle that has likely entered the LiDAR blind zone.",
-            }
 
         self._last_safety_reason = "blind_zone_turn_veto"
         rospy.loginfo_throttle(
@@ -1852,10 +1823,10 @@ class TebCmdVelRelay(object):
             "avoid_direction": turn_away_direction,
             "stop_commanded": False,
             "slowdown_commanded": slowed,
-            "speed_limit_mps": float(guarded.linear.x) if slowed else -1.0,
+            "speed_limit_mps": float(guarded.linear.x),
             "closest_obstacle_dist_m": float(memory["range_m"]),
             "obstacle_lateral_offset_m": obstacle_y,
-            "summary_text": "TEB relay suppressed a turn toward a recently observed side obstacle so the robot keeps respecting the LiDAR blind zone.",
+            "summary_text": "TEB relay suppressed a turn toward a recently observed side obstacle and temporarily capped forward speed so the robot can clear the LiDAR blind zone without freezing.",
         }
 
     def cmd_callback(self, msg):
@@ -1944,6 +1915,7 @@ class TebCmdVelRelay(object):
             cmd,
             now,
             bypass=bool(explain and explain.get("stop_commanded", False))
+            or bool(explain and explain.get("action_taken", "") == "blind_zone_turn_veto")
             or self._is_final_goal_brake_active(),
         )
         self._safe_publish_cmd(cmd)
