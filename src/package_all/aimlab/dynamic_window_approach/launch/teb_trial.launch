@@ -153,6 +153,10 @@
   <arg name="final_brake_distance_m" default="0.18"/>
   <arg name="ignore_local_hold_near_goal_distance_m" default="0.45"/>
   <arg name="obstacle_cloud_timeout_s" default="0.6"/>
+  <arg name="enable_blind_zone_turn_guard" default="true"/>
+  <arg name="blind_zone_turn_guard_radius_m" default="1.40"/>
+  <arg name="blind_zone_turn_guard_ttl_s" default="3.0"/>
+  <arg name="blind_zone_turn_guard_linear_cap_mps" default="0.12"/>
   <arg name="behavior_cmd_timeout_s" default="0.8"/>
   <arg name="rear_approach_conservative_enabled" default="true"/>
   <arg name="rear_approach_max_angular_speed" default="0.12"/>
@@ -492,6 +496,10 @@
     <param name="final_brake_distance_m" value="$(arg final_brake_distance_m)"/>
     <param name="ignore_local_hold_near_goal_distance_m" value="$(arg ignore_local_hold_near_goal_distance_m)"/>
     <param name="obstacle_cloud_timeout_s" value="$(arg obstacle_cloud_timeout_s)"/>
+    <param name="enable_blind_zone_turn_guard" value="$(arg enable_blind_zone_turn_guard)"/>
+    <param name="blind_zone_turn_guard_radius_m" value="$(arg blind_zone_turn_guard_radius_m)"/>
+    <param name="blind_zone_turn_guard_ttl_s" value="$(arg blind_zone_turn_guard_ttl_s)"/>
+    <param name="blind_zone_turn_guard_linear_cap_mps" value="$(arg blind_zone_turn_guard_linear_cap_mps)"/>
     <param name="behavior_cmd_timeout_s" value="$(arg behavior_cmd_timeout_s)"/>
     <param name="rear_approach_conservative_enabled" value="$(arg rear_approach_conservative_enabled)"/>
     <param name="rear_approach_max_angular_speed" value="$(arg rear_approach_max_angular_speed)"/>

@@ -111,6 +111,29 @@ class TebCmdVelRelay(object):
         self.obstacle_cloud_timeout_s = max(
             0.1, float(rospy.get_param("~obstacle_cloud_timeout_s", 0.6))
         )
+        self.enable_blind_zone_turn_guard = bool(
+            rospy.get_param("~enable_blind_zone_turn_guard", True)
+        )
+        self.blind_zone_turn_guard_radius_m = max(
+            0.0, float(rospy.get_param("~blind_zone_turn_guard_radius_m", 1.40))
+        )
+        self.blind_zone_turn_guard_ttl_s = max(
+            0.0, float(rospy.get_param("~blind_zone_turn_guard_ttl_s", 3.0))
+        )
+        self.blind_zone_turn_guard_side_margin_m = max(
+            0.0, float(rospy.get_param("~blind_zone_turn_guard_side_margin_m", 0.08))
+        )
+        self.blind_zone_turn_guard_front_margin_m = max(
+            0.0, float(rospy.get_param("~blind_zone_turn_guard_front_margin_m", 0.15))
+        )
+        self.blind_zone_turn_guard_angular_deadband = max(
+            0.0,
+            float(rospy.get_param("~blind_zone_turn_guard_angular_deadband", 0.03)),
+        )
+        self.blind_zone_turn_guard_linear_cap_mps = max(
+            0.0,
+            float(rospy.get_param("~blind_zone_turn_guard_linear_cap_mps", 0.12)),
+        )
         self.behavior_cmd_timeout_s = max(
             0.1, float(rospy.get_param("~behavior_cmd_timeout_s", 0.8))
         )
@@ -260,6 +283,11 @@ class TebCmdVelRelay(object):
         self.closest_stop_obstacle_y = 0.0
         self.closest_slow_obstacle_x = float("inf")
         self.closest_slow_obstacle_y = 0.0
+        self.blind_zone_memory_time = 0.0
+        self.blind_zone_memory_x = float("inf")
+        self.blind_zone_memory_y = 0.0
+        self.blind_zone_memory_side = 0
+        self.blind_zone_memory_range_m = float("inf")
         self._last_explain_key = None
         self._last_explain_time = 0.0
         self._last_debug_text = ""
@@ -312,7 +340,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f)",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -346,6 +374,10 @@ class TebCmdVelRelay(object):
             self.ignore_local_hold_near_goal_distance_m,
             "on" if self.allow_in_place_rotation_near_obstacle else "off",
             "on" if self.allow_in_place_rotation_during_local_hold else "off",
+            "on" if self.enable_blind_zone_turn_guard else "off",
+            self.blind_zone_turn_guard_radius_m,
+            self.blind_zone_turn_guard_ttl_s,
+            self.blind_zone_turn_guard_linear_cap_mps,
         )
 
     @staticmethod
@@ -841,6 +873,80 @@ class TebCmdVelRelay(object):
             and (angular_z * lateral_y) < 0.0
         )
 
+    def _classify_blind_zone_candidate(self, obstacle_x, obstacle_y):
+        if (not self.enable_blind_zone_turn_guard) or (
+            self.blind_zone_turn_guard_radius_m <= 0.0
+        ):
+            return None
+
+        x = float(obstacle_x)
+        y = float(obstacle_y)
+        if x < -0.10:
+            return None
+
+        distance = math.hypot(x, y)
+        if distance > self.blind_zone_turn_guard_radius_m:
+            return None
+
+        side_limit = self.robot_half_width + self.blind_zone_turn_guard_side_margin_m
+        side = 0
+        if y >= side_limit:
+            side = 1
+        elif y <= -side_limit:
+            side = -1
+        elif x >= 0.0 and abs(y) <= side_limit:
+            side = 0
+        else:
+            return None
+
+        score = distance
+        if side == 0:
+            score -= min(0.20, max(0.0, x) * 0.05)
+        return score, x, y, side, distance
+
+    def _update_blind_zone_memory(self, candidate, now):
+        if candidate is None:
+            return
+        _score, x, y, side, distance = candidate
+        self.blind_zone_memory_time = float(now)
+        self.blind_zone_memory_x = float(x)
+        self.blind_zone_memory_y = float(y)
+        self.blind_zone_memory_side = int(side)
+        self.blind_zone_memory_range_m = float(distance)
+
+    def _get_active_blind_zone_memory(self, now):
+        if (not self.enable_blind_zone_turn_guard) or (
+            self.blind_zone_turn_guard_ttl_s <= 0.0
+        ):
+            return None
+        if self.blind_zone_memory_time <= 0.0:
+            return None
+        age = float(now) - float(self.blind_zone_memory_time)
+        if age < 0.0 or age > self.blind_zone_turn_guard_ttl_s:
+            return None
+        return {
+            "age_s": age,
+            "x": float(self.blind_zone_memory_x),
+            "y": float(self.blind_zone_memory_y),
+            "side": int(self.blind_zone_memory_side),
+            "range_m": float(self.blind_zone_memory_range_m),
+        }
+
+    def _safe_turn_direction_from_side(self, side):
+        if side > 0:
+            return "right"
+        if side < 0:
+            return "left"
+        return "none"
+
+    def _is_turning_toward_side(self, angular_z, side):
+        angular = float(angular_z)
+        if side > 0:
+            return angular > self.blind_zone_turn_guard_angular_deadband
+        if side < 0:
+            return angular < -self.blind_zone_turn_guard_angular_deadband
+        return False
+
     @staticmethod
     def _rotation_only_cmd(cmd):
         out = Twist()
@@ -900,8 +1006,14 @@ class TebCmdVelRelay(object):
         stop_min_y = 0.0
         slow_min_x = float("inf")
         slow_min_y = 0.0
+        blind_zone_candidate = None
+        blind_zone_score = float("inf")
 
         for x, y, _z in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+            blind_candidate = self._classify_blind_zone_candidate(x, y)
+            if blind_candidate is not None and blind_candidate[0] < blind_zone_score:
+                blind_zone_candidate = blind_candidate
+                blind_zone_score = blind_candidate[0]
             if x <= 0.0:
                 continue
             abs_y = abs(float(y))
@@ -926,11 +1038,13 @@ class TebCmdVelRelay(object):
                     stop_min_x = float(x)
                     stop_min_y = float(y)
 
-        self.last_obstacle_time = rospy.get_time()
+        now = rospy.get_time()
+        self.last_obstacle_time = now
         self.closest_stop_obstacle_x = stop_min_x
         self.closest_stop_obstacle_y = stop_min_y
         self.closest_slow_obstacle_x = slow_min_x
         self.closest_slow_obstacle_y = slow_min_y
+        self._update_blind_zone_memory(blind_zone_candidate, now)
 
     def odom_callback(self, msg):
         self.odom_x = float(msg.pose.pose.position.x)
@@ -1637,6 +1751,113 @@ class TebCmdVelRelay(object):
 
         return cmd, None
 
+    def _apply_blind_zone_turn_guard(self, cmd, now):
+        memory = self._get_active_blind_zone_memory(now)
+        if memory is None:
+            return cmd, None
+
+        side = int(memory["side"])
+        obstacle_x = float(memory["x"])
+        obstacle_y = float(memory["y"])
+        age_s = float(memory["age_s"])
+        turn_away_direction = self._safe_turn_direction_from_side(side)
+
+        if side == 0:
+            if float(cmd.linear.x) <= 0.0:
+                return cmd, None
+            self._last_safety_reason = "blind_zone_center_stop"
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: blind-zone front hold | obstacle=(%.2f,%.2f) age=%.2fs cmd(v=%.3f,w=%.3f)",
+                obstacle_x,
+                obstacle_y,
+                age_s,
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            return Twist(), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "blind_zone_obstacle_memory",
+                "action_taken": "blind_zone_hold_stop",
+                "avoid_direction": turn_away_direction,
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(memory["range_m"]),
+                "obstacle_lateral_offset_m": obstacle_y,
+                "summary_text": "TEB relay held the robot because a recently observed close obstacle is now inside the LiDAR blind zone ahead of the robot.",
+            }
+
+        if not self._is_turning_toward_side(cmd.angular.z, side):
+            return cmd, None
+
+        guarded = self._copy_cmd(cmd)
+        guarded.angular.z = 0.0
+        guarded.angular.x = 0.0
+        guarded.angular.y = 0.0
+
+        close_side_obstacle = obstacle_x <= (
+            self.robot_half_length + self.blind_zone_turn_guard_front_margin_m
+        )
+        slowed = False
+        if close_side_obstacle:
+            guarded.linear.x = 0.0
+        elif (
+            self.blind_zone_turn_guard_linear_cap_mps > 0.0
+            and float(guarded.linear.x) > self.blind_zone_turn_guard_linear_cap_mps
+        ):
+            guarded.linear.x = self.blind_zone_turn_guard_linear_cap_mps
+            slowed = True
+
+        if float(guarded.linear.x) <= 1e-4:
+            self._last_safety_reason = "blind_zone_turn_stop"
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: blind-zone turn stop | obstacle=(%.2f,%.2f) age=%.2fs cmd(v=%.3f,w=%.3f)",
+                obstacle_x,
+                obstacle_y,
+                age_s,
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            return Twist(), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "blind_zone_obstacle_memory",
+                "action_taken": "blind_zone_hold_stop",
+                "avoid_direction": turn_away_direction,
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(memory["range_m"]),
+                "obstacle_lateral_offset_m": obstacle_y,
+                "summary_text": "TEB relay blocked a turn toward a recently observed side obstacle that has likely entered the LiDAR blind zone.",
+            }
+
+        self._last_safety_reason = "blind_zone_turn_veto"
+        rospy.loginfo_throttle(
+            self.log_period_s,
+            "teb_cmd_vel_relay: blind-zone turn veto | obstacle=(%.2f,%.2f) age=%.2fs cmd(v=%.3f,w=%.3f) -> out(v=%.3f,w=%.3f)",
+            obstacle_x,
+            obstacle_y,
+            age_s,
+            float(cmd.linear.x),
+            float(cmd.angular.z),
+            float(guarded.linear.x),
+            float(guarded.angular.z),
+        )
+        return guarded, {
+            "event_type": "CONTROL_ACTION_CHANGE",
+            "trigger_reason": "blind_zone_obstacle_memory",
+            "action_taken": "blind_zone_turn_veto",
+            "avoid_direction": turn_away_direction,
+            "stop_commanded": False,
+            "slowdown_commanded": slowed,
+            "speed_limit_mps": float(guarded.linear.x) if slowed else -1.0,
+            "closest_obstacle_dist_m": float(memory["range_m"]),
+            "obstacle_lateral_offset_m": obstacle_y,
+            "summary_text": "TEB relay suppressed a turn toward a recently observed side obstacle so the robot keeps respecting the LiDAR blind zone.",
+        }
+
     def cmd_callback(self, msg):
         self.last_cmd = msg
         self.last_rx_time = rospy.get_time()
@@ -1710,6 +1931,11 @@ class TebCmdVelRelay(object):
 
         if not (explain and explain.get("stop_commanded", False)):
             cmd, info = self._apply_obstacle_safety(cmd, now)
+            if info is not None:
+                explain = info
+
+        if not (explain and explain.get("stop_commanded", False)):
+            cmd, info = self._apply_blind_zone_turn_guard(cmd, now)
             if info is not None:
                 explain = info
 

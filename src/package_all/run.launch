@@ -74,6 +74,10 @@
   <arg name="teb_tiny_reverse_forward_crawl_clearance_m" default="0.80"/>
   <arg name="teb_tiny_reverse_forward_crawl_max_angular_speed" default="0.35"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
+  <arg name="teb_enable_blind_zone_turn_guard" default="true"/>
+  <arg name="teb_blind_zone_turn_guard_radius_m" default="1.40"/>
+  <arg name="teb_blind_zone_turn_guard_ttl_s" default="3.0"/>
+  <arg name="teb_blind_zone_turn_guard_linear_cap_mps" default="0.12"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_rear_approach_conservative_enabled" default="true"/>
   <arg name="teb_rear_approach_max_angular_speed" default="0.12"/>
@@ -741,6 +745,10 @@
       <arg name="tiny_reverse_forward_crawl_clearance_m" value="$(arg teb_tiny_reverse_forward_crawl_clearance_m)"/>
       <arg name="tiny_reverse_forward_crawl_max_angular_speed" value="$(arg teb_tiny_reverse_forward_crawl_max_angular_speed)"/>
       <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
+      <arg name="enable_blind_zone_turn_guard" value="$(arg teb_enable_blind_zone_turn_guard)"/>
+      <arg name="blind_zone_turn_guard_radius_m" value="$(arg teb_blind_zone_turn_guard_radius_m)"/>
+      <arg name="blind_zone_turn_guard_ttl_s" value="$(arg teb_blind_zone_turn_guard_ttl_s)"/>
+      <arg name="blind_zone_turn_guard_linear_cap_mps" value="$(arg teb_blind_zone_turn_guard_linear_cap_mps)"/>
       <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
       <arg name="rear_approach_conservative_enabled" value="$(arg teb_rear_approach_conservative_enabled)"/>
       <arg name="rear_approach_max_angular_speed" value="$(arg teb_rear_approach_max_angular_speed)"/>
