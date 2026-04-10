@@ -1509,9 +1509,9 @@ class AStarPlanner:
                 goal_gap_m,
                 self.drivable_grid_goal_extension_max_gap_m,
             )
-        self._goal_marker_xy = (
-            tuple(goal_xy) if extend_to_clicked_goal else snapped_goal_xy
-        )
+        # Keep the white clicked-goal marker anchored to the user-selected
+        # destination even when the path itself snaps to a safer grid cell.
+        path_goal_xy = tuple(goal_xy) if extend_to_clicked_goal else snapped_goal_xy
         if (not extend_to_clicked_goal) and self.debug_log_enable:
             rospy.loginfo_throttle(
                 1.0,
@@ -1522,7 +1522,7 @@ class AStarPlanner:
                 float(snapped_goal_xy[1]),
                 goal_gap_m,
             )
-        world_points.append(self._goal_marker_xy)
+        world_points.append(path_goal_xy)
         return self._dedupe_world_points(world_points)
 
     # -------------------- Visualization --------------------
