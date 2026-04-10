@@ -774,6 +774,16 @@ class AStarPlanner:
             pts = self._rdp(pts, self.path_simplify_epsilon_m)
         return self._resample_path(pts, self.published_path_spacing_m)
 
+    def _prepare_visualization_path(self, world_points, simplify=True):
+        pts = self._prepare_display_path(world_points, simplify=simplify)
+        if self._display_start_xy is not None:
+            if (not pts) or self._xy_distance(self._display_start_xy, pts[0]) > 0.05:
+                pts = [tuple(self._display_start_xy)] + pts
+        if self._goal_display_xy is not None:
+            if (not pts) or self._xy_distance(self._goal_display_xy, pts[-1]) > 0.05:
+                pts = list(pts) + [tuple(self._goal_display_xy)]
+        return self._dedupe_world_points(pts)
+
     @staticmethod
     def _set_pose_yaw(pose_stamped, yaw):
         pose_stamped.pose.orientation.x = 0.0
@@ -865,15 +875,16 @@ class AStarPlanner:
         pd = Path()
         pd.header.frame_id = "map"
         pd.header.stamp = stamp
-        if self._display_start_xy is not None and self._goal_display_xy is not None:
-            for x, y in (self._display_start_xy, self._goal_display_xy):
-                pds = PoseStamped()
-                pds.header = pd.header
-                pds.pose.position.x = float(x)
-                pds.pose.position.y = float(y)
-                pds.pose.position.z = 0.0
-                pds.pose.orientation.w = 1.0
-                pd.poses.append(pds)
+        viz_points = self._prepare_visualization_path(world_points, simplify=simplify)
+        viz_yaws = self._path_yaws(viz_points)
+        for (x, y), yaw in zip(viz_points, viz_yaws):
+            pds = PoseStamped()
+            pds.header = pd.header
+            pds.pose.position.x = float(x)
+            pds.pose.position.y = float(y)
+            pds.pose.position.z = 0.0
+            self._set_pose_yaw(pds, yaw)
+            pd.poses.append(pds)
 
         pw = Path()
         pw.header.frame_id = "map"
@@ -1550,13 +1561,13 @@ class AStarPlanner:
             self._set_pose_yaw(ps, yaw)
             p.poses.append(ps)
 
-        if self._display_start_xy is not None and self._goal_display_xy is not None:
-            sx, sy = self._display_start_xy
-            gx, gy = self._goal_display_xy
-            for x, y in ((sx, sy), (gx, gy)):
-                pds = PoseStamped(); pds.header = pd.header
-                pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
-                pd.poses.append(pds)
+        viz_points = self._prepare_visualization_path(world_points)
+        viz_yaws = self._path_yaws(viz_points)
+        for (x, y), yaw in zip(viz_points, viz_yaws):
+            pds = PoseStamped(); pds.header = pd.header
+            pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
+            self._set_pose_yaw(pds, yaw)
+            pd.poses.append(pds)
 
         for lat, lon in wgs_points:
             pwps = PoseStamped(); pwps.header = pw.header
