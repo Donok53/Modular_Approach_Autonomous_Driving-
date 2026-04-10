@@ -103,6 +103,8 @@
   <arg name="use_pointcloud_obstacles" default="true"/>
   <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
   <arg name="move_base_goal_topic" default="/planning/teb_goal"/>
+  <arg name="publish_final_goal_only" default="false"/>
+  <arg name="final_goal_topic" default="/move_base_simple/goal"/>
   <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
   <arg name="teb_filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
   <arg name="teb_filter_min_z" default="-0.05"/>
@@ -426,6 +428,8 @@
       <param name="output_topic" value="$(arg teb_via_points_topic)"/>
       <param name="odom_topic" value="$(arg planning_pose_topic)"/>
       <param name="goal_output_topic" value="$(arg move_base_goal_topic)"/>
+      <param name="publish_final_goal_only" value="$(arg publish_final_goal_only)"/>
+      <param name="final_goal_topic" value="$(arg final_goal_topic)"/>
       <param name="goal_lookahead_m" value="$(arg move_base_goal_lookahead_m)"/>
       <param name="final_goal_switch_distance_m" value="$(arg final_goal_switch_distance_m)"/>
       <param name="goal_update_min_dist_m" value="$(arg move_base_goal_update_min_dist_m)"/>

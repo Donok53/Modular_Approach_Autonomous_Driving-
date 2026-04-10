@@ -26,6 +26,12 @@ class AStarPathToTebViaPoints(object):
         )
         self.odom_topic = str(rospy.get_param("~odom_topic", "")).strip()
         self.goal_output_topic = str(rospy.get_param("~goal_output_topic", "")).strip()
+        self.publish_final_goal_only = bool(
+            rospy.get_param("~publish_final_goal_only", False)
+        )
+        self.final_goal_topic = str(
+            rospy.get_param("~final_goal_topic", "/move_base_simple/goal")
+        ).strip()
         self.goal_lookahead_m = max(
             0.0, float(rospy.get_param("~goal_lookahead_m", 4.0))
         )
@@ -65,6 +71,7 @@ class AStarPathToTebViaPoints(object):
         self._local_rx_time = 0.0
         self._avoidance_msg = None
         self._avoidance_rx_time = 0.0
+        self._fixed_goal_msg = None
         self._odom_x = 0.0
         self._odom_y = 0.0
         self._have_odom = False
@@ -74,6 +81,11 @@ class AStarPathToTebViaPoints(object):
         if self.goal_output_topic:
             self.goal_pub = rospy.Publisher(
                 self.goal_output_topic, PoseStamped, queue_size=1, latch=True
+            )
+        self.sub_fixed_goal = None
+        if self.final_goal_topic:
+            self.sub_fixed_goal = rospy.Subscriber(
+                self.final_goal_topic, PoseStamped, self._final_goal_callback, queue_size=2
             )
         self.sub = rospy.Subscriber(
             self.input_topic, Path, self._make_callback("fallback"), queue_size=2
@@ -105,13 +117,15 @@ class AStarPathToTebViaPoints(object):
         self.watchdog = rospy.Timer(rospy.Duration(2.0), self._watchdog_callback)
 
         rospy.loginfo(
-            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
+            "astar_path_to_teb_via_points started | fallback=%s local=%s avoidance=%s odom=%s out=%s goal_out=%s final_goal_only=%s final_goal_topic=%s goal_lookahead=%.2fm final_switch=%.2fm tail_backoff=%.2fm@%.2fm local_hold=%s hold_requires_avoid=%s spacing=%.2fm max_points=%d",
             self.input_topic,
             self.local_input_topic if self.local_input_topic else "-",
             self.avoidance_input_topic if self.avoidance_input_topic else "-",
             self.odom_topic if self.odom_topic else "-",
             self.output_topic,
             self.goal_output_topic if self.goal_output_topic else "-",
+            "on" if self.publish_final_goal_only else "off",
+            self.final_goal_topic if self.final_goal_topic else "-",
             self.goal_lookahead_m,
             self.final_goal_switch_distance_m,
             self.local_goal_tail_backoff_m,
@@ -188,6 +202,9 @@ class AStarPathToTebViaPoints(object):
         self._odom_x = float(msg.pose.pose.position.x)
         self._odom_y = float(msg.pose.pose.position.y)
         self._have_odom = True
+
+    def _final_goal_callback(self, msg):
+        self._fixed_goal_msg = copy.deepcopy(msg)
 
     @staticmethod
     def _path_signature(msg):
@@ -328,36 +345,59 @@ class AStarPathToTebViaPoints(object):
         if self.goal_pub is None or msg is None or not msg.poses:
             return
 
-        goal_pose, goal_idx, goal_reason = self._goal_from_selected_path(source, msg)
-        if goal_pose is None:
-            return
+        goal_idx = len(msg.poses) - 1
+        goal_reason = "path_tail"
+        goal_sig_source = source
 
-        goal_x = float(goal_pose.pose.position.x)
-        goal_y = float(goal_pose.pose.position.y)
-        goal_yaw = self._path_pose_yaw(msg, goal_idx)
+        if self.publish_final_goal_only and self._fixed_goal_msg is not None:
+            goal = copy.deepcopy(self._fixed_goal_msg)
+            if not goal.header.frame_id:
+                goal.header.frame_id = msg.header.frame_id or "map"
+            goal.header.stamp = rospy.Time.now()
+            goal_x = float(goal.pose.position.x)
+            goal_y = float(goal.pose.position.y)
+            qz = float(goal.pose.orientation.z)
+            qw = float(goal.pose.orientation.w)
+            if abs(qz) < 1e-6 and abs(qw) < 1e-6:
+                goal_yaw = self._path_pose_yaw(msg, goal_idx)
+                self._set_pose_yaw(goal, goal_yaw)
+            else:
+                goal_yaw = 2.0 * math.atan2(qz, qw)
+            goal_reason = "user_final"
+            goal_sig_source = "user_final"
+        else:
+            goal_pose, goal_idx, goal_reason = self._goal_from_selected_path(source, msg)
+            if goal_pose is None:
+                return
+
+            goal = PoseStamped()
+            goal.header = msg.header
+            goal.pose.position.x = float(goal_pose.pose.position.x)
+            goal.pose.position.y = float(goal_pose.pose.position.y)
+            goal.pose.position.z = float(goal_pose.pose.position.z)
+            goal_yaw = self._path_pose_yaw(msg, goal_idx)
+            self._set_pose_yaw(goal, goal_yaw)
+            goal_x = float(goal.pose.position.x)
+            goal_y = float(goal.pose.position.y)
+
+        goal_frame = goal.header.frame_id
         if self._last_goal_sig is not None:
             prev_source, prev_frame, prev_x, prev_y, prev_yaw = self._last_goal_sig
             if (
-                prev_source == source
-                and prev_frame == msg.header.frame_id
+                prev_source == goal_sig_source
+                and prev_frame == goal_frame
                 and math.hypot(goal_x - prev_x, goal_y - prev_y) < self.goal_update_min_dist_m
                 and abs(self._angle_diff(goal_yaw, prev_yaw)) < math.radians(10.0)
             ):
                 return
-        self._last_goal_sig = (source, msg.header.frame_id, goal_x, goal_y, goal_yaw)
+        self._last_goal_sig = (goal_sig_source, goal_frame, goal_x, goal_y, goal_yaw)
 
-        goal = PoseStamped()
-        goal.header = msg.header
-        goal.pose.position.x = goal_x
-        goal.pose.position.y = goal_y
-        goal.pose.position.z = float(goal_pose.pose.position.z)
-        self._set_pose_yaw(goal, goal_yaw)
         self.goal_pub.publish(goal)
         rospy.loginfo_throttle(
             1.0,
             "astar_path_to_teb_via_points: synced move_base goal | topic=%s source=%s reason=%s idx=%d x=%.2f y=%.2f",
             self.goal_output_topic,
-            source,
+            goal_sig_source,
             goal_reason,
             goal_idx,
             goal_x,

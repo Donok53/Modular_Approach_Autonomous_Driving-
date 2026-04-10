@@ -79,6 +79,7 @@
   <arg name="teb_rear_approach_spin_linear_threshold_mps" default="0.05"/>
   <arg name="teb_rear_approach_no_reverse" default="true"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
+  <arg name="teb_publish_final_goal_only" default="true"/>
   <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
   <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
   <arg name="teb_local_goal_tail_backoff_m" default="0.45"/>
@@ -743,6 +744,8 @@
       <arg name="rear_approach_spin_linear_threshold_mps" value="$(arg teb_rear_approach_spin_linear_threshold_mps)"/>
       <arg name="rear_approach_no_reverse" value="$(arg teb_rear_approach_no_reverse)"/>
       <arg name="local_hold_timeout_s" value="$(arg teb_local_hold_timeout_s)"/>
+      <arg name="publish_final_goal_only" value="$(arg teb_publish_final_goal_only)"/>
+      <arg name="final_goal_topic" value="$(arg free_area_goal_topic)"/>
       <arg name="move_base_goal_lookahead_m" value="$(arg teb_move_base_goal_lookahead_m)"/>
       <arg name="move_base_goal_update_min_dist_m" value="$(arg teb_move_base_goal_update_min_dist_m)"/>
       <arg name="local_goal_tail_backoff_m" value="$(arg teb_local_goal_tail_backoff_m)"/>
