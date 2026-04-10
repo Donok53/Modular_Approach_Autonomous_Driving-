@@ -634,8 +634,8 @@ public:
         csv_ofstream.open(saveMapDirectory + "/trajectory.csv");
         csv_ofstream_wgs84.open(saveMapDirectory + "/trajectory_wgs84.csv");
         if(csv_ofstream.is_open()) {
-            csv_ofstream << "x,y,z,r,p,y,t\n";
-            csv_ofstream_wgs84 << "lat,lon,height,r,p,y,t\n";
+            csv_ofstream << "x,y,z,roll,pitch,yaw,timestamp\n";
+            csv_ofstream_wgs84 << "lat,lon,height,roll,pitch,yaw,timestamp\n";
             for(const auto& pose:*cloudKeyPoses6D) {
                 csv_ofstream    
                     << std::setprecision(20) 
