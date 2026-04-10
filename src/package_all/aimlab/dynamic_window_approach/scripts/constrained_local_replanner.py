@@ -216,6 +216,14 @@ class ConstrainedLocalReplanner:
         self.global_pointcloud_overlay_max_points = max(
             0, int(rospy.get_param("~global_pointcloud_overlay_max_points", 200))
         )
+        self.global_pointcloud_overlay_blind_zone_radius_m = max(
+            0.0,
+            float(rospy.get_param("~global_pointcloud_overlay_blind_zone_radius_m", 1.40)),
+        )
+        self.global_pointcloud_overlay_blind_zone_hold_ttl_s = max(
+            self.global_pointcloud_overlay_ttl_s,
+            float(rospy.get_param("~global_pointcloud_overlay_blind_zone_hold_ttl_s", 6.0)),
+        )
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
@@ -410,10 +418,12 @@ class ConstrainedLocalReplanner:
         )
         if self.enable_global_pointcloud_overlay and self.global_obstacle_overlay_topic:
             rospy.loginfo(
-                "constrained_local_replanner global obstacle overlay | topic=%s persist=%d ttl=%.1fs range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+                "constrained_local_replanner global obstacle overlay | topic=%s persist=%d ttl=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
                 self.global_obstacle_overlay_topic,
                 self.global_pointcloud_overlay_persistence_frames,
                 self.global_pointcloud_overlay_ttl_s,
+                self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
+                self.global_pointcloud_overlay_blind_zone_radius_m,
                 self.global_pointcloud_overlay_max_range_m,
                 self.global_pointcloud_overlay_lookahead_m,
                 self.global_pointcloud_overlay_corridor_margin_m,
@@ -767,6 +777,17 @@ class ConstrainedLocalReplanner:
             merge_radius_m,
         )
 
+    def _in_global_overlay_blind_zone(self, wx, wy):
+        if self.global_pointcloud_overlay_blind_zone_radius_m <= 0.0:
+            return False
+        dx = wx - self.odom_x
+        dy = wy - self.odom_y
+        radius_sq = (
+            self.global_pointcloud_overlay_blind_zone_radius_m
+            * self.global_pointcloud_overlay_blind_zone_radius_m
+        )
+        return (dx * dx + dy * dy) <= radius_sq
+
     def _select_global_overlay_candidate_points(self, current_points_map):
         if (
             (not self.enable_global_pointcloud_overlay)
@@ -818,7 +839,13 @@ class ConstrainedLocalReplanner:
         max_range_sq = self.global_pointcloud_overlay_max_range_m * self.global_pointcloud_overlay_max_range_m
         kept = []
         for wx, wy, seen_sec, hits in self.global_obstacle_overlay_memory:
-            if (now_sec - seen_sec) > self.global_pointcloud_overlay_ttl_s:
+            effective_ttl_s = self.global_pointcloud_overlay_ttl_s
+            if self._in_global_overlay_blind_zone(wx, wy):
+                effective_ttl_s = max(
+                    effective_ttl_s,
+                    self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
+                )
+            if (now_sec - seen_sec) > effective_ttl_s:
                 continue
             dx = wx - self.odom_x
             dy = wy - self.odom_y

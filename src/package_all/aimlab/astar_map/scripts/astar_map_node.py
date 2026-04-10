@@ -233,11 +233,11 @@ class AStarPlanner:
         # Pubs/Subs
         self.pub_marker = rospy.Publisher('/astar/graph_markers', Marker, queue_size=10)
         self.pub_goal_marker = rospy.Publisher('/astar/clicked_goal_marker', Marker, queue_size=10)
-        self.pub_path = rospy.Publisher('/astar/path', Path, queue_size=10)
-        self.pub_path_display = rospy.Publisher('/astar/path_display', Path, queue_size=10)
-        self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10)
-        self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10)
-        self.pub_path_is_fallback = rospy.Publisher('/astar/path_is_fallback', Bool, queue_size=10)
+        self.pub_path = rospy.Publisher('/astar/path', Path, queue_size=10, latch=True)
+        self.pub_path_display = rospy.Publisher('/astar/path_display', Path, queue_size=10, latch=True)
+        self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10, latch=True)
+        self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10, latch=True)
+        self.pub_path_is_fallback = rospy.Publisher('/astar/path_is_fallback', Bool, queue_size=10, latch=True)
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
 
         self.sub_start_from_rviz = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.callback_start)
