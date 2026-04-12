@@ -190,7 +190,7 @@
   <arg name="local_blind_zone_guard_ttl_s" default="0.45"/>
   <arg name="local_blind_zone_guard_lookahead_m" default="1.0"/>
   <arg name="local_blind_zone_guard_heading_deadband_deg" default="12.0"/>
-  <arg name="tracked_object_virtual_obstacles_enabled" default="true"/>
+  <arg name="tracked_object_virtual_obstacles_enabled" default="false"/>
   <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
   <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
   <arg name="tracked_object_prediction_step_s" default="0.3"/>

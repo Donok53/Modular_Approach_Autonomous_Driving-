@@ -948,6 +948,8 @@ class TebCmdVelRelay(object):
         else:
             return None
 
+        if side != 0 and x <= 0.0:
+            return None
         if side != 0 and x > self.blind_zone_turn_guard_side_forward_limit_x:
             # Treat side blind-zone memory as an immediate flank guard instead
             # of a broad forward-side keepout. This avoids vetoing near-goal

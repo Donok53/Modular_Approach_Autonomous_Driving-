@@ -213,7 +213,7 @@ class ConstrainedLocalReplanner:
             0.0, float(rospy.get_param("~local_blind_zone_guard_side_margin_m", 0.08))
         )
         self.tracked_object_virtual_obstacles_enabled = bool(
-            rospy.get_param("~tracked_object_virtual_obstacles_enabled", True)
+            rospy.get_param("~tracked_object_virtual_obstacles_enabled", False)
         )
         self.tracked_object_virtual_max_range_m = max(
             0.5, float(rospy.get_param("~tracked_object_virtual_max_range_m", 4.0))
@@ -2920,6 +2920,8 @@ class ConstrainedLocalReplanner:
             if abs(ly) <= lateral_limit:
                 continue
             side = 1 if ly > 0.0 else -1
+            if side != 0 and lx <= 0.0:
+                continue
             score = (range_m, age_s)
             if best is None or score < best_score:
                 best = {
