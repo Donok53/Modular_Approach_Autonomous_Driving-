@@ -29,7 +29,11 @@ class CloudClusterTracker:
         self.max_assoc_dist_m = max(0.1, float(rospy.get_param("~max_assoc_dist_m", 1.6)))
         self.track_timeout_s = max(0.1, float(rospy.get_param("~track_timeout_s", 1.0)))
         self.vel_alpha = min(1.0, max(0.01, float(rospy.get_param("~vel_alpha", 0.4))))
-        self.publish_static = bool(rospy.get_param("~publish_static", True))
+        # Static obstacles are already handled by costmaps / raw pointcloud
+        # blocking in the rest of the stack. Publishing static tracks here tends
+        # to create false "static_vehicle" behavior stops from walls or map
+        # structures when localization jitters.
+        self.publish_static = bool(rospy.get_param("~publish_static", False))
         self.static_speed_thresh_mps = max(0.01, float(rospy.get_param("~static_speed_thresh_mps", 0.15)))
         self.dynamic_min_age = max(1, int(rospy.get_param("~dynamic_min_age", 4)))
         self.pedestrian_static_speed_thresh_mps = max(
@@ -268,7 +272,10 @@ class CloudClusterTracker:
             effective_vx = float(t["vx"])
             effective_vy = float(t["vy"])
             effective_speed = speed
-            if t["age"] < dynamic_min_age and effective_speed < (2.0 * static_speed_thresh):
+            # Require a track to persist for a few updates before we trust any
+            # measured motion; otherwise doorway edges and map jitter can look
+            # like short-lived moving objects.
+            if t["age"] < dynamic_min_age:
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
