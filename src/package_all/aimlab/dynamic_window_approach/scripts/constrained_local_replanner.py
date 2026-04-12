@@ -212,6 +212,20 @@ class ConstrainedLocalReplanner:
         self.local_blind_zone_guard_side_margin_m = max(
             0.0, float(rospy.get_param("~local_blind_zone_guard_side_margin_m", 0.08))
         )
+        self.local_blind_zone_guard_side_lateral_limit_m = max(
+            self.robot_half_width + self.local_blind_zone_guard_side_margin_m,
+            float(
+                rospy.get_param(
+                    "~local_blind_zone_guard_side_lateral_limit_m",
+                    min(
+                        self.local_blind_zone_guard_radius_m,
+                        self.robot_half_width
+                        + self.local_blind_zone_guard_side_margin_m
+                        + 0.40,
+                    ),
+                )
+            ),
+        )
         self.tracked_object_virtual_obstacles_enabled = bool(
             rospy.get_param("~tracked_object_virtual_obstacles_enabled", False)
         )
@@ -494,6 +508,15 @@ class ConstrainedLocalReplanner:
                 self.global_pointcloud_overlay_max_range_m,
                 self.global_pointcloud_overlay_lookahead_m,
                 self.global_pointcloud_overlay_corridor_margin_m,
+            )
+        if self.local_blind_zone_guard_enabled:
+            rospy.loginfo(
+                "constrained_local_replanner local blind zone | radius=%.2fm ttl=%.2fs lookahead=%.2fm side_limit=%.2fm side_max=%.2fm",
+                self.local_blind_zone_guard_radius_m,
+                self.local_blind_zone_guard_ttl_s,
+                self.local_blind_zone_guard_lookahead_m,
+                self.robot_half_width + self.local_blind_zone_guard_side_margin_m,
+                self.local_blind_zone_guard_side_lateral_limit_m,
             )
         if self.tracked_object_virtual_obstacles_enabled or self.near_field_object_memory_enabled:
             rospy.loginfo(
@@ -2918,6 +2941,8 @@ class ConstrainedLocalReplanner:
             if range_m > self.local_blind_zone_guard_radius_m:
                 continue
             if abs(ly) <= lateral_limit:
+                continue
+            if abs(ly) > self.local_blind_zone_guard_side_lateral_limit_m:
                 continue
             side = 1 if ly > 0.0 else -1
             if side != 0 and lx <= 0.0:

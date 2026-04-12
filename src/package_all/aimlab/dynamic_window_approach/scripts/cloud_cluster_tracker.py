@@ -51,6 +51,30 @@ class CloudClusterTracker:
             ),
         )
         self.position_jitter_m = max(0.0, float(rospy.get_param("~position_jitter_m", 0.12)))
+        # Static structures can drift slightly in the map frame as localization
+        # settles. Require some travel from the first observation before we
+        # publish a track as dynamic.
+        self.dynamic_min_displacement_m = max(
+            self.position_jitter_m,
+            float(
+                rospy.get_param(
+                    "~dynamic_min_displacement_m",
+                    max(0.30, self.position_jitter_m * 1.8),
+                )
+            ),
+        )
+        self.pedestrian_dynamic_min_displacement_m = max(
+            self.position_jitter_m,
+            min(
+                self.dynamic_min_displacement_m,
+                float(
+                    rospy.get_param(
+                        "~pedestrian_dynamic_min_displacement_m",
+                        max(0.18, self.position_jitter_m * 1.2),
+                    )
+                ),
+            ),
+        )
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -65,10 +89,15 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s out=%s",
+            "cloud_cluster_tracker started | cloud=%s odom=%s out=%s dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm",
             self.pointcloud_topic,
             self.odom_topic,
             self.output_topic,
+            self.dynamic_min_age,
+            self.pedestrian_dynamic_min_age,
+            self.position_jitter_m,
+            self.dynamic_min_displacement_m,
+            self.pedestrian_dynamic_min_displacement_m,
         )
 
     def odom_callback(self, msg):
@@ -215,6 +244,8 @@ class CloudClusterTracker:
             self.tracks[tid] = {
                 "x": c["x"],
                 "y": c["y"],
+                "anchor_x": c["x"],
+                "anchor_y": c["y"],
                 "vx": 0.0,
                 "vy": 0.0,
                 "size_x": c["size_x"],
@@ -241,6 +272,11 @@ class CloudClusterTracker:
     def _is_person_like_label(label):
         text = (label or "").lower()
         return ("ped" in text) or ("person" in text) or ("walker" in text)
+
+    def _dynamic_min_displacement_for_label(self, label):
+        if self._is_person_like_label(label):
+            return self.pedestrian_dynamic_min_displacement_m
+        return self.dynamic_min_displacement_m
 
     def cloud_callback(self, msg):
         try:
@@ -269,6 +305,12 @@ class CloudClusterTracker:
                 if is_person_like
                 else self.static_speed_thresh_mps
             )
+            min_dynamic_displacement = self._dynamic_min_displacement_for_label(raw_label)
+            anchor_x = float(t.get("anchor_x", t["x"]))
+            anchor_y = float(t.get("anchor_y", t["y"]))
+            track_displacement = math.hypot(
+                float(t["x"]) - anchor_x, float(t["y"]) - anchor_y
+            )
             effective_vx = float(t["vx"])
             effective_vy = float(t["vy"])
             effective_speed = speed
@@ -276,6 +318,10 @@ class CloudClusterTracker:
             # measured motion; otherwise doorway edges and map jitter can look
             # like short-lived moving objects.
             if t["age"] < dynamic_min_age:
+                effective_vx = 0.0
+                effective_vy = 0.0
+                effective_speed = 0.0
+            elif track_displacement < min_dynamic_displacement:
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
