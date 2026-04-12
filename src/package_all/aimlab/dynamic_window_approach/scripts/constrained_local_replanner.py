@@ -144,6 +144,21 @@ class ConstrainedLocalReplanner:
         self.recognized_obstacles_marker_lifetime_s = max(
             0.0, float(rospy.get_param("~recognized_obstacles_marker_lifetime_s", 0.8))
         )
+        self.blocking_obstacles_marker_topic = str(
+            rospy.get_param(
+                "~blocking_obstacles_marker_topic",
+                "/planning/blocking_obstacles",
+            )
+        ).strip()
+        self.blocking_obstacles_marker_max_points = max(
+            1, int(rospy.get_param("~blocking_obstacles_marker_max_points", 180))
+        )
+        self.blocking_obstacles_marker_scale_m = max(
+            0.02, float(rospy.get_param("~blocking_obstacles_marker_scale_m", 0.12))
+        )
+        self.blocking_obstacles_marker_lifetime_s = max(
+            0.0, float(rospy.get_param("~blocking_obstacles_marker_lifetime_s", 0.8))
+        )
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
@@ -414,6 +429,13 @@ class ConstrainedLocalReplanner:
                 MarkerArray,
                 queue_size=2,
             )
+        self.pub_blocking_obstacles = None
+        if self.blocking_obstacles_marker_topic:
+            self.pub_blocking_obstacles = rospy.Publisher(
+                self.blocking_obstacles_marker_topic,
+                MarkerArray,
+                queue_size=2,
+            )
         self.pub_global_obstacle_overlay = None
         if self.enable_global_pointcloud_overlay and self.global_obstacle_overlay_topic:
             self.pub_global_obstacle_overlay = rospy.Publisher(
@@ -494,6 +516,14 @@ class ConstrainedLocalReplanner:
                 self.recognized_obstacles_marker_scale_m,
                 self.recognized_obstacles_marker_lifetime_s,
             )
+        if self.pub_blocking_obstacles is not None:
+            rospy.loginfo(
+                "constrained_local_replanner blocking obstacle markers | topic=%s max_points=%d scale=%.2fm lifetime=%.1fs",
+                self.blocking_obstacles_marker_topic,
+                self.blocking_obstacles_marker_max_points,
+                self.blocking_obstacles_marker_scale_m,
+                self.blocking_obstacles_marker_lifetime_s,
+            )
 
     @staticmethod
     def _fmt_debug_float(value, precision=2):
@@ -517,7 +547,17 @@ class ConstrainedLocalReplanner:
         return sampled[:max_points]
 
     def _make_obstacle_points_marker(
-        self, stamp, marker_id, namespace, points, scale_m, color_rgba, z_offset
+        self,
+        stamp,
+        marker_id,
+        namespace,
+        points,
+        scale_m,
+        color_rgba,
+        z_offset,
+        *,
+        max_points=None,
+        lifetime_s=None,
     ):
         marker = Marker()
         marker.header.stamp = stamp
@@ -533,9 +573,16 @@ class ConstrainedLocalReplanner:
         marker.color.g = float(color_rgba[1])
         marker.color.b = float(color_rgba[2])
         marker.color.a = float(color_rgba[3])
-        marker.lifetime = rospy.Duration(self.recognized_obstacles_marker_lifetime_s)
+        marker.lifetime = rospy.Duration(
+            self.recognized_obstacles_marker_lifetime_s
+            if lifetime_s is None
+            else max(0.0, float(lifetime_s))
+        )
         for wx, wy in self._sample_marker_points(
-            points, self.recognized_obstacles_marker_max_points
+            points,
+            self.recognized_obstacles_marker_max_points
+            if max_points is None
+            else max(1, int(max_points)),
         ):
             pt = Point()
             pt.x = float(wx)
@@ -545,7 +592,17 @@ class ConstrainedLocalReplanner:
         return marker
 
     def _make_obstacle_sphere_marker(
-        self, stamp, marker_id, namespace, wx, wy, diameter_m, color_rgba, z_offset
+        self,
+        stamp,
+        marker_id,
+        namespace,
+        wx,
+        wy,
+        diameter_m,
+        color_rgba,
+        z_offset,
+        *,
+        lifetime_s=None,
     ):
         marker = Marker()
         marker.header.stamp = stamp
@@ -565,7 +622,58 @@ class ConstrainedLocalReplanner:
         marker.color.g = float(color_rgba[1])
         marker.color.b = float(color_rgba[2])
         marker.color.a = float(color_rgba[3])
-        marker.lifetime = rospy.Duration(self.recognized_obstacles_marker_lifetime_s)
+        marker.lifetime = rospy.Duration(
+            self.recognized_obstacles_marker_lifetime_s
+            if lifetime_s is None
+            else max(0.0, float(lifetime_s))
+        )
+        return marker
+
+    def _make_obstacle_cube_list_marker(
+        self,
+        stamp,
+        marker_id,
+        namespace,
+        points,
+        scale_xy_m,
+        scale_z_m,
+        color_rgba,
+        z_offset,
+        *,
+        max_points=None,
+        lifetime_s=None,
+    ):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = "map"
+        marker.ns = namespace
+        marker.id = int(marker_id)
+        marker.type = Marker.CUBE_LIST
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = float(scale_xy_m)
+        marker.scale.y = float(scale_xy_m)
+        marker.scale.z = float(scale_z_m)
+        marker.color.r = float(color_rgba[0])
+        marker.color.g = float(color_rgba[1])
+        marker.color.b = float(color_rgba[2])
+        marker.color.a = float(color_rgba[3])
+        marker.lifetime = rospy.Duration(
+            self.recognized_obstacles_marker_lifetime_s
+            if lifetime_s is None
+            else max(0.0, float(lifetime_s))
+        )
+        for wx, wy in self._sample_marker_points(
+            points,
+            self.recognized_obstacles_marker_max_points
+            if max_points is None
+            else max(1, int(max_points)),
+        ):
+            pt = Point()
+            pt.x = float(wx)
+            pt.y = float(wy)
+            pt.z = float(z_offset)
+            marker.points.append(pt)
         return marker
 
     def _publish_recognized_obstacle_markers(self, stamp=None):
@@ -656,6 +764,96 @@ class ConstrainedLocalReplanner:
             )
 
         self.pub_recognized_obstacles.publish(markers)
+
+    @staticmethod
+    def _build_marker_delete_all(stamp):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = "map"
+        marker.action = Marker.DELETEALL
+        return marker
+
+    def _clear_blocking_obstacle_markers(self, stamp=None):
+        if self.pub_blocking_obstacles is None or rospy.is_shutdown():
+            return
+
+        marker_stamp = stamp if hasattr(stamp, "to_sec") else rospy.Time.now()
+        if marker_stamp.to_sec() <= 0.0:
+            marker_stamp = rospy.Time.now()
+
+        markers = MarkerArray()
+        markers.markers.append(self._build_marker_delete_all(marker_stamp))
+        self.pub_blocking_obstacles.publish(markers)
+
+    def _publish_blocking_obstacle_markers(
+        self,
+        stamp=None,
+        *,
+        blocking_points=None,
+        blocked_cells=None,
+        blind_zone_conflict=None,
+        cell_scale_m=None,
+    ):
+        if self.pub_blocking_obstacles is None or rospy.is_shutdown():
+            return
+
+        marker_stamp = stamp if hasattr(stamp, "to_sec") else rospy.Time.now()
+        if marker_stamp.to_sec() <= 0.0:
+            marker_stamp = rospy.Time.now()
+
+        markers = MarkerArray()
+        markers.markers.append(self._build_marker_delete_all(marker_stamp))
+
+        if blocking_points:
+            markers.markers.append(
+                self._make_obstacle_points_marker(
+                    marker_stamp,
+                    110,
+                    "blocking_points",
+                    blocking_points,
+                    self.blocking_obstacles_marker_scale_m,
+                    (0.88, 0.18, 0.96, 0.95),
+                    0.07,
+                    max_points=self.blocking_obstacles_marker_max_points,
+                    lifetime_s=self.blocking_obstacles_marker_lifetime_s,
+                )
+            )
+        if blocked_cells:
+            cell_scale = (
+                self.blocking_obstacles_marker_scale_m
+                if cell_scale_m is None
+                else max(0.02, float(cell_scale_m))
+            )
+            markers.markers.append(
+                self._make_obstacle_cube_list_marker(
+                    marker_stamp,
+                    120,
+                    "blocked_path_cells",
+                    blocked_cells,
+                    cell_scale,
+                    max(0.04, cell_scale * 0.45),
+                    (0.70, 0.14, 0.92, 0.55),
+                    0.03,
+                    max_points=self.blocking_obstacles_marker_max_points,
+                    lifetime_s=self.blocking_obstacles_marker_lifetime_s,
+                )
+            )
+        if blind_zone_conflict is not None:
+            markers.markers.append(
+                self._make_obstacle_sphere_marker(
+                    marker_stamp,
+                    130,
+                    "blind_zone_focus",
+                    blind_zone_conflict["world_x"],
+                    blind_zone_conflict["world_y"],
+                    max(0.16, self.blocking_obstacles_marker_scale_m * 1.9),
+                    (1.0, 0.10, 1.0, 0.95),
+                    0.18,
+                    lifetime_s=self.blocking_obstacles_marker_lifetime_s,
+                )
+            )
+
+        self.pub_blocking_obstacles.publish(markers)
 
     def _publish_debug_text(self, text, stamp=None, force=False):
         if rospy.is_shutdown():
@@ -2338,6 +2536,104 @@ class ConstrainedLocalReplanner:
                 break
         return False
 
+    def _collect_path_overlap_points(
+        self,
+        path,
+        dg,
+        start_cell,
+        points_map,
+        corridor_margin_m,
+        max_check_m=None,
+    ):
+        if not path or not points_map:
+            return []
+
+        start_idx = self._nearest_path_cell_index(path, start_cell)
+        if start_idx >= len(path) - 1:
+            return []
+
+        world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
+        corridor_half = self._pointcloud_corridor_half_width_m(corridor_margin_m)
+        corridor_half_sq = corridor_half * corridor_half
+        remain_m = 0.0
+        hit_indices = set()
+        hits = []
+
+        for seg_idx in range(start_idx, len(world_path) - 1):
+            x0, y0 = world_path[seg_idx]
+            x1, y1 = world_path[seg_idx + 1]
+            seg_len = math.hypot(x1 - x0, y1 - y0)
+            if seg_len <= 1e-6:
+                continue
+            remain_m += seg_len
+            for obs_idx, (ox, oy) in enumerate(points_map):
+                if obs_idx in hit_indices:
+                    continue
+                if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
+                    hit_indices.add(obs_idx)
+                    hits.append((float(ox), float(oy)))
+            if max_check_m is not None and remain_m >= max_check_m:
+                break
+        return hits
+
+    def _collect_confirmed_blocked_path_world_points(
+        self,
+        path,
+        blocked,
+        start_cell,
+        dg,
+        max_check_m=None,
+    ):
+        if not path:
+            return []
+
+        start_idx = self._nearest_path_cell_index(path, start_cell)
+        if start_idx >= len(path):
+            return []
+
+        remain_m = 0.0
+        blocked_run = 0
+        run_cells = []
+        run_keys = set()
+
+        for i in range(start_idx, len(path)):
+            gx, gy = path[i]
+            cell_blocked = (not self._in_bounds_blocked(blocked, gx, gy)) or blocked[gy][gx]
+            seg_blocked = i + 1 < len(path) and (not self._has_line_of_sight(blocked, path[i], path[i + 1]))
+
+            if cell_blocked or seg_blocked:
+                if blocked_run == 0:
+                    run_cells = []
+                    run_keys = set()
+                blocked_run += 1
+
+                candidate_cells = []
+                if cell_blocked:
+                    candidate_cells.append((gx, gy))
+                if seg_blocked and i + 1 < len(path):
+                    candidate_cells.append(path[i + 1])
+
+                for cx, cy in candidate_cells:
+                    if (cx, cy) in run_keys:
+                        continue
+                    run_keys.add((cx, cy))
+                    run_cells.append(self._grid_to_world(dg, cx, cy))
+
+                if blocked_run >= self.risk_block_confirm_cells:
+                    return run_cells
+            else:
+                blocked_run = 0
+                run_cells = []
+                run_keys = set()
+
+            if i + 1 < len(path):
+                remain_m += self._heur(path[i], path[i + 1]) * max(
+                    1e-3, float(dg.info.resolution)
+                )
+                if max_check_m is not None and remain_m >= max_check_m:
+                    break
+        return []
+
     def _first_blocked_path_index(
         self,
         path,
@@ -2740,6 +3036,7 @@ class ConstrainedLocalReplanner:
                 trigger_reason = "blind_zone_turn_conflict"
 
         if trigger_reason is None:
+            self._clear_blocking_obstacle_markers(stamp)
             self._clear_avoidance_path(frame_id, stamp)
             self._publish_debug_text(
                 self._build_debug_text(
@@ -2752,6 +3049,38 @@ class ConstrainedLocalReplanner:
                 stamp=stamp,
             )
             return
+
+        blocking_points = []
+        blocking_cells = []
+        if predicted_overlap:
+            blocking_cells = self._collect_confirmed_blocked_path_world_points(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                max_check_m=self.avoidance_trigger_ahead_m,
+            )
+        if predicted_overlap or direct_points_overlap:
+            point_margin_m = (
+                self.obstacle_block_margin_m
+                if predicted_overlap
+                else (self.obstacle_block_margin_m + self.avoidance_trigger_margin_m)
+            )
+            blocking_points = self._collect_path_overlap_points(
+                nominal_path,
+                dg,
+                start_cell,
+                dynamic_points_map,
+                point_margin_m,
+                max_check_m=self.avoidance_trigger_ahead_m,
+            )
+        self._publish_blocking_obstacle_markers(
+            stamp,
+            blocking_points=blocking_points,
+            blocked_cells=blocking_cells,
+            blind_zone_conflict=blind_zone_conflict,
+            cell_scale_m=max(0.05, float(dg.info.resolution) * 0.95),
+        )
 
         blocked_idx = self._first_blocked_path_index(
             nominal_path,
@@ -3020,6 +3349,7 @@ class ConstrainedLocalReplanner:
             dg = self.drivable_grid
             rg = self.risk_grid
             stamp = rospy.Time.now()
+            self._clear_blocking_obstacle_markers(stamp)
 
             if self.use_direct_goal and self._plan_direct_goal(dg, rg, stamp):
                 return
@@ -3168,6 +3498,30 @@ class ConstrainedLocalReplanner:
                         float(blind_zone_conflict["path_heading_deg"]),
                     )
             if nominal_blocked:
+                blocking_points = []
+                if self.use_pointcloud_static_blocking:
+                    blocking_points = self._collect_path_overlap_points(
+                        nominal_path,
+                        dg,
+                        start_cell,
+                        self.obstacle_points_map,
+                        self.pointcloud_static_block_margin_m,
+                        max_check_m=self.lookahead_m,
+                    )
+                blocking_cells = self._collect_confirmed_blocked_path_world_points(
+                    nominal_path,
+                    blocked,
+                    start_cell,
+                    dg,
+                    max_check_m=self.lookahead_m,
+                )
+                self._publish_blocking_obstacle_markers(
+                    stamp,
+                    blocking_points=blocking_points,
+                    blocked_cells=blocking_cells,
+                    blind_zone_conflict=blind_zone_conflict,
+                    cell_scale_m=max(0.05, float(dg.info.resolution) * 0.95),
+                )
                 now_sec = stamp.to_sec()
                 if self.local_blocked_since_sec <= 0.0:
                     self.local_blocked_since_sec = now_sec

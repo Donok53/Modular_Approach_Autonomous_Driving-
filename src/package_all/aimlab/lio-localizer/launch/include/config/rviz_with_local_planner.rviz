@@ -430,9 +430,16 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /planning/recognized_obstacles
       Name: recognized_obstacles
+      Namespaces: {}
+      Queue Size: 20
+      Value: false
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /planning/blocking_obstacles
+      Name: blocking_obstacles
       Namespaces: {}
       Queue Size: 20
       Value: true
