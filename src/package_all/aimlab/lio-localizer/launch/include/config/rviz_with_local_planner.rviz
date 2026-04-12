@@ -177,7 +177,7 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: true
+      Enabled: false
       Keep: 60
       Name: Planning Odometry
       Position Tolerance: 0.10000000149011612
@@ -194,7 +194,7 @@ Visualization Manager:
         Value: Arrow
       Topic: /lio_localizer/odometry/planning
       Unreliable: false
-      Value: true
+      Value: false
     - Class: rviz/TF
       Enabled: false
       Filter (blacklist): ""
@@ -378,11 +378,11 @@ Visualization Manager:
       Buffer Length: 1
       Class: rviz/Path
       Color: 255; 140; 0
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Billboards
+      Line Style: Lines
       Line Width: 0.10000000149011612
       Name: active_local_path
       Offset:
@@ -390,14 +390,14 @@ Visualization Manager:
         Y: 0
         Z: 0.08
       Pose Color: 255; 85; 255
-      Pose Style: Arrows
+      Pose Style: None
       Queue Size: 10
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
       Topic: /planning/active_path_viz
       Unreliable: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
@@ -406,7 +406,7 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Billboards
+      Line Style: Lines
       Line Width: 0.10000000149011612
       Name: avoidance_path
       Offset:
@@ -414,7 +414,7 @@ Visualization Manager:
         Y: 0
         Z: 0.12
       Pose Color: 255; 85; 255
-      Pose Style: Arrows
+      Pose Style: None
       Queue Size: 10
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
@@ -538,7 +538,7 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Billboards
+      Line Style: Lines
       Line Width: 0.10000000149011612
       Name: astar_path
       Offset:
@@ -546,7 +546,7 @@ Visualization Manager:
         Y: 0
         Z: 0.04
       Pose Color: 255; 85; 255
-      Pose Style: Arrows
+      Pose Style: None
       Queue Size: 10
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612

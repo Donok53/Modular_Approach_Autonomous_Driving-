@@ -157,6 +157,15 @@ class TebCmdVelRelay(object):
                 )
             ),
         )
+        self.near_goal_side_turn_guard_release_distance_m = max(
+            self.near_goal_side_turn_guard_stop_distance_m,
+            float(
+                rospy.get_param(
+                    "~near_goal_side_turn_guard_release_distance_m",
+                    self.near_goal_side_turn_guard_stop_distance_m + 0.10,
+                )
+            ),
+        )
         self.behavior_cmd_timeout_s = max(
             0.1, float(rospy.get_param("~behavior_cmd_timeout_s", 0.8))
         )
@@ -347,6 +356,7 @@ class TebCmdVelRelay(object):
         self.blind_zone_memory_side = 0
         self.blind_zone_memory_range_m = float("inf")
         self.blind_zone_memory_support_points = 0
+        self.near_goal_stop_latched = False
         self._last_explain_key = None
         self._last_explain_time = 0.0
         self._last_debug_text = ""
@@ -404,7 +414,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s final_goal=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f side_x<=%.2f |y|<=%.2f)",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s final_goal=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f side_x<=%.2f |y|<=%.2f near_goal=%.2f/%.2f)",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -445,6 +455,8 @@ class TebCmdVelRelay(object):
             self.blind_zone_turn_guard_linear_cap_mps,
             self.blind_zone_turn_guard_side_forward_limit_x,
             self.blind_zone_turn_guard_side_lateral_limit_y,
+            self.near_goal_side_turn_guard_stop_distance_m,
+            self.near_goal_side_turn_guard_release_distance_m,
         )
 
     @staticmethod
@@ -1242,6 +1254,7 @@ class TebCmdVelRelay(object):
         self.final_goal_x = float(msg.pose.position.x)
         self.final_goal_y = float(msg.pose.position.y)
         self.have_final_goal = True
+        self.near_goal_stop_latched = False
 
     def local_path_callback(self, msg):
         self.last_local_path_time = rospy.get_time()
@@ -1306,9 +1319,14 @@ class TebCmdVelRelay(object):
 
     def _is_near_goal_side_turn_guard_stop_zone(self):
         goal_distance_m = self._final_goal_distance_m()
-        return math.isfinite(goal_distance_m) and (
-            goal_distance_m <= self.near_goal_side_turn_guard_stop_distance_m
-        )
+        if not math.isfinite(goal_distance_m):
+            self.near_goal_stop_latched = False
+            return False
+        if goal_distance_m <= self.near_goal_side_turn_guard_stop_distance_m:
+            self.near_goal_stop_latched = True
+        elif goal_distance_m >= self.near_goal_side_turn_guard_release_distance_m:
+            self.near_goal_stop_latched = False
+        return bool(self.near_goal_stop_latched)
 
     def _is_final_goal_brake_active(self):
         if (
