@@ -156,6 +156,7 @@
     <arg name="near_field_object_memory_max_points" default="120"/>
     <arg name="enable_global_pointcloud_overlay" default="false"/>
     <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
+    <arg name="global_obstacle_overlay_boxes_topic" default="/planning/global_obstacle_overlay_boxes"/>
     <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
     <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
     <arg name="global_pointcloud_overlay_ttl_s" default="2.0"/>
@@ -165,6 +166,7 @@
     <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
     <arg name="global_pointcloud_overlay_max_range_m" default="10.0"/>
     <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
+    <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.08"/>
     <arg name="global_pointcloud_overlay_lookahead_m" default="10.0"/>
     <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
     <arg name="global_pointcloud_overlay_max_points" default="200"/>
@@ -312,6 +314,7 @@
             <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
             <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+            <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
             <param name="enable_travel_history" value="$(eval 'true' if arg('enable_local_replanner') == 'false' else 'false')"/>
             <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
@@ -328,6 +331,7 @@
       <param name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <param name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <param name="global_pointcloud_overlay_static_lock_keep_range_m" value="$(arg global_pointcloud_overlay_static_lock_keep_range_m)"/>
+      <param name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <param name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
             <param name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>

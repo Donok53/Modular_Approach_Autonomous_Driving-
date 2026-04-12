@@ -446,6 +446,13 @@ Visualization Manager:
         {}
       Queue Size: 20
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /planning/global_obstacle_overlay_boxes
+      Name: global_obstacle_overlay_boxes
+      Namespaces: {}
+      Queue Size: 20
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /predicted_trajectory

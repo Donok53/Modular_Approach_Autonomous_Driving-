@@ -9,7 +9,7 @@ from geometry_msgs.msg import Point
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 class GlobalObstacleOverlayPublisher:
@@ -22,6 +22,11 @@ class GlobalObstacleOverlayPublisher:
         )
         self.global_obstacle_overlay_topic = str(
             rospy.get_param("~global_obstacle_overlay_topic", "/planning/global_obstacle_overlay")
+        ).strip()
+        self.global_obstacle_overlay_boxes_topic = str(
+            rospy.get_param(
+                "~global_obstacle_overlay_boxes_topic", "/planning/global_obstacle_overlay_boxes"
+            )
         ).strip()
         self.enable_travel_history = bool(rospy.get_param("~enable_travel_history", False))
         self.travel_history_topic = str(
@@ -79,6 +84,9 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_max_range_m,
             float(rospy.get_param("~global_pointcloud_overlay_static_lock_keep_range_m", 15.0)),
         )
+        self.global_pointcloud_overlay_static_box_margin_m = max(
+            0.0, float(rospy.get_param("~global_pointcloud_overlay_static_box_margin_m", 0.08))
+        )
         self.global_pointcloud_overlay_lookahead_m = max(
             0.5, float(rospy.get_param("~global_pointcloud_overlay_lookahead_m", 8.0))
         )
@@ -104,11 +112,14 @@ class GlobalObstacleOverlayPublisher:
         self.global_path = None
         self.drivable_grid = None
         self.global_obstacle_overlay_memory = []
-        self.global_obstacle_overlay_points_map = []
+        self.global_obstacle_overlay_boxes_map = []
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
 
         self.pub_global_obstacle_overlay = rospy.Publisher(
             self.global_obstacle_overlay_topic, OccupancyGrid, queue_size=1
+        )
+        self.pub_global_obstacle_overlay_boxes = rospy.Publisher(
+            self.global_obstacle_overlay_boxes_topic, MarkerArray, queue_size=1, latch=True
         )
         self.pub_travel_history = None
         if self.enable_travel_history and self.travel_history_topic:
@@ -130,16 +141,17 @@ class GlobalObstacleOverlayPublisher:
         )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s out=%s persist=%d static_lock=%d ttl=%.1fs keep=%.1fm blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s out=%s boxes=%s persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
             self.global_obstacle_overlay_topic,
+            self.global_obstacle_overlay_boxes_topic,
             self.global_pointcloud_overlay_persistence_frames,
             self.global_pointcloud_overlay_static_lock_frames,
             self.global_pointcloud_overlay_static_lock_ttl_s,
             self.global_pointcloud_overlay_static_lock_keep_range_m,
-            self.global_pointcloud_overlay_ttl_s,
+            self.global_pointcloud_overlay_static_box_margin_m,
             self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
             self.global_pointcloud_overlay_blind_zone_radius_m,
             self.global_pointcloud_overlay_max_range_m,
@@ -148,14 +160,155 @@ class GlobalObstacleOverlayPublisher:
         )
 
     @staticmethod
-    def _make_memory_entry(wx, wy, seen_sec, hits=1, locked=False, lock_time=0.0):
+    def _make_box(min_x, max_x, min_y, max_y):
+        raw_min_x = float(min_x)
+        raw_max_x = float(max_x)
+        raw_min_y = float(min_y)
+        raw_max_y = float(max_y)
+        min_x = float(min(raw_min_x, raw_max_x))
+        max_x = float(max(raw_min_x, raw_max_x))
+        min_y = float(min(raw_min_y, raw_max_y))
+        max_y = float(max(raw_min_y, raw_max_y))
         return {
-            "x": float(wx),
-            "y": float(wy),
-            "last_seen": float(seen_sec),
-            "hits": int(max(1, hits)),
-            "locked": bool(locked),
-            "lock_time": float(lock_time),
+            "min_x": min_x,
+            "max_x": max_x,
+            "min_y": min_y,
+            "max_y": max_y,
+            "x": 0.5 * (min_x + max_x),
+            "y": 0.5 * (min_y + max_y),
+            "size_x": max(0.0, max_x - min_x),
+            "size_y": max(0.0, max_y - min_y),
+        }
+
+    @classmethod
+    def _make_memory_entry(cls, box, seen_sec, hits=1, locked=False, lock_time=0.0):
+        entry = cls._make_box(
+            box["min_x"], box["max_x"], box["min_y"], box["max_y"]
+        )
+        entry.update(
+            {
+                "last_seen": float(seen_sec),
+                "hits": int(max(1, hits)),
+                "locked": bool(locked),
+                "lock_time": float(lock_time),
+            }
+        )
+        return entry
+
+    @classmethod
+    def _expand_box(cls, box, margin_m):
+        margin_m = max(0.0, float(margin_m))
+        return cls._make_box(
+            box["min_x"] - margin_m,
+            box["max_x"] + margin_m,
+            box["min_y"] - margin_m,
+            box["max_y"] + margin_m,
+        )
+
+    @staticmethod
+    def _box_radius_m(box):
+        return 0.5 * math.hypot(float(box["size_x"]), float(box["size_y"]))
+
+    @staticmethod
+    def _boxes_match(box_a, box_b, margin_m):
+        margin_m = max(0.0, float(margin_m))
+        return not (
+            float(box_a["max_x"]) < (float(box_b["min_x"]) - margin_m)
+            or float(box_a["min_x"]) > (float(box_b["max_x"]) + margin_m)
+            or float(box_a["max_y"]) < (float(box_b["min_y"]) - margin_m)
+            or float(box_a["min_y"]) > (float(box_b["max_y"]) + margin_m)
+        )
+
+    @classmethod
+    def _average_box_into_entry(cls, entry, box, prev_hits):
+        denom = float(max(1, prev_hits) + 1)
+        return cls._make_box(
+            (float(entry["min_x"]) * prev_hits + float(box["min_x"])) / denom,
+            (float(entry["max_x"]) * prev_hits + float(box["max_x"])) / denom,
+            (float(entry["min_y"]) * prev_hits + float(box["min_y"])) / denom,
+            (float(entry["max_y"]) * prev_hits + float(box["max_y"])) / denom,
+        )
+
+    @staticmethod
+    def _box_center_distance_sq(box, wx, wy):
+        dx = float(box["x"]) - float(wx)
+        dy = float(box["y"]) - float(wy)
+        return dx * dx + dy * dy
+
+    @staticmethod
+    def _grid_bounds_for_box(g, box):
+        res = float(g.info.resolution)
+        ox = float(g.info.origin.position.x)
+        oy = float(g.info.origin.position.y)
+        gx0 = int(math.floor((float(box["min_x"]) - ox) / res))
+        gx1 = int(math.floor((float(box["max_x"]) - ox) / res))
+        gy0 = int(math.floor((float(box["min_y"]) - oy) / res))
+        gy1 = int(math.floor((float(box["max_y"]) - oy) / res))
+        return gx0, gx1, gy0, gy1
+
+    @staticmethod
+    def _local_box_to_map_box(local_min_x, local_max_x, local_min_y, local_max_y, transform_fn):
+        corners = (
+            transform_fn(local_min_x, local_min_y),
+            transform_fn(local_min_x, local_max_y),
+            transform_fn(local_max_x, local_min_y),
+            transform_fn(local_max_x, local_max_y),
+        )
+        xs = [pt[0] for pt in corners]
+        ys = [pt[1] for pt in corners]
+        return GlobalObstacleOverlayPublisher._make_box(min(xs), max(xs), min(ys), max(ys))
+
+    @staticmethod
+    def _box_marker(frame_id, stamp, marker_id, box, min_size_m):
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.header.stamp = stamp
+        marker.ns = "global_obstacle_overlay_boxes"
+        marker.id = int(marker_id)
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.x = float(box["x"])
+        marker.pose.position.y = float(box["y"])
+        marker.pose.position.z = 0.06
+        marker.scale.x = max(float(min_size_m), float(box["size_x"]))
+        marker.scale.y = max(float(min_size_m), float(box["size_y"]))
+        marker.scale.z = 0.12
+        if box.get("locked", False):
+            marker.color.a = 0.35
+            marker.color.r = 1.0
+            marker.color.g = 0.45
+            marker.color.b = 0.05
+        else:
+            marker.color.a = 0.22
+            marker.color.r = 1.0
+            marker.color.g = 0.15
+            marker.color.b = 0.15
+        return marker
+
+    @staticmethod
+    def _delete_all_boxes_marker(frame_id, stamp):
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.header.stamp = stamp
+        marker.action = Marker.DELETEALL
+        return marker
+
+    @staticmethod
+    def _clone_box_entry(item):
+        return {
+            "min_x": float(item["min_x"]),
+            "max_x": float(item["max_x"]),
+            "min_y": float(item["min_y"]),
+            "max_y": float(item["max_y"]),
+            "last_seen": float(item["last_seen"]),
+            "x": float(item["x"]),
+            "y": float(item["y"]),
+            "size_x": float(item["size_x"]),
+            "size_y": float(item["size_y"]),
+            "hits": int(item["hits"]),
+            "locked": bool(item.get("locked", False)),
+            "lock_time": float(item.get("lock_time", 0.0)),
         }
 
     def odom_callback(self, msg):
@@ -181,7 +334,7 @@ class GlobalObstacleOverlayPublisher:
             return
 
         cluster_counts = {}
-        cluster_sums = {}
+        cluster_bounds = {}
         rr = self.obstacle_max_range_m * self.obstacle_max_range_m
         i = 0
         try:
@@ -202,25 +355,70 @@ class GlobalObstacleOverlayPublisher:
 
                 cell = self._pointcloud_cluster_cell(x, y)
                 cluster_counts[cell] = cluster_counts.get(cell, 0) + 1
-                sx, sy = cluster_sums.get(cell, (0.0, 0.0))
-                cluster_sums[cell] = (sx + x, sy + y)
+                min_x, max_x, min_y, max_y = cluster_bounds.get(cell, (x, x, y, y))
+                cluster_bounds[cell] = (
+                    min(min_x, x),
+                    max(max_x, x),
+                    min(min_y, y),
+                    max(max_y, y),
+                )
 
-            current_points_map = []
+            accepted_cells = set()
             for (cx, cy), count in cluster_counts.items():
                 support = 0
                 for dx in (-1, 0, 1):
                     for dy in (-1, 0, 1):
                         support += cluster_counts.get((cx + dx, cy + dy), 0)
-                if support < self.pointcloud_min_cluster_points:
+                if support >= self.pointcloud_min_cluster_points:
+                    accepted_cells.add((cx, cy))
+
+            current_boxes_map = []
+            visited = set()
+            for start_cell in accepted_cells:
+                if start_cell in visited:
                     continue
-                sx, sy = cluster_sums[(cx, cy)]
-                current_points_map.append(self._local_to_map(sx / float(count), sy / float(count)))
+                stack = [start_cell]
+                visited.add(start_cell)
+                local_min_x = float("inf")
+                local_max_x = float("-inf")
+                local_min_y = float("inf")
+                local_max_y = float("-inf")
+                component_points = 0
+                while stack:
+                    cx, cy = stack.pop()
+                    count = int(cluster_counts.get((cx, cy), 0))
+                    if count <= 0:
+                        continue
+                    component_points += count
+                    cell_min_x, cell_max_x, cell_min_y, cell_max_y = cluster_bounds[(cx, cy)]
+                    local_min_x = min(local_min_x, cell_min_x)
+                    local_max_x = max(local_max_x, cell_max_x)
+                    local_min_y = min(local_min_y, cell_min_y)
+                    local_max_y = max(local_max_y, cell_max_y)
+                    for dx in (-1, 0, 1):
+                        for dy in (-1, 0, 1):
+                            nbr = (cx + dx, cy + dy)
+                            if nbr in accepted_cells and nbr not in visited:
+                                visited.add(nbr)
+                                stack.append(nbr)
+                if component_points <= 0 or not math.isfinite(local_min_x):
+                    continue
+                box = self._local_box_to_map_box(
+                    local_min_x,
+                    local_max_x,
+                    local_min_y,
+                    local_max_y,
+                    self._local_to_map,
+                )
+                current_boxes_map.append(
+                    self._expand_box(box, self.global_pointcloud_overlay_static_box_margin_m)
+                )
 
             stamp_sec = msg.header.stamp.to_sec()
             if stamp_sec <= 0.0:
                 stamp_sec = rospy.Time.now().to_sec()
 
-            candidates = self._select_global_overlay_candidate_points(current_points_map)
+            candidates = self._select_global_overlay_candidate_boxes(current_boxes_map)
             self._update_global_obstacle_overlay_memory(candidates, stamp_sec)
             self._publish_global_obstacle_overlay(msg.header.stamp)
         except Exception as exc:
@@ -320,8 +518,8 @@ class GlobalObstacleOverlayPublisher:
         )
         return (dx * dx + dy * dy) <= radius_sq
 
-    def _select_global_overlay_candidate_points(self, current_points_map):
-        if not current_points_map:
+    def _select_global_overlay_candidate_boxes(self, current_boxes_map):
+        if not current_boxes_map:
             return []
 
         pts = self._global_path_points()
@@ -334,29 +532,32 @@ class GlobalObstacleOverlayPublisher:
         if len(path_slice) < 2:
             return []
 
-        max_range_sq = self.global_pointcloud_overlay_max_range_m * self.global_pointcloud_overlay_max_range_m
-        corridor_half_sq = self._pointcloud_corridor_half_width_m(
+        corridor_half_width_m = self._pointcloud_corridor_half_width_m(
             self.global_pointcloud_overlay_corridor_margin_m
-        ) ** 2
+        )
 
         selected = []
-        for wx, wy in current_points_map:
+        for box in current_boxes_map:
+            wx = float(box["x"])
+            wy = float(box["y"])
+            radius_m = self._box_radius_m(box)
             dx = wx - self.odom_x
             dy = wy - self.odom_y
-            if (dx * dx + dy * dy) > max_range_sq:
+            if (dx * dx + dy * dy) > ((self.global_pointcloud_overlay_max_range_m + radius_m) ** 2):
                 continue
+            corridor_limit_sq = (corridor_half_width_m + radius_m) ** 2
             for idx in range(len(path_slice) - 1):
                 x0, y0 = path_slice[idx]
                 x1, y1 = path_slice[idx + 1]
-                if self._point_to_segment_distance_sq(wx, wy, x0, y0, x1, y1) <= corridor_half_sq:
-                    selected.append((wx, wy))
+                if self._point_to_segment_distance_sq(wx, wy, x0, y0, x1, y1) <= corridor_limit_sq:
+                    selected.append(box)
                     break
         return selected
 
     def _prune_global_obstacle_overlay_memory(self, now_sec):
         if self.global_pointcloud_overlay_ttl_s <= 0.0 or self.global_pointcloud_overlay_max_points <= 0:
             self.global_obstacle_overlay_memory = []
-            self.global_obstacle_overlay_points_map = []
+            self.global_obstacle_overlay_boxes_map = []
             return []
 
         max_range_sq = self.global_pointcloud_overlay_max_range_m * self.global_pointcloud_overlay_max_range_m
@@ -404,12 +605,12 @@ class GlobalObstacleOverlayPublisher:
 
         self.global_obstacle_overlay_memory = kept
         confirmed = [
-            (float(item["x"]), float(item["y"]))
+            self._clone_box_entry(item)
             for item in kept
             if item.get("locked", False)
             or int(item["hits"]) >= self.global_pointcloud_overlay_persistence_frames
         ]
-        self.global_obstacle_overlay_points_map = confirmed
+        self.global_obstacle_overlay_boxes_map = confirmed
         return confirmed
 
     def _update_global_obstacle_overlay_memory(self, candidates_map, now_sec):
@@ -417,23 +618,19 @@ class GlobalObstacleOverlayPublisher:
         if not candidates_map:
             return confirmed
 
-        merge_radius_sq = (
-            self.global_pointcloud_overlay_merge_radius_m
-            * self.global_pointcloud_overlay_merge_radius_m
-        )
         memory = list(self.global_obstacle_overlay_memory)
-        for wx, wy in candidates_map:
+        for box in candidates_map:
             best_idx = None
-            best_d2 = merge_radius_sq
+            best_d2 = 1e18
             for idx, entry in enumerate(memory):
-                mx = float(entry["x"])
-                my = float(entry["y"])
-                d2 = (wx - mx) * (wx - mx) + (wy - my) * (wy - my)
-                if d2 <= best_d2:
+                if not self._boxes_match(entry, box, self.global_pointcloud_overlay_merge_radius_m):
+                    continue
+                d2 = self._box_center_distance_sq(entry, box["x"], box["y"])
+                if d2 < best_d2:
                     best_d2 = d2
                     best_idx = idx
             if best_idx is None:
-                memory.append(self._make_memory_entry(wx, wy, now_sec, hits=1))
+                memory.append(self._make_memory_entry(box, now_sec, hits=1))
             else:
                 entry = dict(memory[best_idx])
                 prev_hits = max(1, int(entry["hits"]))
@@ -443,20 +640,16 @@ class GlobalObstacleOverlayPublisher:
                 )
                 locked = bool(entry.get("locked", False))
                 if not locked:
-                    # Average detections before lock, then freeze the obstacle in map frame.
-                    entry["x"] = (
-                        float(entry["x"]) * prev_hits + float(wx)
-                    ) / float(prev_hits + 1)
-                    entry["y"] = (
-                        float(entry["y"]) * prev_hits + float(wy)
-                    ) / float(prev_hits + 1)
+                    entry.update(self._average_box_into_entry(entry, box, prev_hits))
                     if hits >= self.global_pointcloud_overlay_static_lock_frames:
                         locked = True
                         entry["lock_time"] = float(now_sec)
                         rospy.loginfo(
-                            "global_obstacle_overlay: locked static obstacle at (%.2f, %.2f) after %d hits",
+                            "global_obstacle_overlay: locked static obstacle box at (%.2f, %.2f) size=%.2fx%.2fm after %d hits",
                             float(entry["x"]),
                             float(entry["y"]),
+                            float(entry["size_x"]),
+                            float(entry["size_y"]),
                             hits,
                         )
                 entry["hits"] = hits
@@ -483,23 +676,32 @@ class GlobalObstacleOverlayPublisher:
         w = int(base.info.width)
         h = int(base.info.height)
         data = [0] * (w * h)
-        for wx, wy in self.global_obstacle_overlay_points_map:
-            gx, gy = self._world_to_grid(base, wx, wy)
-            if not self._in_bounds(base, gx, gy):
+        for box in self.global_obstacle_overlay_boxes_map:
+            gx0, gx1, gy0, gy1 = self._grid_bounds_for_box(base, box)
+            gx0 = max(0, gx0)
+            gy0 = max(0, gy0)
+            gx1 = min(w - 1, gx1)
+            gy1 = min(h - 1, gy1)
+            if gx0 > gx1 or gy0 > gy1:
                 continue
-            data[gy * w + gx] = 100
+            for gy in range(gy0, gy1 + 1):
+                row_offset = gy * w
+                for gx in range(gx0, gx1 + 1):
+                    data[row_offset + gx] = 100
         out.data = data
         self.pub_global_obstacle_overlay.publish(out)
+        self._publish_global_obstacle_overlay_boxes_marker(
+            out.header.frame_id, out.header.stamp, base.info.resolution
+        )
 
-    def _world_to_grid(self, g, x, y):
-        res = float(g.info.resolution)
-        gx = int(math.floor((x - float(g.info.origin.position.x)) / res))
-        gy = int(math.floor((y - float(g.info.origin.position.y)) / res))
-        return gx, gy
-
-    @staticmethod
-    def _in_bounds(g, gx, gy):
-        return 0 <= gx < int(g.info.width) and 0 <= gy < int(g.info.height)
+    def _publish_global_obstacle_overlay_boxes_marker(self, frame_id, stamp, min_size_m):
+        marker_array = MarkerArray()
+        marker_array.markers.append(self._delete_all_boxes_marker(frame_id, stamp))
+        for idx, box in enumerate(self.global_obstacle_overlay_boxes_map):
+            marker_array.markers.append(
+                self._box_marker(frame_id, stamp, idx, box, min_size_m)
+            )
+        self.pub_global_obstacle_overlay_boxes.publish(marker_array)
 
     def _publish_travel_history_marker(self):
         if self.pub_travel_history is None:

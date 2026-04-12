@@ -208,6 +208,7 @@
   <arg name="near_field_object_memory_max_points" default="120"/>
   <arg name="enable_global_pointcloud_overlay" default="true"/>
   <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
+  <arg name="global_obstacle_overlay_boxes_topic" default="/planning/global_obstacle_overlay_boxes"/>
   <arg name="global_obstacle_overlay_threshold" default="50"/>
   <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
   <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
@@ -218,6 +219,7 @@
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
   <arg name="global_pointcloud_overlay_max_range_m" default="10.0"/>
   <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
+  <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.08"/>
   <arg name="global_pointcloud_overlay_lookahead_m" default="10.0"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
@@ -452,6 +454,7 @@
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
       <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <arg name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
       <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
       <arg name="global_pointcloud_overlay_static_lock_frames" value="$(arg global_pointcloud_overlay_static_lock_frames)"/>
       <arg name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
@@ -461,6 +464,7 @@
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_pointcloud_overlay_static_lock_keep_range_m" value="$(arg global_pointcloud_overlay_static_lock_keep_range_m)"/>
+      <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
@@ -532,6 +536,7 @@
       <arg name="near_field_object_memory_max_points" value="$(arg near_field_object_memory_max_points)"/>
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
       <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <arg name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
       <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
       <arg name="global_pointcloud_overlay_static_lock_frames" value="$(arg global_pointcloud_overlay_static_lock_frames)"/>
       <arg name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
@@ -541,6 +546,7 @@
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_pointcloud_overlay_static_lock_keep_range_m" value="$(arg global_pointcloud_overlay_static_lock_keep_range_m)"/>
+      <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
@@ -707,12 +713,14 @@
       <arg name="near_field_object_memory_max_points" value="$(arg near_field_object_memory_max_points)"/>
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
       <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <arg name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
       <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
       <arg name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
       <arg name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
       <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
+      <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
