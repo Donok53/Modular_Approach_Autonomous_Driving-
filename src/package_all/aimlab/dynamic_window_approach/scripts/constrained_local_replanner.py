@@ -159,6 +159,27 @@ class ConstrainedLocalReplanner:
         self.static_obstacle_memory_max_points = max(
             0, int(rospy.get_param("~static_obstacle_memory_max_points", 40))
         )
+        self.local_blind_zone_guard_enabled = bool(
+            rospy.get_param("~local_blind_zone_guard_enabled", True)
+        )
+        self.local_blind_zone_guard_radius_m = max(
+            0.0, float(rospy.get_param("~local_blind_zone_guard_radius_m", 1.40))
+        )
+        self.local_blind_zone_guard_ttl_s = max(
+            0.0, float(rospy.get_param("~local_blind_zone_guard_ttl_s", 0.45))
+        )
+        self.local_blind_zone_guard_lookahead_m = max(
+            0.10, float(rospy.get_param("~local_blind_zone_guard_lookahead_m", 1.0))
+        )
+        self.local_blind_zone_guard_heading_deadband_deg = max(
+            0.0,
+            float(
+                rospy.get_param("~local_blind_zone_guard_heading_deadband_deg", 12.0)
+            ),
+        )
+        self.local_blind_zone_guard_side_margin_m = max(
+            0.0, float(rospy.get_param("~local_blind_zone_guard_side_margin_m", 0.08))
+        )
         self.tracked_object_virtual_obstacles_enabled = bool(
             rospy.get_param("~tracked_object_virtual_obstacles_enabled", True)
         )
@@ -502,6 +523,13 @@ class ConstrainedLocalReplanner:
         mx = self.odom_x + c * x - s * y
         my = self.odom_y + s * x + c * y
         return mx, my
+
+    def _world_to_local(self, wx, wy):
+        dx = float(wx) - self.odom_x
+        dy = float(wy) - self.odom_y
+        c = math.cos(self.odom_yaw)
+        s = math.sin(self.odom_yaw)
+        return c * dx + s * dy, (-s) * dx + c * dy
 
     def _pointcloud_cluster_cell(self, x, y):
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
@@ -2188,6 +2216,113 @@ class ConstrainedLocalReplanner:
             remain_m += self._heur(path[idx], path[idx + 1]) * scale
         return remain_m
 
+    def _get_active_local_blind_zone_memory(self, now_sec=None):
+        if (
+            (not self.local_blind_zone_guard_enabled)
+            or (not self.static_obstacle_memory_enabled)
+            or self.local_blind_zone_guard_radius_m <= 0.0
+            or self.local_blind_zone_guard_ttl_s <= 0.0
+            or (not self.obstacle_memory_points)
+        ):
+            return None
+        if now_sec is None:
+            now_sec = rospy.get_time()
+
+        lateral_limit = (
+            self.robot_half_width
+            + self.local_blind_zone_guard_side_margin_m
+        )
+        best = None
+        best_score = None
+        for wx, wy, seen_sec in self.obstacle_memory_points:
+            age_s = float(now_sec - seen_sec)
+            if age_s < 0.0 or age_s > self.local_blind_zone_guard_ttl_s:
+                continue
+            lx, ly = self._world_to_local(wx, wy)
+            if lx <= (-self.robot_half_length):
+                continue
+            range_m = math.hypot(lx, ly)
+            if range_m > self.local_blind_zone_guard_radius_m:
+                continue
+            if abs(ly) <= lateral_limit:
+                continue
+            side = 1 if ly > 0.0 else -1
+            score = (range_m, age_s)
+            if best is None or score < best_score:
+                best = {
+                    "world_x": float(wx),
+                    "world_y": float(wy),
+                    "x": float(lx),
+                    "y": float(ly),
+                    "range_m": float(range_m),
+                    "age_s": float(age_s),
+                    "side": int(side),
+                }
+                best_score = score
+        return best
+
+    def _path_blind_zone_turn_conflict(self, path, dg, now_sec=None):
+        memory = self._get_active_local_blind_zone_memory(now_sec)
+        if memory is None or not path:
+            return None
+
+        lookahead_m = max(0.05, self.local_blind_zone_guard_lookahead_m)
+        prev_x = self.odom_x
+        prev_y = self.odom_y
+        travelled_m = 0.0
+        target_world = None
+
+        for gx, gy in path:
+            wx, wy = self._grid_to_world(dg, gx, gy)
+            seg_len = math.hypot(wx - prev_x, wy - prev_y)
+            if seg_len <= 1e-6:
+                prev_x = wx
+                prev_y = wy
+                continue
+            next_travelled_m = travelled_m + seg_len
+            if next_travelled_m >= lookahead_m:
+                ratio = (lookahead_m - travelled_m) / seg_len
+                ratio = max(0.0, min(1.0, ratio))
+                target_world = (
+                    prev_x + ratio * (wx - prev_x),
+                    prev_y + ratio * (wy - prev_y),
+                )
+                travelled_m = lookahead_m
+                break
+            travelled_m = next_travelled_m
+            prev_x = wx
+            prev_y = wy
+            target_world = (wx, wy)
+
+        if target_world is None:
+            return None
+
+        target_x, target_y = self._world_to_local(target_world[0], target_world[1])
+        if target_x <= 0.05:
+            return None
+
+        heading_rad = math.atan2(target_y, target_x)
+        heading_deadband_rad = math.radians(
+            self.local_blind_zone_guard_heading_deadband_deg
+        )
+        if abs(heading_rad) < heading_deadband_rad:
+            return None
+
+        turn_side = 1 if heading_rad > 0.0 else -1
+        if turn_side != int(memory["side"]):
+            return None
+
+        out = dict(memory)
+        out.update(
+            {
+                "path_target_x": float(target_x),
+                "path_target_y": float(target_y),
+                "path_heading_deg": float(math.degrees(heading_rad)),
+                "lookahead_m": float(travelled_m),
+            }
+        )
+        return out
+
     def _had_recent_avoidance_activity(self, now_sec=None):
         if self.avoidance_active:
             return True
@@ -2247,7 +2382,7 @@ class ConstrainedLocalReplanner:
             return True
         return not self._path_segment_blocked(path, relaxed_blocked, blocked_idx)
 
-    def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg):
+    def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg, now_sec=None):
         if len(nominal_path) < 2:
             return None, None
 
@@ -2304,6 +2439,21 @@ class ConstrainedLocalReplanner:
             self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
             self._append_path_segment(composed, detour[1:])
             self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+
+            blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                composed, dg, now_sec=now_sec
+            )
+            if blind_zone_conflict is not None:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: rejecting avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
+                    "left" if int(blind_zone_conflict["side"]) > 0 else "right",
+                    float(blind_zone_conflict["x"]),
+                    float(blind_zone_conflict["y"]),
+                    float(blind_zone_conflict["age_s"]),
+                    float(blind_zone_conflict["path_heading_deg"]),
+                )
+                continue
 
             branch_history_points = self._sample_world_points(
                 [self._grid_to_world(dg, gx, gy) for gx, gy in detour]
@@ -2378,6 +2528,14 @@ class ConstrainedLocalReplanner:
         elif direct_points_overlap:
             trigger_reason = "dynamic_points_overlap"
 
+        blind_zone_conflict = None
+        if trigger_reason is None:
+            blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                nominal_path, dg, now_sec=stamp.to_sec()
+            )
+            if blind_zone_conflict is not None:
+                trigger_reason = "blind_zone_turn_conflict"
+
         if trigger_reason is None:
             self._clear_avoidance_path(frame_id, stamp)
             self._publish_debug_text(
@@ -2415,6 +2573,7 @@ class ConstrainedLocalReplanner:
             dynamic_blocked,
             start_cell,
             dg,
+            now_sec=stamp.to_sec(),
         )
         if avoid_path is None:
             rospy.logwarn_throttle(
@@ -2758,6 +2917,7 @@ class ConstrainedLocalReplanner:
             )
             nominal_blocked = blocked_idx is not None
             if nominal_blocked:
+                blocked_reason = "nominal_path_blocked"
                 relaxed_blocked = None
                 if (
                     self.near_goal_relaxed_path_blocking_radius_m + 1e-6
@@ -2781,6 +2941,29 @@ class ConstrainedLocalReplanner:
                         int(blocked_idx),
                     )
                     nominal_blocked = False
+                if nominal_blocked:
+                    blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                        nominal_path, dg, now_sec=stamp.to_sec()
+                    )
+                    if blind_zone_conflict is not None:
+                        blocked_reason = "blind_zone_turn_conflict"
+            else:
+                blocked_reason = "nominal_path_blocked"
+                blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                    nominal_path, dg, now_sec=stamp.to_sec()
+                )
+                if blind_zone_conflict is not None:
+                    nominal_blocked = True
+                    blocked_reason = "blind_zone_turn_conflict"
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: nominal path turn conflicts with blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
+                        "left" if int(blind_zone_conflict["side"]) > 0 else "right",
+                        float(blind_zone_conflict["x"]),
+                        float(blind_zone_conflict["y"]),
+                        float(blind_zone_conflict["age_s"]),
+                        float(blind_zone_conflict["path_heading_deg"]),
+                    )
             if nominal_blocked:
                 now_sec = stamp.to_sec()
                 if self.local_blocked_since_sec <= 0.0:
@@ -2793,12 +2976,12 @@ class ConstrainedLocalReplanner:
                         self._publish_explainability(
                             event_type="LOCAL_REPLAN_START",
                             stamp=stamp,
-                            trigger_reason="nominal_path_blocked",
+                            trigger_reason=blocked_reason,
                             action_taken="hold_stop",
                             local_planning_active=True,
                             stop_commanded=True,
                             summary_text=(
-                                "Nominal local path became blocked, so local replanning started and the robot entered a hold state for %.1f seconds before avoidance."
+                                "Nominal local path became unsafe, so local replanning started and the robot entered a hold state for %.1f seconds before avoidance."
                             )
                             % self.blocked_stop_before_avoidance_s,
                         )
@@ -2809,12 +2992,12 @@ class ConstrainedLocalReplanner:
                         self._publish_explainability(
                             event_type="LOCAL_REPLAN_START",
                             stamp=stamp,
-                            trigger_reason="nominal_path_blocked",
+                            trigger_reason=blocked_reason,
                             action_taken="avoid_immediate",
                             local_planning_active=True,
                             stop_commanded=False,
                             summary_text=(
-                                "Nominal local path became blocked, so local replanning immediately evaluated an avoidance path without a hold delay."
+                                "Nominal local path became unsafe, so local replanning immediately evaluated an avoidance path without a hold delay."
                             ),
                         )
                 wait_s = now_sec - self.local_blocked_since_sec
@@ -2824,7 +3007,7 @@ class ConstrainedLocalReplanner:
                         self._build_debug_text(
                             "hold_wait",
                             stamp,
-                            trigger_reason="nominal_path_blocked",
+                            trigger_reason=blocked_reason,
                             wait_s=wait_s,
                             path_len=len(nominal_path),
                         ),
