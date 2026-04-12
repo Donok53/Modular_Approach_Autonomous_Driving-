@@ -693,7 +693,7 @@ class ConstrainedLocalReplanner:
 
         scale = self.recognized_obstacles_marker_scale_m
         current_static_points = list(self.current_obstacle_points_map)
-        static_memory_points = [(wx, wy) for wx, wy, _seen_sec in self.obstacle_memory_points]
+        static_memory_points = self._memory_points_from_entries(self.obstacle_memory_points)
         tracked_points = list(self.tracked_object_points_map)
         overlay_points = list(self.global_obstacle_overlay_points_map)
 
@@ -772,6 +772,10 @@ class ConstrainedLocalReplanner:
         marker.header.frame_id = "map"
         marker.action = Marker.DELETEALL
         return marker
+
+    @staticmethod
+    def _memory_points_from_entries(entries):
+        return [(float(wx), float(wy)) for wx, wy, _seen_sec in entries]
 
     def _clear_blocking_obstacle_markers(self, stamp=None):
         if self.pub_blocking_obstacles is None or rospy.is_shutdown():
@@ -2634,6 +2638,176 @@ class ConstrainedLocalReplanner:
                     break
         return []
 
+    def _inflate_source_mask(self, dg, source_mask, radius_override_m=None):
+        w = len(source_mask[0]) if source_mask else 0
+        h = len(source_mask)
+        if w <= 0 or h <= 0:
+            return []
+
+        res = float(dg.info.resolution)
+        inflate_m = max(
+            0.05,
+            self.path_blocking_radius_m
+            if radius_override_m is None
+            else float(radius_override_m),
+        )
+        inflate_cells = max(1, int(math.ceil(inflate_m / max(1e-3, res))))
+        out = [[False for _ in range(w)] for _ in range(h)]
+        for y in range(h):
+            for x in range(w):
+                if not source_mask[y][x]:
+                    continue
+                for dx in range(-inflate_cells, inflate_cells + 1):
+                    for dy in range(-inflate_cells, inflate_cells + 1):
+                        if math.hypot(float(dx) * res, float(dy) * res) > inflate_m:
+                            continue
+                        nx = x + dx
+                        ny = y + dy
+                        if 0 <= nx < w and 0 <= ny < h:
+                            out[ny][nx] = True
+        return out
+
+    def _build_base_source_blocked_grids(self, dg, rg=None, radius_override_m=None):
+        w = int(dg.info.width)
+        h = int(dg.info.height)
+        dims_match = (
+            rg is not None
+            and int(rg.info.width) == w
+            and int(rg.info.height) == h
+        )
+
+        drivable_mask = [[False for _ in range(w)] for _ in range(h)]
+        risk_mask = [[False for _ in range(w)] for _ in range(h)] if dims_match else None
+        for y in range(h):
+            row = y * w
+            for x in range(w):
+                idx = row + x
+                drivable_mask[y][x] = int(dg.data[idx]) != 0
+                if dims_match:
+                    risk_mask[y][x] = int(rg.data[idx]) >= self.risk_threshold
+
+        return {
+            "grid_occ": self._inflate_source_mask(
+                dg, drivable_mask, radius_override_m=radius_override_m
+            ),
+            "risk": self._inflate_source_mask(
+                dg, risk_mask, radius_override_m=radius_override_m
+            )
+            if risk_mask is not None
+            else None,
+        }
+
+    def _build_path_blocker_source_summary(
+        self,
+        path,
+        dg,
+        start_cell,
+        *,
+        max_check_m,
+        point_margin_m,
+        rg=None,
+        radius_override_m=None,
+        blind_zone_conflict=None,
+    ):
+        summary = {
+            "grid_occ": 0,
+            "risk": 0,
+            "pc_current": 0,
+            "pc_memory": 0,
+            "tracked_current": 0,
+            "tracked_memory": 0,
+            "blind_zone": "none",
+        }
+        if blind_zone_conflict is not None:
+            summary["blind_zone"] = (
+                "left" if int(blind_zone_conflict.get("side", 0)) > 0 else "right"
+            )
+        if not path or dg is None:
+            return summary
+
+        source_blocked = self._build_base_source_blocked_grids(
+            dg,
+            rg=rg,
+            radius_override_m=radius_override_m,
+        )
+        summary["grid_occ"] = len(
+            self._collect_confirmed_blocked_path_world_points(
+                path,
+                source_blocked["grid_occ"],
+                start_cell,
+                dg,
+                max_check_m=max_check_m,
+            )
+        )
+        if source_blocked["risk"] is not None:
+            summary["risk"] = len(
+                self._collect_confirmed_blocked_path_world_points(
+                    path,
+                    source_blocked["risk"],
+                    start_cell,
+                    dg,
+                    max_check_m=max_check_m,
+                )
+            )
+
+        summary["pc_current"] = len(
+            self._collect_path_overlap_points(
+                path,
+                dg,
+                start_cell,
+                self.current_obstacle_points_map,
+                point_margin_m,
+                max_check_m=max_check_m,
+            )
+        )
+        summary["pc_memory"] = len(
+            self._collect_path_overlap_points(
+                path,
+                dg,
+                start_cell,
+                self._memory_points_from_entries(self.obstacle_memory_points),
+                point_margin_m,
+                max_check_m=max_check_m,
+            )
+        )
+        summary["tracked_current"] = len(
+            self._collect_path_overlap_points(
+                path,
+                dg,
+                start_cell,
+                self.current_tracked_object_points_map,
+                point_margin_m,
+                max_check_m=max_check_m,
+            )
+        )
+        summary["tracked_memory"] = len(
+            self._collect_path_overlap_points(
+                path,
+                dg,
+                start_cell,
+                self._memory_points_from_entries(self.tracked_object_memory_points),
+                point_margin_m,
+                max_check_m=max_check_m,
+            )
+        )
+        return summary
+
+    def _log_blocker_source_summary(self, context, base_label, trigger_reason, summary):
+        self._debug_avoidance_log(
+            "constrained_local_replanner: blocker_sources | context={} base={} reason={} grid_occ={} risk={} pc_current={} pc_memory={} tracked_current={} tracked_memory={} blind_zone={}".format(
+                context,
+                base_label,
+                trigger_reason,
+                int(summary.get("grid_occ", 0)),
+                int(summary.get("risk", 0)),
+                int(summary.get("pc_current", 0)),
+                int(summary.get("pc_memory", 0)),
+                int(summary.get("tracked_current", 0)),
+                int(summary.get("tracked_memory", 0)),
+                str(summary.get("blind_zone", "none")),
+            )
+        )
+
     def _first_blocked_path_index(
         self,
         path,
@@ -3052,6 +3226,7 @@ class ConstrainedLocalReplanner:
 
         blocking_points = []
         blocking_cells = []
+        point_margin_m = self.obstacle_block_margin_m
         if predicted_overlap:
             blocking_cells = self._collect_confirmed_blocked_path_world_points(
                 nominal_path,
@@ -3074,6 +3249,21 @@ class ConstrainedLocalReplanner:
                 point_margin_m,
                 max_check_m=self.avoidance_trigger_ahead_m,
             )
+        source_summary = self._build_path_blocker_source_summary(
+            nominal_path,
+            dg,
+            start_cell,
+            max_check_m=self.avoidance_trigger_ahead_m,
+            point_margin_m=point_margin_m,
+            rg=self.risk_grid,
+            blind_zone_conflict=blind_zone_conflict,
+        )
+        self._log_blocker_source_summary(
+            "avoidance_eval",
+            label,
+            trigger_reason,
+            source_summary,
+        )
         self._publish_blocking_obstacle_markers(
             stamp,
             blocking_points=blocking_points,
@@ -3514,6 +3704,21 @@ class ConstrainedLocalReplanner:
                     start_cell,
                     dg,
                     max_check_m=self.lookahead_m,
+                )
+                source_summary = self._build_path_blocker_source_summary(
+                    nominal_path,
+                    dg,
+                    start_cell,
+                    max_check_m=self.lookahead_m,
+                    point_margin_m=self.pointcloud_static_block_margin_m,
+                    rg=rg,
+                    blind_zone_conflict=blind_zone_conflict,
+                )
+                self._log_blocker_source_summary(
+                    "nominal_block",
+                    "local",
+                    blocked_reason,
+                    source_summary,
                 )
                 self._publish_blocking_obstacle_markers(
                     stamp,
