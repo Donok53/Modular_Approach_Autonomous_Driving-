@@ -462,17 +462,17 @@ Visualization Manager:
       Buffer Length: 1
       Class: rviz/Path
       Color: 0; 120; 255
-      Enabled: false
+      Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.18000000715255737
+      Line Width: 0.1599999964237213
       Name: travel_history_path
       Offset:
         X: 0
         Y: 0
-        Z: 0.14
+        Z: 0.12
       Pose Color: 255; 85; 255
       Pose Style: None
       Queue Size: 10
@@ -539,12 +539,12 @@ Visualization Manager:
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.2199999988079071
+      Line Width: 0.1599999964237213
       Name: astar_path
       Offset:
         X: 0
         Y: 0
-        Z: 0.14
+        Z: 0.12
       Pose Color: 255; 85; 255
       Pose Style: None
       Queue Size: 10

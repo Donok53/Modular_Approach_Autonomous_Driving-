@@ -2084,7 +2084,7 @@ class ConstrainedLocalReplanner:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.22
+        marker.scale.x = 0.10
         marker.color.a = 1.00
         marker.color.r = 0.00
         marker.color.g = 0.45
@@ -2093,9 +2093,16 @@ class ConstrainedLocalReplanner:
             p = Point()
             p.x = float(x)
             p.y = float(y)
-            p.z = 0.14
+            p.z = 0.12
             marker.points.append(p)
         self.pub_travel_history.publish(marker)
+        rospy.loginfo_throttle(
+            2.0,
+            "constrained_local_replanner: travel_history marker/path points=%d topic=%s path_topic=%s",
+            len(self.travel_history_points),
+            self.travel_history_topic,
+            self.travel_history_path_topic,
+        )
 
     def _publish_travel_history_path(self):
         path = Path()
@@ -2106,7 +2113,7 @@ class ConstrainedLocalReplanner:
             pose.header = path.header
             pose.pose.position.x = float(x)
             pose.pose.position.y = float(y)
-            pose.pose.position.z = 0.14
+            pose.pose.position.z = 0.12
             pose.pose.orientation.w = 1.0
             path.poses.append(pose)
         self.pub_travel_history_path.publish(path)
