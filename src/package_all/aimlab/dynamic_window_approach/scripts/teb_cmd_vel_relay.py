@@ -1051,6 +1051,16 @@ class TebCmdVelRelay(object):
         out.angular.z = self._effective_avoidance_angular_z(cmd)
         return out
 
+    def _rotation_away_from_side_cmd(self, cmd, side):
+        out = Twist()
+        if side == 0:
+            return out
+        turn_sign = -1.0 if side > 0 else 1.0
+        out.angular.z = turn_sign * max(
+            abs(float(cmd.angular.z)), self.min_in_place_rotation_angular_speed
+        )
+        return out
+
     def _coast_forward_cmd(self, cmd):
         out = Twist()
         out.linear.x = max(0.0, float(self.last_publish_cmd.linear.x))
@@ -1995,6 +2005,33 @@ class TebCmdVelRelay(object):
                 "closest_obstacle_dist_m": float(memory["range_m"]),
                 "obstacle_lateral_offset_m": obstacle_y,
                 "summary_text": "TEB relay held the robot stopped because a side obstacle remained inside the blind zone while the avoidance branch had no fresh local path to follow.",
+            }
+
+        if float(cmd.linear.x) <= 0.0:
+            rotate_away = self._rotation_away_from_side_cmd(cmd, side)
+            self._last_safety_reason = "blind_zone_turn_rotate_away"
+            rospy.loginfo_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: blind-zone turn redirect | obstacle=(%.2f,%.2f) age=%.2fs cmd(v=%.3f,w=%.3f) -> out(v=%.3f,w=%.3f)",
+                obstacle_x,
+                obstacle_y,
+                age_s,
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+                float(rotate_away.linear.x),
+                float(rotate_away.angular.z),
+            )
+            return rotate_away, {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "blind_zone_obstacle_memory",
+                "action_taken": "blind_zone_turn_rotate_away",
+                "avoid_direction": turn_away_direction,
+                "stop_commanded": False,
+                "slowdown_commanded": True,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(memory["range_m"]),
+                "obstacle_lateral_offset_m": obstacle_y,
+                "summary_text": "TEB relay redirected an in-place turn away from a recently observed side obstacle instead of vetoing the escape rotation.",
             }
 
         guarded = self._copy_cmd(cmd)
