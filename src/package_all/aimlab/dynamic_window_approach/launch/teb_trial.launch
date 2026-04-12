@@ -348,6 +348,30 @@
     </node>
   </group>
 
+  <group if="$(arg enable_global_pointcloud_overlay)">
+    <node pkg="dynamic_window_approach" type="global_obstacle_overlay.py" name="global_obstacle_overlay" output="screen" respawn="false">
+      <param name="odom_topic" value="$(arg planning_pose_topic)"/>
+      <param name="global_path_topic" value="$(arg global_path_topic)"/>
+      <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
+      <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <param name="robot_width_m" value="$(arg robot_width_m)"/>
+      <param name="robot_length_m" value="$(arg robot_length_m)"/>
+      <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+      <param name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
+      <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
+      <param name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
+      <param name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
+      <param name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
+      <param name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
+      <param name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
+      <param name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
+      <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
+      <param name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
+      <param name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
+    </node>
+  </group>
+
   <group if="$(arg enable_local_replanner)">
     <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
       <param name="odom_topic" value="$(arg planning_pose_topic)"/>
@@ -400,7 +424,7 @@
       <param name="near_field_object_memory_max_range_m" value="$(arg near_field_object_memory_max_range_m)"/>
       <param name="near_field_object_memory_merge_radius_m" value="$(arg near_field_object_memory_merge_radius_m)"/>
       <param name="near_field_object_memory_max_points" value="$(arg near_field_object_memory_max_points)"/>
-      <param name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
+      <param name="enable_global_pointcloud_overlay" value="false"/>
       <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
       <param name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
       <param name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
