@@ -219,6 +219,15 @@ class TebCmdVelRelay(object):
         self.blind_zone_turn_guard_front_limit_x = (
             self.robot_half_length + self.blind_zone_turn_guard_front_margin_m
         )
+        self.blind_zone_turn_guard_side_forward_limit_x = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~blind_zone_turn_guard_side_forward_limit_x",
+                    self.blind_zone_turn_guard_front_limit_x + 0.10,
+                )
+            ),
+        )
         self.emergency_stop_distance = self.robot_half_length + self.emergency_stop_front_margin
         self.emergency_stop_lateral_y = self.robot_half_width + self.emergency_stop_side_margin
         self.slowdown_distance = self.robot_half_length + self.slowdown_front_margin
@@ -360,7 +369,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f)",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f side_x<=%.2f)",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -398,6 +407,7 @@ class TebCmdVelRelay(object):
             self.blind_zone_turn_guard_radius_m,
             self.blind_zone_turn_guard_ttl_s,
             self.blind_zone_turn_guard_linear_cap_mps,
+            self.blind_zone_turn_guard_side_forward_limit_x,
         )
 
     @staticmethod
@@ -921,6 +931,13 @@ class TebCmdVelRelay(object):
         ):
             side = 0
         else:
+            return None
+
+        if side != 0 and x > self.blind_zone_turn_guard_side_forward_limit_x:
+            # Treat side blind-zone memory as an immediate flank guard instead
+            # of a broad forward-side keepout. This avoids vetoing near-goal
+            # turns for people standing outside the robot path but slightly
+            # ahead of the chassis.
             return None
 
         score = distance
