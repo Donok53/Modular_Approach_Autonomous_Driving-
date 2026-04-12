@@ -58,14 +58,26 @@ class GlobalObstacleOverlayPublisher:
         self.global_pointcloud_overlay_persistence_frames = max(
             1, int(rospy.get_param("~global_pointcloud_overlay_persistence_frames", 3))
         )
+        self.global_pointcloud_overlay_static_lock_frames = max(
+            self.global_pointcloud_overlay_persistence_frames,
+            int(rospy.get_param("~global_pointcloud_overlay_static_lock_frames", 5)),
+        )
         self.global_pointcloud_overlay_ttl_s = max(
             0.0, float(rospy.get_param("~global_pointcloud_overlay_ttl_s", 2.0))
+        )
+        self.global_pointcloud_overlay_static_lock_ttl_s = max(
+            self.global_pointcloud_overlay_ttl_s,
+            float(rospy.get_param("~global_pointcloud_overlay_static_lock_ttl_s", 30.0)),
         )
         self.global_pointcloud_overlay_merge_radius_m = max(
             0.05, float(rospy.get_param("~global_pointcloud_overlay_merge_radius_m", 0.25))
         )
         self.global_pointcloud_overlay_max_range_m = max(
             0.5, float(rospy.get_param("~global_pointcloud_overlay_max_range_m", 8.0))
+        )
+        self.global_pointcloud_overlay_static_lock_keep_range_m = max(
+            self.global_pointcloud_overlay_max_range_m,
+            float(rospy.get_param("~global_pointcloud_overlay_static_lock_keep_range_m", 15.0)),
         )
         self.global_pointcloud_overlay_lookahead_m = max(
             0.5, float(rospy.get_param("~global_pointcloud_overlay_lookahead_m", 8.0))
@@ -118,12 +130,15 @@ class GlobalObstacleOverlayPublisher:
         )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s out=%s persist=%d ttl=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s out=%s persist=%d static_lock=%d ttl=%.1fs keep=%.1fm blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
             self.global_obstacle_overlay_topic,
             self.global_pointcloud_overlay_persistence_frames,
+            self.global_pointcloud_overlay_static_lock_frames,
+            self.global_pointcloud_overlay_static_lock_ttl_s,
+            self.global_pointcloud_overlay_static_lock_keep_range_m,
             self.global_pointcloud_overlay_ttl_s,
             self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
             self.global_pointcloud_overlay_blind_zone_radius_m,
@@ -131,6 +146,17 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_lookahead_m,
             self.global_pointcloud_overlay_corridor_margin_m,
         )
+
+    @staticmethod
+    def _make_memory_entry(wx, wy, seen_sec, hits=1, locked=False, lock_time=0.0):
+        return {
+            "x": float(wx),
+            "y": float(wy),
+            "last_seen": float(seen_sec),
+            "hits": int(max(1, hits)),
+            "locked": bool(locked),
+            "lock_time": float(lock_time),
+        }
 
     def odom_callback(self, msg):
         p = msg.pose.pose.position
@@ -334,31 +360,54 @@ class GlobalObstacleOverlayPublisher:
             return []
 
         max_range_sq = self.global_pointcloud_overlay_max_range_m * self.global_pointcloud_overlay_max_range_m
+        static_keep_range_sq = (
+            self.global_pointcloud_overlay_static_lock_keep_range_m
+            * self.global_pointcloud_overlay_static_lock_keep_range_m
+        )
         kept = []
-        for wx, wy, seen_sec, hits in self.global_obstacle_overlay_memory:
+        for entry in self.global_obstacle_overlay_memory:
+            wx = float(entry["x"])
+            wy = float(entry["y"])
+            seen_sec = float(entry["last_seen"])
+            hits = int(entry["hits"])
+            locked = bool(entry.get("locked", False))
             effective_ttl_s = self.global_pointcloud_overlay_ttl_s
             if self._in_global_overlay_blind_zone(wx, wy):
                 effective_ttl_s = max(
                     effective_ttl_s,
                     self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
                 )
+            if locked:
+                effective_ttl_s = max(
+                    effective_ttl_s,
+                    self.global_pointcloud_overlay_static_lock_ttl_s,
+                )
             if (now_sec - seen_sec) > effective_ttl_s:
                 continue
             dx = wx - self.odom_x
             dy = wy - self.odom_y
-            if (dx * dx + dy * dy) > max_range_sq:
+            keep_range_sq = static_keep_range_sq if locked else max_range_sq
+            if (dx * dx + dy * dy) > keep_range_sq:
                 continue
-            kept.append((wx, wy, seen_sec, hits))
+            kept.append(entry)
 
-        kept.sort(key=lambda item: (item[3], item[2]), reverse=True)
+        kept.sort(
+            key=lambda item: (
+                1 if item.get("locked", False) else 0,
+                int(item["hits"]),
+                float(item["last_seen"]),
+            ),
+            reverse=True,
+        )
         if len(kept) > self.global_pointcloud_overlay_max_points:
             kept = kept[: self.global_pointcloud_overlay_max_points]
 
         self.global_obstacle_overlay_memory = kept
         confirmed = [
-            (wx, wy)
-            for wx, wy, _seen_sec, hits in kept
-            if hits >= self.global_pointcloud_overlay_persistence_frames
+            (float(item["x"]), float(item["y"]))
+            for item in kept
+            if item.get("locked", False)
+            or int(item["hits"]) >= self.global_pointcloud_overlay_persistence_frames
         ]
         self.global_obstacle_overlay_points_map = confirmed
         return confirmed
@@ -376,21 +425,44 @@ class GlobalObstacleOverlayPublisher:
         for wx, wy in candidates_map:
             best_idx = None
             best_d2 = merge_radius_sq
-            for idx, (mx, my, _seen_sec, _hits) in enumerate(memory):
+            for idx, entry in enumerate(memory):
+                mx = float(entry["x"])
+                my = float(entry["y"])
                 d2 = (wx - mx) * (wx - mx) + (wy - my) * (wy - my)
                 if d2 <= best_d2:
                     best_d2 = d2
                     best_idx = idx
             if best_idx is None:
-                memory.append((wx, wy, now_sec, 1))
+                memory.append(self._make_memory_entry(wx, wy, now_sec, hits=1))
             else:
-                _mx, _my, _seen_sec, hits = memory[best_idx]
-                memory[best_idx] = (
-                    wx,
-                    wy,
-                    now_sec,
-                    min(hits + 1, self.global_pointcloud_overlay_persistence_frames + 8),
+                entry = dict(memory[best_idx])
+                prev_hits = max(1, int(entry["hits"]))
+                hits = min(
+                    prev_hits + 1,
+                    self.global_pointcloud_overlay_static_lock_frames + 8,
                 )
+                locked = bool(entry.get("locked", False))
+                if not locked:
+                    # Average detections before lock, then freeze the obstacle in map frame.
+                    entry["x"] = (
+                        float(entry["x"]) * prev_hits + float(wx)
+                    ) / float(prev_hits + 1)
+                    entry["y"] = (
+                        float(entry["y"]) * prev_hits + float(wy)
+                    ) / float(prev_hits + 1)
+                    if hits >= self.global_pointcloud_overlay_static_lock_frames:
+                        locked = True
+                        entry["lock_time"] = float(now_sec)
+                        rospy.loginfo(
+                            "global_obstacle_overlay: locked static obstacle at (%.2f, %.2f) after %d hits",
+                            float(entry["x"]),
+                            float(entry["y"]),
+                            hits,
+                        )
+                entry["hits"] = hits
+                entry["last_seen"] = float(now_sec)
+                entry["locked"] = locked
+                memory[best_idx] = entry
 
         self.global_obstacle_overlay_memory = memory
         return self._prune_global_obstacle_overlay_memory(now_sec)
