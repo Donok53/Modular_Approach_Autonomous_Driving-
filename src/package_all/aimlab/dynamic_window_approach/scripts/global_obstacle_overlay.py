@@ -915,16 +915,16 @@ class GlobalObstacleOverlayPublisher:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.35
-        marker.color.a = 0.95
-        marker.color.r = 0.05
-        marker.color.g = 0.35
+        marker.scale.x = 0.55
+        marker.color.a = 1.00
+        marker.color.r = 0.00
+        marker.color.g = 0.45
         marker.color.b = 1.00
         for x, y in self.travel_history_points:
             p = Point()
             p.x = float(x)
             p.y = float(y)
-            p.z = 0.08
+            p.z = 0.18
             marker.points.append(p)
         self.pub_travel_history.publish(marker)
 

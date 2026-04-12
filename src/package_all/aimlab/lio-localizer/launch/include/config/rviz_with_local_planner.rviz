@@ -466,13 +466,13 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.3499999940395355
+      Line Style: Billboards
+      Line Width: 0.6000000238418579
       Name: Local Trjaectory Path
       Offset:
         X: 0
         Y: 0
-        Z: 0
+        Z: 0.18
       Pose Color: 255; 85; 255
       Pose Style: None
       Queue Size: 10
@@ -538,13 +538,13 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.3499999940395355
+      Line Style: Billboards
+      Line Width: 0.6000000238418579
       Name: astar_path
       Offset:
         X: 0
         Y: 0
-        Z: 0.12
+        Z: 0.22
       Pose Color: 255; 85; 255
       Pose Style: None
       Queue Size: 10
