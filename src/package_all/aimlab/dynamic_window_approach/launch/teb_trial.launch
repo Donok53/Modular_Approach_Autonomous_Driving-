@@ -32,6 +32,8 @@
   <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="travel_history_topic" default="/planning/travel_history"/>
   <arg name="travel_history_path_topic" default="/planning/travel_history_path"/>
+  <arg name="localization_history_topic" default="/planning/localization_history"/>
+  <arg name="localization_history_path_topic" default="/planning/localization_history_path"/>
   <arg name="enable_cloud_tracker" default="true"/>
   <arg name="enable_dynamic_risk_manager" default="true"/>
   <arg name="enable_local_replanner" default="true"/>
@@ -287,6 +289,12 @@
       <param name="turning_yaw_rate_threshold_rps" value="$(arg pose_filter_turning_yaw_rate_threshold_rps)"/>
       <param name="turning_yaw_error_deg" value="$(arg pose_filter_turning_yaw_error_deg)"/>
       <param name="max_straight_lateral_correction_mps" value="$(arg pose_filter_max_straight_lateral_correction_mps)"/>
+      <param name="history_marker_topic" value="$(arg localization_history_topic)"/>
+      <param name="history_path_topic" value="$(arg localization_history_path_topic)"/>
+      <param name="history_spacing_m" value="0.03"/>
+      <param name="history_max_points" value="3000"/>
+      <param name="history_z_offset_m" value="0.10"/>
+      <param name="history_marker_width_m" value="0.08"/>
     </node>
   </group>
 

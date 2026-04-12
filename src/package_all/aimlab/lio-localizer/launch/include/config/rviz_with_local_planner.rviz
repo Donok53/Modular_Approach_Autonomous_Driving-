@@ -444,13 +444,13 @@ Visualization Manager:
       Queue Size: 20
       Value: true
     - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /planning/travel_history
-      Name: travel_history
+      Enabled: false
+      Marker Topic: /planning/localization_history
+      Name: localization_history
       Namespaces:
         {}
       Queue Size: 20
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /planning/global_obstacle_overlay_boxes
@@ -468,7 +468,7 @@ Visualization Manager:
       Length: 0.30000001192092896
       Line Style: Billboards
       Line Width: 0.11999999731779099
-      Name: travel_history_path
+      Name: localization_history_path
       Offset:
         X: 0
         Y: 0
@@ -479,7 +479,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /planning/travel_history_path
+      Topic: /planning/localization_history_path
       Unreliable: false
       Value: true
     - Alpha: 1

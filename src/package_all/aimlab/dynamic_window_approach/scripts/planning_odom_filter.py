@@ -2,9 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import math
+from collections import deque
 
 import rospy
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Point, PoseStamped
+from nav_msgs.msg import Odometry, Path
+from visualization_msgs.msg import Marker
 
 
 def clamp(value, low, high):
@@ -111,6 +114,24 @@ class PlanningOdomFilter:
             float(rospy.get_param("~max_straight_lateral_correction_mps", 0.18)),
         )
         self.reinit_gap_s = max(0.2, float(rospy.get_param("~reinit_gap_s", 1.0)))
+        self.history_marker_topic = str(
+            rospy.get_param("~history_marker_topic", "/planning/localization_history")
+        ).strip()
+        self.history_path_topic = str(
+            rospy.get_param("~history_path_topic", "/planning/localization_history_path")
+        ).strip()
+        self.history_max_points = max(
+            2, int(rospy.get_param("~history_max_points", 3000))
+        )
+        self.history_spacing_m = max(
+            0.01, float(rospy.get_param("~history_spacing_m", 0.03))
+        )
+        self.history_z_offset_m = float(
+            rospy.get_param("~history_z_offset_m", 0.10)
+        )
+        self.history_marker_width_m = max(
+            0.02, float(rospy.get_param("~history_marker_width_m", 0.08))
+        )
 
         self.have_state = False
         self.last_stamp_s = None
@@ -126,8 +147,20 @@ class PlanningOdomFilter:
         self.fwz = 0.0
         self.latest_twist_msg = None
         self.latest_twist_stamp_s = 0.0
+        self.history_points = deque(maxlen=self.history_max_points)
+        self.history_frame_id = "map"
 
         self.pub = rospy.Publisher(self.output_topic, Odometry, queue_size=20)
+        self.pub_history_marker = None
+        self.pub_history_path = None
+        if self.history_marker_topic:
+            self.pub_history_marker = rospy.Publisher(
+                self.history_marker_topic, Marker, queue_size=2, latch=True
+            )
+        if self.history_path_topic:
+            self.pub_history_path = rospy.Publisher(
+                self.history_path_topic, Path, queue_size=2, latch=True
+            )
         self.sub = rospy.Subscriber(
             self.input_topic, Odometry, self.odom_callback, queue_size=50
         )
@@ -138,11 +171,12 @@ class PlanningOdomFilter:
             )
 
         rospy.loginfo(
-            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f)",
+            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f)",
             self.input_topic,
             self.twist_topic if self.twist_topic else "-",
             self.twist_linear_frame,
             self.output_topic,
+            self.history_path_topic if self.history_path_topic else "-",
             self.twist_timeout_s,
             self.output_child_frame_id if self.output_child_frame_id else "<inherit>",
             self.forward_tau_s,
@@ -256,6 +290,78 @@ class PlanningOdomFilter:
         out.twist.twist.linear.z = self.fvz
         out.twist.twist.angular.z = self.fwz
         self.pub.publish(out)
+        frame_id = str(out.header.frame_id).strip() or "map"
+        self._record_history_point(self.fx, self.fy, frame_id, out.header.stamp)
+
+    def _publish_history_marker(self, stamp):
+        if self.pub_history_marker is None:
+            return
+
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.history_frame_id
+        marker.ns = "localization_history"
+        marker.id = 1
+        marker.pose.orientation.w = 1.0
+        if len(self.history_points) < 2:
+            marker.action = Marker.DELETE
+            self.pub_history_marker.publish(marker)
+            return
+
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = self.history_marker_width_m
+        marker.color.a = 1.0
+        marker.color.r = 0.0
+        marker.color.g = 0.47
+        marker.color.b = 1.0
+        for x, y in self.history_points:
+            pt = Point()
+            pt.x = float(x)
+            pt.y = float(y)
+            pt.z = self.history_z_offset_m
+            marker.points.append(pt)
+        self.pub_history_marker.publish(marker)
+
+    def _publish_history_path(self, stamp):
+        if self.pub_history_path is None:
+            return
+
+        path = Path()
+        path.header.stamp = stamp
+        path.header.frame_id = self.history_frame_id
+        for x, y in self.history_points:
+            pose = PoseStamped()
+            pose.header = path.header
+            pose.pose.position.x = float(x)
+            pose.pose.position.y = float(y)
+            pose.pose.position.z = self.history_z_offset_m
+            pose.pose.orientation.w = 1.0
+            path.poses.append(pose)
+        self.pub_history_path.publish(path)
+
+    def _record_history_point(self, x, y, frame_id, stamp):
+        if frame_id and frame_id != self.history_frame_id:
+            self.history_frame_id = frame_id
+            self.history_points.clear()
+
+        x = float(x)
+        y = float(y)
+        if self.history_points:
+            last_x, last_y = self.history_points[-1]
+            if math.hypot(x - last_x, y - last_y) < self.history_spacing_m:
+                return
+
+        self.history_points.append((x, y))
+        self._publish_history_marker(stamp)
+        self._publish_history_path(stamp)
+        rospy.loginfo_throttle(
+            2.0,
+            "planning_odom_filter: localization_history points=%d marker_topic=%s path_topic=%s",
+            len(self.history_points),
+            self.history_marker_topic,
+            self.history_path_topic,
+        )
 
     def odom_callback(self, pose_msg):
         stamp_s = self._stamp_to_sec(pose_msg)
