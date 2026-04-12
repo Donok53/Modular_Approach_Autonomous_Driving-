@@ -429,6 +429,13 @@ Visualization Manager:
       Namespaces: {}
       Queue Size: 100
       Value: false
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /planning/recognized_obstacles
+      Name: recognized_obstacles
+      Namespaces: {}
+      Queue Size: 20
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /planning/travel_history

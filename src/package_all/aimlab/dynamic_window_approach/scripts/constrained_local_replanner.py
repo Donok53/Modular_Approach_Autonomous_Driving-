@@ -129,6 +129,21 @@ class ConstrainedLocalReplanner:
         self.travel_history_spacing_m = max(
             0.02, float(rospy.get_param("~travel_history_spacing_m", 0.05))
         )
+        self.recognized_obstacles_marker_topic = str(
+            rospy.get_param(
+                "~recognized_obstacles_marker_topic",
+                "/planning/recognized_obstacles",
+            )
+        ).strip()
+        self.recognized_obstacles_marker_max_points = max(
+            1, int(rospy.get_param("~recognized_obstacles_marker_max_points", 450))
+        )
+        self.recognized_obstacles_marker_scale_m = max(
+            0.02, float(rospy.get_param("~recognized_obstacles_marker_scale_m", 0.09))
+        )
+        self.recognized_obstacles_marker_lifetime_s = max(
+            0.0, float(rospy.get_param("~recognized_obstacles_marker_lifetime_s", 0.8))
+        )
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
@@ -392,6 +407,13 @@ class ConstrainedLocalReplanner:
         self.pub_explainability = rospy.Publisher(
             self.explainability_topic, ExplainabilityEvent, queue_size=20
         )
+        self.pub_recognized_obstacles = None
+        if self.recognized_obstacles_marker_topic:
+            self.pub_recognized_obstacles = rospy.Publisher(
+                self.recognized_obstacles_marker_topic,
+                MarkerArray,
+                queue_size=2,
+            )
         self.pub_global_obstacle_overlay = None
         if self.enable_global_pointcloud_overlay and self.global_obstacle_overlay_topic:
             self.pub_global_obstacle_overlay = rospy.Publisher(
@@ -464,6 +486,14 @@ class ConstrainedLocalReplanner:
                 self.near_field_object_memory_ttl_s,
                 self.near_field_object_memory_max_range_m,
             )
+        if self.pub_recognized_obstacles is not None:
+            rospy.loginfo(
+                "constrained_local_replanner recognized obstacle markers | topic=%s max_points=%d scale=%.2fm lifetime=%.1fs",
+                self.recognized_obstacles_marker_topic,
+                self.recognized_obstacles_marker_max_points,
+                self.recognized_obstacles_marker_scale_m,
+                self.recognized_obstacles_marker_lifetime_s,
+            )
 
     @staticmethod
     def _fmt_debug_float(value, precision=2):
@@ -474,6 +504,158 @@ class ConstrainedLocalReplanner:
         if not math.isfinite(v):
             return "inf"
         return ("{:.%df}" % int(precision)).format(v)
+
+    @staticmethod
+    def _sample_marker_points(points, max_points):
+        pts = list(points)
+        if max_points <= 0 or len(pts) <= max_points:
+            return pts
+        stride = max(1, int(math.ceil(float(len(pts)) / float(max_points))))
+        sampled = pts[::stride]
+        if sampled and sampled[-1] != pts[-1]:
+            sampled.append(pts[-1])
+        return sampled[:max_points]
+
+    def _make_obstacle_points_marker(
+        self, stamp, marker_id, namespace, points, scale_m, color_rgba, z_offset
+    ):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = "map"
+        marker.ns = namespace
+        marker.id = int(marker_id)
+        marker.type = Marker.POINTS
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = float(scale_m)
+        marker.scale.y = float(scale_m)
+        marker.color.r = float(color_rgba[0])
+        marker.color.g = float(color_rgba[1])
+        marker.color.b = float(color_rgba[2])
+        marker.color.a = float(color_rgba[3])
+        marker.lifetime = rospy.Duration(self.recognized_obstacles_marker_lifetime_s)
+        for wx, wy in self._sample_marker_points(
+            points, self.recognized_obstacles_marker_max_points
+        ):
+            pt = Point()
+            pt.x = float(wx)
+            pt.y = float(wy)
+            pt.z = float(z_offset)
+            marker.points.append(pt)
+        return marker
+
+    def _make_obstacle_sphere_marker(
+        self, stamp, marker_id, namespace, wx, wy, diameter_m, color_rgba, z_offset
+    ):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = "map"
+        marker.ns = namespace
+        marker.id = int(marker_id)
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.x = float(wx)
+        marker.pose.position.y = float(wy)
+        marker.pose.position.z = float(z_offset)
+        marker.scale.x = float(diameter_m)
+        marker.scale.y = float(diameter_m)
+        marker.scale.z = float(diameter_m)
+        marker.color.r = float(color_rgba[0])
+        marker.color.g = float(color_rgba[1])
+        marker.color.b = float(color_rgba[2])
+        marker.color.a = float(color_rgba[3])
+        marker.lifetime = rospy.Duration(self.recognized_obstacles_marker_lifetime_s)
+        return marker
+
+    def _publish_recognized_obstacle_markers(self, stamp=None):
+        if self.pub_recognized_obstacles is None or rospy.is_shutdown():
+            return
+
+        marker_stamp = stamp if hasattr(stamp, "to_sec") else rospy.Time.now()
+        if marker_stamp.to_sec() <= 0.0:
+            marker_stamp = rospy.Time.now()
+
+        markers = MarkerArray()
+        delete_all = Marker()
+        delete_all.header.stamp = marker_stamp
+        delete_all.header.frame_id = "map"
+        delete_all.action = Marker.DELETEALL
+        markers.markers.append(delete_all)
+
+        scale = self.recognized_obstacles_marker_scale_m
+        current_static_points = list(self.current_obstacle_points_map)
+        static_memory_points = [(wx, wy) for wx, wy, _seen_sec in self.obstacle_memory_points]
+        tracked_points = list(self.tracked_object_points_map)
+        overlay_points = list(self.global_obstacle_overlay_points_map)
+
+        if current_static_points:
+            markers.markers.append(
+                self._make_obstacle_points_marker(
+                    marker_stamp,
+                    10,
+                    "static_current",
+                    current_static_points,
+                    scale,
+                    (0.74, 0.28, 0.98, 0.95),
+                    0.05,
+                )
+            )
+        if static_memory_points:
+            markers.markers.append(
+                self._make_obstacle_points_marker(
+                    marker_stamp,
+                    20,
+                    "static_memory",
+                    static_memory_points,
+                    scale * 0.9,
+                    (0.60, 0.24, 0.88, 0.45),
+                    0.08,
+                )
+            )
+        if tracked_points:
+            markers.markers.append(
+                self._make_obstacle_points_marker(
+                    marker_stamp,
+                    30,
+                    "tracked_dynamic",
+                    tracked_points,
+                    scale * 0.95,
+                    (0.92, 0.10, 0.95, 0.90),
+                    0.11,
+                )
+            )
+        if overlay_points:
+            markers.markers.append(
+                self._make_obstacle_points_marker(
+                    marker_stamp,
+                    40,
+                    "global_overlay",
+                    overlay_points,
+                    scale * 1.10,
+                    (0.52, 0.18, 0.96, 0.85),
+                    0.14,
+                )
+            )
+
+        blind_zone_memory = self._get_active_local_blind_zone_memory(
+            now_sec=marker_stamp.to_sec()
+        )
+        if blind_zone_memory is not None:
+            markers.markers.append(
+                self._make_obstacle_sphere_marker(
+                    marker_stamp,
+                    50,
+                    "blind_zone_focus",
+                    blind_zone_memory["world_x"],
+                    blind_zone_memory["world_y"],
+                    max(0.14, scale * 1.8),
+                    (1.0, 0.15, 1.0, 0.95),
+                    0.18,
+                )
+            )
+
+        self.pub_recognized_obstacles.publish(markers)
 
     def _publish_debug_text(self, text, stamp=None, force=False):
         if rospy.is_shutdown():
@@ -719,6 +901,7 @@ class ConstrainedLocalReplanner:
             self.tracked_object_points_map = []
             self.tracked_object_memory_points = []
             self.tracked_object_memory_count = 0
+            self._publish_recognized_obstacle_markers(msg.header.stamp)
             return
 
         current_points = []
@@ -748,6 +931,7 @@ class ConstrainedLocalReplanner:
             self.near_field_object_memory_merge_radius_m,
         )
         self.tracked_object_count = tracked_count
+        self._publish_recognized_obstacle_markers(msg.header.stamp)
 
     def _prune_obstacle_memory(self, now_sec):
         if (
@@ -1055,6 +1239,7 @@ class ConstrainedLocalReplanner:
             self.global_obstacle_overlay_candidate_count = len(global_overlay_candidates)
             self._update_global_obstacle_overlay_memory(global_overlay_candidates, stamp_sec)
             self._publish_global_obstacle_overlay(msg.header.stamp)
+            self._publish_recognized_obstacle_markers(msg.header.stamp)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
 
