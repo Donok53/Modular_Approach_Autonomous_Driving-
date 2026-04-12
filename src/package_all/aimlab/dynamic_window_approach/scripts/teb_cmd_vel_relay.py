@@ -1895,6 +1895,33 @@ class TebCmdVelRelay(object):
         if not self._is_turning_toward_side(cmd.angular.z, side):
             return cmd, None
 
+        # When the local replanner has temporarily dropped the path during an
+        # active avoidance branch, do not convert that hold window into a small
+        # forward crawl just because the blind-zone turn guard vetoed rotation.
+        if self.local_path_empty and self.avoidance_path_active:
+            self._last_safety_reason = "blind_zone_turn_hold"
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: blind-zone turn hold | obstacle=(%.2f,%.2f) age=%.2fs local_empty=yes avoid=active cmd(v=%.3f,w=%.3f)",
+                obstacle_x,
+                obstacle_y,
+                age_s,
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            return Twist(), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "blind_zone_obstacle_memory",
+                "action_taken": "blind_zone_turn_hold_stop",
+                "avoid_direction": turn_away_direction,
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(memory["range_m"]),
+                "obstacle_lateral_offset_m": obstacle_y,
+                "summary_text": "TEB relay held the robot stopped because a side obstacle remained inside the blind zone while the avoidance branch had no fresh local path to follow.",
+            }
+
         guarded = self._copy_cmd(cmd)
         guarded.angular.z = 0.0
         guarded.angular.x = 0.0
