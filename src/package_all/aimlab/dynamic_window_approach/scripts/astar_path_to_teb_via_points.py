@@ -349,22 +349,20 @@ class AStarPathToTebViaPoints(object):
         goal_reason = "path_tail"
         goal_sig_source = source
 
-        if self.publish_final_goal_only and self._fixed_goal_msg is not None:
-            goal = copy.deepcopy(self._fixed_goal_msg)
-            if not goal.header.frame_id:
-                goal.header.frame_id = msg.header.frame_id or "map"
-            goal.header.stamp = rospy.Time.now()
+        if self.publish_final_goal_only:
+            goal_pose = msg.poses[-1]
+            goal = PoseStamped()
+            goal.header = msg.header
+            goal.pose.position.x = float(goal_pose.pose.position.x)
+            goal.pose.position.y = float(goal_pose.pose.position.y)
+            goal.pose.position.z = float(goal_pose.pose.position.z)
+            goal_idx = len(msg.poses) - 1
+            goal_yaw = self._path_pose_yaw(msg, goal_idx)
+            self._set_pose_yaw(goal, goal_yaw)
             goal_x = float(goal.pose.position.x)
             goal_y = float(goal.pose.position.y)
-            qz = float(goal.pose.orientation.z)
-            qw = float(goal.pose.orientation.w)
-            if abs(qz) < 1e-6 and abs(qw) < 1e-6:
-                goal_yaw = self._path_pose_yaw(msg, goal_idx)
-                self._set_pose_yaw(goal, goal_yaw)
-            else:
-                goal_yaw = 2.0 * math.atan2(qz, qw)
-            goal_reason = "user_final"
-            goal_sig_source = "user_final"
+            goal_reason = "final_path_tail"
+            goal_sig_source = "%s_final_tail" % source
         else:
             goal_pose, goal_idx, goal_reason = self._goal_from_selected_path(source, msg)
             if goal_pose is None:

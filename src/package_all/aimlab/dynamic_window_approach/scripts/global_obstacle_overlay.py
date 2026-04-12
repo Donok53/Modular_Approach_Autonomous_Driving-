@@ -5,6 +5,7 @@ import math
 from collections import deque
 
 import rospy
+from dynamic_window_approach.msg import TrackedObjectArray
 from geometry_msgs.msg import Point
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
@@ -28,6 +29,21 @@ class GlobalObstacleOverlayPublisher:
                 "~global_obstacle_overlay_boxes_topic", "/planning/global_obstacle_overlay_boxes"
             )
         ).strip()
+        self.tracked_objects_topic = str(
+            rospy.get_param("~tracked_objects_topic", "/perception/tracked_objects")
+        ).strip()
+        self.suppress_dynamic_tracked_boxes = bool(
+            rospy.get_param("~suppress_dynamic_tracked_boxes", True)
+        )
+        self.dynamic_tracked_box_timeout_s = max(
+            0.0, float(rospy.get_param("~dynamic_tracked_box_timeout_s", 1.0))
+        )
+        self.dynamic_tracked_speed_thresh_mps = max(
+            0.0, float(rospy.get_param("~dynamic_tracked_speed_thresh_mps", 0.05))
+        )
+        self.dynamic_tracked_box_margin_m = max(
+            0.0, float(rospy.get_param("~dynamic_tracked_box_margin_m", 0.15))
+        )
         self.enable_travel_history = bool(rospy.get_param("~enable_travel_history", False))
         self.travel_history_topic = str(
             rospy.get_param("~travel_history_topic", "/planning/travel_history")
@@ -114,6 +130,8 @@ class GlobalObstacleOverlayPublisher:
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_boxes_map = []
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
+        self.tracked_objects = []
+        self.tracked_objects_stamp_sec = 0.0
 
         self.pub_global_obstacle_overlay = rospy.Publisher(
             self.global_obstacle_overlay_topic, OccupancyGrid, queue_size=1
@@ -139,12 +157,21 @@ class GlobalObstacleOverlayPublisher:
             self.cloud_callback,
             queue_size=1,
         )
+        self.sub_tracked_objects = None
+        if self.suppress_dynamic_tracked_boxes and self.tracked_objects_topic:
+            self.sub_tracked_objects = rospy.Subscriber(
+                self.tracked_objects_topic,
+                TrackedObjectArray,
+                self.tracked_objects_callback,
+                queue_size=5,
+            )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s out=%s boxes=%s persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
+            self.tracked_objects_topic if self.tracked_objects_topic else "-",
             self.global_obstacle_overlay_topic,
             self.global_obstacle_overlay_boxes_topic,
             self.global_pointcloud_overlay_persistence_frames,
@@ -152,6 +179,8 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_static_lock_ttl_s,
             self.global_pointcloud_overlay_static_lock_keep_range_m,
             self.global_pointcloud_overlay_static_box_margin_m,
+            "on" if self.suppress_dynamic_tracked_boxes else "off",
+            self.dynamic_tracked_box_timeout_s,
             self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
             self.global_pointcloud_overlay_blind_zone_radius_m,
             self.global_pointcloud_overlay_max_range_m,
@@ -323,6 +352,13 @@ class GlobalObstacleOverlayPublisher:
         self.have_odom = True
         self._record_travel_history_point(self.odom_x, self.odom_y)
 
+    def tracked_objects_callback(self, msg):
+        stamp_sec = msg.header.stamp.to_sec()
+        if stamp_sec <= 0.0:
+            stamp_sec = rospy.get_time()
+        self.tracked_objects_stamp_sec = float(stamp_sec)
+        self.tracked_objects = list(msg.objects)
+
     def global_path_callback(self, msg):
         self.global_path = msg
 
@@ -434,6 +470,43 @@ class GlobalObstacleOverlayPublisher:
     def _pointcloud_cluster_cell(self, x, y):
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
         return (int(math.floor(x / res)), int(math.floor(y / res)))
+
+    @staticmethod
+    def _tracked_object_speed_mps(obj):
+        return math.hypot(float(obj.twist.linear.x), float(obj.twist.linear.y))
+
+    def _fresh_dynamic_tracked_boxes(self):
+        if (
+            (not self.suppress_dynamic_tracked_boxes)
+            or (not self.tracked_objects_topic)
+            or self.tracked_objects_stamp_sec <= 0.0
+            or self.dynamic_tracked_box_timeout_s <= 0.0
+        ):
+            return []
+        if (rospy.get_time() - self.tracked_objects_stamp_sec) > self.dynamic_tracked_box_timeout_s:
+            return []
+
+        boxes = []
+        for obj in self.tracked_objects:
+            if self._tracked_object_speed_mps(obj) < self.dynamic_tracked_speed_thresh_mps:
+                continue
+            half_x = max(0.10, 0.5 * abs(float(obj.size.x))) + self.dynamic_tracked_box_margin_m
+            half_y = max(0.10, 0.5 * abs(float(obj.size.y))) + self.dynamic_tracked_box_margin_m
+            boxes.append(
+                self._make_box(
+                    float(obj.pose.position.x) - half_x,
+                    float(obj.pose.position.x) + half_x,
+                    float(obj.pose.position.y) - half_y,
+                    float(obj.pose.position.y) + half_y,
+                )
+            )
+        return boxes
+
+    def _box_overlaps_dynamic_object(self, box, dynamic_boxes):
+        for dynamic_box in dynamic_boxes:
+            if self._boxes_match(box, dynamic_box, 0.0):
+                return True
+        return False
 
     @staticmethod
     def _path_points(path):
@@ -642,13 +715,24 @@ class GlobalObstacleOverlayPublisher:
         corridor_half_width_m = self._pointcloud_corridor_half_width_m(
             self.global_pointcloud_overlay_corridor_margin_m
         )
+        dynamic_boxes = self._fresh_dynamic_tracked_boxes()
 
         selected = []
+        suppressed_dynamic = 0
         for box in current_boxes_map:
+            if dynamic_boxes and self._box_overlaps_dynamic_object(box, dynamic_boxes):
+                suppressed_dynamic += 1
+                continue
             if self._box_is_valid_overlay_candidate(
                 box, path_slice, corridor_half_width_m
             ):
                 selected.append(box)
+        if suppressed_dynamic > 0:
+            rospy.loginfo_throttle(
+                1.0,
+                "global_obstacle_overlay: suppressed %d box candidates that overlapped dynamic tracked objects",
+                suppressed_dynamic,
+            )
         return selected
 
     def _prune_global_obstacle_overlay_memory(self, now_sec):
@@ -666,6 +750,7 @@ class GlobalObstacleOverlayPublisher:
         corridor_half_width_m = self._pointcloud_corridor_half_width_m(
             self.global_pointcloud_overlay_corridor_margin_m
         )
+        dynamic_boxes = self._fresh_dynamic_tracked_boxes()
         kept = []
         for entry in self.global_obstacle_overlay_memory:
             wx = float(entry["x"])
@@ -690,6 +775,8 @@ class GlobalObstacleOverlayPublisher:
             dy = wy - self.odom_y
             keep_range_sq = static_keep_range_sq if locked else max_range_sq
             if (dx * dx + dy * dy) > keep_range_sq:
+                continue
+            if dynamic_boxes and self._box_overlaps_dynamic_object(entry, dynamic_boxes):
                 continue
             if path_slice and (
                 not self._box_is_valid_overlay_candidate(
@@ -828,7 +915,7 @@ class GlobalObstacleOverlayPublisher:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.14
+        marker.scale.x = 0.35
         marker.color.a = 0.95
         marker.color.r = 0.05
         marker.color.g = 0.35

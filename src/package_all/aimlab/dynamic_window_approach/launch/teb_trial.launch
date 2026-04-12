@@ -114,7 +114,8 @@
   <arg name="use_pointcloud_obstacles" default="true"/>
   <arg name="teb_via_points_topic" default="/move_base/TebLocalPlannerROS/via_points"/>
   <arg name="move_base_goal_topic" default="/planning/teb_goal"/>
-  <arg name="publish_final_goal_only" default="false"/>
+  <arg name="relay_final_goal_topic" default="$(arg move_base_goal_topic)"/>
+  <arg name="publish_final_goal_only" default="true"/>
   <arg name="final_goal_topic" default="/move_base_simple/goal"/>
   <arg name="teb_cmd_vel_input_topic" default="/move_base/teb_cmd_vel_raw"/>
   <arg name="teb_filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
@@ -360,6 +361,7 @@
       <param name="global_path_topic" value="$(arg global_path_topic)"/>
       <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
+      <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
       <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
       <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
       <param name="enable_travel_history" value="$(eval 'true' if arg('enable_local_replanner') == 'false' else 'false')"/>
@@ -506,7 +508,7 @@
     <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
     <param name="local_path_topic" value="$(arg local_path_topic)"/>
     <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
-    <param name="final_goal_topic" value="$(arg final_goal_topic)"/>
+    <param name="final_goal_topic" value="$(arg relay_final_goal_topic)"/>
     <param name="robot_width_m" value="$(arg robot_width_m)"/>
     <param name="robot_length_m" value="$(arg robot_length_m)"/>
     <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>

@@ -1251,10 +1251,22 @@ class TebCmdVelRelay(object):
         self.behavior_reason = str(msg.reason).strip() if str(msg.reason).strip() else "behavior"
 
     def final_goal_callback(self, msg):
+        prev_have_goal = bool(self.have_final_goal)
+        prev_goal_x = float(self.final_goal_x) if prev_have_goal else 0.0
+        prev_goal_y = float(self.final_goal_y) if prev_have_goal else 0.0
         self.final_goal_x = float(msg.pose.position.x)
         self.final_goal_y = float(msg.pose.position.y)
         self.have_final_goal = True
-        self.near_goal_stop_latched = False
+        if not prev_have_goal:
+            self.near_goal_stop_latched = False
+            return
+
+        goal_shift_m = math.hypot(
+            float(self.final_goal_x) - prev_goal_x,
+            float(self.final_goal_y) - prev_goal_y,
+        )
+        if goal_shift_m >= max(0.20, self.near_goal_side_turn_guard_stop_distance_m):
+            self.near_goal_stop_latched = False
 
     def local_path_callback(self, msg):
         self.last_local_path_time = rospy.get_time()

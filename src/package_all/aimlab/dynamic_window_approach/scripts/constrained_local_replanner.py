@@ -2078,7 +2078,7 @@ class ConstrainedLocalReplanner:
 
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
-        marker.scale.x = 0.14
+        marker.scale.x = 0.35
         marker.color.a = 0.95
         marker.color.r = 0.05
         marker.color.g = 0.35

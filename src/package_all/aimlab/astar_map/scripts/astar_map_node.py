@@ -157,7 +157,7 @@ class AStarPlanner:
             float(rospy.get_param("~drivable_grid_goal_extension_max_gap_m", 0.60)),
         )
         self.preserve_user_goal_on_drivable_grid = bool(
-            rospy.get_param("~preserve_user_goal_on_drivable_grid", True)
+            rospy.get_param("~preserve_user_goal_on_drivable_grid", False)
         )
         self.continuous_replan = bool(rospy.get_param("~continuous_replan", True))
         self.replan_min_start_shift_m = max(
