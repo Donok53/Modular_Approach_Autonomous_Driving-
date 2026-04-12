@@ -126,6 +126,16 @@ class TebCmdVelRelay(object):
         self.blind_zone_turn_guard_front_margin_m = max(
             0.0, float(rospy.get_param("~blind_zone_turn_guard_front_margin_m", 0.15))
         )
+        self.blind_zone_turn_guard_support_radius_m = max(
+            0.0, float(rospy.get_param("~blind_zone_turn_guard_support_radius_m", 0.18))
+        )
+        self.blind_zone_turn_guard_min_points = max(
+            1, int(rospy.get_param("~blind_zone_turn_guard_min_points", 2))
+        )
+        self.blind_zone_front_hold_min_points = max(
+            self.blind_zone_turn_guard_min_points,
+            int(rospy.get_param("~blind_zone_front_hold_min_points", 3)),
+        )
         self.blind_zone_turn_guard_angular_deadband = max(
             0.0,
             float(rospy.get_param("~blind_zone_turn_guard_angular_deadband", 0.03)),
@@ -206,6 +216,9 @@ class TebCmdVelRelay(object):
         )
         self.robot_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m
         self.robot_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m
+        self.blind_zone_turn_guard_front_limit_x = (
+            self.robot_half_length + self.blind_zone_turn_guard_front_margin_m
+        )
         self.emergency_stop_distance = self.robot_half_length + self.emergency_stop_front_margin
         self.emergency_stop_lateral_y = self.robot_half_width + self.emergency_stop_side_margin
         self.slowdown_distance = self.robot_half_length + self.slowdown_front_margin
@@ -288,6 +301,7 @@ class TebCmdVelRelay(object):
         self.blind_zone_memory_y = 0.0
         self.blind_zone_memory_side = 0
         self.blind_zone_memory_range_m = float("inf")
+        self.blind_zone_memory_support_points = 0
         self._last_explain_key = None
         self._last_explain_time = 0.0
         self._last_debug_text = ""
@@ -894,7 +908,11 @@ class TebCmdVelRelay(object):
             side = 1
         elif y <= -side_limit:
             side = -1
-        elif x >= 0.0 and abs(y) <= side_limit:
+        elif (
+            x >= 0.0
+            and x <= self.blind_zone_turn_guard_front_limit_x
+            and abs(y) <= side_limit
+        ):
             side = 0
         else:
             return None
@@ -904,7 +922,35 @@ class TebCmdVelRelay(object):
             score -= min(0.20, max(0.0, x) * 0.05)
         return score, x, y, side, distance
 
-    def _update_blind_zone_memory(self, candidate, now):
+    def _blind_zone_min_support_points(self, side):
+        return (
+            self.blind_zone_front_hold_min_points
+            if int(side) == 0
+            else self.blind_zone_turn_guard_min_points
+        )
+
+    def _count_blind_zone_support_points(self, candidate, blind_zone_points):
+        if candidate is None:
+            return 0
+        if self.blind_zone_turn_guard_support_radius_m <= 0.0:
+            return 1
+
+        _score, cx, cy, side, _distance = candidate
+        support_radius_sq = (
+            self.blind_zone_turn_guard_support_radius_m
+            * self.blind_zone_turn_guard_support_radius_m
+        )
+        support_points = 0
+        for px, py, pside in blind_zone_points:
+            if int(pside) != int(side):
+                continue
+            dx = float(px) - float(cx)
+            dy = float(py) - float(cy)
+            if (dx * dx + dy * dy) <= support_radius_sq:
+                support_points += 1
+        return support_points
+
+    def _update_blind_zone_memory(self, candidate, support_points, now):
         if candidate is None:
             return
         _score, x, y, side, distance = candidate
@@ -913,6 +959,7 @@ class TebCmdVelRelay(object):
         self.blind_zone_memory_y = float(y)
         self.blind_zone_memory_side = int(side)
         self.blind_zone_memory_range_m = float(distance)
+        self.blind_zone_memory_support_points = int(max(0, support_points))
 
     def _get_active_blind_zone_memory(self, now):
         if (not self.enable_blind_zone_turn_guard) or (
@@ -930,6 +977,7 @@ class TebCmdVelRelay(object):
             "y": float(self.blind_zone_memory_y),
             "side": int(self.blind_zone_memory_side),
             "range_m": float(self.blind_zone_memory_range_m),
+            "support_points": int(self.blind_zone_memory_support_points),
         }
 
     def _safe_turn_direction_from_side(self, side):
@@ -1008,12 +1056,21 @@ class TebCmdVelRelay(object):
         slow_min_y = 0.0
         blind_zone_candidate = None
         blind_zone_score = float("inf")
+        blind_zone_points = []
 
         for x, y, _z in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
             blind_candidate = self._classify_blind_zone_candidate(x, y)
-            if blind_candidate is not None and blind_candidate[0] < blind_zone_score:
-                blind_zone_candidate = blind_candidate
-                blind_zone_score = blind_candidate[0]
+            if blind_candidate is not None:
+                blind_zone_points.append(
+                    (
+                        float(blind_candidate[1]),
+                        float(blind_candidate[2]),
+                        int(blind_candidate[3]),
+                    )
+                )
+                if blind_candidate[0] < blind_zone_score:
+                    blind_zone_candidate = blind_candidate
+                    blind_zone_score = blind_candidate[0]
             if x <= 0.0:
                 continue
             abs_y = abs(float(y))
@@ -1044,7 +1101,18 @@ class TebCmdVelRelay(object):
         self.closest_stop_obstacle_y = stop_min_y
         self.closest_slow_obstacle_x = slow_min_x
         self.closest_slow_obstacle_y = slow_min_y
-        self._update_blind_zone_memory(blind_zone_candidate, now)
+        blind_zone_support_points = self._count_blind_zone_support_points(
+            blind_zone_candidate, blind_zone_points
+        )
+        if blind_zone_candidate is not None:
+            required_support_points = self._blind_zone_min_support_points(
+                blind_zone_candidate[3]
+            )
+            if blind_zone_support_points < required_support_points:
+                blind_zone_candidate = None
+        self._update_blind_zone_memory(
+            blind_zone_candidate, blind_zone_support_points, now
+        )
 
     def odom_callback(self, msg):
         self.odom_x = float(msg.pose.pose.position.x)
