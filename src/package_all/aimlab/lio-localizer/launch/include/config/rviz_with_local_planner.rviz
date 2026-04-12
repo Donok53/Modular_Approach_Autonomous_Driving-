@@ -444,7 +444,7 @@ Visualization Manager:
       Queue Size: 20
       Value: true
     - Class: rviz/Marker
-      Enabled: true
+      Enabled: false
       Marker Topic: /planning/travel_history
       Name: travel_history
       Namespaces:
@@ -461,25 +461,25 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 25; 255; 0
-      Enabled: false
+      Color: 0; 120; 255
+      Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.6000000238418579
-      Name: Local Trjaectory Path
+      Line Width: 0.30000001192092896
+      Name: travel_history_path
       Offset:
         X: 0
         Y: 0
-        Z: 0.18
+        Z: 0.16
       Pose Color: 255; 85; 255
       Pose Style: None
       Queue Size: 10
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /local_planner/global_trajectory_planner/local
+      Topic: /planning/travel_history_path
       Unreliable: false
       Value: false
     - Alpha: 1
@@ -539,12 +539,12 @@ Visualization Manager:
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.6000000238418579
+      Line Width: 0.30000001192092896
       Name: astar_path
       Offset:
         X: 0
         Y: 0
-        Z: 0.22
+        Z: 0.16
       Pose Color: 255; 85; 255
       Pose Style: None
       Queue Size: 10

@@ -6,7 +6,7 @@ from collections import deque
 
 import rospy
 from dynamic_window_approach.msg import TrackedObjectArray
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
@@ -47,6 +47,9 @@ class GlobalObstacleOverlayPublisher:
         self.enable_travel_history = bool(rospy.get_param("~enable_travel_history", False))
         self.travel_history_topic = str(
             rospy.get_param("~travel_history_topic", "/planning/travel_history")
+        ).strip()
+        self.travel_history_path_topic = str(
+            rospy.get_param("~travel_history_path_topic", "/planning/travel_history_path")
         ).strip()
         self.travel_history_max_points = max(
             2, int(rospy.get_param("~travel_history_max_points", 400))
@@ -140,9 +143,14 @@ class GlobalObstacleOverlayPublisher:
             self.global_obstacle_overlay_boxes_topic, MarkerArray, queue_size=1, latch=True
         )
         self.pub_travel_history = None
+        self.pub_travel_history_path = None
         if self.enable_travel_history and self.travel_history_topic:
             self.pub_travel_history = rospy.Publisher(
                 self.travel_history_topic, Marker, queue_size=2, latch=True
+            )
+        if self.enable_travel_history and self.travel_history_path_topic:
+            self.pub_travel_history_path = rospy.Publisher(
+                self.travel_history_path_topic, Path, queue_size=2, latch=True
             )
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(
@@ -928,6 +936,23 @@ class GlobalObstacleOverlayPublisher:
             marker.points.append(p)
         self.pub_travel_history.publish(marker)
 
+    def _publish_travel_history_path(self):
+        if self.pub_travel_history_path is None:
+            return
+
+        path = Path()
+        path.header.stamp = rospy.Time.now()
+        path.header.frame_id = "map"
+        for x, y in self.travel_history_points:
+            pose = PoseStamped()
+            pose.header = path.header
+            pose.pose.position.x = float(x)
+            pose.pose.position.y = float(y)
+            pose.pose.position.z = 0.18
+            pose.pose.orientation.w = 1.0
+            path.poses.append(pose)
+        self.pub_travel_history_path.publish(path)
+
     def _record_travel_history_point(self, x, y):
         if self.pub_travel_history is None:
             return
@@ -940,6 +965,7 @@ class GlobalObstacleOverlayPublisher:
                 return
         self.travel_history_points.append((x, y))
         self._publish_travel_history_marker()
+        self._publish_travel_history_path()
 
 
 if __name__ == "__main__":

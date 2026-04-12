@@ -26,6 +26,9 @@ class ConstrainedLocalReplanner:
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.path_history_topic = rospy.get_param("~path_history_topic", "/planning/path_history")
         self.travel_history_topic = rospy.get_param("~travel_history_topic", "/planning/travel_history")
+        self.travel_history_path_topic = rospy.get_param(
+            "~travel_history_path_topic", "/planning/travel_history_path"
+        )
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.obstacle_pointcloud_topic = rospy.get_param(
             "~obstacle_pointcloud_topic", self.pointcloud_topic
@@ -432,6 +435,9 @@ class ConstrainedLocalReplanner:
         )
         self.pub_travel_history = rospy.Publisher(
             self.travel_history_topic, Marker, queue_size=2, latch=True
+        )
+        self.pub_travel_history_path = rospy.Publisher(
+            self.travel_history_path_topic, Path, queue_size=2, latch=True
         )
         self.pub_explainability = rospy.Publisher(
             self.explainability_topic, ExplainabilityEvent, queue_size=20
@@ -2091,6 +2097,20 @@ class ConstrainedLocalReplanner:
             marker.points.append(p)
         self.pub_travel_history.publish(marker)
 
+    def _publish_travel_history_path(self):
+        path = Path()
+        path.header.stamp = rospy.Time.now()
+        path.header.frame_id = "map"
+        for x, y in self.travel_history_points:
+            pose = PoseStamped()
+            pose.header = path.header
+            pose.pose.position.x = float(x)
+            pose.pose.position.y = float(y)
+            pose.pose.position.z = 0.18
+            pose.pose.orientation.w = 1.0
+            path.poses.append(pose)
+        self.pub_travel_history_path.publish(path)
+
     def _record_travel_history_point(self, x, y):
         x = float(x)
         y = float(y)
@@ -2100,10 +2120,12 @@ class ConstrainedLocalReplanner:
                 return
         self.travel_history_points.append((x, y))
         self._publish_travel_history_marker()
+        self._publish_travel_history_path()
 
     def _clear_travel_history(self):
         self.travel_history_points.clear()
         self._publish_travel_history_marker()
+        self._publish_travel_history_path()
 
     def _record_path_history(self, source, sampled_points, frame_id):
         if source != "avoidance":
