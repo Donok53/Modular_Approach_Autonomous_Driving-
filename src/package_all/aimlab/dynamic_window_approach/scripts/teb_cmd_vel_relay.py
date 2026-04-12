@@ -268,6 +268,12 @@ class TebCmdVelRelay(object):
                 )
             ),
         )
+        self.require_recent_nonempty_local_path_for_crawl = bool(
+            rospy.get_param("~require_recent_nonempty_local_path_for_crawl", True)
+        )
+        self.disable_near_goal_forward_crawl = bool(
+            rospy.get_param("~disable_near_goal_forward_crawl", True)
+        )
 
         self.last_cmd = Twist()
         self.last_rx_time = 0.0
@@ -672,7 +678,7 @@ class TebCmdVelRelay(object):
                         self.closest_stop_obstacle_x,
                     )
                     return self._forward_crawl_cmd(out)
-                if (not fresh_empty_local_path) and self._should_convert_small_reverse_to_rotation(out):
+                if (not fresh_empty_local_path) and self._should_convert_small_reverse_to_rotation(out, now=now):
                     self._last_sanitize_reason = "tiny_reverse_goal_rotate"
                     rospy.loginfo_throttle(
                         self.log_period_s,
@@ -718,7 +724,7 @@ class TebCmdVelRelay(object):
                     self.closest_stop_obstacle_x,
                 )
                 return self._forward_crawl_cmd(out)
-            if self._should_convert_small_reverse_to_rotation(out):
+            if self._should_convert_small_reverse_to_rotation(out, now=now):
                 self._last_sanitize_reason = "tiny_reverse_to_rotation"
                 rospy.loginfo_throttle(
                     self.log_period_s,
@@ -738,7 +744,7 @@ class TebCmdVelRelay(object):
             reverse_clamped_to_stop = True
             sanitize_flags.append("zero")
         if self.forward_only and out.linear.x < 0.0:
-            if self._should_convert_small_reverse_to_rotation(out):
+            if self._should_convert_small_reverse_to_rotation(out, now=now):
                 self._last_sanitize_reason = "reverse_to_rotation"
                 rospy.loginfo_throttle(
                     self.log_period_s,
@@ -1205,7 +1211,11 @@ class TebCmdVelRelay(object):
             return False
         return True
 
-    def _should_convert_small_reverse_to_rotation(self, cmd):
+    def _should_convert_small_reverse_to_rotation(self, cmd, now=None):
+        if self.require_recent_nonempty_local_path_for_crawl and (
+            not self._has_recent_nonempty_local_path(now)
+        ):
+            return False
         return (
             self.forward_only
             and float(cmd.linear.x) < 0.0
@@ -1215,6 +1225,8 @@ class TebCmdVelRelay(object):
         )
 
     def _is_near_goal_tiny_reverse_crawl_window(self):
+        if self.disable_near_goal_forward_crawl:
+            return False
         if self.avoidance_path_active:
             return False
         if not math.isfinite(self.local_path_remaining_m):
@@ -1250,6 +1262,10 @@ class TebCmdVelRelay(object):
             return False
         if final_brake_active or fresh_empty_local_path:
             return False
+        if self.require_recent_nonempty_local_path_for_crawl and (
+            not self._has_recent_nonempty_local_path(now)
+        ):
+            return False
         if float(cmd.linear.x) >= 0.0:
             return False
         if abs(float(cmd.linear.x)) > max(
@@ -1280,6 +1296,12 @@ class TebCmdVelRelay(object):
     def _should_replace_tiny_reverse_with_final_brake_crawl(self, cmd, now):
         if (not self.enable_tiny_reverse_forward_crawl) or (not self.forward_only):
             return False
+        if self.disable_near_goal_forward_crawl:
+            return False
+        if self.require_recent_nonempty_local_path_for_crawl and (
+            not self._has_recent_nonempty_local_path(now)
+        ):
+            return False
         if not self._is_final_goal_brake_active():
             return False
         if not math.isfinite(self.local_path_remaining_m):
@@ -1308,6 +1330,10 @@ class TebCmdVelRelay(object):
             return False
         if final_brake_active or fresh_empty_local_path:
             return False
+        if self.require_recent_nonempty_local_path_for_crawl and (
+            not self._has_recent_nonempty_local_path()
+        ):
+            return False
         if float(cmd.linear.x) >= 0.0:
             return False
         if abs(float(cmd.linear.x)) > max(self.reverse_deadband_mps, self.min_abs_linear_speed):
@@ -1333,6 +1359,16 @@ class TebCmdVelRelay(object):
             self.last_local_path_time > 0.0
             and (now_sec - self.last_local_path_time) <= self.local_hold_timeout_s
             and self.local_path_empty
+        )
+
+    def _has_recent_nonempty_local_path(self, now=None):
+        now_sec = rospy.get_time() if now is None else float(now)
+        return (
+            self.last_local_path_time > 0.0
+            and (now_sec - self.last_local_path_time) <= self.local_hold_timeout_s
+            and (not self.local_path_empty)
+            and self.local_path_pose_count >= 2
+            and math.isfinite(self.local_path_remaining_m)
         )
 
     def _has_fresh_near_goal_empty_local_path(self, now=None):

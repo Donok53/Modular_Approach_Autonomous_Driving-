@@ -570,7 +570,23 @@ class ConstrainedLocalReplanner:
                 ))
         return sampled
 
+    @staticmethod
+    def _tracked_object_label(obj):
+        return str(getattr(obj, "label", "") or "").strip().lower()
+
+    def _should_virtualize_tracked_object(self, obj):
+        label = self._tracked_object_label(obj)
+        if not label:
+            return False
+        if label.startswith("static_"):
+            return False
+        if label == "unknown":
+            return False
+        return True
+
     def _build_tracked_object_virtual_points(self, obj):
+        if not self._should_virtualize_tracked_object(obj):
+            return []
         center_x = float(obj.pose.position.x)
         center_y = float(obj.pose.position.y)
         if (not math.isfinite(center_x)) or (not math.isfinite(center_y)):
