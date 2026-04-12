@@ -156,6 +156,9 @@ class AStarPlanner:
             0.0,
             float(rospy.get_param("~drivable_grid_goal_extension_max_gap_m", 0.60)),
         )
+        self.preserve_user_goal_on_drivable_grid = bool(
+            rospy.get_param("~preserve_user_goal_on_drivable_grid", True)
+        )
         self.continuous_replan = bool(rospy.get_param("~continuous_replan", True))
         self.replan_min_start_shift_m = max(
             0.0, float(rospy.get_param("~replan_min_start_shift_m", 0.15))
@@ -293,6 +296,10 @@ class AStarPlanner:
                     if self.global_path_drivable_area_is_center_safe
                     else "shrink-by-%s" % self.global_path_clearance_model
                 ),
+            )
+            rospy.loginfo(
+                "[astar] preserve exact user goal on drivable-grid path: %s",
+                "on" if self.preserve_user_goal_on_drivable_grid else "off",
             )
         elif self.use_dynamic_risk_grid_global:
             rospy.logwarn(
@@ -1497,16 +1504,23 @@ class AStarPlanner:
         world_points = [tuple(start_xy) if start_cell == start_raw else snapped_start_xy]
         for gx, gy in grid_path[1:-1]:
             world_points.append(self._grid_cell_to_world(g, gx, gy))
+        clicked_goal_xy = (float(goal_xy[0]), float(goal_xy[1]))
         goal_gap_m = math.hypot(
-            float(goal_xy[0]) - float(snapped_goal_xy[0]),
-            float(goal_xy[1]) - float(snapped_goal_xy[1]),
+            clicked_goal_xy[0] - float(snapped_goal_xy[0]),
+            clicked_goal_xy[1] - float(snapped_goal_xy[1]),
+        )
+        goal_raw_is_free = self._blocked_cell_is_free(
+            goal_tail_blocked, goal_raw[0], goal_raw[1]
+        )
+        snapped_goal_has_los_to_clicked = self._has_line_of_sight(
+            goal_tail_blocked, goal_cell, goal_raw
         )
         extend_to_clicked_goal = goal_cell == goal_raw
         if (
             (not extend_to_clicked_goal)
             and goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
-            and self._blocked_cell_is_free(goal_tail_blocked, goal_raw[0], goal_raw[1])
-            and self._has_line_of_sight(goal_tail_blocked, goal_cell, goal_raw)
+            and goal_raw_is_free
+            and snapped_goal_has_los_to_clicked
         ):
             extend_to_clicked_goal = True
         if (
@@ -1520,15 +1534,36 @@ class AStarPlanner:
                 goal_gap_m,
                 self.drivable_grid_goal_extension_max_gap_m,
             )
-        # Keep the white clicked-goal marker anchored to the user-selected
-        # destination even when the path itself snaps to a safer grid cell.
-        path_goal_xy = tuple(goal_xy) if extend_to_clicked_goal else snapped_goal_xy
-        if (not extend_to_clicked_goal) and self.debug_log_enable:
+        preserve_exact_goal = (
+            self.preserve_user_goal_on_drivable_grid and goal_gap_m > 1e-6
+        )
+        if preserve_exact_goal and goal_cell != goal_raw:
+            world_points.append(snapped_goal_xy)
+        # Keep the terminal pose aligned with the user-selected destination even
+        # when the grid search needs a snapped anchor cell internally.
+        path_goal_xy = (
+            clicked_goal_xy
+            if (extend_to_clicked_goal or preserve_exact_goal)
+            else snapped_goal_xy
+        )
+        if preserve_exact_goal and goal_cell != goal_raw and self.debug_log_enable:
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] preserving exact clicked goal as terminal pose after snapped drivable-grid anchor (clicked=%.2f, %.2f snapped=%.2f, %.2f gap=%.2f m raw_free=%s los=%s)",
+                clicked_goal_xy[0],
+                clicked_goal_xy[1],
+                float(snapped_goal_xy[0]),
+                float(snapped_goal_xy[1]),
+                goal_gap_m,
+                "yes" if goal_raw_is_free else "no",
+                "yes" if snapped_goal_has_los_to_clicked else "no",
+            )
+        elif (not extend_to_clicked_goal) and self.debug_log_enable:
             rospy.loginfo_throttle(
                 1.0,
                 "[astar] using snapped drivable-grid goal for display/path end (clicked=%.2f, %.2f snapped=%.2f, %.2f gap=%.2f m)",
-                float(goal_xy[0]),
-                float(goal_xy[1]),
+                clicked_goal_xy[0],
+                clicked_goal_xy[1],
                 float(snapped_goal_xy[0]),
                 float(snapped_goal_xy[1]),
                 goal_gap_m,

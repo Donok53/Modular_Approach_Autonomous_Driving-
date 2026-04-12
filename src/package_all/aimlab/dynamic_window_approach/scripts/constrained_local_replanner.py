@@ -1247,12 +1247,10 @@ class ConstrainedLocalReplanner:
         if (
             (not self.enable_global_pointcloud_overlay)
             or (not current_points_map)
-            or self.global_path is None
-            or len(self.global_path.poses) < 2
         ):
             return []
 
-        pts = self._path_points(self.global_path)
+        pts = self._global_path_points()
         if len(pts) < 2:
             return []
         i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
@@ -1525,6 +1523,23 @@ class ConstrainedLocalReplanner:
     @staticmethod
     def _path_points(path):
         return [(float(ps.pose.position.x), float(ps.pose.position.y)) for ps in path.poses]
+
+    def _global_path_points(self):
+        if self.global_path is None or not self.global_path.poses:
+            return []
+        pts = self._path_points(self.global_path)
+        if len(pts) >= 2 or (not self.have_odom):
+            return pts
+        goal_x, goal_y = pts[0]
+        if math.hypot(goal_x - self.odom_x, goal_y - self.odom_y) <= 1e-3:
+            return pts
+        rospy.loginfo_throttle(
+            1.0,
+            "constrained_local_replanner: expanding single-pose global path to odom->goal fallback (goal=%.2f, %.2f)",
+            goal_x,
+            goal_y,
+        )
+        return [(self.odom_x, self.odom_y), (goal_x, goal_y)]
 
     @staticmethod
     def _nearest_idx(points, x, y):
@@ -3571,14 +3586,14 @@ class ConstrainedLocalReplanner:
             if self.use_direct_goal and self._plan_direct_goal(dg, rg, stamp):
                 return
 
-            if self.global_path is None or len(self.global_path.poses) < 2:
+            pts = self._global_path_points()
+            if len(pts) < 2:
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 self._publish_debug_text(
                     self._build_debug_text("no_global_path", stamp, trigger_reason="missing_global"),
                     stamp=stamp,
                 )
                 return
-            pts = self._path_points(self.global_path)
             i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
             ig = self._accum_distance(pts, i0, self.lookahead_m)
             start_xy = (self.odom_x, self.odom_y)
