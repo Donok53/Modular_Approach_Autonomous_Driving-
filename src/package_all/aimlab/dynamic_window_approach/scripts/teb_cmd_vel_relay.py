@@ -4,7 +4,7 @@
 import math
 
 import rospy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from sensor_msgs import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2
@@ -43,6 +43,9 @@ class TebCmdVelRelay(object):
         ).strip()
         self.avoidance_path_topic = str(
             rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
+        ).strip()
+        self.final_goal_topic = str(
+            rospy.get_param("~final_goal_topic", "/move_base_simple/goal")
         ).strip()
         self.publish_hz = max(1.0, float(rospy.get_param("~publish_hz", 20.0)))
         self.idle_timeout_s = max(0.2, float(rospy.get_param("~idle_timeout_s", 1.0)))
@@ -308,7 +311,7 @@ class TebCmdVelRelay(object):
         self.behavior_speed_limit = float("inf")
         self.behavior_reason = "clear"
         self.last_local_path_time = 0.0
-        self.local_path_empty = False
+        self.local_path_empty = True
         self.local_path_pose_count = 0
         self.local_path_remaining_m = float("inf")
         self.last_nonempty_local_path_remaining_m = float("inf")
@@ -321,6 +324,9 @@ class TebCmdVelRelay(object):
         self.odom_y = 0.0
         self.odom_yaw = 0.0
         self.have_odom = False
+        self.final_goal_x = 0.0
+        self.final_goal_y = 0.0
+        self.have_final_goal = False
         self.closest_stop_obstacle_x = float("inf")
         self.closest_stop_obstacle_y = 0.0
         self.closest_slow_obstacle_x = float("inf")
@@ -371,6 +377,11 @@ class TebCmdVelRelay(object):
             self.avoidance_path_sub = rospy.Subscriber(
                 self.avoidance_path_topic, Path, self.avoidance_path_callback, queue_size=5
             )
+        self.final_goal_sub = None
+        if self.final_goal_topic:
+            self.final_goal_sub = rospy.Subscriber(
+                self.final_goal_topic, PoseStamped, self.final_goal_callback, queue_size=2
+            )
         self.obstacle_sub = None
         if self.enable_emergency_stop or self.enable_obstacle_slowdown:
             self.obstacle_sub = rospy.Subscriber(
@@ -383,7 +394,7 @@ class TebCmdVelRelay(object):
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f side_x<=%.2f |y|<=%.2f)",
+            "teb_cmd_vel_relay started | in=%s out=%s debug=%s explain=%s behavior=%s odom=%s local=%s avoidance=%s final_goal=%s publish=%.1fHz min|v|=%.3f estop=%s slowdown=%s hold_stop=%s hold_requires_avoid=%s defer_hold_on_avoid=%s smoothing=%s slew(v=%.2f,w=%.2f) footprint=%.2fx%.2fm stop=%.2fm/%.2fm(r=%.2f) avoid_stop=%.2fm/%.2fm crawl=%.2f slow=%.2fm/%.2fm(r=%.2f) final_brake=%.2fm hold_ignore=%.2fm rotate_near_obs=%s hold_rotate=%s blind_guard=%s(r=%.2f ttl=%.1f cap=%.2f side_x<=%.2f |y|<=%.2f)",
             self.input_topic,
             self.output_topic,
             self.debug_text_topic if self.debug_text_topic else "-",
@@ -392,6 +403,7 @@ class TebCmdVelRelay(object):
             self.odom_topic if self.odom_topic else "-",
             self.local_path_topic if self.local_path_topic else "-",
             self.avoidance_path_topic if self.avoidance_path_topic else "-",
+            self.final_goal_topic if self.final_goal_topic else "-",
             self.publish_hz,
             self.min_abs_linear_speed,
             "on" if self.enable_emergency_stop else "off",
@@ -534,9 +546,10 @@ class TebCmdVelRelay(object):
             if self.behavior_speed_limit < float("inf")
             else "inf"
         )
+        goal_dist_text = self._fmt_debug_float(self._final_goal_distance_m())
         return (
             "relay reason={} action={} sanitize={} safety={} smooth={} raw(v={},w={}) sanitized(v={},w={}) target(v={},w={}) out(v={},w={}) "
-            "local(n={},empty={},remain={}) avoid={} dir={} hold={} final_brake={} "
+            "local(n={},empty={},remain={}) goal_dist={} avoid={} dir={} hold={} final_brake={} "
             "behavior(stop={},limit={}) obs(stop_x={},slow_x={})"
         ).format(
             trigger_reason,
@@ -555,6 +568,7 @@ class TebCmdVelRelay(object):
             int(self.local_path_pose_count),
             "yes" if self.local_path_empty else "no",
             self._fmt_debug_float(self.local_path_remaining_m),
+            goal_dist_text,
             "on" if self.avoidance_path_active else "off",
             self.avoidance_turn_direction,
             "on" if self._has_local_hold(now) else "off",
@@ -1214,6 +1228,11 @@ class TebCmdVelRelay(object):
         self.behavior_speed_limit = max(0.0, float(msg.speed_limit))
         self.behavior_reason = str(msg.reason).strip() if str(msg.reason).strip() else "behavior"
 
+    def final_goal_callback(self, msg):
+        self.final_goal_x = float(msg.pose.position.x)
+        self.final_goal_y = float(msg.pose.position.y)
+        self.have_final_goal = True
+
     def local_path_callback(self, msg):
         self.last_local_path_time = rospy.get_time()
         self.local_path_pose_count = len(msg.poses)
@@ -1267,11 +1286,24 @@ class TebCmdVelRelay(object):
             and not self.avoidance_path_active
         )
 
+    def _final_goal_distance_m(self):
+        if (not self.have_odom) or (not self.have_final_goal):
+            return float("inf")
+        return math.hypot(
+            float(self.final_goal_x) - float(self.odom_x),
+            float(self.final_goal_y) - float(self.odom_y),
+        )
+
     def _is_final_goal_brake_active(self):
-        return (
+        if (
             self._is_final_path_segment_active()
             and math.isfinite(self.local_path_remaining_m)
             and self.local_path_remaining_m <= self.final_brake_distance_m
+        ):
+            return True
+        goal_distance_m = self._final_goal_distance_m()
+        return math.isfinite(goal_distance_m) and (
+            goal_distance_m <= self.final_brake_distance_m
         )
 
     def _terminal_goal_stop_distance_m(self):
@@ -1280,14 +1312,23 @@ class TebCmdVelRelay(object):
             max(0.12, 0.8 * self.final_cmd_linear_stop_threshold),
         )
 
+    def _is_terminal_goal_stop_active(self):
+        stop_distance_m = self._terminal_goal_stop_distance_m()
+        if (
+            self._is_final_path_segment_active()
+            and math.isfinite(self.local_path_remaining_m)
+            and self.local_path_remaining_m <= stop_distance_m
+        ):
+            return True
+        goal_distance_m = self._final_goal_distance_m()
+        return math.isfinite(goal_distance_m) and (goal_distance_m <= stop_distance_m)
+
     def _should_force_goal_stop(self, cmd, final_brake_active=None):
         if final_brake_active is None:
             final_brake_active = self._is_final_goal_brake_active()
-        if (not final_brake_active) or (not math.isfinite(self.local_path_remaining_m)):
+        if not final_brake_active:
             return False
-        if self.local_path_remaining_m > self._terminal_goal_stop_distance_m():
-            return False
-        return True
+        return self._is_terminal_goal_stop_active()
 
     def _should_convert_small_reverse_to_rotation(self, cmd, now=None):
         # Converting a tiny reverse into an in-place rotation is safer than

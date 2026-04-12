@@ -500,6 +500,119 @@ class GlobalObstacleOverlayPublisher:
         dy = py - proj_y
         return dx * dx + dy * dy
 
+    @staticmethod
+    def _project_point_to_segment(px, py, x0, y0, x1, y1):
+        vx = x1 - x0
+        vy = y1 - y0
+        seg_len_sq = vx * vx + vy * vy
+        if seg_len_sq <= 1e-9:
+            dx = px - x0
+            dy = py - y0
+            return x0, y0, 0.0, dx * dx + dy * dy
+
+        t = ((px - x0) * vx + (py - y0) * vy) / seg_len_sq
+        t = max(0.0, min(1.0, t))
+        proj_x = x0 + t * vx
+        proj_y = y0 + t * vy
+        dx = px - proj_x
+        dy = py - proj_y
+        return proj_x, proj_y, t, dx * dx + dy * dy
+
+    @staticmethod
+    def _world_to_grid_cell(g, x, y):
+        res = float(g.info.resolution)
+        gx = int(math.floor((float(x) - float(g.info.origin.position.x)) / res))
+        gy = int(math.floor((float(y) - float(g.info.origin.position.y)) / res))
+        return gx, gy
+
+    @staticmethod
+    def _grid_cell_is_drivable_free(g, gx, gy):
+        if gx < 0 or gy < 0 or gx >= int(g.info.width) or gy >= int(g.info.height):
+            return False
+        idx = gy * int(g.info.width) + gx
+        return int(g.data[idx]) == 0
+
+    def _world_cell_is_drivable_free(self, g, x, y):
+        gx, gy = self._world_to_grid_cell(g, x, y)
+        return self._grid_cell_is_drivable_free(g, gx, gy)
+
+    def _has_drivable_grid_line_of_sight(self, g, x0, y0, x1, y1):
+        gx0, gy0 = self._world_to_grid_cell(g, x0, y0)
+        gx1, gy1 = self._world_to_grid_cell(g, x1, y1)
+        if not self._grid_cell_is_drivable_free(g, gx0, gy0):
+            return False
+        if not self._grid_cell_is_drivable_free(g, gx1, gy1):
+            return False
+
+        dx = abs(gx1 - gx0)
+        dy = abs(gy1 - gy0)
+        sx = 1 if gx0 < gx1 else -1
+        sy = 1 if gy0 < gy1 else -1
+        err = dx - dy
+        cx = gx0
+        cy = gy0
+        while True:
+            if not self._grid_cell_is_drivable_free(g, cx, cy):
+                return False
+            if cx == gx1 and cy == gy1:
+                return True
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                cx += sx
+            if e2 < dx:
+                err += dx
+                cy += sy
+
+    def _global_overlay_path_slice(self):
+        pts = self._global_path_points()
+        if len(pts) < 2:
+            return []
+
+        i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
+        ig = self._accum_distance(pts, i0, self.global_pointcloud_overlay_lookahead_m)
+        path_slice = pts[i0 : ig + 1]
+        if len(path_slice) < 2:
+            return []
+        return path_slice
+
+    def _box_is_valid_overlay_candidate(self, box, path_slice, corridor_half_width_m):
+        if not path_slice:
+            return False
+
+        wx = float(box["x"])
+        wy = float(box["y"])
+        radius_m = self._box_radius_m(box)
+        dx = wx - self.odom_x
+        dy = wy - self.odom_y
+        if (dx * dx + dy * dy) > (
+            (self.global_pointcloud_overlay_max_range_m + radius_m) ** 2
+        ):
+            return False
+
+        best_proj = None
+        best_dist_sq = float("inf")
+        corridor_limit_sq = (corridor_half_width_m + radius_m) ** 2
+        for idx in range(len(path_slice) - 1):
+            x0, y0 = path_slice[idx]
+            x1, y1 = path_slice[idx + 1]
+            proj_x, proj_y, _, dist_sq = self._project_point_to_segment(
+                wx, wy, x0, y0, x1, y1
+            )
+            if dist_sq <= corridor_limit_sq and dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_proj = (proj_x, proj_y)
+
+        if best_proj is None:
+            return False
+        if self.drivable_grid is None:
+            return True
+        if not self._world_cell_is_drivable_free(self.drivable_grid, wx, wy):
+            return False
+        return self._has_drivable_grid_line_of_sight(
+            self.drivable_grid, best_proj[0], best_proj[1], wx, wy
+        )
+
     def _pointcloud_corridor_half_width_m(self, margin_m):
         return max(
             0.05,
@@ -522,13 +635,7 @@ class GlobalObstacleOverlayPublisher:
         if not current_boxes_map:
             return []
 
-        pts = self._global_path_points()
-        if len(pts) < 2:
-            return []
-
-        i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
-        ig = self._accum_distance(pts, i0, self.global_pointcloud_overlay_lookahead_m)
-        path_slice = pts[i0 : ig + 1]
+        path_slice = self._global_overlay_path_slice()
         if len(path_slice) < 2:
             return []
 
@@ -538,20 +645,10 @@ class GlobalObstacleOverlayPublisher:
 
         selected = []
         for box in current_boxes_map:
-            wx = float(box["x"])
-            wy = float(box["y"])
-            radius_m = self._box_radius_m(box)
-            dx = wx - self.odom_x
-            dy = wy - self.odom_y
-            if (dx * dx + dy * dy) > ((self.global_pointcloud_overlay_max_range_m + radius_m) ** 2):
-                continue
-            corridor_limit_sq = (corridor_half_width_m + radius_m) ** 2
-            for idx in range(len(path_slice) - 1):
-                x0, y0 = path_slice[idx]
-                x1, y1 = path_slice[idx + 1]
-                if self._point_to_segment_distance_sq(wx, wy, x0, y0, x1, y1) <= corridor_limit_sq:
-                    selected.append(box)
-                    break
+            if self._box_is_valid_overlay_candidate(
+                box, path_slice, corridor_half_width_m
+            ):
+                selected.append(box)
         return selected
 
     def _prune_global_obstacle_overlay_memory(self, now_sec):
@@ -564,6 +661,10 @@ class GlobalObstacleOverlayPublisher:
         static_keep_range_sq = (
             self.global_pointcloud_overlay_static_lock_keep_range_m
             * self.global_pointcloud_overlay_static_lock_keep_range_m
+        )
+        path_slice = self._global_overlay_path_slice()
+        corridor_half_width_m = self._pointcloud_corridor_half_width_m(
+            self.global_pointcloud_overlay_corridor_margin_m
         )
         kept = []
         for entry in self.global_obstacle_overlay_memory:
@@ -589,6 +690,12 @@ class GlobalObstacleOverlayPublisher:
             dy = wy - self.odom_y
             keep_range_sq = static_keep_range_sq if locked else max_range_sq
             if (dx * dx + dy * dy) > keep_range_sq:
+                continue
+            if path_slice and (
+                not self._box_is_valid_overlay_candidate(
+                    entry, path_slice, corridor_half_width_m
+                )
+            ):
                 continue
             kept.append(entry)
 

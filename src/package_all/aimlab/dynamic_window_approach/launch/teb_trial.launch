@@ -506,6 +506,7 @@
     <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
     <param name="local_path_topic" value="$(arg local_path_topic)"/>
     <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+    <param name="final_goal_topic" value="$(arg final_goal_topic)"/>
     <param name="robot_width_m" value="$(arg robot_width_m)"/>
     <param name="robot_length_m" value="$(arg robot_length_m)"/>
     <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>

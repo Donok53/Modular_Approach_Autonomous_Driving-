@@ -187,6 +187,9 @@ class AStarPlanner:
         self.keep_last_path_goal_tolerance_m = max(
             0.0, float(rospy.get_param("~keep_last_path_goal_tolerance_m", 0.05))
         )
+        self.goal_reached_replan_freeze_distance_m = max(
+            0.0, float(rospy.get_param("~goal_reached_replan_freeze_distance_m", 0.35))
+        )
         self.keep_last_path_max_start_path_deviation_m = max(
             0.0,
             float(rospy.get_param("~keep_last_path_max_start_path_deviation_m", 0.80)),
@@ -403,6 +406,16 @@ class AStarPlanner:
             and self._goal_display_xy is not None
         )
 
+    def _is_near_active_goal(self):
+        if self.goal_reached_replan_freeze_distance_m <= 0.0:
+            return False
+        return (
+            self._display_start_xy is not None
+            and self._goal_display_xy is not None
+            and self._xy_distance(self._display_start_xy, self._goal_display_xy)
+            <= self.goal_reached_replan_freeze_distance_m
+        )
+
     def _mark_plan_context(self, success):
         self._last_planned_start_xy = (
             tuple(self._display_start_xy) if self._display_start_xy is not None else None
@@ -424,6 +437,14 @@ class AStarPlanner:
             return False
         if self.new_goal_flag or self._last_plan_stamp_s <= 0.0:
             return True
+        if self._is_near_active_goal():
+            if self.debug_log_enable:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "[astar] near active goal; freezing replans within %.2f m",
+                    self.goal_reached_replan_freeze_distance_m,
+                )
+            return False
         if not self.continuous_replan:
             return False
 
