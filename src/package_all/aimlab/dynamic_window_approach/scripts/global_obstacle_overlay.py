@@ -273,16 +273,16 @@ class GlobalObstacleOverlayPublisher:
         marker.pose.position.z = 0.06
         marker.scale.x = max(float(min_size_m), float(box["size_x"]))
         marker.scale.y = max(float(min_size_m), float(box["size_y"]))
-        marker.scale.z = 0.12
+        marker.scale.z = 0.16
         if box.get("locked", False):
-            marker.color.a = 0.35
+            marker.color.a = 0.60
             marker.color.r = 1.0
-            marker.color.g = 0.45
+            marker.color.g = 0.55
             marker.color.b = 0.05
         else:
-            marker.color.a = 0.22
+            marker.color.a = 0.38
             marker.color.r = 1.0
-            marker.color.g = 0.15
+            marker.color.g = 0.22
             marker.color.b = 0.15
         return marker
 
