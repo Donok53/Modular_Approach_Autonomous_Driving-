@@ -35,6 +35,9 @@
   <arg name="continuous_replan" default="true"/>
   <arg name="replan_min_start_shift_m" default="0.15"/>
   <arg name="replan_min_interval_s" default="0.40"/>
+  <arg name="replan_path_validation_lookahead_m" default="8.0"/>
+  <arg name="replan_path_start_ignore_m" default="0.35"/>
+  <arg name="replan_path_start_deviation_m" default="0.60"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -75,6 +78,9 @@
     <param name="continuous_replan" value="$(arg continuous_replan)"/>
     <param name="replan_min_start_shift_m" value="$(arg replan_min_start_shift_m)"/>
     <param name="replan_min_interval_s" value="$(arg replan_min_interval_s)"/>
+    <param name="replan_path_validation_lookahead_m" value="$(arg replan_path_validation_lookahead_m)"/>
+    <param name="replan_path_start_ignore_m" value="$(arg replan_path_start_ignore_m)"/>
+    <param name="replan_path_start_deviation_m" value="$(arg replan_path_start_deviation_m)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>
