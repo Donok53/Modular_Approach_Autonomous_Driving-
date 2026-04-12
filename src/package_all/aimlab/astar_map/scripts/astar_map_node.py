@@ -166,6 +166,21 @@ class AStarPlanner:
         self.replan_min_interval_s = max(
             0.0, float(rospy.get_param("~replan_min_interval_s", 0.40))
         )
+        self.replan_path_validation_lookahead_m = max(
+            0.5, float(rospy.get_param("~replan_path_validation_lookahead_m", 4.0))
+        )
+        self.replan_path_start_ignore_m = max(
+            0.0, float(rospy.get_param("~replan_path_start_ignore_m", 0.35))
+        )
+        self.replan_path_start_deviation_m = max(
+            self.replan_min_start_shift_m,
+            float(
+                rospy.get_param(
+                    "~replan_path_start_deviation_m",
+                    0.80,
+                )
+            ),
+        )
         self.keep_last_path_on_replan_failure = bool(
             rospy.get_param("~keep_last_path_on_replan_failure", True)
         )
@@ -417,19 +432,30 @@ class AStarPlanner:
             return False
         if not self._last_plan_success:
             return True
+        grid_state_changed = False
         if (
             self.use_dynamic_risk_grid_global
             and self._dynamic_risk_grid_change_seq
             != self._last_planned_dynamic_risk_grid_change_seq
         ):
-            return True
+            grid_state_changed = True
         if (
             self.use_global_obstacle_overlay
             and self._global_obstacle_overlay_change_seq
             != self._last_planned_global_obstacle_overlay_change_seq
         ):
-            return True
-        if self.start_id != self._last_planned_start_id:
+            grid_state_changed = True
+        if grid_state_changed:
+            if not self.use_drivable_grid_global:
+                return True
+            if self._current_published_path_conflicts_with_current_grid():
+                return True
+            if self.debug_log_enable:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "[astar] overlay/risk changed but keeping current global path: upcoming path remains valid",
+                )
+        if (not self.use_drivable_grid_global) and self.start_id != self._last_planned_start_id:
             return True
         if self.goal_id != self._last_planned_goal_id:
             return True
@@ -443,7 +469,15 @@ class AStarPlanner:
             and self._xy_distance(self._display_start_xy, self._last_planned_start_xy)
             >= self.replan_min_start_shift_m
         ):
-            return True
+            if not self.use_drivable_grid_global:
+                return True
+            if self._current_published_path_start_deviation_m() >= self.replan_path_start_deviation_m:
+                return True
+            if self.debug_log_enable:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "[astar] start moved but keeping current global path: start remains close to published path",
+                )
         if (
             self._goal_display_xy is not None
             and self._last_planned_goal_xy is not None
@@ -966,6 +1000,76 @@ class AStarPlanner:
                 continue
             points.append(self._xy_to_map(n.east, n.north))
         return points
+
+    def _current_published_path_start_deviation_m(self):
+        if self._display_start_xy is None:
+            return float("inf")
+        path_points = self._current_published_path_world_points()
+        if not path_points:
+            return float("inf")
+        return self._distance_point_to_polyline(self._display_start_xy, path_points)
+
+    def _world_path_conflicts_with_blocked_grid(self, g, blocked, world_points):
+        pts = self._dedupe_world_points(world_points)
+        if len(pts) < 2:
+            return False
+
+        start_ignore_m = max(0.0, self.replan_path_start_ignore_m)
+        lookahead_m = max(start_ignore_m, self.replan_path_validation_lookahead_m)
+        accumulated_m = 0.0
+
+        for idx in range(len(pts) - 1):
+            ax, ay = pts[idx]
+            bx, by = pts[idx + 1]
+            seg_len = math.hypot(float(bx) - float(ax), float(by) - float(ay))
+            if seg_len <= 1e-6:
+                continue
+
+            seg_start_m = accumulated_m
+            seg_end_m = accumulated_m + seg_len
+            accumulated_m = seg_end_m
+
+            if seg_end_m <= start_ignore_m:
+                continue
+            if seg_start_m >= lookahead_m:
+                break
+
+            t0 = 0.0
+            t1 = 1.0
+            if seg_start_m < start_ignore_m:
+                t0 = (start_ignore_m - seg_start_m) / seg_len
+            if seg_end_m > lookahead_m:
+                t1 = (lookahead_m - seg_start_m) / seg_len
+            t0 = max(0.0, min(1.0, t0))
+            t1 = max(0.0, min(1.0, t1))
+            if t1 <= t0:
+                continue
+
+            sx = float(ax) + (float(bx) - float(ax)) * t0
+            sy = float(ay) + (float(by) - float(ay)) * t0
+            ex = float(ax) + (float(bx) - float(ax)) * t1
+            ey = float(ay) + (float(by) - float(ay)) * t1
+
+            start_cell = self._world_to_grid_cell(g, sx, sy)
+            end_cell = self._world_to_grid_cell(g, ex, ey)
+            if (not self._grid_in_bounds(g, start_cell[0], start_cell[1])) or (
+                not self._grid_in_bounds(g, end_cell[0], end_cell[1])
+            ):
+                return True
+            if not self._has_line_of_sight(blocked, start_cell, end_cell):
+                return True
+        return False
+
+    def _current_published_path_conflicts_with_current_grid(self):
+        if (not self.use_drivable_grid_global) or self.drivable_grid is None:
+            return True
+        path_points = self._current_published_path_world_points()
+        if len(path_points) < 2:
+            return True
+        blocked = self._build_blocked_grid(self.drivable_grid)
+        return self._world_path_conflicts_with_blocked_grid(
+            self.drivable_grid, blocked, path_points
+        )
 
     def _can_keep_last_path_on_replan_failure(self):
         if not self.keep_last_path_on_replan_failure:
