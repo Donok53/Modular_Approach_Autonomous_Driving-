@@ -207,6 +207,7 @@ class AStarPlanner:
         self._ref_file = ""
         self._goal_display_xy = None
         self._display_start_xy = None
+        self._display_start_yaw = None
         self.drivable_grid = None
         self._last_world_path_signature = None
         self._last_world_path = None
@@ -368,6 +369,13 @@ class AStarPlanner:
         if a is None or b is None:
             return float("inf")
         return math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1]))
+
+    @staticmethod
+    def _quat_to_yaw(q):
+        return math.atan2(
+            2.0 * (float(q.w) * float(q.z) + float(q.x) * float(q.y)),
+            1.0 - 2.0 * (float(q.y) * float(q.y) + float(q.z) * float(q.z)),
+        )
 
     def _has_active_goal_context(self):
         if not self.start_init_flag:
@@ -791,6 +799,20 @@ class AStarPlanner:
                 pts = list(pts) + [tuple(self._goal_display_xy)]
         return self._dedupe_world_points(pts)
 
+    def _apply_start_yaw_hint(self, yaws):
+        if (not yaws) or self._display_start_yaw is None:
+            return yaws
+        hinted = list(yaws)
+        hinted[0] = float(self._display_start_yaw)
+        return hinted
+
+    def _prepend_current_start_to_path_points(self, points):
+        pts = list(points)
+        if self._display_start_xy is not None:
+            if (not pts) or self._xy_distance(self._display_start_xy, pts[0]) > 0.05:
+                pts = [tuple(self._display_start_xy)] + pts
+        return self._dedupe_world_points(pts)
+
     @staticmethod
     def _set_pose_yaw(pose_stamped, yaw):
         pose_stamped.pose.orientation.x = 0.0
@@ -868,8 +890,10 @@ class AStarPlanner:
         p = Path()
         p.header.frame_id = "map"
         p.header.stamp = stamp
-        display_points = self._prepare_display_path(world_points, simplify=simplify)
-        display_yaws = self._path_yaws(display_points)
+        display_points = self._prepend_current_start_to_path_points(
+            self._prepare_display_path(world_points, simplify=simplify)
+        )
+        display_yaws = self._apply_start_yaw_hint(self._path_yaws(display_points))
         for (x, y), yaw in zip(display_points, display_yaws):
             ps = PoseStamped()
             ps.header = p.header
@@ -883,7 +907,7 @@ class AStarPlanner:
         pd.header.frame_id = "map"
         pd.header.stamp = stamp
         viz_points = self._prepare_visualization_path(world_points, simplify=simplify)
-        viz_yaws = self._path_yaws(viz_points)
+        viz_yaws = self._apply_start_yaw_hint(self._path_yaws(viz_points))
         for (x, y), yaw in zip(viz_points, viz_yaws):
             pds = PoseStamped()
             pds.header = pd.header
@@ -1271,6 +1295,63 @@ class AStarPlanner:
                 return best
         return None
 
+    def _nearest_free_start_grid_cell(self, g, blocked, start_xy, goal_xy=None):
+        start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
+        if self._blocked_cell_is_free(blocked, start_raw[0], start_raw[1]):
+            return start_raw
+
+        heading_yaw = self._display_start_yaw
+        goal_dx = 0.0
+        goal_dy = 0.0
+        goal_norm = 0.0
+        if goal_xy is not None:
+            goal_dx = float(goal_xy[0]) - float(start_xy[0])
+            goal_dy = float(goal_xy[1]) - float(start_xy[1])
+            goal_norm = math.hypot(goal_dx, goal_dy)
+
+        best = None
+        best_score = float("inf")
+        best_dist = float("inf")
+        cx, cy = start_raw
+        for r in range(1, self.grid_snap_search_radius_cells + 1):
+            for gx in range(cx - r, cx + r + 1):
+                for gy in range(cy - r, cy + r + 1):
+                    if max(abs(gx - cx), abs(gy - cy)) != r:
+                        continue
+                    if not self._blocked_cell_is_free(blocked, gx, gy):
+                        continue
+
+                    wx, wy = self._grid_cell_to_world(g, gx, gy)
+                    dx = float(wx) - float(start_xy[0])
+                    dy = float(wy) - float(start_xy[1])
+                    dist = math.hypot(dx, dy)
+                    score = dist
+
+                    if heading_yaw is not None:
+                        hx = math.cos(float(heading_yaw))
+                        hy = math.sin(float(heading_yaw))
+                        forward = dx * hx + dy * hy
+                        lateral = abs(-hy * dx + hx * dy)
+                        score += 1.0 * lateral
+                        score -= 0.75 * max(0.0, forward)
+                        if forward < -0.05:
+                            score += 0.75 + abs(forward)
+
+                    if goal_norm > 1e-3:
+                        progress = (dx * goal_dx + dy * goal_dy) / goal_norm
+                        if progress < -0.05:
+                            score += 0.50 + abs(progress)
+                        else:
+                            score -= 0.15 * min(progress, dist)
+
+                    if (score + 1e-6) < best_score or (
+                        abs(score - best_score) <= 1e-6 and dist < best_dist
+                    ):
+                        best = (gx, gy)
+                        best_score = score
+                        best_dist = dist
+        return best
+
     @staticmethod
     def _grid_heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
@@ -1449,7 +1530,7 @@ class AStarPlanner:
 
         start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
         goal_raw = self._world_to_grid_cell(g, goal_xy[0], goal_xy[1])
-        start_cell = self._nearest_free_grid_cell(blocked, start_raw)
+        start_cell = self._nearest_free_start_grid_cell(g, blocked, start_xy, goal_xy)
         goal_cell = self._nearest_free_grid_cell(blocked, goal_raw)
         if start_cell is None or goal_cell is None:
             rospy.logwarn_throttle(
@@ -1501,7 +1582,9 @@ class AStarPlanner:
         snapped_start_xy = self._grid_cell_to_world(g, start_cell[0], start_cell[1])
         snapped_goal_xy = self._grid_cell_to_world(g, goal_cell[0], goal_cell[1])
         self._last_snapped_goal_xy = snapped_goal_xy
-        world_points = [tuple(start_xy) if start_cell == start_raw else snapped_start_xy]
+        world_points = [tuple(start_xy)]
+        if self._xy_distance(start_xy, snapped_start_xy) > 0.05:
+            world_points.append(snapped_start_xy)
         for gx, gy in grid_path[1:-1]:
             world_points.append(self._grid_cell_to_world(g, gx, gy))
         clicked_goal_xy = (float(goal_xy[0]), float(goal_xy[1]))
@@ -1588,8 +1671,10 @@ class AStarPlanner:
             world_points.append(self._xy_to_map(n.east, n.north))
             wgs_points.append((n.lat, n.lon))
 
-        display_points = self._prepare_display_path(world_points)
-        display_yaws = self._path_yaws(display_points)
+        display_points = self._prepend_current_start_to_path_points(
+            self._prepare_display_path(world_points)
+        )
+        display_yaws = self._apply_start_yaw_hint(self._path_yaws(display_points))
         for (x, y), yaw in zip(display_points, display_yaws):
             ps = PoseStamped(); ps.header = p.header
             ps.pose.position.x = x; ps.pose.position.y = y; ps.pose.position.z = 0.0
@@ -1597,7 +1682,7 @@ class AStarPlanner:
             p.poses.append(ps)
 
         viz_points = self._prepare_visualization_path(world_points)
-        viz_yaws = self._path_yaws(viz_points)
+        viz_yaws = self._apply_start_yaw_hint(self._path_yaws(viz_points))
         for (x, y), yaw in zip(viz_points, viz_yaws):
             pds = PoseStamped(); pds.header = pd.header
             pds.pose.position.x = x; pds.pose.position.y = y; pds.pose.position.z = 0.0
@@ -1808,6 +1893,7 @@ class AStarPlanner:
             float(data.pose.pose.position.x),
             float(data.pose.pose.position.y),
         )
+        self._display_start_yaw = self._quat_to_yaw(data.pose.pose.orientation)
         if n:
             self.start_id = n.id; self.start_init_flag = True
             if self.debug_log_enable:
@@ -1819,6 +1905,7 @@ class AStarPlanner:
             float(data.pose.pose.position.x),
             float(data.pose.pose.position.y),
         )
+        self._display_start_yaw = self._quat_to_yaw(data.pose.pose.orientation)
         if n:
             self.start_id = n.id; self.start_init_flag = True
 
