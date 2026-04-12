@@ -188,7 +188,7 @@ class AStarPlanner:
             0.0, float(rospy.get_param("~keep_last_path_goal_tolerance_m", 0.05))
         )
         self.goal_reached_replan_freeze_distance_m = max(
-            0.0, float(rospy.get_param("~goal_reached_replan_freeze_distance_m", 0.35))
+            0.0, float(rospy.get_param("~goal_reached_replan_freeze_distance_m", 0.60))
         )
         self.keep_last_path_max_start_path_deviation_m = max(
             0.0,

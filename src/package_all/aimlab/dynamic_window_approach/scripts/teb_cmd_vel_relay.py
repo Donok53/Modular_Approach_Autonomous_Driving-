@@ -147,6 +147,16 @@ class TebCmdVelRelay(object):
             0.0,
             float(rospy.get_param("~blind_zone_turn_guard_linear_cap_mps", 0.12)),
         )
+        self.near_goal_side_turn_guard_stop_distance_m = max(
+            self.final_brake_distance_m,
+            self.ignore_local_hold_near_goal_distance_m,
+            float(
+                rospy.get_param(
+                    "~near_goal_side_turn_guard_stop_distance_m",
+                    0.60,
+                )
+            ),
+        )
         self.behavior_cmd_timeout_s = max(
             0.1, float(rospy.get_param("~behavior_cmd_timeout_s", 0.8))
         )
@@ -1294,6 +1304,12 @@ class TebCmdVelRelay(object):
             float(self.final_goal_y) - float(self.odom_y),
         )
 
+    def _is_near_goal_side_turn_guard_stop_zone(self):
+        goal_distance_m = self._final_goal_distance_m()
+        return math.isfinite(goal_distance_m) and (
+            goal_distance_m <= self.near_goal_side_turn_guard_stop_distance_m
+        )
+
     def _is_final_goal_brake_active(self):
         if (
             self._is_final_path_segment_active()
@@ -1789,6 +1805,7 @@ class TebCmdVelRelay(object):
             return cmd, None
 
         final_segment_active = self._is_final_path_segment_active()
+        near_goal_guard_zone = self._is_near_goal_side_turn_guard_stop_zone()
         ignore_stop = self._should_ignore_obstacle_for_local_goal(
             self.closest_stop_obstacle_x
         )
@@ -1844,6 +1861,7 @@ class TebCmdVelRelay(object):
                 }
             if (
                 self.allow_in_place_rotation_near_obstacle
+                and (not near_goal_guard_zone)
                 and (not final_segment_active)
                 and (
                     self._should_preserve_in_place_rotation(cmd)
@@ -1929,6 +1947,7 @@ class TebCmdVelRelay(object):
             if abs(slowed.linear.x) <= self.final_cmd_linear_stop_threshold:
                 if (
                     self.allow_in_place_rotation_near_obstacle
+                    and (not near_goal_guard_zone)
                     and (not final_segment_active)
                     and (
                         self._should_preserve_in_place_rotation(cmd)
@@ -2020,6 +2039,31 @@ class TebCmdVelRelay(object):
 
         if not self._is_turning_toward_side(cmd.angular.z, side):
             return cmd, None
+
+        if self._is_near_goal_side_turn_guard_stop_zone():
+            self._last_safety_reason = "blind_zone_turn_goal_stop"
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: near-goal blind-zone stop | obstacle=(%.2f,%.2f) age=%.2fs goal_dist=%.2f cmd(v=%.3f,w=%.3f)",
+                obstacle_x,
+                obstacle_y,
+                age_s,
+                self._final_goal_distance_m(),
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            return Twist(), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "blind_zone_obstacle_memory",
+                "action_taken": "blind_zone_turn_goal_stop",
+                "avoid_direction": turn_away_direction,
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(memory["range_m"]),
+                "obstacle_lateral_offset_m": obstacle_y,
+                "summary_text": "TEB relay held the robot stopped near the final goal instead of rotating or drifting away because a side obstacle remained inside the blind zone.",
+            }
 
         # When the local replanner has temporarily dropped the path during an
         # active avoidance branch, do not convert that hold window into a small
