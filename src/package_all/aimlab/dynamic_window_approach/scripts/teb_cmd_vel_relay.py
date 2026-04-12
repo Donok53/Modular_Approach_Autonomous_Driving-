@@ -1280,10 +1280,9 @@ class TebCmdVelRelay(object):
         return True
 
     def _should_convert_small_reverse_to_rotation(self, cmd, now=None):
-        if self.require_recent_nonempty_local_path_for_crawl and (
-            not self._has_recent_nonempty_local_path(now)
-        ):
-            return False
+        # Converting a tiny reverse into an in-place rotation is safer than
+        # letting a forward-only robot stall at startup just because the local
+        # planner has not yet published a fresh nonempty path.
         return (
             self.forward_only
             and float(cmd.linear.x) < 0.0
@@ -1439,6 +1438,9 @@ class TebCmdVelRelay(object):
             and math.isfinite(self.local_path_remaining_m)
         )
 
+    def _has_seen_nonempty_local_path(self):
+        return math.isfinite(self.last_nonempty_local_path_remaining_m)
+
     def _has_fresh_near_goal_empty_local_path(self, now=None):
         if not self._has_fresh_empty_local_path(now):
             return False
@@ -1477,6 +1479,11 @@ class TebCmdVelRelay(object):
         if (now - self.last_local_path_time) > self.local_hold_timeout_s:
             return False
         if not self.local_path_empty:
+            return False
+        if not self._has_seen_nonempty_local_path():
+            # Do not arm the local-hold stop before the planner has ever
+            # produced a real local path. Otherwise the robot can freeze right
+            # after a new goal while TEB is still spinning up.
             return False
         if self._has_fresh_near_goal_empty_local_path(now):
             return True
