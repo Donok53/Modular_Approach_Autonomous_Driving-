@@ -77,6 +77,8 @@ class ConstrainedLocalReplanner:
         )
         self.robot_radius = 0.5 * math.hypot(self.robot_length_m, self.robot_width_m)
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
+        self.robot_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m
+        self.robot_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m
         self.footprint_clearance_radius_m = self.robot_radius + self.footprint_padding_m
         self.trim_published_path_to_robot_front = bool(
             rospy.get_param("~trim_published_path_to_robot_front", True)
