@@ -151,6 +151,7 @@
   <arg name="tiny_reverse_forward_crawl_speed_mps" default="0.04"/>
   <arg name="tiny_reverse_forward_crawl_clearance_m" default="0.80"/>
   <arg name="tiny_reverse_forward_crawl_max_angular_speed" default="0.35"/>
+  <arg name="disable_near_goal_forward_crawl" default="false"/>
   <arg name="ignore_obstacles_beyond_local_goal" default="true"/>
   <arg name="near_goal_obstacle_ignore_distance_m" default="1.2"/>
   <arg name="obstacle_beyond_goal_slack_m" default="0.05"/>
@@ -355,6 +356,8 @@
       <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
       <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <param name="enable_travel_history" value="$(eval 'true' if arg('enable_local_replanner') == 'false' else 'false')"/>
+      <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -513,6 +516,7 @@
     <param name="tiny_reverse_forward_crawl_speed" value="$(arg tiny_reverse_forward_crawl_speed_mps)"/>
     <param name="tiny_reverse_forward_crawl_clearance_m" value="$(arg tiny_reverse_forward_crawl_clearance_m)"/>
     <param name="tiny_reverse_forward_crawl_max_angular_speed" value="$(arg tiny_reverse_forward_crawl_max_angular_speed)"/>
+    <param name="disable_near_goal_forward_crawl" value="$(arg disable_near_goal_forward_crawl)"/>
     <param name="enable_cmd_smoothing" value="$(arg enable_cmd_smoothing)"/>
     <param name="max_linear_slew_mps2" value="$(arg max_linear_slew_mps2)"/>
     <param name="max_angular_slew_rps2" value="$(arg max_angular_slew_rps2)"/>

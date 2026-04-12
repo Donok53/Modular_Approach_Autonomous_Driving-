@@ -1070,6 +1070,35 @@ class TebCmdVelRelay(object):
         out.angular.z = float(cmd.angular.z)
         return out
 
+    def _near_goal_blind_zone_crawl_speed(self, now):
+        if self.disable_near_goal_forward_crawl:
+            return 0.0
+        if self.avoidance_path_active:
+            return 0.0
+        if not self._is_near_goal_tiny_reverse_crawl_window():
+            return 0.0
+        if not self._has_recent_nonempty_local_path(now):
+            return 0.0
+        if not self._has_fresh_obstacle_data(now):
+            return 0.0
+        if self._is_final_goal_brake_active():
+            return 0.0
+        if math.isfinite(self.closest_stop_obstacle_x) and (
+            self.closest_stop_obstacle_x <= self.emergency_stop_distance
+        ):
+            return 0.0
+
+        crawl_speed = max(
+            0.0,
+            float(self.tiny_reverse_forward_crawl_speed),
+            float(self.reverse_replacement_speed),
+        )
+        if self.enforce_min_linear_speed:
+            crawl_speed = max(crawl_speed, float(self.min_abs_linear_speed))
+        if self.blind_zone_turn_guard_linear_cap_mps > 0.0:
+            crawl_speed = min(crawl_speed, self.blind_zone_turn_guard_linear_cap_mps)
+        return max(0.0, crawl_speed)
+
     def _avoidance_close_crawl_cmd(self, cmd):
         out = Twist()
         out.linear.x = min(
@@ -1974,6 +2003,12 @@ class TebCmdVelRelay(object):
             guarded.linear.x = self.blind_zone_turn_guard_linear_cap_mps
             slowed = True
 
+        crawl_applied = False
+        crawl_speed = self._near_goal_blind_zone_crawl_speed(now)
+        if crawl_speed > 0.0 and float(guarded.linear.x) < crawl_speed:
+            guarded.linear.x = crawl_speed
+            crawl_applied = True
+
         self._last_safety_reason = "blind_zone_turn_veto"
         rospy.loginfo_throttle(
             self.log_period_s,
@@ -1989,14 +2024,20 @@ class TebCmdVelRelay(object):
         return guarded, {
             "event_type": "CONTROL_ACTION_CHANGE",
             "trigger_reason": "blind_zone_obstacle_memory",
-            "action_taken": "blind_zone_turn_veto",
+            "action_taken": (
+                "blind_zone_turn_veto_crawl" if crawl_applied else "blind_zone_turn_veto"
+            ),
             "avoid_direction": turn_away_direction,
             "stop_commanded": False,
-            "slowdown_commanded": slowed,
+            "slowdown_commanded": slowed or crawl_applied,
             "speed_limit_mps": float(guarded.linear.x),
             "closest_obstacle_dist_m": float(memory["range_m"]),
             "obstacle_lateral_offset_m": obstacle_y,
-            "summary_text": "TEB relay suppressed a turn toward a recently observed side obstacle and temporarily capped forward speed so the robot can clear the LiDAR blind zone without freezing.",
+            "summary_text": (
+                "TEB relay suppressed a turn toward a recently observed side obstacle and kept a small near-goal forward crawl so the robot can clear the LiDAR blind zone without stop-go."
+                if crawl_applied
+                else "TEB relay suppressed a turn toward a recently observed side obstacle and temporarily capped forward speed so the robot can clear the LiDAR blind zone without freezing."
+            ),
         }
 
     def cmd_callback(self, msg):

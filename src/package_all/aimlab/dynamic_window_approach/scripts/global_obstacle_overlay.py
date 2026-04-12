@@ -2,11 +2,14 @@
 # -*- coding: utf-8 -*-
 
 import math
+from collections import deque
 
 import rospy
+from geometry_msgs.msg import Point
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
+from visualization_msgs.msg import Marker
 
 
 class GlobalObstacleOverlayPublisher:
@@ -20,6 +23,16 @@ class GlobalObstacleOverlayPublisher:
         self.global_obstacle_overlay_topic = str(
             rospy.get_param("~global_obstacle_overlay_topic", "/planning/global_obstacle_overlay")
         ).strip()
+        self.enable_travel_history = bool(rospy.get_param("~enable_travel_history", False))
+        self.travel_history_topic = str(
+            rospy.get_param("~travel_history_topic", "/planning/travel_history")
+        ).strip()
+        self.travel_history_max_points = max(
+            2, int(rospy.get_param("~travel_history_max_points", 400))
+        )
+        self.travel_history_spacing_m = max(
+            0.02, float(rospy.get_param("~travel_history_spacing_m", 0.05))
+        )
 
         self.robot_width_m = max(0.05, float(rospy.get_param("~robot_width_m", 0.58)))
         self.robot_length_m = max(0.05, float(rospy.get_param("~robot_length_m", 0.612)))
@@ -80,10 +93,16 @@ class GlobalObstacleOverlayPublisher:
         self.drivable_grid = None
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_points_map = []
+        self.travel_history_points = deque(maxlen=self.travel_history_max_points)
 
         self.pub_global_obstacle_overlay = rospy.Publisher(
             self.global_obstacle_overlay_topic, OccupancyGrid, queue_size=1
         )
+        self.pub_travel_history = None
+        if self.enable_travel_history and self.travel_history_topic:
+            self.pub_travel_history = rospy.Publisher(
+                self.travel_history_topic, Marker, queue_size=2, latch=True
+            )
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
         self.sub_global = rospy.Subscriber(
             self.global_path_topic, Path, self.global_path_callback, queue_size=5
@@ -123,6 +142,7 @@ class GlobalObstacleOverlayPublisher:
             1.0 - 2.0 * (q.y * q.y + q.z * q.z),
         )
         self.have_odom = True
+        self._record_travel_history_point(self.odom_x, self.odom_y)
 
     def global_path_callback(self, msg):
         self.global_path = msg
@@ -408,6 +428,50 @@ class GlobalObstacleOverlayPublisher:
     @staticmethod
     def _in_bounds(g, gx, gy):
         return 0 <= gx < int(g.info.width) and 0 <= gy < int(g.info.height)
+
+    def _publish_travel_history_marker(self):
+        if self.pub_travel_history is None:
+            return
+
+        marker = Marker()
+        marker.header.stamp = rospy.Time.now()
+        marker.header.frame_id = "map"
+        marker.ns = "travel_history"
+        marker.id = 1
+        marker.pose.orientation.w = 1.0
+
+        if len(self.travel_history_points) < 2:
+            marker.action = Marker.DELETE
+            self.pub_travel_history.publish(marker)
+            return
+
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.10
+        marker.color.a = 0.80
+        marker.color.r = 0.10
+        marker.color.g = 0.45
+        marker.color.b = 0.95
+        for x, y in self.travel_history_points:
+            p = Point()
+            p.x = float(x)
+            p.y = float(y)
+            p.z = 0.02
+            marker.points.append(p)
+        self.pub_travel_history.publish(marker)
+
+    def _record_travel_history_point(self, x, y):
+        if self.pub_travel_history is None:
+            return
+
+        x = float(x)
+        y = float(y)
+        if self.travel_history_points:
+            last_x, last_y = self.travel_history_points[-1]
+            if math.hypot(x - last_x, y - last_y) < self.travel_history_spacing_m:
+                return
+        self.travel_history_points.append((x, y))
+        self._publish_travel_history_marker()
 
 
 if __name__ == "__main__":

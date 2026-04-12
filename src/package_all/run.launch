@@ -25,6 +25,7 @@
   <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
   <arg name="use_local_path_fallback" default="false"/>
   <arg name="path_history_topic" default="/planning/path_history"/>
+  <arg name="travel_history_topic" default="/planning/travel_history"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_free_area_goal" default="false"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
@@ -73,6 +74,7 @@
   <arg name="teb_tiny_reverse_forward_crawl_speed_mps" default="0.04"/>
   <arg name="teb_tiny_reverse_forward_crawl_clearance_m" default="0.80"/>
   <arg name="teb_tiny_reverse_forward_crawl_max_angular_speed" default="0.35"/>
+  <arg name="teb_disable_near_goal_forward_crawl" default="false"/>
   <arg name="teb_obstacle_cloud_timeout_s" default="0.6"/>
   <arg name="teb_enable_blind_zone_turn_guard" default="true"/>
   <arg name="teb_blind_zone_turn_guard_radius_m" default="1.40"/>
@@ -624,7 +626,7 @@
       <arg name="active_path_viz_topic" value="$(arg active_path_viz_topic)"/>
       <arg name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
       <arg name="path_history_topic" value="$(arg path_history_topic)"/>
-      <arg name="travel_history_topic" value="/planning/travel_history"/>
+      <arg name="travel_history_topic" value="$(arg travel_history_topic)"/>
       <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
@@ -766,6 +768,7 @@
       <arg name="tiny_reverse_forward_crawl_speed_mps" value="$(arg teb_tiny_reverse_forward_crawl_speed_mps)"/>
       <arg name="tiny_reverse_forward_crawl_clearance_m" value="$(arg teb_tiny_reverse_forward_crawl_clearance_m)"/>
       <arg name="tiny_reverse_forward_crawl_max_angular_speed" value="$(arg teb_tiny_reverse_forward_crawl_max_angular_speed)"/>
+      <arg name="disable_near_goal_forward_crawl" value="$(arg teb_disable_near_goal_forward_crawl)"/>
       <arg name="obstacle_cloud_timeout_s" value="$(arg teb_obstacle_cloud_timeout_s)"/>
       <arg name="enable_blind_zone_turn_guard" value="$(arg teb_enable_blind_zone_turn_guard)"/>
       <arg name="blind_zone_turn_guard_radius_m" value="$(arg teb_blind_zone_turn_guard_radius_m)"/>

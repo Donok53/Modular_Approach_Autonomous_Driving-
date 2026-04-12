@@ -53,6 +53,7 @@
     <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
     <arg name="use_local_path_fallback" default="false"/>
     <arg name="path_history_topic" default="/planning/path_history"/>
+    <arg name="travel_history_topic" default="/planning/travel_history"/>
     <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
     <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
     <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
@@ -308,6 +309,8 @@
             <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
             <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+            <param name="enable_travel_history" value="$(eval 'true' if arg('enable_local_replanner') == 'false' else 'false')"/>
+            <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
             <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -334,6 +337,7 @@
             <param name="local_path_topic" value="$(arg local_path_topic)"/>
             <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
             <param name="path_history_topic" value="$(arg path_history_topic)"/>
+            <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
             <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
             <param name="use_direct_goal" value="$(arg use_direct_goal)"/>
