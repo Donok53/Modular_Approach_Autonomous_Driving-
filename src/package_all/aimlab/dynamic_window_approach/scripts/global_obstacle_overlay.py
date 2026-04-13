@@ -70,6 +70,12 @@ class GlobalObstacleOverlayPublisher:
 
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
         self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
+        self.enable_slope_compensation = bool(
+            rospy.get_param("~enable_slope_compensation", True)
+        )
+        self.slope_compensation_max_abs_rad = math.radians(
+            max(0.0, float(rospy.get_param("~slope_compensation_max_abs_deg", 25.0)))
+        )
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
         self.obstacle_downsample = max(1, int(rospy.get_param("~obstacle_downsample", 6)))
         self.pointcloud_cluster_resolution_m = max(
@@ -128,6 +134,8 @@ class GlobalObstacleOverlayPublisher:
         self.odom_x = 0.0
         self.odom_y = 0.0
         self.odom_yaw = 0.0
+        self.odom_roll = 0.0
+        self.odom_pitch = 0.0
         self.global_path = None
         self.drivable_grid = None
         self.global_obstacle_overlay_memory = []
@@ -175,13 +183,15 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
             self.tracked_objects_topic if self.tracked_objects_topic else "-",
             self.global_obstacle_overlay_topic,
             self.global_obstacle_overlay_boxes_topic,
+            "on" if self.enable_slope_compensation else "off",
+            math.degrees(self.slope_compensation_max_abs_rad),
             self.global_pointcloud_overlay_persistence_frames,
             self.global_pointcloud_overlay_static_lock_frames,
             self.global_pointcloud_overlay_static_lock_ttl_s,
@@ -348,17 +358,51 @@ class GlobalObstacleOverlayPublisher:
             "lock_time": float(item.get("lock_time", 0.0)),
         }
 
+    @staticmethod
+    def _quat_to_roll_pitch_yaw(q):
+        sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z)
+        cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2.0 * (q.w * q.y - q.z * q.x)
+        if abs(sinp) >= 1.0:
+            pitch = math.copysign(math.pi / 2.0, sinp)
+        else:
+            pitch = math.asin(sinp)
+
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        return roll, pitch, yaw
+
     def odom_callback(self, msg):
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
         self.odom_x = float(p.x)
         self.odom_y = float(p.y)
-        self.odom_yaw = math.atan2(
-            2.0 * (q.w * q.z + q.x * q.y),
-            1.0 - 2.0 * (q.y * q.y + q.z * q.z),
-        )
+        roll, pitch, yaw = self._quat_to_roll_pitch_yaw(q)
+        max_abs = self.slope_compensation_max_abs_rad
+        if max_abs > 0.0:
+            roll = max(-max_abs, min(max_abs, roll))
+            pitch = max(-max_abs, min(max_abs, pitch))
+        self.odom_roll = float(roll)
+        self.odom_pitch = float(pitch)
+        self.odom_yaw = float(yaw)
         self.have_odom = True
         self._record_travel_history_point(self.odom_x, self.odom_y)
+
+    def _leveled_z(self, x, y, z):
+        if (not self.enable_slope_compensation) or (not self.have_odom):
+            return z
+
+        cr = math.cos(self.odom_roll)
+        sr = math.sin(self.odom_roll)
+        cp = math.cos(self.odom_pitch)
+        sp = math.sin(self.odom_pitch)
+
+        y1 = cr * y - sr * z
+        z1 = sr * y + cr * z
+        return (-sp * x) + (cp * z1)
 
     def tracked_objects_callback(self, msg):
         stamp_sec = msg.header.stamp.to_sec()
@@ -390,7 +434,8 @@ class GlobalObstacleOverlayPublisher:
                 x = float(p[0])
                 y = float(p[1])
                 z = float(p[2])
-                if z < self.obstacle_min_z or z > self.obstacle_max_z:
+                z_eval = self._leveled_z(x, y, z)
+                if z_eval < self.obstacle_min_z or z_eval > self.obstacle_max_z:
                     continue
                 if x * x + y * y > rr:
                     continue
