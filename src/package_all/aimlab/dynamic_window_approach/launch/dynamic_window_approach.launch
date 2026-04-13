@@ -143,6 +143,11 @@
     <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
     <arg name="static_obstacle_memory_max_support" default="8"/>
     <arg name="static_obstacle_memory_max_points" default="40"/>
+    <arg name="static_obstacle_memory_persistence_frames" default="3"/>
+    <arg name="static_obstacle_memory_lock_ttl_s" default="8.0"/>
+    <arg name="static_obstacle_memory_locked_keep_range_m" default="4.5"/>
+    <arg name="static_obstacle_memory_blind_zone_radius_m" default="1.40"/>
+    <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="5.0"/>
     <arg name="local_blind_zone_guard_enabled" default="true"/>
     <arg name="local_blind_zone_guard_radius_m" default="1.40"/>
     <arg name="local_blind_zone_guard_ttl_s" default="0.45"/>
@@ -390,6 +395,11 @@
             <param name="static_obstacle_memory_max_range_m" value="$(arg static_obstacle_memory_max_range_m)"/>
             <param name="static_obstacle_memory_max_support" value="$(arg static_obstacle_memory_max_support)"/>
             <param name="static_obstacle_memory_max_points" value="$(arg static_obstacle_memory_max_points)"/>
+            <param name="static_obstacle_memory_persistence_frames" value="$(arg static_obstacle_memory_persistence_frames)"/>
+            <param name="static_obstacle_memory_lock_ttl_s" value="$(arg static_obstacle_memory_lock_ttl_s)"/>
+            <param name="static_obstacle_memory_locked_keep_range_m" value="$(arg static_obstacle_memory_locked_keep_range_m)"/>
+            <param name="static_obstacle_memory_blind_zone_radius_m" value="$(arg static_obstacle_memory_blind_zone_radius_m)"/>
+            <param name="static_obstacle_memory_blind_zone_hold_ttl_s" value="$(arg static_obstacle_memory_blind_zone_hold_ttl_s)"/>
             <param name="local_blind_zone_guard_enabled" value="$(arg local_blind_zone_guard_enabled)"/>
             <param name="local_blind_zone_guard_radius_m" value="$(arg local_blind_zone_guard_radius_m)"/>
             <param name="local_blind_zone_guard_ttl_s" value="$(arg local_blind_zone_guard_ttl_s)"/>
