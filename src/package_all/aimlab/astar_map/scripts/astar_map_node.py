@@ -1742,8 +1742,13 @@ class AStarPlanner:
                 goal_gap_m,
                 self.drivable_grid_goal_extension_max_gap_m,
             )
+        preserve_goal_gap_cap_m = max(
+            1e-6, float(self.drivable_grid_goal_extension_max_gap_m)
+        )
         preserve_exact_goal = (
-            self.preserve_user_goal_on_drivable_grid and goal_gap_m > 1e-6
+            self.preserve_user_goal_on_drivable_grid
+            and goal_gap_m > 1e-6
+            and goal_gap_m <= preserve_goal_gap_cap_m
         )
         if preserve_exact_goal and goal_cell != goal_raw:
             world_points.append(snapped_goal_xy)
@@ -1763,6 +1768,23 @@ class AStarPlanner:
                 float(snapped_goal_xy[0]),
                 float(snapped_goal_xy[1]),
                 goal_gap_m,
+                "yes" if goal_raw_is_free else "no",
+                "yes" if snapped_goal_has_los_to_clicked else "no",
+            )
+        elif (
+            self.preserve_user_goal_on_drivable_grid
+            and goal_gap_m > preserve_goal_gap_cap_m
+            and self.debug_log_enable
+        ):
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] skipping exact clicked goal terminal pose because snapped gap is too large (clicked=%.2f, %.2f snapped=%.2f, %.2f gap=%.2f m limit=%.2f m raw_free=%s los=%s)",
+                clicked_goal_xy[0],
+                clicked_goal_xy[1],
+                float(snapped_goal_xy[0]),
+                float(snapped_goal_xy[1]),
+                goal_gap_m,
+                preserve_goal_gap_cap_m,
                 "yes" if goal_raw_is_free else "no",
                 "yes" if snapped_goal_has_los_to_clicked else "no",
             )
