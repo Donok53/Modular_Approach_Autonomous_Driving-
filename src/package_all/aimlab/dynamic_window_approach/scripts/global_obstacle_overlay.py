@@ -96,6 +96,12 @@ class GlobalObstacleOverlayPublisher:
         self.pointcloud_min_cluster_points = max(
             1, int(rospy.get_param("~pointcloud_min_cluster_points", 4))
         )
+        self.known_map_subtraction_enabled = bool(
+            rospy.get_param("~known_map_subtraction_enabled", True)
+        )
+        self.known_map_subtraction_radius_m = max(
+            0.0, float(rospy.get_param("~known_map_subtraction_radius_m", 0.30))
+        )
 
         self.global_pointcloud_overlay_persistence_frames = max(
             1, int(rospy.get_param("~global_pointcloud_overlay_persistence_frames", 3))
@@ -195,7 +201,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm map_subtract=%s radius=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -220,6 +226,8 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_max_range_m,
             self.global_pointcloud_overlay_lookahead_m,
             self.global_pointcloud_overlay_corridor_margin_m,
+            "on" if self.known_map_subtraction_enabled else "off",
+            self.known_map_subtraction_radius_m,
         )
 
     @staticmethod
@@ -694,6 +702,30 @@ class GlobalObstacleOverlayPublisher:
         gx, gy = self._world_to_grid_cell(g, x, y)
         return self._grid_cell_is_drivable_free(g, gx, gy)
 
+    def _box_overlaps_known_map_obstacle(self, box, margin_m=0.0):
+        if (not self.known_map_subtraction_enabled) or self.drivable_grid is None:
+            return False
+
+        g = self.drivable_grid
+        expanded = self._expand_box(box, max(margin_m, self.known_map_subtraction_radius_m))
+        gx0, gx1, gy0, gy1 = self._grid_bounds_for_box(g, expanded)
+        width = int(g.info.width)
+        for gy in range(gy0, gy1 + 1):
+            for gx in range(gx0, gx1 + 1):
+                if gx < 0 or gy < 0 or gx >= width or gy >= int(g.info.height):
+                    continue
+                idx = gy * width + gx
+                if int(g.data[idx]) == 0:
+                    continue
+                cx = float(g.info.origin.position.x) + (gx + 0.5) * float(g.info.resolution)
+                cy = float(g.info.origin.position.y) + (gy + 0.5) * float(g.info.resolution)
+                if (
+                    float(expanded["min_x"]) <= cx <= float(expanded["max_x"])
+                    and float(expanded["min_y"]) <= cy <= float(expanded["max_y"])
+                ):
+                    return True
+        return False
+
     def _has_drivable_grid_line_of_sight(self, g, x0, y0, x1, y1):
         gx0, gy0 = self._world_to_grid_cell(g, x0, y0)
         gx1, gy1 = self._world_to_grid_cell(g, x1, y1)
@@ -765,6 +797,8 @@ class GlobalObstacleOverlayPublisher:
             return False
         if self.drivable_grid is None:
             return True
+        if self._box_overlaps_known_map_obstacle(box):
+            return False
         if not self._world_cell_is_drivable_free(self.drivable_grid, wx, wy):
             return False
         return self._has_drivable_grid_line_of_sight(
@@ -843,6 +877,8 @@ class GlobalObstacleOverlayPublisher:
             seen_sec = float(entry["last_seen"])
             hits = int(entry["hits"])
             locked = bool(entry.get("locked", False))
+            if self._box_overlaps_known_map_obstacle(entry):
+                continue
             effective_ttl_s = self.global_pointcloud_overlay_ttl_s
             if self._in_global_overlay_blind_zone(wx, wy):
                 effective_ttl_s = max(

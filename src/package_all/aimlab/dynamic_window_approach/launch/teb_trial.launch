@@ -86,6 +86,8 @@
   <arg name="static_obstacle_memory_locked_keep_range_m" default="4.5"/>
   <arg name="static_obstacle_memory_blind_zone_radius_m" default="1.40"/>
   <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="5.0"/>
+  <arg name="known_map_subtraction_enabled" default="true"/>
+  <arg name="known_map_subtraction_radius_m" default="0.30"/>
   <arg name="local_blind_zone_guard_enabled" default="true"/>
   <arg name="local_blind_zone_guard_radius_m" default="1.20"/>
   <arg name="local_blind_zone_guard_ttl_s" default="0.45"/>
@@ -412,6 +414,8 @@
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
       <param name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
       <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
+      <param name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
+      <param name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>
       <param name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
       <param name="global_pointcloud_overlay_static_lock_frames" value="$(arg global_pointcloud_overlay_static_lock_frames)"/>
       <param name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
@@ -478,6 +482,8 @@
       <param name="static_obstacle_memory_locked_keep_range_m" value="$(arg static_obstacle_memory_locked_keep_range_m)"/>
       <param name="static_obstacle_memory_blind_zone_radius_m" value="$(arg static_obstacle_memory_blind_zone_radius_m)"/>
       <param name="static_obstacle_memory_blind_zone_hold_ttl_s" value="$(arg static_obstacle_memory_blind_zone_hold_ttl_s)"/>
+      <param name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
+      <param name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>
       <param name="local_blind_zone_guard_enabled" value="$(arg local_blind_zone_guard_enabled)"/>
       <param name="local_blind_zone_guard_radius_m" value="$(arg local_blind_zone_guard_radius_m)"/>
       <param name="local_blind_zone_guard_ttl_s" value="$(arg local_blind_zone_guard_ttl_s)"/>

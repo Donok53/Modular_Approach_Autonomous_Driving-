@@ -244,6 +244,12 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        self.known_map_subtraction_enabled = bool(
+            rospy.get_param("~known_map_subtraction_enabled", True)
+        )
+        self.known_map_subtraction_radius_m = max(
+            0.0, float(rospy.get_param("~known_map_subtraction_radius_m", 0.30))
+        )
         self.local_blind_zone_guard_enabled = bool(
             rospy.get_param("~local_blind_zone_guard_enabled", True)
         )
@@ -441,6 +447,7 @@ class ConstrainedLocalReplanner:
         self.obstacle_memory_points = []
         self.obstacle_memory_count = 0
         self.obstacle_memory_locked_count = 0
+        self.known_map_filtered_count = 0
         self.next_obstacle_memory_id = 1
         self.current_tracked_object_points_map = []
         self.tracked_object_points_map = []
@@ -587,7 +594,7 @@ class ConstrainedLocalReplanner:
             )
         if self.static_obstacle_memory_enabled:
             rospy.loginfo(
-                "constrained_local_replanner static obstacle memory | ttl=%.1fs lock_ttl=%.1fs blind_ttl=%.1fs blind_radius=%.2fm persist=%d locked_keep=%.1fm range=%.1fm",
+                "constrained_local_replanner static obstacle memory | ttl=%.1fs lock_ttl=%.1fs blind_ttl=%.1fs blind_radius=%.2fm persist=%d locked_keep=%.1fm range=%.1fm map_subtract=%s radius=%.2fm",
                 self.static_obstacle_memory_ttl_s,
                 self.static_obstacle_memory_lock_ttl_s,
                 self.static_obstacle_memory_blind_zone_hold_ttl_s,
@@ -595,6 +602,8 @@ class ConstrainedLocalReplanner:
                 self.static_obstacle_memory_persistence_frames,
                 self.static_obstacle_memory_locked_keep_range_m,
                 self.static_obstacle_memory_max_range_m,
+                "on" if self.known_map_subtraction_enabled else "off",
+                self.known_map_subtraction_radius_m,
             )
         if self.tracked_object_virtual_obstacles_enabled or self.near_field_object_memory_enabled:
             rospy.loginfo(
@@ -1356,6 +1365,8 @@ class ConstrainedLocalReplanner:
             seen_sec = self._memory_entry_last_seen(entry)
             hits = self._memory_entry_hits(entry)
             locked = self._memory_entry_locked(entry)
+            if self._is_known_map_static_obstacle(wx, wy):
+                continue
             effective_ttl_s = self.static_obstacle_memory_ttl_s
             dx = wx - self.odom_x
             dy = wy - self.odom_y
@@ -1694,7 +1705,15 @@ class ConstrainedLocalReplanner:
                 )
 
             self.obstacle_cluster_count = len(filtered_clusters)
-            current_points_map = [self._local_to_map(item["x"], item["y"]) for item in filtered_clusters]
+            current_points_map = []
+            map_filtered_count = 0
+            for item in filtered_clusters:
+                wx, wy = self._local_to_map(item["x"], item["y"])
+                if self._is_known_map_static_obstacle(wx, wy):
+                    map_filtered_count += 1
+                    continue
+                current_points_map.append((wx, wy))
+            self.known_map_filtered_count = map_filtered_count
             self.current_obstacle_points_map = list(current_points_map)
 
             stamp_sec = msg.header.stamp.to_sec()
@@ -1704,13 +1723,16 @@ class ConstrainedLocalReplanner:
             memory_candidates_map = []
             max_range_sq = self.static_obstacle_memory_max_range_m * self.static_obstacle_memory_max_range_m
             for item in filtered_clusters:
+                wx, wy = self._local_to_map(item["x"], item["y"])
+                if self._is_known_map_static_obstacle(wx, wy):
+                    continue
                 if item["support"] > self.static_obstacle_memory_max_support:
                     continue
                 if item["z_max"] > self.static_obstacle_memory_max_z_m:
                     continue
                 if (item["x"] * item["x"] + item["y"] * item["y"]) > max_range_sq:
                     continue
-                memory_candidates_map.append(self._local_to_map(item["x"], item["y"]))
+                memory_candidates_map.append((wx, wy))
 
             remembered_points = self._update_obstacle_memory(memory_candidates_map, stamp_sec)
             self.obstacle_points_map = self._merge_obstacle_memory_points(
@@ -1771,6 +1793,7 @@ class ConstrainedLocalReplanner:
         self.obstacle_memory_points = []
         self.obstacle_memory_count = 0
         self.obstacle_memory_locked_count = 0
+        self.known_map_filtered_count = 0
         self._clear_path_history()
         self._clear_travel_history()
         self._clear_avoidance_path("map", rospy.Time.now(), force=True)
@@ -1847,6 +1870,40 @@ class ConstrainedLocalReplanner:
         h = len(blocked)
         w = len(blocked[0]) if h > 0 else 0
         return 0 <= gx < w and 0 <= gy < h
+
+    def _grid_cell_is_drivable_free(self, g, gx, gy):
+        if not self._in_bounds(g, gx, gy):
+            return False
+        idx = gy * int(g.info.width) + gx
+        return int(g.data[idx]) == 0
+
+    def _is_known_map_static_obstacle(self, wx, wy):
+        if (not self.known_map_subtraction_enabled) or self.drivable_grid is None:
+            return False
+        dg = self.drivable_grid
+        gx, gy = self._world_to_grid(dg, wx, wy)
+        if not self._grid_cell_is_drivable_free(dg, gx, gy):
+            return True
+
+        radius_m = self.known_map_subtraction_radius_m
+        if radius_m <= 0.0:
+            return False
+
+        res = max(1e-3, float(dg.info.resolution))
+        cell_radius = int(math.ceil(radius_m / res))
+        radius_sq = radius_m * radius_m
+        for ny in range(gy - cell_radius, gy + cell_radius + 1):
+            for nx in range(gx - cell_radius, gx + cell_radius + 1):
+                if not self._in_bounds(dg, nx, ny):
+                    continue
+                if self._grid_cell_is_drivable_free(dg, nx, ny):
+                    continue
+                cx, cy = self._grid_to_world(dg, nx, ny)
+                dx = cx - float(wx)
+                dy = cy - float(wy)
+                if (dx * dx + dy * dy) <= radius_sq:
+                    return True
+        return False
 
     def _is_blocked_cell(self, dg, rg, gx, gy):
         if not self._in_bounds(dg, gx, gy):
@@ -2624,7 +2681,7 @@ class ConstrainedLocalReplanner:
         overlay_points = int(kwargs.get("overlay_points", 0))
         return (
             "local_replanner state={} reason={} avoid={} dir={} wait={}/{} "
-            "path_len={} raw_pts={} clustered={} memory_pts={} locked_static={} tracked_objs={} tracked_pts={} tracked_mem={} overlay_pts={} blocked_since={}"
+            "path_len={} raw_pts={} clustered={} map_filtered={} memory_pts={} locked_static={} tracked_objs={} tracked_pts={} tracked_mem={} overlay_pts={} blocked_since={}"
         ).format(
             state,
             trigger_reason,
@@ -2635,6 +2692,7 @@ class ConstrainedLocalReplanner:
             path_len,
             int(self.obstacle_raw_point_count),
             int(self.obstacle_cluster_count),
+            int(self.known_map_filtered_count),
             int(self.obstacle_memory_count),
             int(self.obstacle_memory_locked_count),
             int(self.tracked_object_count),
@@ -3528,7 +3586,7 @@ class ConstrainedLocalReplanner:
 
         clustered_point_count = self.obstacle_cluster_count
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} direct_points_enabled={} direct_points_overlap={} raw_points={} clustered_points={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} direct_points_enabled={} direct_points_overlap={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
@@ -3536,6 +3594,7 @@ class ConstrainedLocalReplanner:
                 "yes" if direct_points_overlap else "no",
                 self.obstacle_raw_point_count,
                 clustered_point_count,
+                self.known_map_filtered_count,
                 self.obstacle_memory_count,
                 self.obstacle_memory_locked_count,
                 self.tracked_object_count,
