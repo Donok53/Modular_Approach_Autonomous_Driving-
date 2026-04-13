@@ -170,6 +170,18 @@ class ConstrainedLocalReplanner:
         self.slope_compensation_max_abs_rad = math.radians(
             max(0.0, float(rospy.get_param("~slope_compensation_max_abs_deg", 25.0)))
         )
+        self.enable_ground_band_rejection = bool(
+            rospy.get_param("~enable_ground_band_rejection", True)
+        )
+        self.lidar_height_m = max(
+            0.0, float(rospy.get_param("~lidar_height_m", 0.46))
+        )
+        self.ground_reject_min_m = float(
+            rospy.get_param("~ground_reject_min_m", -0.20)
+        )
+        self.ground_reject_max_m = float(
+            rospy.get_param("~ground_reject_max_m", 0.04)
+        )
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
         self.obstacle_downsample = max(1, int(rospy.get_param("~obstacle_downsample", 6)))
         self.pointcloud_cluster_resolution_m = max(
@@ -987,6 +999,9 @@ class ConstrainedLocalReplanner:
         z1 = sr * y + cr * z
         return (-sp * x) + (cp * z1)
 
+    def _ground_relative_height(self, x, y, z):
+        return self._leveled_z(x, y, z) + self.lidar_height_m
+
     def _dedupe_world_points(self, points_map):
         if not points_map:
             return []
@@ -1442,6 +1457,10 @@ class ConstrainedLocalReplanner:
                 x = float(p[0])
                 y = float(p[1])
                 z = float(p[2])
+                if self.enable_ground_band_rejection:
+                    ground_h = self._ground_relative_height(x, y, z)
+                    if self.ground_reject_min_m <= ground_h <= self.ground_reject_max_m:
+                        continue
                 z_eval = self._leveled_z(x, y, z)
                 if z_eval < self.obstacle_min_z or z_eval > self.obstacle_max_z:
                     continue

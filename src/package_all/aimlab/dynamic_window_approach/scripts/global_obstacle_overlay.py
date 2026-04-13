@@ -76,6 +76,18 @@ class GlobalObstacleOverlayPublisher:
         self.slope_compensation_max_abs_rad = math.radians(
             max(0.0, float(rospy.get_param("~slope_compensation_max_abs_deg", 25.0)))
         )
+        self.enable_ground_band_rejection = bool(
+            rospy.get_param("~enable_ground_band_rejection", True)
+        )
+        self.lidar_height_m = max(
+            0.0, float(rospy.get_param("~lidar_height_m", 0.46))
+        )
+        self.ground_reject_min_m = float(
+            rospy.get_param("~ground_reject_min_m", -0.20)
+        )
+        self.ground_reject_max_m = float(
+            rospy.get_param("~ground_reject_max_m", 0.04)
+        )
         self.obstacle_max_range_m = max(1.0, float(rospy.get_param("~obstacle_max_range_m", 12.0)))
         self.obstacle_downsample = max(1, int(rospy.get_param("~obstacle_downsample", 6)))
         self.pointcloud_cluster_resolution_m = max(
@@ -183,7 +195,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -192,6 +204,10 @@ class GlobalObstacleOverlayPublisher:
             self.global_obstacle_overlay_boxes_topic,
             "on" if self.enable_slope_compensation else "off",
             math.degrees(self.slope_compensation_max_abs_rad),
+            "on" if self.enable_ground_band_rejection else "off",
+            self.lidar_height_m,
+            self.ground_reject_min_m,
+            self.ground_reject_max_m,
             self.global_pointcloud_overlay_persistence_frames,
             self.global_pointcloud_overlay_static_lock_frames,
             self.global_pointcloud_overlay_static_lock_ttl_s,
@@ -404,6 +420,9 @@ class GlobalObstacleOverlayPublisher:
         z1 = sr * y + cr * z
         return (-sp * x) + (cp * z1)
 
+    def _ground_relative_height(self, x, y, z):
+        return self._leveled_z(x, y, z) + self.lidar_height_m
+
     def tracked_objects_callback(self, msg):
         stamp_sec = msg.header.stamp.to_sec()
         if stamp_sec <= 0.0:
@@ -434,6 +453,10 @@ class GlobalObstacleOverlayPublisher:
                 x = float(p[0])
                 y = float(p[1])
                 z = float(p[2])
+                if self.enable_ground_band_rejection:
+                    ground_h = self._ground_relative_height(x, y, z)
+                    if self.ground_reject_min_m <= ground_h <= self.ground_reject_max_m:
+                        continue
                 z_eval = self._leveled_z(x, y, z)
                 if z_eval < self.obstacle_min_z or z_eval > self.obstacle_max_z:
                     continue

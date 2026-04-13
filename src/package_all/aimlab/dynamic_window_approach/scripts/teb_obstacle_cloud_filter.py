@@ -23,6 +23,18 @@ class TebObstacleCloudFilter:
         self.slope_compensation_max_abs_rad = math.radians(
             max(0.0, float(rospy.get_param("~slope_compensation_max_abs_deg", 25.0)))
         )
+        self.enable_ground_band_rejection = bool(
+            rospy.get_param("~enable_ground_band_rejection", True)
+        )
+        self.lidar_height_m = max(
+            0.0, float(rospy.get_param("~lidar_height_m", 0.46))
+        )
+        self.ground_reject_min_m = float(
+            rospy.get_param("~ground_reject_min_m", -0.20)
+        )
+        self.ground_reject_max_m = float(
+            rospy.get_param("~ground_reject_max_m", 0.04)
+        )
         self.min_range = max(0.0, float(rospy.get_param("~min_range", 0.10)))
         self.max_range = max(self.min_range + 0.1, float(rospy.get_param("~max_range", 4.5)))
         self.self_filter_radius_x = max(0.0, float(rospy.get_param("~self_filter_radius_x", 0.45)))
@@ -46,12 +58,16 @@ class TebObstacleCloudFilter:
             )
 
         rospy.loginfo(
-            "teb_obstacle_cloud_filter started | in=%s out=%s odom=%s slope_comp=%s max_tilt=%.1fdeg z=[%.2f, %.2f] self=%.2fx%.2fm pad=%.2fm rear>=%.2fm lateral<=%.2fm voxel=%.2fm range=%.1f..%.1fm",
+            "teb_obstacle_cloud_filter started | in=%s out=%s odom=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] z=[%.2f, %.2f] self=%.2fx%.2fm pad=%.2fm rear>=%.2fm lateral<=%.2fm voxel=%.2fm range=%.1f..%.1fm",
             self.input_topic,
             self.output_topic,
             self.odom_topic if self.odom_topic else "-",
             "on" if self.enable_slope_compensation else "off",
             math.degrees(self.slope_compensation_max_abs_rad),
+            "on" if self.enable_ground_band_rejection else "off",
+            self.lidar_height_m,
+            self.ground_reject_min_m,
+            self.ground_reject_max_m,
             self.min_z,
             self.max_z,
             2.0 * self.self_filter_radius_x,
@@ -101,6 +117,9 @@ class TebObstacleCloudFilter:
         z1 = sr * y + cr * z
         return (-sp * x) + (cp * z1)
 
+    def _ground_relative_height(self, x, y, z):
+        return self._leveled_z(x, y, z) + self.lidar_height_m
+
     def _safe_publish(self, msg):
         if rospy.is_shutdown():
             return
@@ -122,7 +141,14 @@ class TebObstacleCloudFilter:
         for x, y, z in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
             raw_count += 1
 
-            z_eval = self._leveled_z(float(x), float(y), float(z))
+            x = float(x)
+            y = float(y)
+            z = float(z)
+            z_eval = self._leveled_z(x, y, z)
+            if self.enable_ground_band_rejection:
+                ground_h = self._ground_relative_height(x, y, z)
+                if self.ground_reject_min_m <= ground_h <= self.ground_reject_max_m:
+                    continue
             if z_eval < self.min_z or z_eval > self.max_z:
                 continue
 

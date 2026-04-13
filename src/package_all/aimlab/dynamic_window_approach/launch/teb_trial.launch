@@ -126,6 +126,10 @@
   <arg name="teb_filter_max_z" default="1.50"/>
   <arg name="pointcloud_slope_compensation_enabled" default="true"/>
   <arg name="pointcloud_slope_compensation_max_abs_deg" default="25.0"/>
+  <arg name="pointcloud_ground_band_rejection_enabled" default="true"/>
+  <arg name="pointcloud_lidar_height_m" default="0.46"/>
+  <arg name="pointcloud_ground_reject_min_m" default="-0.20"/>
+  <arg name="pointcloud_ground_reject_max_m" default="0.04"/>
   <arg name="teb_filter_min_range" default="0.10"/>
   <arg name="teb_filter_max_range" default="10.0"/>
   <arg name="teb_filter_voxel_size" default="0.15"/>
@@ -382,6 +386,10 @@
       <param name="travel_history_path_topic" value="$(arg travel_history_path_topic)"/>
       <param name="enable_slope_compensation" value="$(arg pointcloud_slope_compensation_enabled)"/>
       <param name="slope_compensation_max_abs_deg" value="$(arg pointcloud_slope_compensation_max_abs_deg)"/>
+      <param name="enable_ground_band_rejection" value="$(arg pointcloud_ground_band_rejection_enabled)"/>
+      <param name="lidar_height_m" value="$(arg pointcloud_lidar_height_m)"/>
+      <param name="ground_reject_min_m" value="$(arg pointcloud_ground_reject_min_m)"/>
+      <param name="ground_reject_max_m" value="$(arg pointcloud_ground_reject_max_m)"/>
       <param name="robot_width_m" value="$(arg robot_width_m)"/>
       <param name="robot_length_m" value="$(arg robot_length_m)"/>
       <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -419,6 +427,10 @@
       <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
       <param name="enable_slope_compensation" value="$(arg pointcloud_slope_compensation_enabled)"/>
       <param name="slope_compensation_max_abs_deg" value="$(arg pointcloud_slope_compensation_max_abs_deg)"/>
+      <param name="enable_ground_band_rejection" value="$(arg pointcloud_ground_band_rejection_enabled)"/>
+      <param name="lidar_height_m" value="$(arg pointcloud_lidar_height_m)"/>
+      <param name="ground_reject_min_m" value="$(arg pointcloud_ground_reject_min_m)"/>
+      <param name="ground_reject_max_m" value="$(arg pointcloud_ground_reject_max_m)"/>
       <param name="use_direct_goal" value="$(arg use_direct_goal)"/>
       <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
       <param name="direct_goal_timeout_s" value="$(arg direct_goal_timeout_s)"/>
@@ -600,6 +612,10 @@
     <param name="max_z" value="$(arg teb_filter_max_z)"/>
     <param name="enable_slope_compensation" value="$(arg pointcloud_slope_compensation_enabled)"/>
     <param name="slope_compensation_max_abs_deg" value="$(arg pointcloud_slope_compensation_max_abs_deg)"/>
+    <param name="enable_ground_band_rejection" value="$(arg pointcloud_ground_band_rejection_enabled)"/>
+    <param name="lidar_height_m" value="$(arg pointcloud_lidar_height_m)"/>
+    <param name="ground_reject_min_m" value="$(arg pointcloud_ground_reject_min_m)"/>
+    <param name="ground_reject_max_m" value="$(arg pointcloud_ground_reject_max_m)"/>
     <param name="min_range" value="$(arg teb_filter_min_range)"/>
     <param name="max_range" value="$(arg teb_filter_max_range)"/>
     <param name="voxel_size" value="$(arg teb_filter_voxel_size)"/>
