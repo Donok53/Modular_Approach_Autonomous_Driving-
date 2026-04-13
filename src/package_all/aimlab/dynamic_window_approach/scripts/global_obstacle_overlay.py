@@ -483,6 +483,10 @@ class GlobalObstacleOverlayPublisher:
     def _tracked_object_speed_mps(obj):
         return math.hypot(float(obj.twist.linear.x), float(obj.twist.linear.y))
 
+    @staticmethod
+    def _is_recent_dynamic_label(label):
+        return (label or "").lower().startswith("recent_")
+
     def _fresh_dynamic_tracked_boxes(self):
         if (
             (not self.suppress_dynamic_tracked_boxes)
@@ -496,7 +500,12 @@ class GlobalObstacleOverlayPublisher:
 
         boxes = []
         for obj in self.tracked_objects:
-            if self._tracked_object_speed_mps(obj) < self.dynamic_tracked_speed_thresh_mps:
+            label = str(getattr(obj, "label", "") or "")
+            speed_mps = self._tracked_object_speed_mps(obj)
+            if (
+                speed_mps < self.dynamic_tracked_speed_thresh_mps
+                and (not self._is_recent_dynamic_label(label))
+            ):
                 continue
             half_x = max(0.10, 0.5 * abs(float(obj.size.x))) + self.dynamic_tracked_box_margin_m
             half_y = max(0.10, 0.5 * abs(float(obj.size.y))) + self.dynamic_tracked_box_margin_m

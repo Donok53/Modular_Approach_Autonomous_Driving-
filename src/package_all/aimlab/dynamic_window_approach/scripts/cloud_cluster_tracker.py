@@ -75,6 +75,9 @@ class CloudClusterTracker:
                 ),
             ),
         )
+        self.recent_dynamic_hold_s = max(
+            0.0, float(rospy.get_param("~recent_dynamic_hold_s", 1.5))
+        )
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -89,7 +92,7 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s out=%s dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm",
+            "cloud_cluster_tracker started | cloud=%s odom=%s out=%s dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs",
             self.pointcloud_topic,
             self.odom_topic,
             self.output_topic,
@@ -98,6 +101,7 @@ class CloudClusterTracker:
             self.position_jitter_m,
             self.dynamic_min_displacement_m,
             self.pedestrian_dynamic_min_displacement_m,
+            self.recent_dynamic_hold_s,
         )
 
     def odom_callback(self, msg):
@@ -253,6 +257,7 @@ class CloudClusterTracker:
                 "score": c["score"],
                 "last_t": now_sec,
                 "age": 1,
+                "last_dynamic_t": 0.0,
             }
 
         stale = [tid for tid, t in self.tracks.items() if (now_sec - t["last_t"]) > self.track_timeout_s]
@@ -291,6 +296,7 @@ class CloudClusterTracker:
         out = TrackedObjectArray()
         out.header.stamp = stamp if stamp.to_sec() > 0.0 else rospy.Time.now()
         out.header.frame_id = "map"
+        stamp_sec = out.header.stamp.to_sec() if out.header.stamp.to_sec() > 0.0 else rospy.Time.now().to_sec()
         for tid, t in self.tracks.items():
             speed = math.hypot(t["vx"], t["vy"])
             raw_label = self._label_track(t["size_x"], t["size_y"], speed)
@@ -314,26 +320,39 @@ class CloudClusterTracker:
             effective_vx = float(t["vx"])
             effective_vy = float(t["vy"])
             effective_speed = speed
+            observed_dynamic = True
             # Require a track to persist for a few updates before we trust any
             # measured motion; otherwise doorway edges and map jitter can look
             # like short-lived moving objects.
             if t["age"] < dynamic_min_age:
+                observed_dynamic = False
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
             elif track_displacement < min_dynamic_displacement:
+                observed_dynamic = False
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
             if effective_speed < static_speed_thresh:
+                observed_dynamic = False
                 effective_vx = 0.0
                 effective_vy = 0.0
                 effective_speed = 0.0
-            if (not self.publish_static) and effective_speed < static_speed_thresh:
+            if observed_dynamic:
+                t["last_dynamic_t"] = float(stamp_sec)
+            recent_dynamic = (
+                self.recent_dynamic_hold_s > 0.0
+                and (stamp_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
+            )
+            if (not self.publish_static) and effective_speed < static_speed_thresh and not recent_dynamic:
                 continue
             obj = TrackedObject()
             obj.id = int(tid)
-            obj.label = self._label_track(t["size_x"], t["size_y"], effective_speed)
+            label = self._label_track(t["size_x"], t["size_y"], effective_speed)
+            if recent_dynamic and effective_speed < static_speed_thresh:
+                label = "recent_" + label
+            obj.label = label
             obj.confidence = float(t["score"])
             obj.pose.position.x = float(t["x"])
             obj.pose.position.y = float(t["y"])

@@ -250,6 +250,7 @@
   <arg name="cloud_tracker_dynamic_min_age" default="3"/>
   <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" default="0.08"/>
   <arg name="cloud_tracker_pedestrian_dynamic_min_age" default="2"/>
+  <arg name="cloud_tracker_recent_dynamic_hold_s" default="1.5"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
@@ -309,6 +310,7 @@
       <param name="dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
       <param name="pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
       <param name="pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
+      <param name="recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
     </node>
   </group>
