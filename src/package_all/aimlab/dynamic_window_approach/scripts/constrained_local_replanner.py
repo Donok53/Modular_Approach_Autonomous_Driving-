@@ -24,6 +24,7 @@ class ConstrainedLocalReplanner:
         self.dynamic_risk_grid_topic = rospy.get_param("~dynamic_risk_grid_topic", "/planning/dynamic_risk_grid")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
+        self.path_mode_topic = rospy.get_param("~path_mode_topic", "/planning/path_mode")
         self.path_history_topic = rospy.get_param("~path_history_topic", "/planning/path_history")
         self.travel_history_topic = rospy.get_param("~travel_history_topic", "/planning/travel_history")
         self.travel_history_path_topic = rospy.get_param(
@@ -352,6 +353,9 @@ class ConstrainedLocalReplanner:
         self.avoidance_rejoin_min_distance_m = max(
             0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
         )
+        self.rejoin_mode_hold_s = max(
+            0.0, float(rospy.get_param("~rejoin_mode_hold_s", 1.0))
+        )
         self.blocked_stop_before_avoidance_s = max(
             0.0, float(rospy.get_param("~blocked_stop_before_avoidance_s", 0.0))
         )
@@ -423,6 +427,8 @@ class ConstrainedLocalReplanner:
         self.local_blocked_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
+        self.current_path_mode = "follow_global"
+        self.rejoin_mode_until_sec = 0.0
         self._last_explain_key = None
         self._last_explain_time = 0.0
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
@@ -450,6 +456,7 @@ class ConstrainedLocalReplanner:
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
+        self.pub_path_mode = rospy.Publisher(self.path_mode_topic, String, queue_size=4, latch=True)
         self.pub_path_history = rospy.Publisher(
             self.path_history_topic, MarkerArray, queue_size=2, latch=True
         )
@@ -508,6 +515,7 @@ class ConstrainedLocalReplanner:
 
         self._clear_path_history()
         self._clear_travel_history()
+        self._publish_path_mode(self.current_path_mode, force=True)
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
             "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
@@ -573,6 +581,29 @@ class ConstrainedLocalReplanner:
                 self.blocking_obstacles_marker_scale_m,
                 self.blocking_obstacles_marker_lifetime_s,
             )
+
+    def _publish_path_mode(self, mode, force=False):
+        mode_str = str(mode or "hold").strip().lower()
+        if not force and mode_str == self.current_path_mode:
+            return
+        self.current_path_mode = mode_str
+        if rospy.is_shutdown():
+            return
+        try:
+            self.pub_path_mode.publish(String(data=mode_str))
+        except rospy.ROSException:
+            return
+        rospy.loginfo("constrained_local_replanner: path_mode=%s", mode_str)
+
+    def _arm_rejoin_mode(self, now_sec):
+        if self.rejoin_mode_hold_s <= 1e-6:
+            self.rejoin_mode_until_sec = 0.0
+            return False
+        self.rejoin_mode_until_sec = max(0.0, float(now_sec)) + self.rejoin_mode_hold_s
+        return True
+
+    def _is_rejoin_mode_active(self, now_sec):
+        return self.rejoin_mode_until_sec > 0.0 and float(now_sec) < self.rejoin_mode_until_sec
 
     @staticmethod
     def _fmt_debug_float(value, precision=2):
@@ -2232,6 +2263,7 @@ class ConstrainedLocalReplanner:
     def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None, start_xy=None, end_xy=None, record_history=True):
         if start_xy is None and self.have_odom:
             start_xy = (self.odom_x, self.odom_y)
+        self._publish_path_mode("follow_avoidance")
         sampled_points, frame_id = self._publish_grid_path(
             self.pub_avoidance_path,
             grid_path,
@@ -3276,7 +3308,7 @@ class ConstrainedLocalReplanner:
                 ),
                 stamp=stamp,
             )
-            return
+            return "avoidance" if self.avoidance_active else "clear"
 
         dynamic_points_map = self._combined_dynamic_obstacle_points()
         dynamic_blocked, obstacle_count = self._overlay_dynamic_obstacles(
@@ -3350,7 +3382,7 @@ class ConstrainedLocalReplanner:
                 ),
                 stamp=stamp,
             )
-            return
+            return "avoidance" if self.avoidance_active else "clear"
 
         blocking_points = []
         blocking_cells = []
@@ -3416,7 +3448,7 @@ class ConstrainedLocalReplanner:
                 int(blocked_idx),
             )
             self._clear_avoidance_path(frame_id, stamp)
-            return
+            return "avoidance" if self.avoidance_active else "clear"
 
         avoid_path, branch_history_points = self._build_branch_avoidance_path(
             nominal_path,
@@ -3455,13 +3487,13 @@ class ConstrainedLocalReplanner:
                 force=True,
             )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
-                return
+                return "avoidance"
             # When no avoidance branch exists, publish an empty local path so the
             # cmd_vel relay enters local hold instead of continuing along a stale
             # nominal path toward the detected obstacle.
             self._publish_empty_path(self.pub_local_path, frame_id, stamp)
             self._clear_avoidance_path(frame_id, stamp, force=True)
-            return
+            return "hold"
 
         if len(avoid_path) < 2:
             self._publish_debug_text(
@@ -3476,10 +3508,10 @@ class ConstrainedLocalReplanner:
                 force=True,
             )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
-                return
+                return "avoidance"
             self._publish_empty_path(self.pub_local_path, frame_id, stamp)
             self._clear_avoidance_path(frame_id, stamp, force=True)
-            return
+            return "hold"
 
         self._publish_avoidance_path(
             avoid_path,
@@ -3533,6 +3565,7 @@ class ConstrainedLocalReplanner:
             stamp=stamp,
             force=True,
         )
+        return "avoidance"
 
     def _plan_direct_goal(self, dg, rg, stamp):
         if self.direct_goal is None:
@@ -3555,6 +3588,8 @@ class ConstrainedLocalReplanner:
         if dist_to_goal <= self.goal_tolerance_m:
             self._publish_world_path([start_xy, goal_xy], dg.header.frame_id, stamp)
             self._clear_avoidance_path(dg.header.frame_id, stamp)
+            self.rejoin_mode_until_sec = 0.0
+            self._publish_path_mode("follow_local")
             return True
 
         sx, sy = self._world_to_grid(dg, start_xy[0], start_xy[1])
@@ -3571,6 +3606,8 @@ class ConstrainedLocalReplanner:
                 str((gx, gy)),
             )
             self._clear_avoidance_path(dg.header.frame_id, stamp)
+            self.rejoin_mode_until_sec = 0.0
+            self._publish_path_mode("hold")
             return True
 
         if (
@@ -3589,7 +3626,7 @@ class ConstrainedLocalReplanner:
                 start_xy=self.frozen_direct_start_xy,
                 end_xy=self.frozen_direct_goal_xy,
             )
-            self._update_avoidance_path(
+            avoidance_state = self._update_avoidance_path(
                 self.frozen_direct_grid_path,
                 blocked,
                 start_cell,
@@ -3598,6 +3635,11 @@ class ConstrainedLocalReplanner:
                 stamp,
                 "direct(frozen)",
             )
+            self.rejoin_mode_until_sec = 0.0
+            if avoidance_state == "hold":
+                self._publish_path_mode("hold")
+            elif avoidance_state != "avoidance":
+                self._publish_path_mode("follow_local")
             return True
 
         path = self._astar(
@@ -3616,6 +3658,8 @@ class ConstrainedLocalReplanner:
                 str(goal_cell),
             )
             self._clear_avoidance_path(dg.header.frame_id, stamp)
+            self.rejoin_mode_until_sec = 0.0
+            self._publish_path_mode("hold")
             return True
         # If the direct goal is visible on the blocked grid, prefer a single
         # straight segment over the staircase-like A* cell path.
@@ -3626,10 +3670,17 @@ class ConstrainedLocalReplanner:
         if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "direct"):
             self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
             self._clear_avoidance_path(dg.header.frame_id, stamp)
+            self.rejoin_mode_until_sec = 0.0
+            self._publish_path_mode("hold")
             return True
 
         if not self._should_publish_path(goal_cell, path):
-            self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
+            avoidance_state = self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
+            self.rejoin_mode_until_sec = 0.0
+            if avoidance_state == "hold":
+                self._publish_path_mode("hold")
+            elif avoidance_state != "avoidance":
+                self._publish_path_mode("follow_local")
             return True
 
         if path[-1] != goal_cell:
@@ -3656,7 +3707,12 @@ class ConstrainedLocalReplanner:
             start_xy=start_xy,
             end_xy=goal_xy if path[-1] == goal_cell else None,
         )
-        self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
+        avoidance_state = self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
+        self.rejoin_mode_until_sec = 0.0
+        if avoidance_state == "hold":
+            self._publish_path_mode("hold")
+        elif avoidance_state != "avoidance":
+            self._publish_path_mode("follow_local")
         self._record_published_path(goal_cell, path)
         return True
 
@@ -3675,6 +3731,8 @@ class ConstrainedLocalReplanner:
             pts = self._global_path_points()
             if len(pts) < 2:
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
+                self.rejoin_mode_until_sec = 0.0
+                self._publish_path_mode("hold")
                 self._publish_debug_text(
                     self._build_debug_text("no_global_path", stamp, trigger_reason="missing_global"),
                     stamp=stamp,
@@ -3699,8 +3757,10 @@ class ConstrainedLocalReplanner:
                     str((gx, gy)),
                 )
                 self.local_blocked_since_sec = 0.0
+                self.rejoin_mode_until_sec = 0.0
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
+                self._publish_path_mode("hold")
                 self._publish_debug_text(
                     self._build_debug_text("no_snap_cell", stamp, trigger_reason="snap_failed"),
                     stamp=stamp,
@@ -3726,8 +3786,10 @@ class ConstrainedLocalReplanner:
                         nominal_world_remain_m,
                     )
                     self.local_blocked_since_sec = 0.0
+                    self.rejoin_mode_until_sec = 0.0
                     self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
                     self._clear_avoidance_path(dg.header.frame_id, stamp)
+                    self._publish_path_mode("follow_local")
                     self._publish_debug_text(
                         self._build_debug_text(
                             "follow_nominal_world",
@@ -3745,8 +3807,10 @@ class ConstrainedLocalReplanner:
                     nominal_fail_reason if nominal_fail_reason else "unknown",
                 )
                 self.local_blocked_since_sec = 0.0
+                self.rejoin_mode_until_sec = 0.0
                 self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
+                self._publish_path_mode("hold")
                 self._publish_debug_text(
                     self._build_debug_text(
                         "nominal_build_failed",
@@ -3893,6 +3957,8 @@ class ConstrainedLocalReplanner:
                 wait_s = now_sec - self.local_blocked_since_sec
                 if wait_s < self.blocked_stop_before_avoidance_s:
                     self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                    self.rejoin_mode_until_sec = 0.0
+                    self._publish_path_mode("hold")
                     self._publish_debug_text(
                         self._build_debug_text(
                             "hold_wait",
@@ -3908,7 +3974,7 @@ class ConstrainedLocalReplanner:
                         return
                     self._clear_avoidance_path(dg.header.frame_id, stamp)
                     return
-                self._update_avoidance_path(
+                avoidance_state = self._update_avoidance_path(
                     nominal_path,
                     blocked,
                     start_cell,
@@ -3917,8 +3983,15 @@ class ConstrainedLocalReplanner:
                     stamp,
                     "local_hold",
                 )
+                self.rejoin_mode_until_sec = 0.0
+                if avoidance_state == "hold":
+                    self._publish_path_mode("hold")
+                elif avoidance_state == "clear":
+                    self.local_blocked_since_sec = 0.0
+                    self._publish_path_mode("follow_global")
                 return
 
+            resumed_from_local_block = self.local_blocked_since_sec > 0.0
             if self.local_blocked_since_sec > 0.0:
                 rospy.loginfo("constrained_local_replanner: nominal path clear; resuming global path tracking")
                 self._publish_explainability(
@@ -3931,7 +4004,25 @@ class ConstrainedLocalReplanner:
                 )
             self.local_blocked_since_sec = 0.0
             self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
-            self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")
+            avoidance_state = self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")
+            if avoidance_state == "avoidance":
+                self.rejoin_mode_until_sec = 0.0
+                return
+            if avoidance_state == "hold":
+                self.rejoin_mode_until_sec = 0.0
+                self._publish_path_mode("hold")
+                return
+            now_sec = stamp.to_sec()
+            if resumed_from_local_block:
+                if self._arm_rejoin_mode(now_sec):
+                    self._publish_path_mode("rejoin_global")
+                else:
+                    self._publish_path_mode("follow_global")
+            elif self._is_rejoin_mode_active(now_sec):
+                self._publish_path_mode("rejoin_global")
+            else:
+                self.rejoin_mode_until_sec = 0.0
+                self._publish_path_mode("follow_global")
             self._publish_debug_text(
                 self._build_debug_text(
                     "follow_nominal",

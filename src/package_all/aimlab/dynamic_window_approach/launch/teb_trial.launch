@@ -26,6 +26,7 @@
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
+  <arg name="path_mode_topic" default="/planning/path_mode"/>
   <arg name="active_path_topic" default="/planning/active_path"/>
   <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
   <arg name="use_local_path_fallback" default="false"/>
@@ -67,6 +68,7 @@
   <arg name="avoidance_clear_confirm_cycles" default="10"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
+  <arg name="rejoin_mode_hold_s" default="1.0"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
   <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
@@ -271,6 +273,7 @@
     <param name="global_path_topic" value="$(arg global_path_topic)"/>
     <param name="local_path_topic" value="$(arg local_path_topic)"/>
     <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+    <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
     <param name="active_path_topic" value="$(arg active_path_topic)"/>
     <param name="active_path_viz_topic" value="$(arg active_path_viz_topic)"/>
     <param name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
@@ -419,6 +422,7 @@
       <param name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
       <param name="local_path_topic" value="$(arg local_path_topic)"/>
       <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+      <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
       <param name="path_history_topic" value="$(arg path_history_topic)"/>
       <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
       <param name="travel_history_path_topic" value="$(arg travel_history_path_topic)"/>
@@ -491,6 +495,7 @@
       <param name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
       <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <param name="rejoin_mode_hold_s" value="$(arg rejoin_mode_hold_s)"/>
       <param name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
       <param name="near_goal_block_ignore_distance_m" value="$(arg near_goal_block_ignore_distance_m)"/>
       <param name="near_goal_tail_block_ignore_distance_m" value="$(arg near_goal_tail_block_ignore_distance_m)"/>
@@ -513,6 +518,7 @@
       <param name="input_topic" value="$(arg global_path_topic)"/>
       <param name="local_input_topic" value="$(arg local_path_topic)"/>
       <param name="avoidance_input_topic" value="$(arg avoidance_path_topic)"/>
+      <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
       <param name="local_path_timeout_s" value="4.0"/>
       <param name="avoidance_path_timeout_s" value="1.5"/>
       <param name="output_topic" value="$(arg teb_via_points_topic)"/>

@@ -3,6 +3,7 @@
 
 import rospy
 from nav_msgs.msg import Path
+from std_msgs.msg import String
 
 
 class ActivePathMux:
@@ -10,6 +11,7 @@ class ActivePathMux:
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
+        self.path_mode_topic = str(rospy.get_param("~path_mode_topic", "")).strip()
         self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
         self.active_path_viz_topic = rospy.get_param(
             "~active_path_viz_topic",
@@ -28,6 +30,7 @@ class ActivePathMux:
         self.local_path_stamp = rospy.Time(0)
         self.avoidance_path_msg = None
         self.avoidance_path_stamp = rospy.Time(0)
+        self.path_mode = ""
         self.last_source = "none"
         self.last_viz_source = "none"
 
@@ -41,6 +44,14 @@ class ActivePathMux:
             self.avoidance_path_callback,
             queue_size=5,
         )
+        self.sub_path_mode = None
+        if self.path_mode_topic:
+            self.sub_path_mode = rospy.Subscriber(
+                self.path_mode_topic,
+                String,
+                self.path_mode_callback,
+                queue_size=5,
+            )
         self.timer = rospy.Timer(rospy.Duration(0.1), self.on_timer)
 
         rospy.loginfo(
@@ -64,6 +75,9 @@ class ActivePathMux:
         self.avoidance_path_msg = msg
         self.avoidance_path_stamp = rospy.Time.now()
 
+    def path_mode_callback(self, msg):
+        self.path_mode = str(msg.data).strip().lower()
+
     @staticmethod
     def _is_valid_path(msg):
         return msg is not None and len(msg.poses) >= 2
@@ -78,6 +92,9 @@ class ActivePathMux:
             and len(self.local_path_msg.poses) < 2
             and self._is_fresh(self.local_path_stamp, self.local_path_timeout_s)
         )
+
+    def _hold_placeholder_msg(self):
+        return self.local_path_msg or self.avoidance_path_msg or self.global_path_msg
 
     @staticmethod
     def _empty_path_like(msg=None):
@@ -99,6 +116,50 @@ class ActivePathMux:
             return False
 
     def _select_active_path(self):
+        if self.path_mode == "follow_avoidance":
+            if (
+                self._is_valid_path(self.avoidance_path_msg)
+                and self._is_fresh(self.avoidance_path_stamp, self.avoidance_path_timeout_s)
+            ):
+                return "avoidance", self.avoidance_path_msg
+            if (
+                self._is_valid_path(self.local_path_msg)
+                and self._is_fresh(self.local_path_stamp, self.local_path_timeout_s)
+            ):
+                return "local", self.local_path_msg
+            if self._has_explicit_local_hold():
+                return "hold", self._hold_placeholder_msg()
+            if self._is_valid_path(self.global_path_msg):
+                return "global", self.global_path_msg
+            return "none", None
+
+        if self.path_mode == "hold":
+            return "hold", self._hold_placeholder_msg()
+
+        if self.path_mode in ("rejoin_global", "follow_local"):
+            if (
+                self._is_valid_path(self.local_path_msg)
+                and self._is_fresh(self.local_path_stamp, self.local_path_timeout_s)
+            ):
+                return "local", self.local_path_msg
+            if self._has_explicit_local_hold():
+                return "hold", self._hold_placeholder_msg()
+            if self._is_valid_path(self.global_path_msg):
+                return "global", self.global_path_msg
+            return "none", None
+
+        if self.path_mode == "follow_global":
+            if self._is_valid_path(self.global_path_msg):
+                return "global", self.global_path_msg
+            if (
+                self._is_valid_path(self.local_path_msg)
+                and self._is_fresh(self.local_path_stamp, self.local_path_timeout_s)
+            ):
+                return "local", self.local_path_msg
+            if self._has_explicit_local_hold():
+                return "hold", self._hold_placeholder_msg()
+            return "none", None
+
         use_avoidance = (
             self._is_valid_path(self.avoidance_path_msg)
             and self._is_fresh(self.avoidance_path_stamp, self.avoidance_path_timeout_s)

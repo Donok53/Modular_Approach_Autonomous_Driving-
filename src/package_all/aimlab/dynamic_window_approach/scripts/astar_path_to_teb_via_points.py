@@ -8,6 +8,7 @@ import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 
 
 class AStarPathToTebViaPoints(object):
@@ -15,6 +16,7 @@ class AStarPathToTebViaPoints(object):
         self.input_topic = rospy.get_param("~input_topic", "/astar/path")
         self.local_input_topic = str(rospy.get_param("~local_input_topic", "")).strip()
         self.avoidance_input_topic = str(rospy.get_param("~avoidance_input_topic", "")).strip()
+        self.path_mode_topic = str(rospy.get_param("~path_mode_topic", "")).strip()
         self.local_path_timeout_s = max(
             0.1, float(rospy.get_param("~local_path_timeout_s", 4.0))
         )
@@ -72,6 +74,7 @@ class AStarPathToTebViaPoints(object):
         self._avoidance_msg = None
         self._avoidance_rx_time = 0.0
         self._fixed_goal_msg = None
+        self._path_mode = ""
         self._odom_x = 0.0
         self._odom_y = 0.0
         self._have_odom = False
@@ -90,6 +93,14 @@ class AStarPathToTebViaPoints(object):
         self.sub = rospy.Subscriber(
             self.input_topic, Path, self._make_callback("fallback"), queue_size=2
         )
+        self.sub_path_mode = None
+        if self.path_mode_topic:
+            self.sub_path_mode = rospy.Subscriber(
+                self.path_mode_topic,
+                String,
+                self._path_mode_callback,
+                queue_size=5,
+            )
         self.sub_local = None
         if self.local_input_topic:
             self.sub_local = rospy.Subscriber(
@@ -205,6 +216,10 @@ class AStarPathToTebViaPoints(object):
 
     def _final_goal_callback(self, msg):
         self._fixed_goal_msg = copy.deepcopy(msg)
+
+    def _path_mode_callback(self, msg):
+        self._path_mode = str(msg.data).strip().lower()
+        self._publish_selected()
 
     @staticmethod
     def _path_signature(msg):
@@ -405,6 +420,27 @@ class AStarPathToTebViaPoints(object):
     def _is_fresh(self, stamp_sec, timeout_s):
         return stamp_sec > 0.0 and (rospy.get_time() - stamp_sec) <= timeout_s
 
+    @staticmethod
+    def _has_path(msg):
+        return msg is not None and len(msg.poses) >= 2
+
+    def _has_valid_avoidance_path(self):
+        return (
+            bool(self.avoidance_input_topic)
+            and self._has_path(self._avoidance_msg)
+            and self._is_fresh(self._avoidance_rx_time, self.avoidance_path_timeout_s)
+        )
+
+    def _has_valid_local_path(self):
+        return (
+            bool(self.local_input_topic)
+            and self._has_path(self._local_msg)
+            and self._is_fresh(self._local_rx_time, self.local_path_timeout_s)
+        )
+
+    def _has_valid_fallback_path(self):
+        return self._has_path(self._fallback_msg)
+
     def _has_fresh_empty_local_path(self):
         if not (
             self.respect_local_hold
@@ -440,30 +476,56 @@ class AStarPathToTebViaPoints(object):
             out.header.frame_id = "map"
         return out
 
+    def _hold_placeholder_msg(self):
+        return self._local_msg or self._avoidance_msg or self._fallback_msg
+
     def _pick_path(self):
-        if (
-            self.avoidance_input_topic
-            and self._avoidance_msg is not None
-            and len(self._avoidance_msg.poses) >= 2
-            and self._is_fresh(self._avoidance_rx_time, self.avoidance_path_timeout_s)
-        ):
+        path_mode = self._path_mode
+        if path_mode == "follow_avoidance":
+            if self._has_valid_avoidance_path():
+                return "avoidance", self._avoidance_msg
+            if self._has_valid_local_path():
+                return "local", self._local_msg
+            if self._has_fresh_empty_local_path():
+                return "local_hold", self._hold_placeholder_msg()
+            if self._has_valid_fallback_path():
+                return "fallback", self._fallback_msg
+            return None, None
+
+        if path_mode == "hold":
+            return "local_hold", self._hold_placeholder_msg()
+
+        if path_mode in ("rejoin_global", "follow_local"):
+            if self._has_valid_local_path():
+                return "local", self._local_msg
+            if self._has_fresh_empty_local_path():
+                return "local_hold", self._hold_placeholder_msg()
+            if self._has_valid_fallback_path():
+                return "fallback", self._fallback_msg
+            return None, None
+
+        if path_mode == "follow_global":
+            if self._has_valid_fallback_path():
+                return "fallback", self._fallback_msg
+            if self._has_valid_local_path():
+                return "local", self._local_msg
+            if self._has_fresh_empty_local_path():
+                return "local_hold", self._hold_placeholder_msg()
+            return None, None
+
+        if self._has_valid_avoidance_path():
             return "avoidance", self._avoidance_msg
 
-        if (
-            self.local_input_topic
-            and self._local_msg is not None
-            and len(self._local_msg.poses) >= 2
-            and self._is_fresh(self._local_rx_time, self.local_path_timeout_s)
-        ):
+        if self._has_valid_local_path():
             return "local", self._local_msg
 
         if self._has_fresh_local_hold():
-            return "local_hold", self._local_msg
+            return "local_hold", self._hold_placeholder_msg()
 
         if self._has_fresh_empty_local_path():
-            return "local_hold", self._local_msg
+            return "local_hold", self._hold_placeholder_msg()
 
-        if self._fallback_msg is not None and len(self._fallback_msg.poses) >= 2:
+        if self._has_valid_fallback_path():
             return "fallback", self._fallback_msg
 
         return None, None
