@@ -2972,6 +2972,8 @@ class ConstrainedLocalReplanner:
         dg,
         max_check_m=None,
         include_pointcloud=False,
+        points_map=None,
+        point_margin_m=None,
     ):
         if not path:
             return None
@@ -2998,12 +3000,18 @@ class ConstrainedLocalReplanner:
                 if max_check_m is not None and remain_m >= max_check_m:
                     return None
 
-        if (not include_pointcloud) or (not self.obstacle_points_map):
+        if not include_pointcloud:
+            return None
+
+        point_source = self.obstacle_points_map if points_map is None else points_map
+        if not point_source:
             return None
 
         world_path = [self._grid_to_world(dg, gx, gy) for gx, gy in path]
         corridor_half = self._pointcloud_corridor_half_width_m(
             self.obstacle_block_margin_m + self.avoidance_trigger_margin_m
+            if point_margin_m is None
+            else point_margin_m
         )
         corridor_half_sq = corridor_half * corridor_half
         remain_m = 0.0
@@ -3017,7 +3025,7 @@ class ConstrainedLocalReplanner:
             if seg_len <= 1e-6:
                 continue
             remain_m += seg_len
-            for obs_idx, (ox, oy) in enumerate(self.obstacle_points_map):
+            for obs_idx, (ox, oy) in enumerate(point_source):
                 if obs_idx in hit_indices:
                     continue
                 if self._point_to_segment_distance_sq(ox, oy, x0, y0, x1, y1) <= corridor_half_sq:
@@ -3026,7 +3034,7 @@ class ConstrainedLocalReplanner:
                         first_hit_i = min(seg_idx + 1, len(path) - 1)
                     if len(hit_indices) >= self.pointcloud_block_confirm_points:
                         return first_hit_i
-            if remain_m >= self.avoidance_trigger_ahead_m:
+            if max_check_m is not None and remain_m >= max_check_m:
                 break
         return None
 
@@ -3215,7 +3223,15 @@ class ConstrainedLocalReplanner:
             return True
         return not self._path_segment_blocked(path, relaxed_blocked, blocked_idx)
 
-    def _build_branch_avoidance_path(self, nominal_path, dynamic_blocked, start_cell, dg, now_sec=None):
+    def _build_branch_avoidance_path(
+        self,
+        nominal_path,
+        dynamic_blocked,
+        start_cell,
+        dg,
+        now_sec=None,
+        points_map=None,
+    ):
         if len(nominal_path) < 2:
             return None, None
 
@@ -3226,7 +3242,9 @@ class ConstrainedLocalReplanner:
             start_cell,
             dg,
             max_check_m=self.avoidance_trigger_ahead_m,
-            include_pointcloud=self.use_pointcloud_avoidance_trigger,
+            include_pointcloud=self.use_pointcloud_avoidance_trigger or bool(points_map),
+            points_map=points_map,
+            point_margin_m=self.obstacle_block_margin_m + self.avoidance_trigger_margin_m,
         )
         if blocked_idx is None:
             return None, None
@@ -3439,6 +3457,8 @@ class ConstrainedLocalReplanner:
             dg,
             max_check_m=self.avoidance_trigger_ahead_m,
             include_pointcloud=direct_points_enabled,
+            points_map=dynamic_points_map if direct_points_enabled else None,
+            point_margin_m=self.obstacle_block_margin_m + self.avoidance_trigger_margin_m,
         )
         if self._should_ignore_near_goal_block(nominal_path, blocked_idx, start_cell, dg):
             rospy.loginfo_throttle(
@@ -3456,6 +3476,9 @@ class ConstrainedLocalReplanner:
             start_cell,
             dg,
             now_sec=stamp.to_sec(),
+            # Use the same dynamic point source that triggered direct overlap so
+            # near-goal tail ignores and branching start from a consistent index.
+            points_map=dynamic_points_map if direct_points_enabled else None,
         )
         if avoid_path is None:
             rospy.logwarn_throttle(

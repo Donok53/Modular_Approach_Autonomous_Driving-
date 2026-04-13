@@ -116,7 +116,7 @@
   <arg name="teb_min_obstacle_dist_m" default="0.14"/>
   <arg name="teb_inflation_dist_m" default="0.24"/>
   <arg name="teb_weight_viapoint" default="60.0"/>
-  <arg name="teb_max_vel_x_backwards_mps" default="0.00"/>
+  <arg name="teb_max_vel_x_backwards_mps" default="0.05"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
   <arg name="teb_acc_lim_theta_rps2" default="0.60"/>
   <arg name="teb_weight_forward_drive" default="8000.0"/>
@@ -180,8 +180,8 @@
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
-  <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
-  <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
+  <arg name="near_goal_block_ignore_distance_m" default="1.20"/>
+  <arg name="near_goal_tail_block_ignore_distance_m" default="0.60"/>
   <arg name="near_goal_block_ignore_after_avoidance_s" default="1.0"/>
   <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
   <arg name="debug_avoidance_logging" default="true"/>
