@@ -23,6 +23,8 @@
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="global_path_topic" default="/astar/path"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+  <arg name="enable_tracked_objects_marker_viz" default="true"/>
+  <arg name="tracked_objects_marker_topic" default="/perception/tracked_objects_markers"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
@@ -321,6 +323,13 @@
       <param name="pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
       <param name="recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+    </node>
+  </group>
+
+  <group if="$(arg enable_tracked_objects_marker_viz)">
+    <node pkg="dynamic_window_approach" type="tracked_objects_marker_viz.py" name="tracked_objects_marker_viz" output="screen" respawn="false">
+      <param name="input_topic" value="$(arg tracked_objects_topic)"/>
+      <param name="output_topic" value="$(arg tracked_objects_marker_topic)"/>
     </node>
   </group>
 

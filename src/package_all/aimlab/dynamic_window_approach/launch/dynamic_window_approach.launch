@@ -57,6 +57,8 @@
     <arg name="travel_history_topic" default="/planning/travel_history"/>
     <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
     <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+    <arg name="enable_tracked_objects_marker_viz" default="true"/>
+    <arg name="tracked_objects_marker_topic" default="/perception/tracked_objects_markers"/>
     <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
     <arg name="enable_cloud_tracker" default="true"/>
     <arg name="enable_dynamic_risk_manager" default="true"/>
@@ -256,6 +258,13 @@
             <param name="pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
             <param name="pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
             <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+        </node>
+    </group>
+
+    <group if="$(arg enable_tracked_objects_marker_viz)">
+        <node pkg="dynamic_window_approach" type="tracked_objects_marker_viz.py" name="tracked_objects_marker_viz" output="screen" respawn="false">
+            <param name="input_topic" value="$(arg tracked_objects_topic)"/>
+            <param name="output_topic" value="$(arg tracked_objects_marker_topic)"/>
         </node>
     </group>
 

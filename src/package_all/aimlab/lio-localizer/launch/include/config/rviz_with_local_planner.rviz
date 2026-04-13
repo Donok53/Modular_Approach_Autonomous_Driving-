@@ -430,12 +430,22 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: false
+      Enabled: true
       Marker Topic: /planning/recognized_obstacles
       Name: recognized_obstacles
       Namespaces: {}
       Queue Size: 20
-      Value: false
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /perception/tracked_objects_markers
+      Name: tracked_objects
+      Namespaces:
+        boxes: true
+        labels: true
+        velocity: true
+      Queue Size: 20
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /planning/blocking_obstacles
@@ -452,12 +462,12 @@ Visualization Manager:
       Queue Size: 20
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /planning/global_obstacle_overlay_boxes
       Name: global_obstacle_overlay_boxes
       Namespaces: {}
       Queue Size: 20
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
