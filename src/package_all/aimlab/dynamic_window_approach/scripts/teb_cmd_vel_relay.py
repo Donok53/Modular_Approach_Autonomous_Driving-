@@ -1321,6 +1321,23 @@ class TebCmdVelRelay(object):
             and not self.avoidance_path_active
         )
 
+    def _is_near_goal_short_local_segment_active(self):
+        if (
+            self.local_path_pose_count <= 0
+            or self.local_path_pose_count > self.final_path_pose_threshold
+        ):
+            return False
+        if not math.isfinite(self.local_path_remaining_m):
+            return False
+        goal_distance_m = self._final_goal_distance_m()
+        if not math.isfinite(goal_distance_m):
+            return False
+        near_goal_window_m = max(
+            self.final_brake_distance_m,
+            self.ignore_local_hold_near_goal_distance_m,
+        )
+        return goal_distance_m <= near_goal_window_m
+
     def _final_goal_distance_m(self):
         if (not self.have_odom) or (not self.have_final_goal):
             return float("inf")
@@ -1342,7 +1359,10 @@ class TebCmdVelRelay(object):
 
     def _is_final_goal_brake_active(self):
         if (
-            self._is_final_path_segment_active()
+            (
+                self._is_final_path_segment_active()
+                or self._is_near_goal_short_local_segment_active()
+            )
             and math.isfinite(self.local_path_remaining_m)
             and self.local_path_remaining_m <= self.final_brake_distance_m
         ):
@@ -1361,7 +1381,10 @@ class TebCmdVelRelay(object):
     def _is_terminal_goal_stop_active(self):
         stop_distance_m = self._terminal_goal_stop_distance_m()
         if (
-            self._is_final_path_segment_active()
+            (
+                self._is_final_path_segment_active()
+                or self._is_near_goal_short_local_segment_active()
+            )
             and math.isfinite(self.local_path_remaining_m)
             and self.local_path_remaining_m <= stop_distance_m
         ):
