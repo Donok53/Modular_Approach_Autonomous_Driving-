@@ -18,8 +18,8 @@ lio_localizer:
 
   
   # Initial pose (x, y, z, roll, pitch, yaw)
-  cfg_use_initial_pose_setup: False
-  cfg_initial_pose_m_deg: [87.0, -111.2, 0, 0, 0, -72] 
+  cfg_use_initial_pose_setup: True
+  cfg_initial_pose_m_deg: [0.0, 0.0, 0.0, 0, 0, 160.6]
 
   # Frames
   lidarFrame: "os_lidar"

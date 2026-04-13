@@ -269,6 +269,8 @@
   <arg name="cloud_tracker_pedestrian_dynamic_min_age" default="2"/>
   <arg name="cloud_tracker_recent_dynamic_hold_s" default="1.5"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
+  <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
+  <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -321,6 +323,7 @@
     <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
       <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <param name="odom_topic" value="$(arg planning_pose_topic)"/>
+      <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <param name="output_topic" value="$(arg tracked_objects_topic)"/>
       <param name="max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
       <param name="vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
@@ -330,6 +333,10 @@
       <param name="pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
       <param name="recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <param name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
+      <param name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>
+      <param name="free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
+      <param name="free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
     </node>
   </group>
 

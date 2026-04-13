@@ -270,6 +270,8 @@
   <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" default="0.08"/>
   <arg name="cloud_tracker_pedestrian_dynamic_min_age" default="2"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
+  <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
+  <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -604,6 +606,8 @@
       <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
+      <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
@@ -792,6 +796,8 @@
       <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
+      <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>

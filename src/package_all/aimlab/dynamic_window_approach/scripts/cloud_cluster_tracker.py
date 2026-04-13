@@ -6,6 +6,7 @@ import math
 import rospy
 import tf.transformations as transformations
 from nav_msgs.msg import Odometry
+from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 
@@ -17,6 +18,9 @@ class CloudClusterTracker:
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.odom_topic = rospy.get_param("~odom_topic", "/lio_localizer/odometry/optimization")
         self.output_topic = rospy.get_param("~output_topic", "/perception/tracked_objects")
+        self.drivable_grid_topic = rospy.get_param(
+            "~drivable_grid_topic", "/lio_sam/drivable_area/grid"
+        )
 
         self.min_z = float(rospy.get_param("~min_z", -0.4))
         self.max_z = float(rospy.get_param("~max_z", 1.7))
@@ -78,23 +82,40 @@ class CloudClusterTracker:
         self.recent_dynamic_hold_s = max(
             0.0, float(rospy.get_param("~recent_dynamic_hold_s", 1.5))
         )
+        self.known_map_subtraction_enabled = bool(
+            rospy.get_param("~known_map_subtraction_enabled", True)
+        )
+        self.known_map_subtraction_radius_m = max(
+            0.0, float(rospy.get_param("~known_map_subtraction_radius_m", 0.30))
+        )
+        self.free_space_support_radius_m = max(
+            0.0, float(rospy.get_param("~free_space_support_radius_m", 0.35))
+        )
+        self.free_space_support_min_cells = max(
+            1, int(rospy.get_param("~free_space_support_min_cells", 3))
+        )
 
         self.odom_x = 0.0
         self.odom_y = 0.0
         self.odom_yaw = 0.0
         self.have_odom = False
+        self.drivable_grid = None
 
         self.next_track_id = 1
         self.tracks = {}
 
         self.pub_tracks = rospy.Publisher(self.output_topic, TrackedObjectArray, queue_size=2)
         self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
+        self.sub_drivable = rospy.Subscriber(
+            self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3
+        )
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s out=%s dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
             self.pointcloud_topic,
             self.odom_topic,
+            self.drivable_grid_topic,
             self.output_topic,
             self.dynamic_min_age,
             self.pedestrian_dynamic_min_age,
@@ -102,6 +123,10 @@ class CloudClusterTracker:
             self.dynamic_min_displacement_m,
             self.pedestrian_dynamic_min_displacement_m,
             self.recent_dynamic_hold_s,
+            "on" if self.known_map_subtraction_enabled else "off",
+            self.known_map_subtraction_radius_m,
+            self.free_space_support_radius_m,
+            self.free_space_support_min_cells,
         )
 
     def odom_callback(self, msg):
@@ -112,12 +137,78 @@ class CloudClusterTracker:
         self.odom_yaw = transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
         self.have_odom = True
 
+    def drivable_grid_callback(self, msg):
+        self.drivable_grid = msg
+
     def _local_to_map(self, x, y):
         c = math.cos(self.odom_yaw)
         s = math.sin(self.odom_yaw)
         mx = self.odom_x + c * x - s * y
         my = self.odom_y + s * x + c * y
         return mx, my
+
+    @staticmethod
+    def _world_to_grid(g, x, y):
+        res = float(g.info.resolution)
+        gx = int(math.floor((float(x) - float(g.info.origin.position.x)) / res))
+        gy = int(math.floor((float(y) - float(g.info.origin.position.y)) / res))
+        return gx, gy
+
+    @staticmethod
+    def _in_bounds(g, gx, gy):
+        return 0 <= gx < int(g.info.width) and 0 <= gy < int(g.info.height)
+
+    def _grid_cell_is_drivable_free(self, g, gx, gy):
+        if not self._in_bounds(g, gx, gy):
+            return False
+        idx = gy * int(g.info.width) + gx
+        return int(g.data[idx]) == 0
+
+    def _cluster_overlaps_known_map_obstacle(self, cluster):
+        if (not self.known_map_subtraction_enabled) or self.drivable_grid is None:
+            return False
+
+        g = self.drivable_grid
+        margin_m = max(0.0, self.known_map_subtraction_radius_m)
+        min_x = float(cluster["min_x"]) - margin_m
+        max_x = float(cluster["max_x"]) + margin_m
+        min_y = float(cluster["min_y"]) - margin_m
+        max_y = float(cluster["max_y"]) + margin_m
+        gx0, gy0 = self._world_to_grid(g, min_x, min_y)
+        gx1, gy1 = self._world_to_grid(g, max_x, max_y)
+        saw_in_bounds = False
+        for gy in range(min(gy0, gy1), max(gy0, gy1) + 1):
+            for gx in range(min(gx0, gx1), max(gx0, gx1) + 1):
+                if not self._in_bounds(g, gx, gy):
+                    continue
+                saw_in_bounds = True
+                if self._grid_cell_is_drivable_free(g, gx, gy):
+                    continue
+                return True
+        return not saw_in_bounds
+
+    def _pose_has_free_space_support(self, x, y):
+        if (not self.known_map_subtraction_enabled) or self.drivable_grid is None:
+            return True
+
+        g = self.drivable_grid
+        gx, gy = self._world_to_grid(g, x, y)
+        if not self._in_bounds(g, gx, gy):
+            return False
+
+        radius_cells = int(
+            math.ceil(self.free_space_support_radius_m / float(g.info.resolution))
+        )
+        free_cells = 0
+        for ny in range(gy - radius_cells, gy + radius_cells + 1):
+            for nx in range(gx - radius_cells, gx + radius_cells + 1):
+                if not self._in_bounds(g, nx, ny):
+                    continue
+                if self._grid_cell_is_drivable_free(g, nx, ny):
+                    free_cells += 1
+                    if free_cells >= self.free_space_support_min_cells:
+                        return True
+        return False
 
     def _extract_clusters(self, msg):
         if not self.have_odom:
@@ -186,15 +277,22 @@ class CloudClusterTracker:
                 continue
             cx = sum(xs) / float(len(xs))
             cy = sum(ys) / float(len(ys))
-            clusters.append(
-                {
-                    "x": cx,
-                    "y": cy,
-                    "size_x": max(0.2, max_x - min_x + self.cell_size_m),
-                    "size_y": max(0.2, max_y - min_y + self.cell_size_m),
-                    "score": min(1.0, len(comp) / 20.0),
-                }
-            )
+            cluster = {
+                "x": cx,
+                "y": cy,
+                "min_x": min_x,
+                "max_x": max_x,
+                "min_y": min_y,
+                "max_y": max_y,
+                "size_x": max(0.2, max_x - min_x + self.cell_size_m),
+                "size_y": max(0.2, max_y - min_y + self.cell_size_m),
+                "score": min(1.0, len(comp) / 20.0),
+            }
+            if self._cluster_overlaps_known_map_obstacle(cluster):
+                continue
+            if not self._pose_has_free_space_support(cluster["x"], cluster["y"]):
+                continue
+            clusters.append(cluster)
         return clusters
 
     def _associate_and_update(self, clusters, now_sec):
@@ -346,6 +444,8 @@ class CloudClusterTracker:
                 and (stamp_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
             )
             if (not self.publish_static) and effective_speed < static_speed_thresh and not recent_dynamic:
+                continue
+            if not self._pose_has_free_space_support(t["x"], t["y"]):
                 continue
             obj = TrackedObject()
             obj.id = int(tid)
