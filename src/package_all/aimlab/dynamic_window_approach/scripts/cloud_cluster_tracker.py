@@ -112,11 +112,16 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
             self.output_topic,
+            self.max_range_m,
+            self.downsample,
+            self.cell_size_m,
+            self.min_points_per_cell,
+            self.min_cluster_cells,
             self.dynamic_min_age,
             self.pedestrian_dynamic_min_age,
             self.position_jitter_m,
@@ -255,28 +260,28 @@ class CloudClusterTracker:
             if len(comp) < self.min_cluster_cells:
                 continue
 
-            xs = []
-            ys = []
             min_x = 1e9
             min_y = 1e9
             max_x = -1e9
             max_y = -1e9
             weight_sum = 0
+            weighted_x_sum = 0.0
+            weighted_y_sum = 0.0
             for (ix, iy) in comp:
                 cx = (ix + 0.5) * self.cell_size_m
                 cy = (iy + 0.5) * self.cell_size_m
                 w = float(cells.get((ix, iy), 1))
-                xs.append(cx)
-                ys.append(cy)
                 min_x = min(min_x, cx)
                 min_y = min(min_y, cy)
                 max_x = max(max_x, cx)
                 max_y = max(max_y, cy)
                 weight_sum += w
+                weighted_x_sum += cx * w
+                weighted_y_sum += cy * w
             if weight_sum <= 0:
                 continue
-            cx = sum(xs) / float(len(xs))
-            cy = sum(ys) / float(len(ys))
+            cx = weighted_x_sum / weight_sum
+            cy = weighted_y_sum / weight_sum
             cluster = {
                 "x": cx,
                 "y": cy,

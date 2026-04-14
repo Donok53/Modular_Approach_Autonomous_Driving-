@@ -10,6 +10,7 @@
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="cloud_tracker_pointcloud_topic" default="$(eval '/lio_sam/deskew/cloud_deskewed' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/cloud_deskewed')"/>
   <arg name="use_drivable_grid" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
@@ -266,6 +267,10 @@
   <arg name="cloud_tracker_max_range_m" default="25.0"/>
   <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
   <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
+  <arg name="cloud_tracker_downsample" default="2"/>
+  <arg name="cloud_tracker_cell_size_m" default="0.25"/>
+  <arg name="cloud_tracker_min_points_per_cell" default="2"/>
+  <arg name="cloud_tracker_min_cluster_cells" default="3"/>
   <arg name="cloud_tracker_vel_alpha" default="0.25"/>
   <arg name="cloud_tracker_static_speed_thresh_mps" default="0.12"/>
   <arg name="cloud_tracker_dynamic_min_age" default="3"/>
@@ -446,6 +451,7 @@
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
@@ -604,6 +610,10 @@
       <arg name="cloud_tracker_max_range_m" value="$(arg cloud_tracker_max_range_m)"/>
       <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
       <arg name="cloud_tracker_track_timeout_s" value="$(arg cloud_tracker_track_timeout_s)"/>
+      <arg name="cloud_tracker_downsample" value="$(arg cloud_tracker_downsample)"/>
+      <arg name="cloud_tracker_cell_size_m" value="$(arg cloud_tracker_cell_size_m)"/>
+      <arg name="cloud_tracker_min_points_per_cell" value="$(arg cloud_tracker_min_points_per_cell)"/>
+      <arg name="cloud_tracker_min_cluster_cells" value="$(arg cloud_tracker_min_cluster_cells)"/>
       <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
       <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
@@ -661,6 +671,7 @@
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="/move_base/filtered_obstacles"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="global_path_topic" value="/astar/path"/>
@@ -796,6 +807,10 @@
       <arg name="cloud_tracker_max_range_m" value="$(arg cloud_tracker_max_range_m)"/>
       <arg name="cloud_tracker_max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
       <arg name="cloud_tracker_track_timeout_s" value="$(arg cloud_tracker_track_timeout_s)"/>
+      <arg name="cloud_tracker_downsample" value="$(arg cloud_tracker_downsample)"/>
+      <arg name="cloud_tracker_cell_size_m" value="$(arg cloud_tracker_cell_size_m)"/>
+      <arg name="cloud_tracker_min_points_per_cell" value="$(arg cloud_tracker_min_points_per_cell)"/>
+      <arg name="cloud_tracker_min_cluster_cells" value="$(arg cloud_tracker_min_cluster_cells)"/>
       <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
       <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>

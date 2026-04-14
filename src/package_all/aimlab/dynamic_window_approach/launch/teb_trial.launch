@@ -19,6 +19,7 @@
   <arg name="pose_filter_turning_yaw_error_deg" default="10.0"/>
   <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.18"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="cloud_tracker_pointcloud_topic" default="$(arg pointcloud_topic)"/>
   <arg name="obstacle_pointcloud_topic" default="/move_base/filtered_obstacles"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="global_path_topic" default="/astar/path"/>
@@ -264,6 +265,10 @@
   <arg name="cloud_tracker_max_range_m" default="25.0"/>
   <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
   <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
+  <arg name="cloud_tracker_downsample" default="2"/>
+  <arg name="cloud_tracker_cell_size_m" default="0.25"/>
+  <arg name="cloud_tracker_min_points_per_cell" default="2"/>
+  <arg name="cloud_tracker_min_cluster_cells" default="3"/>
   <arg name="cloud_tracker_vel_alpha" default="0.25"/>
   <arg name="cloud_tracker_static_speed_thresh_mps" default="0.12"/>
   <arg name="cloud_tracker_dynamic_min_age" default="3"/>
@@ -323,13 +328,17 @@
 
   <group if="$(arg enable_cloud_tracker)">
     <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
-      <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <param name="pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <param name="odom_topic" value="$(arg planning_pose_topic)"/>
       <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <param name="output_topic" value="$(arg tracked_objects_topic)"/>
       <param name="max_range_m" value="$(arg cloud_tracker_max_range_m)"/>
       <param name="max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
       <param name="track_timeout_s" value="$(arg cloud_tracker_track_timeout_s)"/>
+      <param name="downsample" value="$(arg cloud_tracker_downsample)"/>
+      <param name="cell_size_m" value="$(arg cloud_tracker_cell_size_m)"/>
+      <param name="min_points_per_cell" value="$(arg cloud_tracker_min_points_per_cell)"/>
+      <param name="min_cluster_cells" value="$(arg cloud_tracker_min_cluster_cells)"/>
       <param name="vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
       <param name="static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
       <param name="dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
