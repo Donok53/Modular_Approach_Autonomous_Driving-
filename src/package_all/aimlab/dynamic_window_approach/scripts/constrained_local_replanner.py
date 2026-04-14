@@ -288,6 +288,9 @@ class ConstrainedLocalReplanner:
         self.tracked_object_virtual_obstacles_enabled = bool(
             rospy.get_param("~tracked_object_virtual_obstacles_enabled", False)
         )
+        self.tracked_object_avoidance_enabled = bool(
+            rospy.get_param("~tracked_object_avoidance_enabled", False)
+        )
         self.tracked_object_virtual_max_range_m = max(
             0.5, float(rospy.get_param("~tracked_object_virtual_max_range_m", 4.0))
         )
@@ -610,9 +613,10 @@ class ConstrainedLocalReplanner:
             )
         if self.tracked_object_virtual_obstacles_enabled or self.near_field_object_memory_enabled:
             rospy.loginfo(
-                "constrained_local_replanner tracked objects | topic=%s virtual=%s range=%.1fm horizon=%.1fs step=%.2fs min_speed=%.2fmps margin=%.2fm memory=%s ttl=%.1fs near_range=%.1fm",
+                "constrained_local_replanner tracked objects | topic=%s virtual=%s avoidance=%s range=%.1fm horizon=%.1fs step=%.2fs min_speed=%.2fmps margin=%.2fm memory=%s ttl=%.1fs near_range=%.1fm",
                 self.tracked_objects_topic,
                 "on" if self.tracked_object_virtual_obstacles_enabled else "off",
+                "on" if self.tracked_object_avoidance_enabled else "off",
                 self.tracked_object_virtual_max_range_m,
                 self.tracked_object_prediction_horizon_s,
                 self.tracked_object_prediction_step_s,
@@ -1492,8 +1496,9 @@ class ConstrainedLocalReplanner:
             self.static_obstacle_memory_merge_radius_m,
         )
 
-    def _combined_dynamic_obstacle_points(self):
-        if not self.tracked_object_points_map:
+    def _combined_dynamic_obstacle_points(self, include_tracked=True):
+        tracked_points = self.tracked_object_points_map if include_tracked else []
+        if not tracked_points:
             return list(self.current_obstacle_points_map)
         merge_radius_m = max(
             self.pointcloud_cluster_resolution_m,
@@ -1501,7 +1506,7 @@ class ConstrainedLocalReplanner:
         )
         return self._merge_point_sets(
             self.current_obstacle_points_map,
-            self.tracked_object_points_map,
+            tracked_points,
             merge_radius_m,
         )
 
@@ -2836,16 +2841,26 @@ class ConstrainedLocalReplanner:
                     out[ny][nx] = True
         return out, marked_sources
 
-    def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None):
+    def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None, include_tracked=None):
         # Dynamic avoidance should react to live returns plus short-lived tracked-object memory.
-        dynamic_points = self._combined_dynamic_obstacle_points()
+        if include_tracked is None:
+            include_tracked = (
+                self.tracked_object_virtual_obstacles_enabled
+                and self.tracked_object_avoidance_enabled
+            )
+        dynamic_points = self._combined_dynamic_obstacle_points(
+            include_tracked=include_tracked
+        )
         return self._overlay_pointcloud_obstacles(
             blocked,
             dg,
             keep_cells=keep_cells,
             enabled=(
                 self.use_pointcloud_avoidance_trigger
-                or self.tracked_object_virtual_obstacles_enabled
+                or (
+                    self.tracked_object_virtual_obstacles_enabled
+                    and include_tracked
+                )
             ),
             margin_m=self.obstacle_block_margin_m,
             points_map=dynamic_points,
@@ -3565,11 +3580,18 @@ class ConstrainedLocalReplanner:
             )
             return "avoidance" if self.avoidance_active else "clear"
 
-        dynamic_points_map = self._combined_dynamic_obstacle_points()
+        tracked_for_avoidance = (
+            self.tracked_object_virtual_obstacles_enabled
+            and self.tracked_object_avoidance_enabled
+        )
+        dynamic_points_map = self._combined_dynamic_obstacle_points(
+            include_tracked=tracked_for_avoidance
+        )
         dynamic_blocked, obstacle_count = self._overlay_dynamic_obstacles(
             base_blocked,
             dg,
             keep_cells=(start_cell, goal_cell),
+            include_tracked=tracked_for_avoidance,
         )
         predicted_overlap = self._path_blocked_ahead(
             nominal_path,
@@ -3581,7 +3603,7 @@ class ConstrainedLocalReplanner:
         direct_points_overlap = False
         direct_points_enabled = (
             self.use_pointcloud_avoidance_trigger
-            or self.tracked_object_virtual_obstacles_enabled
+            or tracked_for_avoidance
         )
         if (not predicted_overlap) and direct_points_enabled:
             direct_points_overlap = self._path_blocked_by_obstacles(
@@ -3593,11 +3615,12 @@ class ConstrainedLocalReplanner:
 
         clustered_point_count = self.obstacle_cluster_count
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} direct_points_enabled={} direct_points_overlap={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} direct_points_enabled={} tracked_avoidance={} direct_points_overlap={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
                 "on" if direct_points_enabled else "off",
+                "on" if tracked_for_avoidance else "off",
                 "yes" if direct_points_overlap else "no",
                 self.obstacle_raw_point_count,
                 clustered_point_count,

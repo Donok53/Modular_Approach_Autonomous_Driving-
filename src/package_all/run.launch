@@ -212,6 +212,7 @@
   <arg name="local_blind_zone_guard_lookahead_m" default="1.0"/>
   <arg name="local_blind_zone_guard_heading_deadband_deg" default="12.0"/>
   <arg name="tracked_object_virtual_obstacles_enabled" default="true"/>
+  <arg name="tracked_object_avoidance_enabled" default="false"/>
   <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
   <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
   <arg name="tracked_object_prediction_step_s" default="0.3"/>
@@ -568,6 +569,7 @@
       <arg name="local_blind_zone_guard_lookahead_m" value="$(arg local_blind_zone_guard_lookahead_m)"/>
       <arg name="local_blind_zone_guard_heading_deadband_deg" value="$(arg local_blind_zone_guard_heading_deadband_deg)"/>
       <arg name="tracked_object_virtual_obstacles_enabled" value="$(arg tracked_object_virtual_obstacles_enabled)"/>
+      <arg name="tracked_object_avoidance_enabled" value="$(arg tracked_object_avoidance_enabled)"/>
       <arg name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
       <arg name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
       <arg name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
@@ -766,6 +768,7 @@
       <arg name="local_blind_zone_guard_lookahead_m" value="$(arg local_blind_zone_guard_lookahead_m)"/>
       <arg name="local_blind_zone_guard_heading_deadband_deg" value="$(arg local_blind_zone_guard_heading_deadband_deg)"/>
       <arg name="tracked_object_virtual_obstacles_enabled" value="$(arg tracked_object_virtual_obstacles_enabled)"/>
+      <arg name="tracked_object_avoidance_enabled" value="$(arg tracked_object_avoidance_enabled)"/>
       <arg name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
       <arg name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
       <arg name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
