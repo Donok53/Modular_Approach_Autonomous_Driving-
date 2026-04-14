@@ -64,6 +64,8 @@
   <arg name="use_pointcloud_avoidance_trigger" default="false"/>
   <arg name="avoidance_trigger_margin_m" default="0.18"/>
   <arg name="avoidance_trigger_ahead_m" default="4.0"/>
+  <arg name="forward_path_obstacle_filter_enabled" default="true"/>
+  <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
   <arg name="risk_block_confirm_cells" default="2"/>
   <arg name="pointcloud_block_confirm_points" default="2"/>
   <arg name="obstacle_block_margin_m" default="0.24"/>
@@ -547,6 +549,8 @@
       <param name="obstacle_block_margin_m" value="$(arg obstacle_block_margin_m)"/>
       <param name="avoidance_trigger_margin_m" value="$(arg avoidance_trigger_margin_m)"/>
       <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+      <param name="forward_path_obstacle_filter_enabled" value="$(arg forward_path_obstacle_filter_enabled)"/>
+      <param name="forward_path_obstacle_rear_tolerance_m" value="$(arg forward_path_obstacle_rear_tolerance_m)"/>
       <param name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
       <param name="pointcloud_block_confirm_points" value="$(arg pointcloud_block_confirm_points)"/>
       <param name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>

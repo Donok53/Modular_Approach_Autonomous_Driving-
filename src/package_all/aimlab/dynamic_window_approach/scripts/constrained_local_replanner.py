@@ -374,6 +374,13 @@ class ConstrainedLocalReplanner:
         self.avoidance_trigger_ahead_m = max(
             1.0, float(rospy.get_param("~avoidance_trigger_ahead_m", 8.0))
         )
+        self.forward_path_obstacle_filter_enabled = bool(
+            rospy.get_param("~forward_path_obstacle_filter_enabled", True)
+        )
+        self.forward_path_obstacle_rear_tolerance_m = max(
+            0.0,
+            float(rospy.get_param("~forward_path_obstacle_rear_tolerance_m", 0.05)),
+        )
         self.risk_block_confirm_cells = max(
             1, int(rospy.get_param("~risk_block_confirm_cells", 2))
         )
@@ -1973,13 +1980,6 @@ class ConstrainedLocalReplanner:
                         ny = y + dy
                         if 0 <= nx < w and 0 <= ny < h:
                             out[ny][nx] = True
-        out, _ = self._overlay_pointcloud_obstacles(
-            out,
-            dg,
-            keep_cells=None,
-            enabled=self.use_pointcloud_static_blocking,
-            margin_m=self.pointcloud_static_block_margin_m,
-        )
         return out
 
     def _nearest_free_cell(self, blocked, cell):
@@ -2851,7 +2851,16 @@ class ConstrainedLocalReplanner:
                     out[ny][nx] = True
         return out, marked_sources
 
-    def _overlay_dynamic_obstacles(self, blocked, dg, keep_cells=None, include_tracked=None):
+    def _overlay_dynamic_obstacles(
+        self,
+        blocked,
+        dg,
+        keep_cells=None,
+        include_tracked=None,
+        path=None,
+        start_cell=None,
+        max_check_m=None,
+    ):
         # Dynamic avoidance should react to live returns plus short-lived tracked-object memory.
         if include_tracked is None:
             include_tracked = (
@@ -2861,6 +2870,14 @@ class ConstrainedLocalReplanner:
         dynamic_points = self._combined_dynamic_obstacle_points(
             include_tracked=include_tracked
         )
+        if path is not None and start_cell is not None:
+            dynamic_points = self._filter_path_relevant_obstacle_points(
+                path,
+                dg,
+                start_cell,
+                dynamic_points,
+                max_check_m=max_check_m,
+            )
         return self._overlay_pointcloud_obstacles(
             blocked,
             dg,
@@ -2875,6 +2892,72 @@ class ConstrainedLocalReplanner:
             margin_m=self.obstacle_block_margin_m,
             points_map=dynamic_points,
         )
+
+    def _path_forward_unit_vector(self, path, dg, start_cell):
+        if not path:
+            return None
+
+        start_idx = self._nearest_path_cell_index(path, start_cell)
+        if start_idx >= len(path):
+            return None
+
+        prev_x = float(self.odom_x)
+        prev_y = float(self.odom_y)
+        for idx in range(start_idx, len(path)):
+            wx, wy = self._grid_to_world(dg, path[idx][0], path[idx][1])
+            dx = float(wx) - prev_x
+            dy = float(wy) - prev_y
+            seg_len = math.hypot(dx, dy)
+            if seg_len > 1e-6:
+                return dx / seg_len, dy / seg_len
+            prev_x = float(wx)
+            prev_y = float(wy)
+
+        return math.cos(self.odom_yaw), math.sin(self.odom_yaw)
+
+    def _filter_path_relevant_obstacle_points(
+        self,
+        path,
+        dg,
+        start_cell,
+        points_map,
+        max_check_m=None,
+    ):
+        if (not points_map) or (not self.forward_path_obstacle_filter_enabled):
+            return list(points_map or [])
+
+        forward = self._path_forward_unit_vector(path, dg, start_cell)
+        if forward is None:
+            return list(points_map)
+        ux, uy = forward
+
+        local_forward_x, _local_forward_y = self._world_to_local(
+            self.odom_x + ux,
+            self.odom_y + uy,
+        )
+        if local_forward_x <= 0.1:
+            return list(points_map)
+
+        far_limit_m = None
+        if max_check_m is not None:
+            far_limit_m = (
+                float(max_check_m)
+                + self.path_blocking_radius_m
+                + self.obstacle_block_margin_m
+                + self.avoidance_trigger_margin_m
+            )
+
+        filtered = []
+        for wx, wy in points_map:
+            progress_m = (
+                (float(wx) - self.odom_x) * ux + (float(wy) - self.odom_y) * uy
+            )
+            if progress_m < (-self.forward_path_obstacle_rear_tolerance_m):
+                continue
+            if far_limit_m is not None and progress_m > far_limit_m:
+                continue
+            filtered.append((float(wx), float(wy)))
+        return filtered
 
     def _path_blocked_ahead(self, path, blocked, start_cell, grid_resolution_m, max_check_m=None):
         if not path:
@@ -2919,9 +3002,26 @@ class ConstrainedLocalReplanner:
         dy = py - proj_y
         return dx * dx + dy * dy
 
-    def _path_blocked_by_obstacles(self, path, dg, start_cell, points_map=None):
+    def _path_blocked_by_obstacles(
+        self,
+        path,
+        dg,
+        start_cell,
+        points_map=None,
+        max_check_m=None,
+    ):
         obstacle_points = self.obstacle_points_map if points_map is None else points_map
         if not path or not obstacle_points:
+            return False
+
+        obstacle_points = self._filter_path_relevant_obstacle_points(
+            path,
+            dg,
+            start_cell,
+            obstacle_points,
+            max_check_m=max_check_m,
+        )
+        if not obstacle_points:
             return False
 
         start_idx = self._nearest_path_cell_index(path, start_cell)
@@ -2950,7 +3050,9 @@ class ConstrainedLocalReplanner:
                     hit_indices.add(obs_idx)
                     if len(hit_indices) >= self.pointcloud_block_confirm_points:
                         return True
-            if remain_m >= self.avoidance_trigger_ahead_m:
+            if max_check_m is not None and remain_m >= max_check_m:
+                break
+            if max_check_m is None and remain_m >= self.avoidance_trigger_ahead_m:
                 break
         return False
 
@@ -2964,6 +3066,16 @@ class ConstrainedLocalReplanner:
         max_check_m=None,
     ):
         if not path or not points_map:
+            return []
+
+        points_map = self._filter_path_relevant_obstacle_points(
+            path,
+            dg,
+            start_cell,
+            points_map,
+            max_check_m=max_check_m,
+        )
+        if not points_map:
             return []
 
         start_idx = self._nearest_path_cell_index(path, start_cell)
@@ -3264,6 +3376,16 @@ class ConstrainedLocalReplanner:
             return None
 
         point_source = self.obstacle_points_map if points_map is None else points_map
+        if not point_source:
+            return None
+
+        point_source = self._filter_path_relevant_obstacle_points(
+            path,
+            dg,
+            start_cell,
+            point_source,
+            max_check_m=max_check_m,
+        )
         if not point_source:
             return None
 
@@ -3602,6 +3724,9 @@ class ConstrainedLocalReplanner:
             dg,
             keep_cells=(start_cell, goal_cell),
             include_tracked=tracked_for_avoidance,
+            path=nominal_path,
+            start_cell=start_cell,
+            max_check_m=self.avoidance_trigger_ahead_m,
         )
         predicted_overlap = self._path_blocked_ahead(
             nominal_path,
@@ -3621,6 +3746,7 @@ class ConstrainedLocalReplanner:
                 dg,
                 start_cell,
                 points_map=dynamic_points_map,
+                max_check_m=self.avoidance_trigger_ahead_m,
             )
 
         clustered_point_count = self.obstacle_cluster_count
