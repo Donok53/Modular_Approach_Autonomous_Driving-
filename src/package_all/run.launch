@@ -92,6 +92,7 @@
   <arg name="teb_blind_zone_turn_guard_min_points" default="2"/>
   <arg name="teb_blind_zone_front_hold_min_points" default="3"/>
   <arg name="teb_blind_zone_turn_guard_linear_cap_mps" default="0.12"/>
+  <arg name="teb_blind_zone_turn_recovery_stop_s" default="0.35"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_rear_approach_conservative_enabled" default="true"/>
   <arg name="teb_rear_approach_max_angular_speed" default="0.12"/>
@@ -185,6 +186,7 @@
   <arg name="pointcloud_block_confirm_points" default="2"/>
   <arg name="avoidance_hold_s" default="1.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="10"/>
+  <arg name="blocked_clear_hold_s" default="0.35"/>
   <arg name="avoidance_branch_backtrack_cells" default="2"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
@@ -543,6 +545,7 @@
       <arg name="pointcloud_block_confirm_points" value="$(arg pointcloud_block_confirm_points)"/>
       <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
       <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+      <arg name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
@@ -743,6 +746,7 @@
       <arg name="pointcloud_block_confirm_points" value="$(arg pointcloud_block_confirm_points)"/>
       <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
       <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+      <arg name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
@@ -887,6 +891,7 @@
       <arg name="blind_zone_turn_guard_min_points" value="$(arg teb_blind_zone_turn_guard_min_points)"/>
       <arg name="blind_zone_front_hold_min_points" value="$(arg teb_blind_zone_front_hold_min_points)"/>
       <arg name="blind_zone_turn_guard_linear_cap_mps" value="$(arg teb_blind_zone_turn_guard_linear_cap_mps)"/>
+      <arg name="blind_zone_turn_recovery_stop_s" value="$(arg teb_blind_zone_turn_recovery_stop_s)"/>
       <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
       <arg name="rear_approach_conservative_enabled" value="$(arg teb_rear_approach_conservative_enabled)"/>
       <arg name="rear_approach_max_angular_speed" value="$(arg teb_rear_approach_max_angular_speed)"/>

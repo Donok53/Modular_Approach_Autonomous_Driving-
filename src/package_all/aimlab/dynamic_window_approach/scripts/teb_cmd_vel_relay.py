@@ -147,6 +147,10 @@ class TebCmdVelRelay(object):
             0.0,
             float(rospy.get_param("~blind_zone_turn_guard_linear_cap_mps", 0.12)),
         )
+        self.blind_zone_turn_recovery_stop_s = max(
+            0.0,
+            float(rospy.get_param("~blind_zone_turn_recovery_stop_s", 0.35)),
+        )
         self.near_goal_side_turn_guard_stop_distance_m = max(
             self.final_brake_distance_m,
             self.ignore_local_hold_near_goal_distance_m,
@@ -330,6 +334,8 @@ class TebCmdVelRelay(object):
         self.behavior_speed_limit = float("inf")
         self.behavior_reason = "clear"
         self.last_local_path_time = 0.0
+        self.last_local_path_empty_time = 0.0
+        self.last_local_path_recovery_time = 0.0
         self.local_path_empty = True
         self.local_path_pose_count = 0
         self.local_path_remaining_m = float("inf")
@@ -1145,6 +1151,15 @@ class TebCmdVelRelay(object):
             crawl_speed = min(crawl_speed, self.blind_zone_turn_guard_linear_cap_mps)
         return max(0.0, crawl_speed)
 
+    def _is_recent_local_path_recovery(self, now):
+        if self.blind_zone_turn_recovery_stop_s <= 1e-6:
+            return False
+        if self.last_local_path_recovery_time <= 0.0:
+            return False
+        if now < self.last_local_path_recovery_time:
+            return False
+        return (now - self.last_local_path_recovery_time) <= self.blind_zone_turn_recovery_stop_s
+
     def _avoidance_close_crawl_cmd(self, cmd):
         out = Twist()
         out.linear.x = min(
@@ -1269,9 +1284,15 @@ class TebCmdVelRelay(object):
             self.near_goal_stop_latched = False
 
     def local_path_callback(self, msg):
-        self.last_local_path_time = rospy.get_time()
+        now = rospy.get_time()
+        prev_empty = bool(self.local_path_empty)
+        self.last_local_path_time = now
         self.local_path_pose_count = len(msg.poses)
         self.local_path_empty = len(msg.poses) < 2
+        if self.local_path_empty:
+            self.last_local_path_empty_time = now
+        elif prev_empty and self.last_local_path_empty_time > 0.0:
+            self.last_local_path_recovery_time = now
         self.local_path_remaining_m = float("inf")
         if len(msg.poses) < 2 or (not self.have_odom):
             return
@@ -2143,6 +2164,31 @@ class TebCmdVelRelay(object):
                 "closest_obstacle_dist_m": float(memory["range_m"]),
                 "obstacle_lateral_offset_m": obstacle_y,
                 "summary_text": "TEB relay held the robot stopped because a side obstacle remained inside the blind zone while the avoidance branch had no fresh local path to follow.",
+            }
+
+        if float(cmd.linear.x) > 0.0 and self._is_recent_local_path_recovery(now):
+            self._last_safety_reason = "blind_zone_turn_recovery_stop"
+            rospy.logwarn_throttle(
+                self.log_period_s,
+                "teb_cmd_vel_relay: blind-zone recovery hold | obstacle=(%.2f,%.2f) age=%.2fs recovery=%.2fs cmd(v=%.3f,w=%.3f)",
+                obstacle_x,
+                obstacle_y,
+                age_s,
+                max(0.0, now - self.last_local_path_recovery_time),
+                float(cmd.linear.x),
+                float(cmd.angular.z),
+            )
+            return Twist(), {
+                "event_type": "CONTROL_ACTION_CHANGE",
+                "trigger_reason": "blind_zone_obstacle_memory",
+                "action_taken": "blind_zone_turn_recovery_stop",
+                "avoid_direction": turn_away_direction,
+                "stop_commanded": True,
+                "slowdown_commanded": False,
+                "speed_limit_mps": 0.0,
+                "closest_obstacle_dist_m": float(memory["range_m"]),
+                "obstacle_lateral_offset_m": obstacle_y,
+                "summary_text": "TEB relay briefly held the robot stopped after local-path recovery so it would not immediately jump from replanner hold into a blind-zone-limited forward crawl.",
             }
 
         if float(cmd.linear.x) <= 0.0:
