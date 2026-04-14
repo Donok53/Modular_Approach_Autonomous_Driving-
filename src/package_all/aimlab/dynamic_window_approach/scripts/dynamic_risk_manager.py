@@ -153,6 +153,29 @@ class DynamicRiskManager:
         self.include_static_pedestrians_in_risk_grid = bool(
             rospy.get_param("~include_static_pedestrians_in_risk_grid", True)
         )
+        self.risk_grid_forward_projection_enabled = bool(
+            rospy.get_param("~risk_grid_forward_projection_enabled", True)
+        )
+        self.risk_grid_rear_exclusion_m = max(
+            0.0, float(rospy.get_param("~risk_grid_rear_exclusion_m", 0.20))
+        )
+        self.risk_grid_forward_lateral_m = max(
+            0.1,
+            float(
+                rospy.get_param(
+                    "~risk_grid_forward_lateral_m",
+                    max(self.front_lateral_caution_m, 2.0),
+                )
+            ),
+        )
+        self.pedestrian_risk_grid_forward_lateral_extra_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~pedestrian_risk_grid_forward_lateral_extra_m", 0.60
+                )
+            ),
+        )
         self.static_risk_min_span_m = max(
             0.1, float(rospy.get_param("~static_risk_min_span_m", 1.4))
         )
@@ -652,6 +675,35 @@ class DynamicRiskManager:
             return True
         return False
 
+    def _project_object_to_risk_grid(self, obj, is_dynamic):
+        if (not self.risk_grid_forward_projection_enabled) or (not self.have_odom):
+            return True
+
+        ox = float(obj.pose.position.x)
+        oy = float(obj.pose.position.y)
+        rx, ry = self._world_to_robot(ox, oy)
+        lateral_limit = self.risk_grid_forward_lateral_m
+        if self._is_pedestrian(obj.label):
+            lateral_limit += self.pedestrian_risk_grid_forward_lateral_extra_m
+
+        # Keep objects that are inside or just behind the forward corridor.
+        if rx >= (-self.risk_grid_rear_exclusion_m) and abs(ry) <= lateral_limit:
+            return True
+
+        if not is_dynamic:
+            return False
+
+        # Dynamic objects that will soon cross the forward corridor still belong
+        # in the risk grid even if they are currently lateral to the robot.
+        ovx = float(obj.twist.linear.x)
+        ovy = float(obj.twist.linear.y)
+        rvx = ovx - self.odom_vx
+        rvy = ovy - self.odom_vy
+        rvx_robot, rvy_robot = self._world_vector_to_robot(rvx, rvy)
+        return math.isfinite(
+            self._time_to_cross_path_corridor(rx, ry, rvx_robot, rvy_robot)
+        )
+
     def _build_risk_grid(self):
         if self.grid_msg is None:
             return None
@@ -670,6 +722,8 @@ class DynamicRiskManager:
             is_dynamic = self._is_dynamic_object(obj)
             is_static_pedestrian = (not is_dynamic) and self._is_pedestrian(obj.label)
             if not self._include_object_in_risk_grid(obj, is_dynamic, is_static_pedestrian):
+                continue
+            if not self._project_object_to_risk_grid(obj, is_dynamic):
                 continue
             obj_horizon_s = self._object_prediction_horizon_s(obj)
             steps = max(1, int(math.floor(obj_horizon_s / self.step_s)))

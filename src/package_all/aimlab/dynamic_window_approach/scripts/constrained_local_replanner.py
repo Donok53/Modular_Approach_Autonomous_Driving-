@@ -117,6 +117,18 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        self.grid_only_relaxed_path_blocking_enabled = bool(
+            rospy.get_param("~grid_only_relaxed_path_blocking_enabled", True)
+        )
+        self.grid_only_relaxed_path_blocking_radius_m = max(
+            0.05,
+            float(
+                rospy.get_param(
+                    "~grid_only_relaxed_path_blocking_radius_m",
+                    0.5 * self.robot_width_m + self.footprint_padding_m + 0.02,
+                )
+            ),
+        )
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
@@ -3607,6 +3619,55 @@ class ConstrainedLocalReplanner:
             return True
         return not self._path_segment_blocked(path, relaxed_blocked, blocked_idx)
 
+    @staticmethod
+    def _is_grid_only_blocker_source_summary(summary):
+        if not summary:
+            return False
+        if int(summary.get("grid_occ", 0)) <= 0:
+            return False
+        if str(summary.get("blind_zone", "none")) != "none":
+            return False
+        return (
+            int(summary.get("risk", 0)) <= 0
+            and int(summary.get("pc_current", 0)) <= 0
+            and int(summary.get("pc_memory", 0)) <= 0
+            and int(summary.get("tracked_current", 0)) <= 0
+            and int(summary.get("tracked_memory", 0)) <= 0
+        )
+
+    def _should_ignore_grid_only_nominal_block(
+        self,
+        path,
+        start_cell,
+        dg,
+        rg,
+        source_summary,
+    ):
+        if not self.grid_only_relaxed_path_blocking_enabled:
+            return False
+        if not self._is_grid_only_blocker_source_summary(source_summary):
+            return False
+        if (
+            self.grid_only_relaxed_path_blocking_radius_m + 1e-6
+            >= self.path_blocking_radius_m
+        ):
+            return False
+
+        relaxed_blocked = self._inflate_blocked(
+            dg,
+            rg,
+            radius_override_m=self.grid_only_relaxed_path_blocking_radius_m,
+        )
+        relaxed_idx = self._first_blocked_path_index(
+            path,
+            relaxed_blocked,
+            start_cell,
+            dg,
+            max_check_m=self.lookahead_m,
+            include_pointcloud=False,
+        )
+        return relaxed_idx is None
+
     def _build_branch_avoidance_path(
         self,
         nominal_path,
@@ -4252,6 +4313,7 @@ class ConstrainedLocalReplanner:
                 include_pointcloud=self.use_pointcloud_static_blocking,
             )
             nominal_blocked = blocked_idx is not None
+            source_summary = None
             if nominal_blocked:
                 blocked_reason = "nominal_path_blocked"
                 relaxed_blocked = None
@@ -4301,6 +4363,35 @@ class ConstrainedLocalReplanner:
                         float(blind_zone_conflict["path_heading_deg"]),
                     )
             if nominal_blocked:
+                source_summary = self._build_path_blocker_source_summary(
+                    nominal_path,
+                    dg,
+                    start_cell,
+                    max_check_m=self.lookahead_m,
+                    point_margin_m=self.pointcloud_static_block_margin_m,
+                    rg=rg,
+                    blind_zone_conflict=blind_zone_conflict,
+                )
+                if (
+                    blocked_reason == "nominal_path_blocked"
+                    and self._should_ignore_grid_only_nominal_block(
+                        nominal_path,
+                        start_cell,
+                        dg,
+                        rg,
+                        source_summary,
+                    )
+                ):
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: ignoring grid-only nominal block using relaxed radius (grid_occ=%d radius=%.2f->%.2f)",
+                        int(source_summary.get("grid_occ", 0)),
+                        float(self.path_blocking_radius_m),
+                        float(self.grid_only_relaxed_path_blocking_radius_m),
+                    )
+                    nominal_blocked = False
+
+            if nominal_blocked:
                 blocking_points = []
                 if self.use_pointcloud_static_blocking:
                     blocking_points = self._collect_path_overlap_points(
@@ -4318,15 +4409,16 @@ class ConstrainedLocalReplanner:
                     dg,
                     max_check_m=self.lookahead_m,
                 )
-                source_summary = self._build_path_blocker_source_summary(
-                    nominal_path,
-                    dg,
-                    start_cell,
-                    max_check_m=self.lookahead_m,
-                    point_margin_m=self.pointcloud_static_block_margin_m,
-                    rg=rg,
-                    blind_zone_conflict=blind_zone_conflict,
-                )
+                if source_summary is None:
+                    source_summary = self._build_path_blocker_source_summary(
+                        nominal_path,
+                        dg,
+                        start_cell,
+                        max_check_m=self.lookahead_m,
+                        point_margin_m=self.pointcloud_static_block_margin_m,
+                        rg=rg,
+                        blind_zone_conflict=blind_zone_conflict,
+                    )
                 self._log_blocker_source_summary(
                     "nominal_block",
                     "local",

@@ -139,6 +139,8 @@
   <arg name="footprint_padding_m" default="0.05"/>
   <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.16)"/>
   <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
+  <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
@@ -301,6 +303,10 @@
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
   <arg name="include_static_pedestrians_in_risk_grid" default="true"/>
+  <arg name="risk_grid_forward_projection_enabled" default="true"/>
+  <arg name="risk_grid_rear_exclusion_m" default="0.20"/>
+  <arg name="risk_grid_forward_lateral_m" default="2.00"/>
+  <arg name="pedestrian_risk_grid_forward_lateral_extra_m" default="0.60"/>
   <arg name="static_risk_min_span_m" default="1.4"/>
   <arg name="static_risk_min_area_m2" default="1.2"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
@@ -514,6 +520,8 @@
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <arg name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
+      <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
+      <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
       <arg name="path_tracking_only" value="$(arg path_tracking_only)"/>
       <arg name="path_tracking_speed_cap" value="$(arg path_tracking_speed_cap)"/>
@@ -661,6 +669,10 @@
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
       <arg name="include_static_pedestrians_in_risk_grid" value="$(arg include_static_pedestrians_in_risk_grid)"/>
+      <arg name="risk_grid_forward_projection_enabled" value="$(arg risk_grid_forward_projection_enabled)"/>
+      <arg name="risk_grid_rear_exclusion_m" value="$(arg risk_grid_rear_exclusion_m)"/>
+      <arg name="risk_grid_forward_lateral_m" value="$(arg risk_grid_forward_lateral_m)"/>
+      <arg name="pedestrian_risk_grid_forward_lateral_extra_m" value="$(arg pedestrian_risk_grid_forward_lateral_extra_m)"/>
       <arg name="static_risk_min_span_m" value="$(arg static_risk_min_span_m)"/>
       <arg name="static_risk_min_area_m2" value="$(arg static_risk_min_area_m2)"/>
       <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
@@ -811,6 +823,8 @@
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <arg name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
+      <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
+      <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
       <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
       <arg name="pedestrian_dynamic_speed_thresh_mps" value="$(arg pedestrian_dynamic_speed_thresh_mps)"/>
@@ -868,6 +882,10 @@
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
       <arg name="include_static_pedestrians_in_risk_grid" value="$(arg include_static_pedestrians_in_risk_grid)"/>
+      <arg name="risk_grid_forward_projection_enabled" value="$(arg risk_grid_forward_projection_enabled)"/>
+      <arg name="risk_grid_rear_exclusion_m" value="$(arg risk_grid_rear_exclusion_m)"/>
+      <arg name="risk_grid_forward_lateral_m" value="$(arg risk_grid_forward_lateral_m)"/>
+      <arg name="pedestrian_risk_grid_forward_lateral_extra_m" value="$(arg pedestrian_risk_grid_forward_lateral_extra_m)"/>
       <arg name="static_risk_min_span_m" value="$(arg static_risk_min_span_m)"/>
       <arg name="static_risk_min_area_m2" value="$(arg static_risk_min_area_m2)"/>
       <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
