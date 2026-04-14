@@ -6,9 +6,20 @@
     <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
     <arg name="enable_drivable_area_2d_editor" default="false"/>
     <arg name="rviz_config_file" default="$(find lio_localizer)/launch/include/config/rviz.rviz"/>
+    <arg name="use_internal_initial_pose" default="false"/>
+    <arg name="initial_pose_x_m" default="0.0"/>
+    <arg name="initial_pose_y_m" default="0.0"/>
+    <arg name="initial_pose_z_m" default="0.0"/>
+    <arg name="initial_pose_roll_deg" default="0.0"/>
+    <arg name="initial_pose_pitch_deg" default="0.0"/>
+    <arg name="initial_pose_yaw_deg" default="160.6"/>
     
     <!-- Parameters -->
     <rosparam file="$(arg base_config_file)" command="load" />
+    <param name="lio_localizer/cfg_use_initial_pose_setup" value="$(arg use_internal_initial_pose)"/>
+    <rosparam param="lio_localizer/cfg_initial_pose_m_deg" subst_value="true">
+      [$(arg initial_pose_x_m), $(arg initial_pose_y_m), $(arg initial_pose_z_m), $(arg initial_pose_roll_deg), $(arg initial_pose_pitch_deg), $(arg initial_pose_yaw_deg)]
+    </rosparam>
     <group unless="$(eval str(arg('environment')).lower() == 'outdoor')">
       <rosparam file="$(find lio_localizer)/config/params-env-indoor.yaml" command="load" />
     </group>

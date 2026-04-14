@@ -4,6 +4,13 @@
   <arg name="enable_localizer_drivable_area" default="true"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
   <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
+  <arg name="localizer_use_internal_initial_pose" default="false"/>
+  <arg name="localizer_initial_pose_x_m" default="0.0"/>
+  <arg name="localizer_initial_pose_y_m" default="0.0"/>
+  <arg name="localizer_initial_pose_z_m" default="0.0"/>
+  <arg name="localizer_initial_pose_roll_deg" default="0.0"/>
+  <arg name="localizer_initial_pose_pitch_deg" default="0.0"/>
+  <arg name="localizer_initial_pose_yaw_deg" default="160.6"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
   <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
@@ -319,6 +326,13 @@
       <arg name="enable_drivable_area" value="$(arg enable_localizer_drivable_area)"/>
       <arg name="enable_drivable_area_2d_editor" value="$(arg enable_localizer_drivable_area_2d_editor)"/>
       <arg name="rviz_config_file" value="$(find lio_localizer)/launch/include/config/rviz_with_local_planner.rviz"/>
+      <arg name="use_internal_initial_pose" value="$(arg localizer_use_internal_initial_pose)"/>
+      <arg name="initial_pose_x_m" value="$(arg localizer_initial_pose_x_m)"/>
+      <arg name="initial_pose_y_m" value="$(arg localizer_initial_pose_y_m)"/>
+      <arg name="initial_pose_z_m" value="$(arg localizer_initial_pose_z_m)"/>
+      <arg name="initial_pose_roll_deg" value="$(arg localizer_initial_pose_roll_deg)"/>
+      <arg name="initial_pose_pitch_deg" value="$(arg localizer_initial_pose_pitch_deg)"/>
+      <arg name="initial_pose_yaw_deg" value="$(arg localizer_initial_pose_yaw_deg)"/>
     </include>
   </group>
 
