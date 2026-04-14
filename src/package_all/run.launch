@@ -192,6 +192,7 @@
   <arg name="near_goal_tail_block_ignore_distance_m" default="0.60"/>
   <arg name="near_goal_block_ignore_after_avoidance_s" default="1.0"/>
   <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
+  <arg name="allow_avoidance_reuse_on_no_solution" default="false"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="static_obstacle_memory_enabled" default="true"/>
@@ -549,6 +550,7 @@
       <arg name="near_goal_tail_block_ignore_distance_m" value="$(arg near_goal_tail_block_ignore_distance_m)"/>
       <arg name="near_goal_block_ignore_after_avoidance_s" value="$(arg near_goal_block_ignore_after_avoidance_s)"/>
       <arg name="near_goal_recent_avoidance_release_distance_m" value="$(arg near_goal_recent_avoidance_release_distance_m)"/>
+      <arg name="allow_avoidance_reuse_on_no_solution" value="$(arg allow_avoidance_reuse_on_no_solution)"/>
       <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
       <arg name="static_obstacle_memory_enabled" value="$(arg static_obstacle_memory_enabled)"/>
@@ -748,6 +750,7 @@
       <arg name="near_goal_tail_block_ignore_distance_m" value="$(arg near_goal_tail_block_ignore_distance_m)"/>
       <arg name="near_goal_block_ignore_after_avoidance_s" value="$(arg near_goal_block_ignore_after_avoidance_s)"/>
       <arg name="near_goal_recent_avoidance_release_distance_m" value="$(arg near_goal_recent_avoidance_release_distance_m)"/>
+      <arg name="allow_avoidance_reuse_on_no_solution" value="$(arg allow_avoidance_reuse_on_no_solution)"/>
       <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
       <arg name="static_obstacle_memory_enabled" value="$(arg static_obstacle_memory_enabled)"/>

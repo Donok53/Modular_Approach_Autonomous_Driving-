@@ -390,6 +390,9 @@ class ConstrainedLocalReplanner:
         self.avoidance_reuse_max_deviation_m = max(
             0.0, float(rospy.get_param("~avoidance_reuse_max_deviation_m", 0.8))
         )
+        self.allow_avoidance_reuse_on_no_solution = bool(
+            rospy.get_param("~allow_avoidance_reuse_on_no_solution", False)
+        )
         self.avoidance_branch_backtrack_cells = max(
             0, int(rospy.get_param("~avoidance_branch_backtrack_cells", 2))
         )
@@ -2643,6 +2646,8 @@ class ConstrainedLocalReplanner:
         return best
 
     def _republish_last_avoidance_path(self, dg, stamp):
+        if not self.allow_avoidance_reuse_on_no_solution:
+            return False
         if self.last_avoidance_grid_path is None or len(self.last_avoidance_grid_path) < 2:
             return False
         reuse_reference_sec = max(
