@@ -265,6 +265,7 @@
   <arg name="behavior_stop_hold_s" default="0.25"/>
   <arg name="cloud_tracker_max_range_m" default="25.0"/>
   <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
+  <arg name="cloud_tracker_dynamic_assoc_bonus_m" default="0.5"/>
   <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
   <arg name="cloud_tracker_downsample" default="2"/>
   <arg name="cloud_tracker_cell_size_m" default="0.25"/>
@@ -273,9 +274,11 @@
   <arg name="cloud_tracker_vel_alpha" default="0.25"/>
   <arg name="cloud_tracker_static_speed_thresh_mps" default="0.12"/>
   <arg name="cloud_tracker_dynamic_min_age" default="3"/>
-  <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" default="0.08"/>
+  <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" default="0.06"/>
   <arg name="cloud_tracker_pedestrian_dynamic_min_age" default="2"/>
-  <arg name="cloud_tracker_recent_dynamic_hold_s" default="1.5"/>
+  <arg name="cloud_tracker_pedestrian_dynamic_min_displacement_m" default="0.14"/>
+  <arg name="cloud_tracker_recent_dynamic_hold_s" default="2.5"/>
+  <arg name="cloud_tracker_recent_dynamic_velocity_decay" default="0.65"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
   <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
@@ -335,6 +338,7 @@
       <param name="output_topic" value="$(arg tracked_objects_topic)"/>
       <param name="max_range_m" value="$(arg cloud_tracker_max_range_m)"/>
       <param name="max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
+      <param name="dynamic_assoc_bonus_m" value="$(arg cloud_tracker_dynamic_assoc_bonus_m)"/>
       <param name="track_timeout_s" value="$(arg cloud_tracker_track_timeout_s)"/>
       <param name="downsample" value="$(arg cloud_tracker_downsample)"/>
       <param name="cell_size_m" value="$(arg cloud_tracker_cell_size_m)"/>
@@ -345,7 +349,9 @@
       <param name="dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
       <param name="pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
       <param name="pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
+      <param name="pedestrian_dynamic_min_displacement_m" value="$(arg cloud_tracker_pedestrian_dynamic_min_displacement_m)"/>
       <param name="recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
+      <param name="recent_dynamic_velocity_decay" value="$(arg cloud_tracker_recent_dynamic_velocity_decay)"/>
       <param name="position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
       <param name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
       <param name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>

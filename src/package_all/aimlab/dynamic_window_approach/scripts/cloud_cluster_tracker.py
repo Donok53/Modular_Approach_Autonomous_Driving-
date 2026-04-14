@@ -31,6 +31,9 @@ class CloudClusterTracker:
         self.min_cluster_cells = max(2, int(rospy.get_param("~min_cluster_cells", 3)))
 
         self.max_assoc_dist_m = max(0.1, float(rospy.get_param("~max_assoc_dist_m", 1.6)))
+        self.dynamic_assoc_bonus_m = max(
+            0.0, float(rospy.get_param("~dynamic_assoc_bonus_m", 0.5))
+        )
         self.track_timeout_s = max(0.1, float(rospy.get_param("~track_timeout_s", 1.0)))
         self.vel_alpha = min(1.0, max(0.01, float(rospy.get_param("~vel_alpha", 0.4))))
         # Static obstacles are already handled by costmaps / raw pointcloud
@@ -74,13 +77,20 @@ class CloudClusterTracker:
                 float(
                     rospy.get_param(
                         "~pedestrian_dynamic_min_displacement_m",
-                        max(0.18, self.position_jitter_m * 1.2),
+                        max(0.12, self.position_jitter_m * 0.9),
                     )
                 ),
             ),
         )
         self.recent_dynamic_hold_s = max(
             0.0, float(rospy.get_param("~recent_dynamic_hold_s", 1.5))
+        )
+        self.recent_dynamic_velocity_decay = min(
+            1.0,
+            max(
+                0.0,
+                float(rospy.get_param("~recent_dynamic_velocity_decay", 0.65)),
+            ),
         )
         self.known_map_subtraction_enabled = bool(
             rospy.get_param("~known_map_subtraction_enabled", True)
@@ -112,7 +122,7 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
@@ -128,6 +138,8 @@ class CloudClusterTracker:
             self.dynamic_min_displacement_m,
             self.pedestrian_dynamic_min_displacement_m,
             self.recent_dynamic_hold_s,
+            self.dynamic_assoc_bonus_m,
+            self.recent_dynamic_velocity_decay,
             "on" if self.known_map_subtraction_enabled else "off",
             self.known_map_subtraction_radius_m,
             self.free_space_support_radius_m,
@@ -313,11 +325,21 @@ class CloudClusterTracker:
                 if tid not in unmatched_tracks:
                     continue
                 t = self.tracks[tid]
-                d = math.hypot(c["x"] - t["x"], c["y"] - t["y"])
-                if d < best_d:
+                dt = max(0.0, now_sec - float(t["last_t"]))
+                pred_horizon = min(dt, self.track_timeout_s)
+                pred_x = float(t["x"]) + float(t["vx"]) * pred_horizon
+                pred_y = float(t["y"]) + float(t["vy"]) * pred_horizon
+                assoc_limit = self.max_assoc_dist_m
+                if (
+                    self.recent_dynamic_hold_s > 0.0
+                    and (now_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
+                ):
+                    assoc_limit += self.dynamic_assoc_bonus_m
+                d = math.hypot(c["x"] - pred_x, c["y"] - pred_y)
+                if d < best_d and d <= assoc_limit:
                     best_d = d
                     best_tid = tid
-            if best_tid is not None and best_d <= self.max_assoc_dist_m:
+            if best_tid is not None:
                 matches.append((ci, best_tid))
                 unmatched_tracks.discard(best_tid)
                 unmatched_clusters.discard(ci)
@@ -423,6 +445,10 @@ class CloudClusterTracker:
             effective_vx = float(t["vx"])
             effective_vy = float(t["vy"])
             effective_speed = speed
+            was_recent_dynamic = (
+                self.recent_dynamic_hold_s > 0.0
+                and (stamp_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
+            )
             observed_dynamic = True
             # Require a track to persist for a few updates before we trust any
             # measured motion; otherwise doorway edges and map jitter can look
@@ -439,14 +465,26 @@ class CloudClusterTracker:
                 effective_speed = 0.0
             if effective_speed < static_speed_thresh:
                 observed_dynamic = False
-                effective_vx = 0.0
-                effective_vy = 0.0
-                effective_speed = 0.0
+                if was_recent_dynamic and self.recent_dynamic_velocity_decay > 0.0:
+                    effective_vx *= self.recent_dynamic_velocity_decay
+                    effective_vy *= self.recent_dynamic_velocity_decay
+                    effective_speed = math.hypot(effective_vx, effective_vy)
+                    if effective_speed < min(static_speed_thresh * 0.5, 0.03):
+                        effective_vx = 0.0
+                        effective_vy = 0.0
+                        effective_speed = 0.0
+                else:
+                    effective_vx = 0.0
+                    effective_vy = 0.0
+                    effective_speed = 0.0
             if observed_dynamic:
                 t["last_dynamic_t"] = float(stamp_sec)
             recent_dynamic = (
-                self.recent_dynamic_hold_s > 0.0
-                and (stamp_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
+                observed_dynamic
+                or (
+                    self.recent_dynamic_hold_s > 0.0
+                    and (stamp_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
+                )
             )
             if (not self.publish_static) and effective_speed < static_speed_thresh and not recent_dynamic:
                 continue
