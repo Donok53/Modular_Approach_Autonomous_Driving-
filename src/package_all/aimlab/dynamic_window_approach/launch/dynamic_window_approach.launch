@@ -279,6 +279,8 @@
         <node pkg="dynamic_window_approach" type="tracked_objects_marker_viz.py" name="tracked_objects_marker_viz" output="screen" respawn="false">
             <param name="input_topic" value="$(arg tracked_objects_topic)"/>
             <param name="output_topic" value="$(arg tracked_objects_marker_topic)"/>
+            <param name="show_labels" value="false"/>
+            <param name="show_velocity" value="false"/>
         </node>
     </group>
 

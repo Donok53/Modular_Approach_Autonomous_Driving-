@@ -26,8 +26,8 @@ class TrackedObjectsMarkerViz:
         self.arrow_head_width_m = max(0.02, float(rospy.get_param("~arrow_head_width_m", 0.14)))
         self.arrow_scale_s = max(0.1, float(rospy.get_param("~arrow_scale_s", 0.8)))
         self.z_offset_m = float(rospy.get_param("~z_offset_m", 0.4))
-        self.show_labels = bool(rospy.get_param("~show_labels", True))
-        self.show_velocity = bool(rospy.get_param("~show_velocity", True))
+        self.show_labels = bool(rospy.get_param("~show_labels", False))
+        self.show_velocity = bool(rospy.get_param("~show_velocity", False))
 
         self.pub = rospy.Publisher(self.output_topic, MarkerArray, queue_size=2)
         self.sub = rospy.Subscriber(self.input_topic, TrackedObjectArray, self.callback, queue_size=5)
