@@ -28,30 +28,25 @@ class TrackedObjectsMarkerViz:
         self.z_offset_m = float(rospy.get_param("~z_offset_m", 0.4))
         self.show_labels = bool(rospy.get_param("~show_labels", False))
         self.show_velocity = bool(rospy.get_param("~show_velocity", False))
+        self.box_color = (
+            max(0.0, min(1.0, float(rospy.get_param("~box_color_r", 0.98)))),
+            max(0.0, min(1.0, float(rospy.get_param("~box_color_g", 0.82)))),
+            max(0.0, min(1.0, float(rospy.get_param("~box_color_b", 0.20)))),
+        )
 
         self.pub = rospy.Publisher(self.output_topic, MarkerArray, queue_size=2)
         self.sub = rospy.Subscriber(self.input_topic, TrackedObjectArray, self.callback, queue_size=5)
 
         rospy.loginfo(
-            "tracked_objects_marker_viz started | in=%s out=%s labels=%s velocity=%s",
+            "tracked_objects_marker_viz started | in=%s out=%s labels=%s velocity=%s color=(%.2f, %.2f, %.2f)",
             self.input_topic,
             self.output_topic,
             "on" if self.show_labels else "off",
             "on" if self.show_velocity else "off",
+            self.box_color[0],
+            self.box_color[1],
+            self.box_color[2],
         )
-
-    @staticmethod
-    def color_for_label(label):
-        value = str(label or "").lower()
-        if "pedestrian" in value or "person" in value:
-            return (0.98, 0.82, 0.20)
-        if "vehicle" in value or "car" in value:
-            return (0.92, 0.18, 0.18)
-        if "bike" in value or "cycl" in value:
-            return (0.20, 0.55, 0.98)
-        if "static" in value:
-            return (0.62, 0.62, 0.62)
-        return (0.80, 0.40, 0.96)
 
     def callback(self, msg):
         frame_id = self.frame_id_override or msg.header.frame_id or "map"
@@ -67,7 +62,7 @@ class TrackedObjectsMarkerViz:
 
         marker_id = 0
         for obj in msg.objects:
-            color = self.color_for_label(getattr(obj, "label", ""))
+            color = self.box_color
             size_x = max(0.10, abs(float(obj.size.x)))
             size_y = max(0.10, abs(float(obj.size.y)))
             size_z = max(0.10, abs(float(obj.size.z)))

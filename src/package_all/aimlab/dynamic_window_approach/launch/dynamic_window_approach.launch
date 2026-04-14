@@ -160,6 +160,7 @@
     <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
     <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
     <arg name="tracked_object_prediction_step_s" default="0.3"/>
+    <arg name="tracked_object_prediction_min_speed_mps" default="0.10"/>
     <arg name="tracked_object_virtual_margin_m" default="0.20"/>
     <arg name="near_field_object_memory_enabled" default="true"/>
     <arg name="near_field_object_memory_ttl_s" default="1.5"/>
@@ -294,6 +295,9 @@
             <param name="output_topic" value="$(arg tracked_objects_marker_topic)"/>
             <param name="show_labels" value="false"/>
             <param name="show_velocity" value="false"/>
+            <param name="box_color_r" value="0.98"/>
+            <param name="box_color_g" value="0.82"/>
+            <param name="box_color_b" value="0.20"/>
         </node>
     </group>
 
@@ -437,6 +441,7 @@
             <param name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
             <param name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
             <param name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
+            <param name="tracked_object_prediction_min_speed_mps" value="$(arg tracked_object_prediction_min_speed_mps)"/>
             <param name="tracked_object_virtual_margin_m" value="$(arg tracked_object_virtual_margin_m)"/>
             <param name="near_field_object_memory_enabled" value="$(arg near_field_object_memory_enabled)"/>
             <param name="near_field_object_memory_ttl_s" value="$(arg near_field_object_memory_ttl_s)"/>

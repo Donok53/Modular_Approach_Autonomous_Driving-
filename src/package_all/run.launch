@@ -211,10 +211,11 @@
   <arg name="local_blind_zone_guard_ttl_s" default="0.45"/>
   <arg name="local_blind_zone_guard_lookahead_m" default="1.0"/>
   <arg name="local_blind_zone_guard_heading_deadband_deg" default="12.0"/>
-  <arg name="tracked_object_virtual_obstacles_enabled" default="false"/>
+  <arg name="tracked_object_virtual_obstacles_enabled" default="true"/>
   <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
   <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
   <arg name="tracked_object_prediction_step_s" default="0.3"/>
+  <arg name="tracked_object_prediction_min_speed_mps" default="0.10"/>
   <arg name="tracked_object_virtual_margin_m" default="0.20"/>
   <arg name="near_field_object_memory_enabled" default="true"/>
   <arg name="near_field_object_memory_ttl_s" default="1.5"/>
@@ -566,6 +567,7 @@
       <arg name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
       <arg name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
       <arg name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
+      <arg name="tracked_object_prediction_min_speed_mps" value="$(arg tracked_object_prediction_min_speed_mps)"/>
       <arg name="tracked_object_virtual_margin_m" value="$(arg tracked_object_virtual_margin_m)"/>
       <arg name="near_field_object_memory_enabled" value="$(arg near_field_object_memory_enabled)"/>
       <arg name="near_field_object_memory_ttl_s" value="$(arg near_field_object_memory_ttl_s)"/>
@@ -759,6 +761,7 @@
       <arg name="tracked_object_virtual_max_range_m" value="$(arg tracked_object_virtual_max_range_m)"/>
       <arg name="tracked_object_prediction_horizon_s" value="$(arg tracked_object_prediction_horizon_s)"/>
       <arg name="tracked_object_prediction_step_s" value="$(arg tracked_object_prediction_step_s)"/>
+      <arg name="tracked_object_prediction_min_speed_mps" value="$(arg tracked_object_prediction_min_speed_mps)"/>
       <arg name="tracked_object_virtual_margin_m" value="$(arg tracked_object_virtual_margin_m)"/>
       <arg name="near_field_object_memory_enabled" value="$(arg near_field_object_memory_enabled)"/>
       <arg name="near_field_object_memory_ttl_s" value="$(arg near_field_object_memory_ttl_s)"/>

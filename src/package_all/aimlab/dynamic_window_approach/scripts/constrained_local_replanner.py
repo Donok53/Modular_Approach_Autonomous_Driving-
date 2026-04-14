@@ -297,6 +297,9 @@ class ConstrainedLocalReplanner:
         self.tracked_object_prediction_step_s = max(
             0.1, float(rospy.get_param("~tracked_object_prediction_step_s", 0.3))
         )
+        self.tracked_object_prediction_min_speed_mps = max(
+            0.0, float(rospy.get_param("~tracked_object_prediction_min_speed_mps", 0.10))
+        )
         self.tracked_object_virtual_margin_m = max(
             0.0, float(rospy.get_param("~tracked_object_virtual_margin_m", 0.20))
         )
@@ -607,12 +610,13 @@ class ConstrainedLocalReplanner:
             )
         if self.tracked_object_virtual_obstacles_enabled or self.near_field_object_memory_enabled:
             rospy.loginfo(
-                "constrained_local_replanner tracked objects | topic=%s virtual=%s range=%.1fm horizon=%.1fs step=%.2fs margin=%.2fm memory=%s ttl=%.1fs near_range=%.1fm",
+                "constrained_local_replanner tracked objects | topic=%s virtual=%s range=%.1fm horizon=%.1fs step=%.2fs min_speed=%.2fmps margin=%.2fm memory=%s ttl=%.1fs near_range=%.1fm",
                 self.tracked_objects_topic,
                 "on" if self.tracked_object_virtual_obstacles_enabled else "off",
                 self.tracked_object_virtual_max_range_m,
                 self.tracked_object_prediction_horizon_s,
                 self.tracked_object_prediction_step_s,
+                self.tracked_object_prediction_min_speed_mps,
                 self.tracked_object_virtual_margin_m,
                 "on" if self.near_field_object_memory_enabled else "off",
                 self.near_field_object_memory_ttl_s,
@@ -1162,19 +1166,14 @@ class ConstrainedLocalReplanner:
     def _tracked_object_label(obj):
         return str(getattr(obj, "label", "") or "").strip().lower()
 
-    def _should_virtualize_tracked_object(self, obj):
-        label = self._tracked_object_label(obj)
-        if not label:
-            return False
-        if label.startswith("static_"):
-            return False
-        if label == "unknown":
-            return False
-        return True
+    @staticmethod
+    def _yaw_from_quaternion(quat):
+        return math.atan2(
+            2.0 * (float(quat.w) * float(quat.z) + float(quat.x) * float(quat.y)),
+            1.0 - 2.0 * (float(quat.y) * float(quat.y) + float(quat.z) * float(quat.z)),
+        )
 
     def _build_tracked_object_virtual_points(self, obj):
-        if not self._should_virtualize_tracked_object(obj):
-            return []
         center_x = float(obj.pose.position.x)
         center_y = float(obj.pose.position.y)
         if (not math.isfinite(center_x)) or (not math.isfinite(center_y)):
@@ -1200,9 +1199,17 @@ class ConstrainedLocalReplanner:
         half_x = 0.5 * size_x + self.tracked_object_virtual_margin_m
         half_y = 0.5 * size_y + self.tracked_object_virtual_margin_m
         speed = math.hypot(vx, vy)
-        yaw = math.atan2(vy, vx) if speed > 0.05 else 0.0
+        yaw = (
+            math.atan2(vy, vx)
+            if speed > self.tracked_object_prediction_min_speed_mps
+            else self._yaw_from_quaternion(obj.pose.orientation)
+        )
         spacing = max(0.15, self.pointcloud_cluster_resolution_m)
-        horizon_s = max(0.0, self.tracked_object_prediction_horizon_s)
+        horizon_s = (
+            max(0.0, self.tracked_object_prediction_horizon_s)
+            if speed > self.tracked_object_prediction_min_speed_mps
+            else 0.0
+        )
         step_s = max(1e-3, self.tracked_object_prediction_step_s)
         num_steps = max(1, int(math.ceil(horizon_s / step_s)) + 1)
         points = []
