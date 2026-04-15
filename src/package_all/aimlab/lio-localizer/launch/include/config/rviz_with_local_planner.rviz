@@ -51,7 +51,7 @@ Visualization Manager:
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
-    - Alpha: 0.5
+    - Alpha: 0.30000001192092896
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 33.600746154785156
@@ -60,10 +60,10 @@ Visualization Manager:
       Axis: Z
       Channel Name: intensity
       Class: rviz/PointCloud2
-      Color: 165; 255; 255
+      Color: 120; 170; 170
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -75,6 +75,34 @@ Visualization Manager:
       Size (m): 0.029999999329447746
       Style: Flat Squares
       Topic: /lio_localizer/localization/global_map
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 185; 205; 205
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: Global Map 2D
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.06000000074505806
+      Style: Flat Squares
+      Topic: /lio_localizer/localization/global_map_2d
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -147,7 +175,7 @@ Visualization Manager:
     - Alpha: 1
       Class: rviz/RobotModel
       Collision Enabled: false
-      Enabled: true
+      Enabled: false
       Links:
         All Links Enabled: true
         Expand Joint Details: false
@@ -158,7 +186,7 @@ Visualization Manager:
       Robot Description: robot_description
       TF Prefix: ""
       Update Interval: 0
-      Value: true
+      Value: false
       Visual Enabled: true
     - Angle Tolerance: 0.10000000149011612
       Class: rviz/Odometry
@@ -364,11 +392,11 @@ Visualization Manager:
         {}
       Queue Size: 20
       Value: false
-    - Alpha: 0.3499999940395355
+    - Alpha: 0.15000000596046448
       Class: rviz/Map
       Color Scheme: map
-      Draw Behind: false
-      Enabled: true
+      Draw Behind: true
+      Enabled: false
       Name: Drivable Grid
       Topic: /lio_sam/drivable_area/grid
       Unreliable: false

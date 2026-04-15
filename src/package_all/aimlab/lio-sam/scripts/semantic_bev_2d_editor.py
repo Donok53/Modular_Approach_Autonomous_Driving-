@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
+import struct
 import threading
 
 import cv2
@@ -18,6 +20,7 @@ LABEL_COLORS = {
     80: (210, 230, 210), # sidewalk
     100: (220, 70, 60),  # curb
 }
+BACKGROUND_POINT_COLOR = (142, 146, 152)
 
 
 class SemanticBEV2DEditor:
@@ -25,11 +28,21 @@ class SemanticBEV2DEditor:
         self.window_name = rospy.get_param("~window_name", "Semantic BEV 2D Editor")
         self.grid_topic = rospy.get_param("~grid_topic", "/semantic_bev_editor/grid")
         self.paint_point_topic = rospy.get_param("~paint_point_topic", "/semantic_bev_editor/paint_point")
+        self.erase_point_topic = rospy.get_param("~erase_point_topic", "/semantic_bev_editor/erase_point")
         self.mode_topic = rospy.get_param("~mode_topic", "/semantic_bev_editor/mode")
         self.clear_topic = rospy.get_param("~clear_topic", "/semantic_bev_editor/clear")
         self.undo_topic = rospy.get_param("~undo_topic", "/semantic_bev_editor/undo")
         self.save_topic = rospy.get_param("~save_topic", "/semantic_bev_editor/save")
         self.load_topic = rospy.get_param("~load_topic", "/semantic_bev_editor/load")
+        self.sidewalk_only_editing = bool(rospy.get_param("~sidewalk_only_editing", True))
+        self.background_enabled = bool(rospy.get_param("~background_enabled", True))
+        self.background_alpha = min(0.95, max(0.0, float(rospy.get_param("~background_alpha", 0.35))))
+        self.background_point_color = tuple(
+            int(v) for v in rospy.get_param("~background_point_color_bgr", list(BACKGROUND_POINT_COLOR))
+        )
+        self.background_pcd_path = self._resolve_background_pcd_path(
+            rospy.get_param("~background_pcd_path", "")
+        )
 
         self.max_display_px = max(400, int(rospy.get_param("~max_display_px", 1200)))
         self.max_scale = max(1.0, float(rospy.get_param("~max_scale", 24.0)))
@@ -50,10 +63,17 @@ class SemanticBEV2DEditor:
         self._last_pan_px = None
         self._zoom_dragging = False
         self._last_zoom_px = None
+        self._erasing = False
+        self._last_erase_px = None
         self._last_pub_time = rospy.Time(0)
         self._trackbar_updating = False
+        self._background_points_xy = None
+        self._background_mask = None
+        self._background_signature = None
+        self.show_background = self.background_enabled
 
         self.pub_paint = rospy.Publisher(self.paint_point_topic, PointStamped, queue_size=50)
+        self.pub_erase = rospy.Publisher(self.erase_point_topic, PointStamped, queue_size=50)
         self.pub_mode = rospy.Publisher(self.mode_topic, String, queue_size=10, latch=True)
         self.pub_clear = rospy.Publisher(self.clear_topic, Empty, queue_size=2)
         self.pub_undo = rospy.Publisher(self.undo_topic, Empty, queue_size=2)
@@ -69,10 +89,168 @@ class SemanticBEV2DEditor:
         cv2.createTrackbar("Zoom %", self.window_name, 100, self.zoom_slider_max, self.on_trackbar_zoom)
         cv2.setMouseCallback(self.window_name, self.on_mouse)
         rospy.on_shutdown(self.on_shutdown)
+        self._load_background_points()
         self._publish_mode()
         rospy.loginfo(
-            "semantic_bev_2d_editor started | grid=%s | keys=[1 sidewalk, 2 road, 3 curb, 0 observed, wheel zoom, ctrl+drag zoom, middle drag pan, +/- zoom, f fit, u/s/l/c/q]",
+            "semantic_bev_2d_editor started | grid=%s | background=%s | sidewalk_only=%s | keys=[g background, wheel zoom, ctrl+drag zoom, middle drag pan, +/- zoom, f fit, u/s/l/c/q]",
             self.grid_topic,
+            self.background_pcd_path if self.background_pcd_path else "off",
+            str(self.sidewalk_only_editing),
+        )
+
+    @staticmethod
+    def _pcd_type_to_struct(type_code, size):
+        table = {
+            ("F", 4): "f",
+            ("F", 8): "d",
+            ("I", 1): "b",
+            ("I", 2): "h",
+            ("I", 4): "i",
+            ("I", 8): "q",
+            ("U", 1): "B",
+            ("U", 2): "H",
+            ("U", 4): "I",
+            ("U", 8): "Q",
+        }
+        return table.get((type_code, size))
+
+    @staticmethod
+    def _candidate_background_paths():
+        return [
+            "/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/src/package_all/aimlab/lio-localizer/map/test/GlobalMap2D.pcd",
+            "/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/src/package_all/monitoring_delivery/latest/GlobalMap2D.pcd",
+        ]
+
+    def _resolve_background_pcd_path(self, configured):
+        configured = os.path.expanduser(str(configured).strip())
+        if configured:
+            return configured
+        for candidate in self._candidate_background_paths():
+            if os.path.isfile(candidate):
+                return candidate
+        return ""
+
+    @classmethod
+    def _read_pcd_header(cls, path):
+        header = {}
+        with open(path, "rb") as f:
+            while True:
+                line = f.readline()
+                if not line:
+                    raise ValueError("pcd header ended unexpectedly: %s" % path)
+                text = line.decode("ascii", errors="ignore").strip()
+                if not text or text.startswith("#"):
+                    continue
+                parts = text.split()
+                key = parts[0].upper()
+                values = parts[1:]
+                header[key] = values
+                if key == "DATA":
+                    header["DATA_START"] = f.tell()
+                    break
+
+        fields = header.get("FIELDS", [])
+        size = [int(v) for v in header.get("SIZE", [])]
+        types = header.get("TYPE", [])
+        counts = [int(v) for v in header.get("COUNT", ["1"] * len(fields))]
+        points = int(header.get("POINTS", [header.get("WIDTH", ["0"])[0]])[0])
+        data_mode = header.get("DATA", [""])[0].lower()
+
+        if not (len(fields) == len(size) == len(types) == len(counts)):
+            raise ValueError("pcd header field metadata mismatch: %s" % path)
+
+        offset = 0
+        layout = []
+        for name, item_size, item_type, item_count in zip(fields, size, types, counts):
+            struct_code = cls._pcd_type_to_struct(item_type, item_size)
+            if struct_code is None:
+                raise ValueError("unsupported pcd field type %s/%s in %s" % (item_type, item_size, path))
+            layout.append(
+                {
+                    "name": name,
+                    "size": item_size,
+                    "type": item_type,
+                    "count": item_count,
+                    "offset": offset,
+                    "struct_code": struct_code,
+                }
+            )
+            offset += item_size * item_count
+
+        header["POINT_COUNT"] = points
+        header["DATA_MODE"] = data_mode
+        header["POINT_STEP"] = offset
+        header["LAYOUT"] = layout
+        return header
+
+    @classmethod
+    def _read_pcd_xy_points(cls, path):
+        header = cls._read_pcd_header(path)
+        fields = {item["name"]: item for item in header["LAYOUT"]}
+        if "x" not in fields or "y" not in fields:
+            raise ValueError("pcd missing x/y fields: %s" % path)
+
+        def unpack_scalar(blob, spec):
+            fmt = "<" + spec["struct_code"]
+            return struct.unpack_from(fmt, blob, spec["offset"])[0]
+
+        data_mode = header["DATA_MODE"]
+        field_names = header.get("FIELDS", [])
+        point_count = header["POINT_COUNT"]
+        point_step = header["POINT_STEP"]
+        points = []
+
+        if data_mode == "ascii":
+            with open(path, "r", encoding="ascii", errors="ignore") as f:
+                started = False
+                field_index = {name: idx for idx, name in enumerate(field_names)}
+                for line in f:
+                    if not started:
+                        if line.strip().lower().startswith("data"):
+                            started = True
+                        continue
+                    row = line.strip().split()
+                    if not row:
+                        continue
+                    points.append((float(row[field_index["x"]]), float(row[field_index["y"]])))
+            return np.asarray(points, dtype=np.float32)
+
+        if data_mode != "binary":
+            raise ValueError("unsupported pcd data mode '%s' in %s" % (data_mode, path))
+
+        with open(path, "rb") as f:
+            f.seek(header["DATA_START"])
+            for _ in range(point_count):
+                blob = f.read(point_step)
+                if len(blob) < point_step:
+                    break
+                points.append(
+                    (
+                        float(unpack_scalar(blob, fields["x"])),
+                        float(unpack_scalar(blob, fields["y"])),
+                    )
+                )
+        return np.asarray(points, dtype=np.float32)
+
+    def _load_background_points(self):
+        self._background_points_xy = None
+        self._background_mask = None
+        self._background_signature = None
+        if not self.background_enabled:
+            return
+        if not self.background_pcd_path or not os.path.isfile(self.background_pcd_path):
+            rospy.logwarn("semantic_bev_2d_editor: background pcd not found: %s", self.background_pcd_path)
+            return
+        try:
+            points_xy = self._read_pcd_xy_points(self.background_pcd_path)
+        except Exception as e:
+            rospy.logwarn("semantic_bev_2d_editor: failed to load background pcd '%s': %s", self.background_pcd_path, str(e))
+            return
+        self._background_points_xy = points_xy
+        rospy.loginfo(
+            "semantic_bev_2d_editor: loaded background GlobalMap2D (%d pts) from %s",
+            int(points_xy.shape[0]),
+            self.background_pcd_path,
         )
 
     def on_shutdown(self):
@@ -122,9 +300,18 @@ class SemanticBEV2DEditor:
         return img
 
     def _draw_hud(self, disp):
+        if self.sidewalk_only_editing:
+            help_text = "Sidewalk edit | BG:{} | left drag add sidewalk | right drag erase | [g]bg [u]undo [s]save [l]load [c]reset [f]fit [q]quit".format(
+                "on" if self.show_background and self._background_points_xy is not None else "off"
+            )
+        else:
+            help_text = "Mode: {} | BG:{} | slider/wheel zoom | middle drag pan | [1/2/3/0] label | [g]bg [u]undo [s]save [l]load [c]reset [f]fit [q]quit".format(
+                self.mode,
+                "on" if self.show_background and self._background_points_xy is not None else "off",
+            )
         cv2.putText(
             disp,
-            "Mode: {} | slider/wheel zoom | ctrl+drag zoom | middle drag pan | [1/2/3/0] label | [u]undo [s]save [l]load [c]reset [f]fit [q]quit".format(self.mode),
+            help_text,
             (10, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
@@ -132,6 +319,52 @@ class SemanticBEV2DEditor:
             1,
             cv2.LINE_AA,
         )
+
+    def _ensure_background_mask(self, grid):
+        if not self.show_background or self._background_points_xy is None or self._background_points_xy.size == 0:
+            return None
+        signature = (
+            int(grid.info.width),
+            int(grid.info.height),
+            round(float(grid.info.resolution), 6),
+            round(float(grid.info.origin.position.x), 6),
+            round(float(grid.info.origin.position.y), 6),
+        )
+        if self._background_signature == signature and self._background_mask is not None:
+            return self._background_mask
+
+        width = int(grid.info.width)
+        height = int(grid.info.height)
+        resolution = float(grid.info.resolution)
+        origin_x = float(grid.info.origin.position.x)
+        origin_y = float(grid.info.origin.position.y)
+
+        pts = self._background_points_xy
+        gx = np.floor((pts[:, 0] - origin_x) / resolution).astype(np.int32)
+        gy = np.floor((pts[:, 1] - origin_y) / resolution).astype(np.int32)
+        valid = (gx >= 0) & (gy >= 0) & (gx < width) & (gy < height)
+
+        mask = np.zeros((height, width), dtype=np.uint8)
+        if np.any(valid):
+            mask[gy[valid], gx[valid]] = 255
+        mask = np.flipud(mask)
+        self._background_mask = mask
+        self._background_signature = signature
+        return self._background_mask
+
+    def _blend_background(self, img, grid):
+        bg_mask = self._ensure_background_mask(grid)
+        if bg_mask is None:
+            return img
+        blended = img.astype(np.float32)
+        point_color = np.array(self.background_point_color, dtype=np.float32)
+        mask = bg_mask > 0
+        if np.any(mask):
+            blended[mask] = (
+                blended[mask] * (1.0 - self.background_alpha)
+                + point_color * self.background_alpha
+            )
+        return np.clip(blended, 0, 255).astype(np.uint8)
 
     @staticmethod
     def _mouse_wheel_delta(flags):
@@ -226,9 +459,15 @@ class SemanticBEV2DEditor:
         data = np.array(grid.data, dtype=np.int16).reshape((h, w))
         data_img = np.flipud(data)
 
-        img = np.zeros((h, w, 3), dtype=np.uint8)
-        for val, color in LABEL_COLORS.items():
-            img[data_img == val] = color
+        if self.sidewalk_only_editing:
+            img = np.zeros((h, w, 3), dtype=np.uint8)
+            img[:, :] = LABEL_COLORS[-1]
+            img[data_img == 80] = LABEL_COLORS[80]
+        else:
+            img = np.zeros((h, w, 3), dtype=np.uint8)
+            for val, color in LABEL_COLORS.items():
+                img[data_img == val] = color
+        img = self._blend_background(img, grid)
 
         with self._lock:
             if self._display_scale <= 0.0:
@@ -272,7 +511,7 @@ class SemanticBEV2DEditor:
         y = grid.info.origin.position.y + (gy + 0.5) * grid.info.resolution
         return x, y, grid.header.frame_id or "map"
 
-    def _publish_point(self, x, y, frame_id):
+    def _publish_point(self, x, y, frame_id, erase=False):
         now = rospy.Time.now()
         if (now - self._last_pub_time).to_sec() < (1.0 / self.paint_throttle_hz):
             return
@@ -283,17 +522,23 @@ class SemanticBEV2DEditor:
         msg.point.x = float(x)
         msg.point.y = float(y)
         msg.point.z = 0.0
-        self.pub_paint.publish(msg)
+        if erase:
+            self.pub_erase.publish(msg)
+        else:
+            self.pub_paint.publish(msg)
 
-    def _handle_point_action(self, px, py, force_mode=None):
+    def _handle_point_action(self, px, py, force_mode=None, erase=False):
         mapped = self._pixel_to_world(px, py)
         if mapped is None:
             return
         x, y, frame_id = mapped
+        if self.sidewalk_only_editing:
+            self._publish_point(x, y, frame_id, erase=erase)
+            return
         if force_mode is not None and force_mode != self.mode:
             self.mode = force_mode
             self._publish_mode()
-        self._publish_point(x, y, frame_id)
+        self._publish_point(x, y, frame_id, erase=erase)
 
     def on_mouse(self, event, x, y, flags, _userdata):
         if hasattr(cv2, "EVENT_MOUSEWHEEL") and event == cv2.EVENT_MOUSEWHEEL:
@@ -310,7 +555,7 @@ class SemanticBEV2DEditor:
         if event == cv2.EVENT_LBUTTONDOWN:
             self._dragging = True
             self._last_drag_px = (x, y)
-            self._handle_point_action(x, y, None)
+            self._handle_point_action(x, y, None, erase=False)
             return
         if event == cv2.EVENT_LBUTTONUP:
             self._zoom_dragging = False
@@ -319,7 +564,13 @@ class SemanticBEV2DEditor:
             self._last_drag_px = None
             return
         if event == cv2.EVENT_RBUTTONDOWN:
-            self._handle_point_action(x, y, "observed")
+            self._erasing = True
+            self._last_erase_px = (x, y)
+            self._handle_point_action(x, y, "observed", erase=True)
+            return
+        if event == cv2.EVENT_RBUTTONUP:
+            self._erasing = False
+            self._last_erase_px = None
             return
         if event == cv2.EVENT_MBUTTONDOWN:
             self._panning = True
@@ -363,28 +614,39 @@ class SemanticBEV2DEditor:
             with self._lock:
                 self._view_origin_px = (origin_x, origin_y)
             return
+        if event == cv2.EVENT_MOUSEMOVE and self._erasing:
+            if self._last_erase_px is None:
+                self._last_erase_px = (x, y)
+                self._handle_point_action(x, y, "observed", erase=True)
+                return
+            dx = x - self._last_erase_px[0]
+            dy = y - self._last_erase_px[1]
+            if (dx * dx + dy * dy) >= (self.drag_min_step_px * self.drag_min_step_px):
+                self._last_erase_px = (x, y)
+                self._handle_point_action(x, y, "observed", erase=True)
+            return
         if event == cv2.EVENT_MOUSEMOVE and self._dragging:
             if self._last_drag_px is None:
                 self._last_drag_px = (x, y)
-                self._handle_point_action(x, y, None)
+                self._handle_point_action(x, y, None, erase=False)
                 return
             dx = x - self._last_drag_px[0]
             dy = y - self._last_drag_px[1]
             if (dx * dx + dy * dy) >= (self.drag_min_step_px * self.drag_min_step_px):
                 self._last_drag_px = (x, y)
-                self._handle_point_action(x, y, None)
+                self._handle_point_action(x, y, None, erase=False)
 
     def _handle_key(self, key):
-        if key == ord("1"):
+        if (not self.sidewalk_only_editing) and key == ord("1"):
             self.mode = "sidewalk"
             self._publish_mode()
-        elif key == ord("2"):
+        elif (not self.sidewalk_only_editing) and key == ord("2"):
             self.mode = "road"
             self._publish_mode()
-        elif key == ord("3"):
+        elif (not self.sidewalk_only_editing) and key == ord("3"):
             self.mode = "curb"
             self._publish_mode()
-        elif key == ord("0"):
+        elif (not self.sidewalk_only_editing) and key == ord("0"):
             self.mode = "observed"
             self._publish_mode()
         elif key == ord("u"):
@@ -395,6 +657,8 @@ class SemanticBEV2DEditor:
             self._set_scale_around_pixel(self._display_scale / self.zoom_step)
         elif key == ord("f"):
             self._reset_view()
+        elif key == ord("g"):
+            self.show_background = not self.show_background
         elif key == ord("s"):
             self.pub_save.publish(Empty())
         elif key == ord("l"):

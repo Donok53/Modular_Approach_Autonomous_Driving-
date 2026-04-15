@@ -335,8 +335,6 @@
   <group if="$(arg use_lio_sam)">
     <include file="$(find lio_sam)/launch/run-robot.launch">
       <arg name="environment" value="$(arg localization_environment)"/>
-      <arg name="enable_drivable_area" value="true"/>
-      <arg name="enable_drivable_area_2d_editor" value="$(arg enable_lio_sam_drivable_area_2d_editor)"/>
     </include>
   </group>
   <group unless="$(arg use_lio_sam)">

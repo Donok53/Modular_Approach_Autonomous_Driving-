@@ -108,8 +108,11 @@ catkin_install_python(PROGRAMS
   scripts/drivable_area_builder.py
   scripts/drivable_area_2d_editor.py
   scripts/build_sidewalk_semantic_map.py
+  scripts/generate_semantic_sidewalk_bundle.py
   scripts/build_sidewalk_semantic_fusion.py
   scripts/build_raw_semantic_bev_map.py
+  scripts/global_map_2d_publisher.py
+  scripts/run_lio_sam_semantic_pipeline.py
   scripts/semantic_bev_editor.py
   scripts/semantic_bev_2d_editor.py
   scripts/tune_sidewalk_fusion_projection.py

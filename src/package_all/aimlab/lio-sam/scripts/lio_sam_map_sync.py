@@ -4,11 +4,18 @@
 import json
 import math
 import os
+import shlex
+import signal
 import shutil
+import subprocess
 import struct
+import sys
+import threading
 import time
 
 import rospy
+
+from lio_sam.srv import save_map, save_mapRequest
 
 
 class LioSamMapSync:
@@ -57,6 +64,38 @@ class LioSamMapSync:
         self.global_map_2d_xy_leaf_size = max(0.0, float(rospy.get_param("~global_map_2d_xy_leaf_size", 0.20)))
         self.write_asset_descriptions = bool(rospy.get_param("~write_asset_descriptions", False))
         self.asset_readme_file = rospy.get_param("~asset_readme_file", "README_static_assets.txt")
+        self.generate_semantic_sidewalk = bool(rospy.get_param("~generate_semantic_sidewalk", False))
+        self.semantic_sidewalk_script = os.path.expanduser(
+            rospy.get_param(
+                "~semantic_sidewalk_script",
+                os.path.join(os.path.dirname(__file__), "generate_semantic_sidewalk_bundle.py"),
+            )
+        )
+        self.semantic_sidewalk_output_dir = rospy.get_param("~semantic_sidewalk_output_dir", "semantic_sidewalk")
+        self.semantic_state_output = rospy.get_param("~semantic_state_output", "semantic_sidewalk_state.json")
+        self.semantic_drivable_state_output = rospy.get_param(
+            "~semantic_drivable_state_output", "lio_sam_drivable_area_state.json"
+        )
+        self.semantic_global_drivable_state_file = os.path.expanduser(
+            rospy.get_param("~semantic_global_drivable_state_file", self.drivable_area_state_file)
+        )
+        self.semantic_source_bag = os.path.expanduser(rospy.get_param("~semantic_source_bag", ""))
+        self.semantic_auto_detect_source_bag = bool(rospy.get_param("~semantic_auto_detect_source_bag", True))
+        self.semantic_detect_bag_poll_period_s = max(0.2, float(rospy.get_param("~semantic_detect_bag_poll_period_s", 0.5)))
+        self.semantic_detected_source_bag = ""
+        self.auto_finalize_after_bag = bool(rospy.get_param("~auto_finalize_after_bag", True))
+        self.auto_finalize_bag_idle_s = max(0.2, float(rospy.get_param("~auto_finalize_bag_idle_s", 0.5)))
+        self.auto_shutdown_after_bag_complete = bool(rospy.get_param("~auto_shutdown_after_bag_complete", True))
+        self.save_map_service_name = rospy.get_param("~save_map_service_name", "/lio_sam/save_map")
+        self.save_map_service_timeout_s = max(1.0, float(rospy.get_param("~save_map_service_timeout_s", 30.0)))
+        self.semantic_lidar_frame_stride = max(1, int(rospy.get_param("~semantic_lidar_frame_stride", 1)))
+        self.semantic_point_stride = max(1, int(rospy.get_param("~semantic_point_stride", 8)))
+        self.semantic_max_lidar_frames = max(1, int(rospy.get_param("~semantic_max_lidar_frames", 100000)))
+        self.semantic_async_on_shutdown = bool(rospy.get_param("~semantic_async_on_shutdown", True))
+        self.detach_full_sync_on_shutdown = bool(rospy.get_param("~detach_full_sync_on_shutdown", True))
+        self.shutdown_worker_job_file = rospy.get_param("~shutdown_worker_job_file", "lio_sam_map_sync_job.json")
+        self.shutdown_worker_log_file = rospy.get_param("~shutdown_worker_log_file", "lio_sam_map_sync_worker.log")
+        self.semantic_log_file = rospy.get_param("~semantic_log_file", "semantic_sidewalk_generation.log")
 
         rospy.loginfo(
             "lio_sam_map_sync started | enable=%s src=%s dst=%s extra=%d export_drivable_pcd=%s",
@@ -69,6 +108,20 @@ class LioSamMapSync:
 
         if self.enabled and self.copy_on_start:
             self.sync_once("startup")
+        self._bag_completion_sync_started = False
+        self._bag_completion_sync_completed = False
+        self._bag_completion_thread = None
+        self._auto_shutdown_sent = False
+        self._last_rosbag_seen_time = 0.0
+        self._rosbag_was_active = False
+        if self.generate_semantic_sidewalk and not self.semantic_source_bag and self.semantic_auto_detect_source_bag:
+            self._refresh_detected_source_bag()
+            self._bag_detect_timer = rospy.Timer(
+                rospy.Duration(self.semantic_detect_bag_poll_period_s),
+                self._bag_detect_timer_cb,
+            )
+        else:
+            self._bag_detect_timer = None
         rospy.on_shutdown(self.on_shutdown)
 
     def _file_signature(self, fresh_after_ns=None):
@@ -462,6 +515,388 @@ class LioSamMapSync:
 
         return generated
 
+    @staticmethod
+    def _process_cwd(pid):
+        try:
+            return os.path.realpath(os.readlink("/proc/%d/cwd" % int(pid)))
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _iter_rosbag_play_processes():
+        try:
+            output = subprocess.check_output(["ps", "-eo", "pid=,args="], text=True)
+        except Exception:
+            return []
+        processes = []
+        for line in output.splitlines():
+            raw = line.rstrip()
+            if not raw:
+                continue
+            parts = raw.strip().split(None, 1)
+            if len(parts) != 2:
+                continue
+            pid_s, cmd = parts
+            if "rosbag play" not in cmd:
+                continue
+            try:
+                pid = int(pid_s)
+            except Exception:
+                continue
+            processes.append((pid, cmd))
+        return processes
+
+    @staticmethod
+    def _extract_bag_paths_from_command(command, process_cwd=""):
+        try:
+            tokens = shlex.split(command)
+        except Exception:
+            tokens = command.split()
+        bag_paths = []
+        for token in tokens:
+            expanded = os.path.expanduser(token)
+            if not expanded.endswith(".bag"):
+                continue
+            candidates = []
+            if os.path.isabs(expanded):
+                candidates.append(expanded)
+            elif process_cwd:
+                candidates.append(os.path.join(process_cwd, expanded))
+            candidates.append(os.path.abspath(expanded))
+            for candidate in candidates:
+                candidate = os.path.realpath(candidate)
+                if os.path.isfile(candidate):
+                    bag_paths.append(candidate)
+                    break
+        return bag_paths
+
+    def _detect_semantic_source_bag(self):
+        latest = ""
+        for pid, command in self._iter_rosbag_play_processes():
+            bag_paths = self._extract_bag_paths_from_command(command, process_cwd=self._process_cwd(pid))
+            if bag_paths:
+                latest = bag_paths[-1]
+        return latest
+
+    def _refresh_detected_source_bag(self):
+        detected = self._detect_semantic_source_bag()
+        if detected and detected != self.semantic_detected_source_bag:
+            self.semantic_detected_source_bag = detected
+            rospy.loginfo("lio_sam_map_sync: detected semantic source bag: %s", detected)
+        return self.semantic_detected_source_bag
+
+    def _call_save_map_service(self):
+        try:
+            rospy.wait_for_service(self.save_map_service_name, timeout=self.save_map_service_timeout_s)
+            proxy = rospy.ServiceProxy(self.save_map_service_name, save_map)
+            req = save_mapRequest()
+            req.resolution = 0.0
+            req.destination = ""
+            resp = proxy(req)
+            return bool(getattr(resp, "success", False))
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: save_map service call failed: %s", str(e))
+            return False
+
+    def _run_bag_completion_sync(self):
+        trigger_ns = time.time_ns()
+        rospy.loginfo("lio_sam_map_sync: rosbag playback finished, saving map and generating semantic drivable area")
+        if not self._call_save_map_service():
+            rospy.logwarn("lio_sam_map_sync: bag-complete sync aborted because save_map did not succeed")
+            return
+        self._wait_until_stable(fresh_after_ns=trigger_ns)
+        self.sync_once(
+            "bag-complete",
+            fresh_after_ns=trigger_ns,
+            semantic_async=False,
+        )
+        self._bag_completion_sync_completed = True
+        rospy.loginfo("lio_sam_map_sync: bag-complete sync finished")
+        if self.auto_shutdown_after_bag_complete and self._rosbag_was_active:
+            self._request_parent_roslaunch_shutdown()
+
+    def _request_parent_roslaunch_shutdown(self):
+        if self._auto_shutdown_sent:
+            return
+        self._auto_shutdown_sent = True
+        parent_pid = os.getppid()
+        if parent_pid <= 1:
+            rospy.logwarn("lio_sam_map_sync: unable to auto-shutdown roslaunch, invalid parent pid=%s", parent_pid)
+            return
+        try:
+            rospy.loginfo("lio_sam_map_sync: bag-complete pipeline finished, requesting roslaunch shutdown (ppid=%d)", parent_pid)
+            os.kill(parent_pid, signal.SIGINT)
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: failed to request roslaunch shutdown: %s", str(e))
+
+    def _bag_detect_timer_cb(self, _event):
+        self._refresh_detected_source_bag()
+        processes = self._iter_rosbag_play_processes()
+        now = time.time()
+        if processes:
+            self._rosbag_was_active = True
+            self._last_rosbag_seen_time = now
+            return
+        if not self.auto_finalize_after_bag:
+            return
+        if not self._rosbag_was_active:
+            return
+        if self._bag_completion_sync_started:
+            return
+        if self._last_rosbag_seen_time <= 0.0:
+            return
+        if (now - self._last_rosbag_seen_time) < self.auto_finalize_bag_idle_s:
+            return
+        self._bag_completion_sync_started = True
+        self._bag_completion_thread = threading.Thread(
+            target=self._run_bag_completion_sync,
+            name="lio_sam_map_sync_bag_complete",
+            daemon=True,
+        )
+        self._bag_completion_thread.start()
+
+    def _resolved_semantic_source_bag(self):
+        if self.semantic_source_bag and os.path.isfile(self.semantic_source_bag):
+            return self.semantic_source_bag
+        if self.semantic_detected_source_bag and os.path.isfile(self.semantic_detected_source_bag):
+            return self.semantic_detected_source_bag
+        if self.semantic_auto_detect_source_bag:
+            detected = self._refresh_detected_source_bag()
+            if detected and os.path.isfile(detected):
+                return detected
+        return ""
+
+    def _resolve_destination_path(self, value):
+        if not value:
+            return ""
+        expanded = os.path.expanduser(str(value))
+        if os.path.isabs(expanded):
+            return expanded
+        return os.path.join(self.destination_dir, expanded)
+
+    def _build_semantic_sidewalk_command(self):
+        script_path = self.semantic_sidewalk_script
+        if not os.path.isfile(script_path):
+            raise FileNotFoundError("semantic sidewalk script missing: %s" % script_path)
+
+        output_dir = self._resolve_destination_path(self.semantic_sidewalk_output_dir)
+        semantic_state_path = self._resolve_destination_path(self.semantic_state_output)
+        drivable_state_path = self._resolve_destination_path(self.semantic_drivable_state_output)
+        global_drivable_state_path = self.semantic_global_drivable_state_file
+
+        cmd = [
+            "python3",
+            script_path,
+            "--bundle-dir",
+            self.destination_dir,
+            "--output-dir",
+            output_dir,
+            "--semantic-state-json",
+            semantic_state_path,
+            "--drivable-state-json",
+            drivable_state_path,
+            "--global-drivable-state-json",
+            global_drivable_state_path,
+        ]
+        resolved_source_bag = self._resolved_semantic_source_bag()
+        if resolved_source_bag:
+            cmd.extend(["--source-bag", resolved_source_bag])
+            cmd.extend(["--lidar-frame-stride", str(self.semantic_lidar_frame_stride)])
+            cmd.extend(["--point-stride", str(self.semantic_point_stride)])
+            cmd.extend(["--max-lidar-frames", str(self.semantic_max_lidar_frames)])
+        elif self.semantic_source_bag:
+            rospy.logwarn("lio_sam_map_sync: semantic_source_bag configured but file missing: %s", self.semantic_source_bag)
+        else:
+            rospy.logwarn("lio_sam_map_sync: no semantic source bag detected, falling back to GlobalMap-based semantic generation")
+        return cmd, output_dir, semantic_state_path, drivable_state_path
+
+    def _generate_semantic_sidewalk_bundle(self):
+        generated = []
+        if not self.generate_semantic_sidewalk:
+            return generated
+        try:
+            cmd, output_dir, semantic_state_path, drivable_state_path = self._build_semantic_sidewalk_command()
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: semantic sidewalk generation skipped: %s", str(e))
+            return generated
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=self.destination_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: semantic sidewalk generation launch failed: %s", str(e))
+            return generated
+
+        if proc.returncode != 0:
+            rospy.logwarn(
+                "lio_sam_map_sync: semantic sidewalk generation failed (code=%d)\nstdout:\n%s\nstderr:\n%s",
+                proc.returncode,
+                proc.stdout.strip(),
+                proc.stderr.strip(),
+            )
+            return generated
+
+        if proc.stdout.strip():
+            rospy.loginfo("lio_sam_map_sync semantic sidewalk:\n%s", proc.stdout.strip())
+
+        candidate_paths = [
+            semantic_state_path,
+            drivable_state_path,
+        ]
+        if output_dir.startswith(self.destination_dir):
+            for root, _, names in os.walk(output_dir):
+                for name in names:
+                    candidate_paths.append(os.path.join(root, name))
+        for abs_path in candidate_paths:
+            if not abs_path or not os.path.isfile(abs_path):
+                continue
+            if os.path.commonpath([self.destination_dir, abs_path]) != self.destination_dir:
+                continue
+            generated.append(os.path.relpath(abs_path, self.destination_dir))
+        return sorted(set(generated))
+
+    def _launch_semantic_sidewalk_bundle_background(self):
+        if not self.generate_semantic_sidewalk:
+            return False
+        try:
+            cmd, _output_dir, semantic_state_path, drivable_state_path = self._build_semantic_sidewalk_command()
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: semantic sidewalk async launch skipped: %s", str(e))
+            return False
+
+        log_path = self._resolve_destination_path(self.semantic_log_file)
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        try:
+            with open(log_path, "a", encoding="utf-8") as log_f:
+                log_f.write("\n[%s] launch: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), " ".join(cmd)))
+                log_f.flush()
+                subprocess.Popen(
+                    cmd,
+                    cwd=self.destination_dir,
+                    stdout=log_f,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync: semantic sidewalk async launch failed: %s", str(e))
+            return False
+
+        rospy.loginfo(
+            "lio_sam_map_sync: semantic sidewalk generation launched in background | state=%s drivable=%s log=%s",
+            semantic_state_path,
+            drivable_state_path,
+            log_path,
+        )
+        return True
+
+    @staticmethod
+    def _plain_log(level, message, *args):
+        if args:
+            try:
+                message = message % args
+            except Exception:
+                message = "%s %s" % (message, args)
+        print("[%s] %s" % (level, message), flush=True)
+
+    def _shutdown_worker_job_payload(self, shutdown_trigger_ns):
+        return {
+            "enabled": self.enabled,
+            "source_dir": self.source_dir,
+            "destination_dir": self.destination_dir,
+            "sync_astar_ref": self.sync_astar_ref,
+            "source_ref_file": self.source_ref_file,
+            "astar_ref_destination_file": self.astar_ref_destination_file,
+            "wait_timeout_s": self.wait_timeout_s,
+            "poll_period_s": self.poll_period_s,
+            "stable_checks": self.stable_checks,
+            "freshness_slack_s": self.freshness_slack_s,
+            "delete_extra": self.delete_extra,
+            "required_files": list(self.required_files),
+            "extra_files": list(self.extra_files),
+            "write_manifest": self.write_manifest,
+            "manifest_file": self.manifest_file,
+            "export_drivable_area_pcd": self.export_drivable_area_pcd,
+            "drivable_area_state_file": self.drivable_area_state_file,
+            "drivable_area_pcd_output": self.drivable_area_pcd_output,
+            "drivable_area_risk_pcd_output": self.drivable_area_risk_pcd_output,
+            "export_global_map_2d_pcd": self.export_global_map_2d_pcd,
+            "global_map_input_file": self.global_map_input_file,
+            "global_map_2d_output": self.global_map_2d_output,
+            "global_map_2d_z_value": self.global_map_2d_z_value,
+            "global_map_2d_binary_output": self.global_map_2d_binary_output,
+            "global_map_2d_xy_leaf_size": self.global_map_2d_xy_leaf_size,
+            "write_asset_descriptions": self.write_asset_descriptions,
+            "asset_readme_file": self.asset_readme_file,
+            "generate_semantic_sidewalk": self.generate_semantic_sidewalk,
+            "semantic_sidewalk_script": self.semantic_sidewalk_script,
+            "semantic_sidewalk_output_dir": self.semantic_sidewalk_output_dir,
+            "semantic_state_output": self.semantic_state_output,
+            "semantic_drivable_state_output": self.semantic_drivable_state_output,
+            "semantic_global_drivable_state_file": self.semantic_global_drivable_state_file,
+            "semantic_source_bag": self._resolved_semantic_source_bag(),
+            "semantic_detected_source_bag": self.semantic_detected_source_bag,
+            "semantic_auto_detect_source_bag": False,
+            "semantic_lidar_frame_stride": self.semantic_lidar_frame_stride,
+            "semantic_point_stride": self.semantic_point_stride,
+            "semantic_max_lidar_frames": self.semantic_max_lidar_frames,
+            "semantic_async_on_shutdown": self.semantic_async_on_shutdown,
+            "auto_shutdown_after_bag_complete": False,
+            "semantic_log_file": self.semantic_log_file,
+            "shutdown_trigger_ns": int(shutdown_trigger_ns),
+        }
+
+    def _launch_shutdown_worker_background(self, shutdown_trigger_ns):
+        job_path = self._resolve_destination_path(self.shutdown_worker_job_file)
+        log_path = self._resolve_destination_path(self.shutdown_worker_log_file)
+        os.makedirs(os.path.dirname(job_path) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        payload = self._shutdown_worker_job_payload(shutdown_trigger_ns)
+        with open(job_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=True)
+        cmd = ["python3", os.path.realpath(__file__), "--shutdown-worker", job_path]
+        with open(log_path, "a", encoding="utf-8") as log_f:
+            log_f.write("\n[%s] launch: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), " ".join(cmd)))
+            log_f.flush()
+            subprocess.Popen(
+                cmd,
+                cwd=self.destination_dir,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                close_fds=True,
+            )
+        rospy.loginfo(
+            "lio_sam_map_sync: detached shutdown worker launched | job=%s log=%s semantic_source_bag=%s",
+            job_path,
+            log_path,
+            payload.get("semantic_source_bag", ""),
+        )
+
+    @classmethod
+    def _run_shutdown_worker(cls, job_path):
+        with open(job_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        rospy.loginfo = lambda msg, *args: cls._plain_log("INFO", msg, *args)
+        rospy.logwarn = lambda msg, *args: cls._plain_log("WARN", msg, *args)
+        worker = cls.__new__(cls)
+        for key, value in payload.items():
+            setattr(worker, key, value)
+        worker.copy_on_start = False
+        worker._bag_detect_timer = None
+        worker._wait_until_stable(fresh_after_ns=payload.get("shutdown_trigger_ns"))
+        worker.sync_once(
+            "shutdown-worker",
+            fresh_after_ns=payload.get("shutdown_trigger_ns"),
+            semantic_async=payload.get("semantic_async_on_shutdown", True),
+        )
+
     def _write_manifest(self):
         if not self.write_manifest:
             return
@@ -504,6 +939,7 @@ class LioSamMapSync:
             "SurfMap.pcd",
             "DrivableAreaMap.pcd",
             "DrivableAreaRiskMap.pcd",
+            "semantic_sidewalk_state.json",
             "auto_trajectory.osm",
             "map_reference_coordinate.csv",
             "lio_sam_drivable_area_state.json",
@@ -532,6 +968,8 @@ class LioSamMapSync:
                 f.write("- DrivableAreaMap.pcd: 주행 가능 영역을 셀 중심점 형태의 포인트클라우드로 만든 파일입니다. 웹 관제에서 2D/2.5D 배경 레이어로 쓰기 좋습니다.\n")
             if "DrivableAreaRiskMap.pcd" in existing_assets:
                 f.write("- DrivableAreaRiskMap.pcd: 위험 셀 또는 제한 셀을 모아둔 포인트클라우드입니다. 위험 영역 표시용 오버레이로 사용합니다.\n")
+            if "semantic_sidewalk_state.json" in existing_assets:
+                f.write("- semantic_sidewalk_state.json: 보도(semantic sidewalk) 편집용 원본 상태 파일입니다. RViz Publish Point 편집의 기준 데이터로 사용합니다.\n")
             if "auto_trajectory.osm" in existing_assets:
                 f.write("- auto_trajectory.osm: 주행 궤적으로부터 만든 경로 그래프 파일입니다. A* 경로 계획이나 경로 네트워크 시각화에 사용합니다.\n")
             if "map_reference_coordinate.csv" in existing_assets:
@@ -547,7 +985,7 @@ class LioSamMapSync:
             f.write("- 2D/2.5D 관제 화면: DrivableAreaMap.pcd + path/osm + localization pose\n")
             f.write("- 설명 가능한 주행 화면: 위 자산들에 path, tracked objects, explainability topic을 함께 겹쳐서 사용\n")
 
-    def sync_once(self, reason, fresh_after_ns=None):
+    def sync_once(self, reason, fresh_after_ns=None, semantic_async=False):
         if not self.enabled:
             return
         if not os.path.isdir(self.source_dir):
@@ -569,6 +1007,10 @@ class LioSamMapSync:
         copied += self._copy_extra_files()
         generated = []
         generated.extend(self._export_global_map_2d())
+        if semantic_async:
+            self._launch_semantic_sidewalk_bundle_background()
+        else:
+            generated.extend(self._generate_semantic_sidewalk_bundle())
         generated.extend(self._export_drivable_area_pcds())
         self._write_manifest()
         self._write_asset_descriptions()
@@ -603,14 +1045,32 @@ class LioSamMapSync:
         if not self.enabled:
             return
         try:
+            if getattr(self, "_bag_detect_timer", None) is not None:
+                try:
+                    self._bag_detect_timer.shutdown()
+                except Exception:
+                    pass
+            if self._bag_completion_sync_completed:
+                rospy.loginfo("lio_sam_map_sync: bag-complete sync already finished, skipping shutdown sync")
+                return
             shutdown_trigger_ns = time.time_ns()
+            if self.detach_full_sync_on_shutdown:
+                self._launch_shutdown_worker_background(shutdown_trigger_ns)
+                return
             self._wait_until_stable(fresh_after_ns=shutdown_trigger_ns)
-            self.sync_once("shutdown", fresh_after_ns=shutdown_trigger_ns)
+            self.sync_once(
+                "shutdown",
+                fresh_after_ns=shutdown_trigger_ns,
+                semantic_async=self.semantic_async_on_shutdown,
+            )
         except Exception as e:
             rospy.logwarn("lio_sam_map_sync failed on shutdown: %s", str(e))
 
 
 if __name__ == "__main__":
-    rospy.init_node("lio_sam_map_sync", anonymous=False)
-    node = LioSamMapSync()
-    rospy.spin()
+    if len(sys.argv) >= 3 and sys.argv[1] == "--shutdown-worker":
+        LioSamMapSync._run_shutdown_worker(sys.argv[2])
+    else:
+        rospy.init_node("lio_sam_map_sync", anonymous=False)
+        node = LioSamMapSync()
+        rospy.spin()

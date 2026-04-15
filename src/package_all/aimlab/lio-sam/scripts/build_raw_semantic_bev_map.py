@@ -60,6 +60,7 @@ def parse_args():
     parser.add_argument("--lidar-frame-stride", type=int, default=5)
     parser.add_argument("--point-stride", type=int, default=8)
     parser.add_argument("--max-lidar-frames", type=int, default=800)
+    parser.add_argument("--trajectory-time-padding-s", type=float, default=2.0)
     parser.add_argument("--keep-lowest-per-cell", type=int, default=5)
     parser.add_argument("--min-points-per-cell", type=int, default=3)
     parser.add_argument("--local-radius-m", type=float, default=10.0)
@@ -848,6 +849,8 @@ def main():
     bundle_trajectory = os.path.join(args.bundle_dir, "trajectory.csv")
     trajectory_rows = load_trajectory(bundle_trajectory, args.lidar_height_m)
     stamps = [row["timestamp"] for row in trajectory_rows]
+    trajectory_start_ts = stamps[0] - max(0.0, args.trajectory_time_padding_s)
+    trajectory_end_ts = stamps[-1] + max(0.0, args.trajectory_time_padding_s)
 
     import rosbag
     bag = rosbag.Bag(args.bag)
@@ -869,7 +872,12 @@ def main():
     sidewalk_proto_bank = deque(maxlen=max(1, args.prototype_bank_size))
     road_proto_bank = deque(maxlen=max(1, args.prototype_bank_size))
 
-    for topic, msg, _ in bag.read_messages(topics=[args.image_topic, args.imu_topic, args.point_topic]):
+    for topic, msg, bag_time in bag.read_messages(topics=[args.image_topic, args.imu_topic, args.point_topic]):
+        bag_ts = bag_time.to_sec()
+        if bag_ts < trajectory_start_ts:
+            continue
+        if bag_ts > trajectory_end_ts:
+            break
         if topic == args.image_topic:
             recent_images.append({
                 "timestamp": msg.header.stamp.to_sec(),

@@ -5,6 +5,15 @@
   <arg name="edited_state_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_state.edited.json"/>
   <arg name="override_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_override.edited.json"/>
   <arg name="brush_radius_m" default="0.8"/>
+  <arg name="background_pcd_path" default=""/>
+  <arg name="sidewalk_only_editing" default="true"/>
+  <arg name="clicked_point_mode" default="toggle"/>
+  <arg name="export_drivable_state_on_save" default="true"/>
+  <arg name="drivable_state_file_path" default="$(env HOME)/.ros/lio_sam_drivable_area_state.json"/>
+  <arg name="notify_drivable_reload_on_save" default="true"/>
+  <arg name="save_on_shutdown" default="true"/>
+  <arg name="watch_node_name" default=""/>
+  <arg name="save_on_watch_node_exit" default="false"/>
 
   <include file="$(find lio_sam)/launch/include/module_semantic_bev_editor.launch">
     <arg name="enable" value="true"/>
@@ -14,5 +23,14 @@
     <arg name="edited_state_file_path" value="$(arg edited_state_file_path)"/>
     <arg name="override_file_path" value="$(arg override_file_path)"/>
     <arg name="brush_radius_m" value="$(arg brush_radius_m)"/>
+    <arg name="background_pcd_path" value="$(arg background_pcd_path)"/>
+    <arg name="sidewalk_only_editing" value="$(arg sidewalk_only_editing)"/>
+    <arg name="clicked_point_mode" value="$(arg clicked_point_mode)"/>
+    <arg name="export_drivable_state_on_save" value="$(arg export_drivable_state_on_save)"/>
+    <arg name="drivable_state_file_path" value="$(arg drivable_state_file_path)"/>
+    <arg name="notify_drivable_reload_on_save" value="$(arg notify_drivable_reload_on_save)"/>
+    <arg name="save_on_shutdown" value="$(arg save_on_shutdown)"/>
+    <arg name="watch_node_name" value="$(arg watch_node_name)"/>
+    <arg name="save_on_watch_node_exit" value="$(arg save_on_watch_node_exit)"/>
   </include>
 </launch>

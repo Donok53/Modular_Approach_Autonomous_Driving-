@@ -3,11 +3,24 @@
     <arg name="project" default="lio_sam"/>
     <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
     <arg name="environment" default="indoor"/>
-    <arg name="enable_drivable_area" default="true"/>
-    <arg name="enable_drivable_area_2d_editor" default="false"/>
     <arg name="enable_map_sync" default="true"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
     <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/test"/>
+    <arg name="enable_semantic_sidewalk_pipeline" default="true"/>
+    <arg name="semantic_source_bag" default=""/>
+    <arg name="semantic_auto_detect_source_bag" default="true"/>
+    <arg name="semantic_detect_bag_poll_period_s" default="0.5"/>
+    <arg name="auto_finalize_after_bag" default="true"/>
+    <arg name="auto_finalize_bag_idle_s" default="0.5"/>
+    <arg name="auto_shutdown_after_bag_complete" default="true"/>
+    <arg name="save_map_service_name" default="/lio_sam/save_map"/>
+    <arg name="save_map_service_timeout_s" default="30.0"/>
+    <arg name="semantic_lidar_frame_stride" default="1"/>
+    <arg name="semantic_point_stride" default="8"/>
+    <arg name="semantic_max_lidar_frames" default="100000"/>
+    <arg name="detach_full_sync_on_shutdown" default="true"/>
+    <arg name="shutdown_worker_job_file" default="lio_sam_map_sync_job.json"/>
+    <arg name="shutdown_worker_log_file" default="lio_sam_map_sync_worker.log"/>
     <arg name="map_sync_astar_ref_enable" default="true"/>
     <arg name="map_sync_astar_ref_source_file" default="map_reference_coordinate.csv"/>
     <arg name="map_sync_astar_ref_destination_file" default="$(find astar_map)/map/map_reference_coordinate.csv"/>
@@ -32,16 +45,6 @@
     <!--- LOAM -->
     <include file="$(find lio_sam)/launch/include/module_loam.launch" />
 
-    <!--- Drivable area from LIO-SAM odometry -->
-    <include file="$(find lio_sam)/launch/include/module_drivable_area.launch">
-      <arg name="enable" value="$(arg enable_drivable_area)"/>
-    </include>
-
-    <!-- Optional 2D editor window for drivable area (click/drag add-erase on top view) -->
-    <include file="$(find lio_sam)/launch/include/module_drivable_area_2d_editor.launch">
-      <arg name="enable" value="$(arg enable_drivable_area_2d_editor)"/>
-    </include>
-
     <!--- Auto export LIO-SAM path to CSV/OSM (for A* map update pipeline) -->
     <include file="$(find lio_sam)/launch/include/module_trajectory_export.launch">
       <arg name="enable" value="$(arg enable_trajectory_export)"/>
@@ -59,6 +62,25 @@
       <arg name="enable" value="$(arg enable_map_sync)"/>
       <arg name="source_dir" value="$(arg map_sync_source_dir)"/>
       <arg name="destination_dir" value="$(arg map_sync_destination_dir)"/>
+      <arg name="generate_semantic_sidewalk" value="$(arg enable_semantic_sidewalk_pipeline)"/>
+      <arg name="semantic_sidewalk_output_dir" value="semantic_sidewalk"/>
+      <arg name="semantic_state_output" value="semantic_sidewalk_state.json"/>
+      <arg name="semantic_drivable_state_output" value="lio_sam_drivable_area_state.json"/>
+      <arg name="semantic_global_drivable_state_file" value="$(env HOME)/.ros/lio_sam_drivable_area_state.json"/>
+      <arg name="semantic_source_bag" value="$(arg semantic_source_bag)"/>
+      <arg name="semantic_auto_detect_source_bag" value="$(arg semantic_auto_detect_source_bag)"/>
+      <arg name="semantic_detect_bag_poll_period_s" value="$(arg semantic_detect_bag_poll_period_s)"/>
+      <arg name="auto_finalize_after_bag" value="$(arg auto_finalize_after_bag)"/>
+      <arg name="auto_finalize_bag_idle_s" value="$(arg auto_finalize_bag_idle_s)"/>
+      <arg name="auto_shutdown_after_bag_complete" value="$(arg auto_shutdown_after_bag_complete)"/>
+      <arg name="save_map_service_name" value="$(arg save_map_service_name)"/>
+      <arg name="save_map_service_timeout_s" value="$(arg save_map_service_timeout_s)"/>
+      <arg name="semantic_lidar_frame_stride" value="$(arg semantic_lidar_frame_stride)"/>
+      <arg name="semantic_point_stride" value="$(arg semantic_point_stride)"/>
+      <arg name="semantic_max_lidar_frames" value="$(arg semantic_max_lidar_frames)"/>
+      <arg name="detach_full_sync_on_shutdown" value="$(arg detach_full_sync_on_shutdown)"/>
+      <arg name="shutdown_worker_job_file" value="$(arg shutdown_worker_job_file)"/>
+      <arg name="shutdown_worker_log_file" value="$(arg shutdown_worker_log_file)"/>
       <arg name="sync_astar_ref" value="$(arg map_sync_astar_ref_enable)"/>
       <arg name="source_ref_file" value="$(arg map_sync_astar_ref_source_file)"/>
       <arg name="astar_ref_destination_file" value="$(arg map_sync_astar_ref_destination_file)"/>
