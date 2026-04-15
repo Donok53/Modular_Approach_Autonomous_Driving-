@@ -36,6 +36,7 @@ class SemanticBEV2DEditor:
         self.zoom_step = max(1.01, float(rospy.get_param("~zoom_step", 1.25)))
         self.drag_min_step_px = max(1, int(rospy.get_param("~drag_min_step_px", 3)))
         self.paint_throttle_hz = max(1.0, float(rospy.get_param("~paint_throttle_hz", 30.0)))
+        self.zoom_slider_max = max(100, int(round(self.max_scale * 100.0)))
 
         self.mode = "sidewalk"
         self._lock = threading.RLock()
@@ -50,6 +51,7 @@ class SemanticBEV2DEditor:
         self._zoom_dragging = False
         self._last_zoom_px = None
         self._last_pub_time = rospy.Time(0)
+        self._trackbar_updating = False
 
         self.pub_paint = rospy.Publisher(self.paint_point_topic, PointStamped, queue_size=50)
         self.pub_mode = rospy.Publisher(self.mode_topic, String, queue_size=10, latch=True)
@@ -64,6 +66,7 @@ class SemanticBEV2DEditor:
         if hasattr(cv2, "WINDOW_GUI_EXPANDED"):
             window_flags |= cv2.WINDOW_GUI_EXPANDED
         cv2.namedWindow(self.window_name, window_flags)
+        cv2.createTrackbar("Zoom %", self.window_name, 100, self.zoom_slider_max, self.on_trackbar_zoom)
         cv2.setMouseCallback(self.window_name, self.on_mouse)
         rospy.on_shutdown(self.on_shutdown)
         self._publish_mode()
@@ -80,6 +83,12 @@ class SemanticBEV2DEditor:
 
     def _publish_mode(self):
         self.pub_mode.publish(String(data=self.mode))
+
+    def on_trackbar_zoom(self, value):
+        if self._trackbar_updating:
+            return
+        scale = max(self._fit_scale, min(self.max_scale, float(max(100, value)) / 100.0))
+        self._set_scale_around_pixel(scale)
 
     def grid_callback(self, msg):
         reset_needed = False
@@ -115,7 +124,7 @@ class SemanticBEV2DEditor:
     def _draw_hud(self, disp):
         cv2.putText(
             disp,
-            "Mode: {} | [1]sidewalk [2]road [3]curb [0]observed | wheel zoom | ctrl+drag zoom | middle drag pan | [+/-] zoom [f]fit [u]undo [s]save [l]load [c]reset [q]quit".format(self.mode),
+            "Mode: {} | slider/wheel zoom | ctrl+drag zoom | middle drag pan | [1/2/3/0] label | [u]undo [s]save [l]load [c]reset [f]fit [q]quit".format(self.mode),
             (10, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
@@ -170,6 +179,7 @@ class SemanticBEV2DEditor:
         with self._lock:
             self._display_scale = new_scale
             self._view_origin_px = (new_origin_x, new_origin_y)
+        self._sync_trackbar_to_scale(new_scale)
 
     def _reset_view(self):
         with self._lock:
@@ -192,6 +202,18 @@ class SemanticBEV2DEditor:
             self._fit_scale = fit
             self._display_scale = fit
             self._view_origin_px = (origin_x, origin_y)
+        self._sync_trackbar_to_scale(fit)
+
+    def _sync_trackbar_to_scale(self, scale):
+        value = int(round(max(1.0, min(self.max_scale, scale)) * 100.0))
+        value = min(self.zoom_slider_max, max(100, value))
+        self._trackbar_updating = True
+        try:
+            cv2.setTrackbarPos("Zoom %", self.window_name, value)
+        except Exception:
+            pass
+        finally:
+            self._trackbar_updating = False
 
     def _build_display_image(self):
         with self._lock:
