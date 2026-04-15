@@ -14,8 +14,8 @@ Panels:
     Expanded:
       - /2D Pose Estimate1
       - /2D Nav Goal1
-      - /2D Nav Goal2
-      - /2D Nav Goal3
+      - /Publish Point1
+      - /Publish Point2
     Name: Tool Properties
     Splitter Ratio: 0.5886790156364441
   - Class: rviz/Views
@@ -104,6 +104,34 @@ Visualization Manager:
       Size (m): 0.06000000074505806
       Style: Flat Squares
       Topic: /lio_localizer/localization/global_map_2d
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.004999999888241291
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 205; 215; 215
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: Global Map 2D Edit Plane
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.20000000298023224
+      Style: Flat Squares
+      Topic: /lio_localizer/localization/global_map_2d_edit_plane
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -622,10 +650,12 @@ Visualization Manager:
       Y std deviation: 0.5
     - Class: rviz/SetGoal
       Topic: /move_base_simple/goal
-    - Class: rviz/SetGoal
-      Topic: /lio_sam/drivable_area/add_goal
-    - Class: rviz/SetGoal
-      Topic: /lio_sam/drivable_area/erase_goal
+    - Class: rviz/PublishPoint
+      Single click: true
+      Topic: /lio_sam/drivable_area/add_point
+    - Class: rviz/PublishPoint
+      Single click: true
+      Topic: /lio_sam/drivable_area/erase_point
   Value: true
   Views:
     Current:

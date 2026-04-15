@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import math
 import os
 import struct
 
@@ -22,10 +23,18 @@ class GlobalMap2DPublisher:
         self.frame_id = rospy.get_param("~frame_id", "map")
         self.z_offset = float(rospy.get_param("~z_offset", -0.05))
         self.reload_period_s = max(0.5, float(rospy.get_param("~reload_period_s", 2.0)))
+        self.publish_edit_plane = bool(rospy.get_param("~publish_edit_plane", False))
+        self.edit_plane_topic = rospy.get_param("~edit_plane_topic", self.topic + "_edit_plane")
+        self.edit_plane_resolution = max(0.05, float(rospy.get_param("~edit_plane_resolution", 0.20)))
+        self.edit_plane_z_offset = float(rospy.get_param("~edit_plane_z_offset", self.z_offset))
 
         self._last_mtime_ns = None
         self._last_cloud = None
+        self._last_edit_cloud = None
         self._pub = rospy.Publisher(self.topic, PointCloud2, queue_size=1, latch=True)
+        self._edit_pub = None
+        if self.publish_edit_plane:
+            self._edit_pub = rospy.Publisher(self.edit_plane_topic, PointCloud2, queue_size=1, latch=True)
         self._timer = rospy.Timer(rospy.Duration(self.reload_period_s), self._on_timer)
         self._reload_if_needed(force=True)
 
@@ -162,6 +171,28 @@ class GlobalMap2DPublisher:
         ]
         return pc2.create_cloud(header, fields, points)
 
+    def _build_edit_plane_points(self, raw_points):
+        if not raw_points:
+            return []
+        min_x = min(p[0] for p in raw_points)
+        max_x = max(p[0] for p in raw_points)
+        min_y = min(p[1] for p in raw_points)
+        max_y = max(p[1] for p in raw_points)
+        res = self.edit_plane_resolution
+        start_x = math.floor(min_x / res) * res
+        end_x = math.ceil(max_x / res) * res
+        start_y = math.floor(min_y / res) * res
+        end_y = math.ceil(max_y / res) * res
+        points = []
+        x = start_x
+        while x <= (end_x + 1e-6):
+            y = start_y
+            while y <= (end_y + 1e-6):
+                points.append((float(x), float(y), float(self.edit_plane_z_offset), 0.0))
+                y += res
+            x += res
+        return points
+
     def _reload_if_needed(self, force=False):
         if not os.path.isfile(self.pcd_path):
             rospy.logwarn_throttle(5.0, "global_map_2d_publisher: missing pcd: %s" % self.pcd_path)
@@ -179,8 +210,13 @@ class GlobalMap2DPublisher:
             return
         points = [(x, y, z + self.z_offset, intensity) for x, y, z, intensity in raw_points]
         self._last_cloud = self._build_cloud(points)
+        if self.publish_edit_plane and self._edit_pub is not None:
+            edit_plane_points = self._build_edit_plane_points(raw_points)
+            self._last_edit_cloud = self._build_cloud(edit_plane_points)
         self._last_mtime_ns = mtime_ns
         self._pub.publish(self._last_cloud)
+        if self._last_edit_cloud is not None and self._edit_pub is not None:
+            self._edit_pub.publish(self._last_edit_cloud)
         rospy.loginfo(
             "global_map_2d_publisher: published %d pts from %s on %s (z_offset=%.3f)",
             len(points),
@@ -188,12 +224,21 @@ class GlobalMap2DPublisher:
             self.topic,
             self.z_offset,
         )
+        if self._last_edit_cloud is not None:
+            rospy.loginfo(
+                "global_map_2d_publisher: published edit plane on %s (res=%.3f)",
+                self.edit_plane_topic,
+                self.edit_plane_resolution,
+            )
 
     def _on_timer(self, _event):
         self._reload_if_needed(force=False)
         if self._last_cloud is not None:
             self._last_cloud.header.stamp = rospy.Time.now()
             self._pub.publish(self._last_cloud)
+        if self._last_edit_cloud is not None and self._edit_pub is not None:
+            self._last_edit_cloud.header.stamp = rospy.Time.now()
+            self._edit_pub.publish(self._last_edit_cloud)
 
 
 if __name__ == "__main__":
