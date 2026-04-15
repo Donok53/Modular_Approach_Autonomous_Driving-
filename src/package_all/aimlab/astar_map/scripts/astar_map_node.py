@@ -126,7 +126,12 @@ class AStarPlanner:
         self.robot_width_m = max(0.0, float(rospy.get_param("~robot_width_m", 0.58)))
         self.robot_length_m = max(0.0, float(rospy.get_param("~robot_length_m", 0.612)))
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
-        self.global_path_use_any_angle = bool(rospy.get_param("~global_path_use_any_angle", True))
+        legacy_any_angle = bool(rospy.get_param("~global_path_use_any_angle", True))
+        planner_param = str(rospy.get_param("~global_path_grid_planner", "")).strip().lower()
+        self.global_path_grid_planner = self._normalize_global_grid_planner(
+            planner_param, legacy_any_angle
+        )
+        self.global_path_use_any_angle = self.global_path_grid_planner == "theta"
         self.global_path_clearance_m = max(
             0.0, float(rospy.get_param("~global_path_clearance_m", 0.02))
         )
@@ -194,6 +199,7 @@ class AStarPlanner:
             0.0,
             float(rospy.get_param("~keep_last_path_max_start_path_deviation_m", 0.80)),
         )
+        self.planner_loop_hz = max(2.0, float(rospy.get_param("~planner_loop_hz", 8.0)))
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -307,7 +313,7 @@ class AStarPlanner:
                 )
             rospy.loginfo(
                 "[astar] global grid planner: %s, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s",
-                "Theta*" if self.global_path_use_any_angle else "A* (cardinal)",
+                self._global_grid_planner_label(),
                 self._global_path_clearance_radius_m(),
                 self._global_path_goal_tail_clearance_radius(),
                 (
@@ -1481,6 +1487,41 @@ class AStarPlanner:
     def _grid_heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
 
+    @staticmethod
+    def _normalize_global_grid_planner(planner_name, legacy_any_angle):
+        if not planner_name:
+            return "theta" if legacy_any_angle else "astar4"
+        aliases = {
+            "theta": "theta",
+            "theta*": "theta",
+            "any_angle": "theta",
+            "astar8": "astar8",
+            "astar": "astar8",
+            "a*": "astar8",
+            "8way": "astar8",
+            "8-way": "astar8",
+            "diagonal": "astar8",
+            "astar4": "astar4",
+            "cardinal": "astar4",
+            "4way": "astar4",
+            "4-way": "astar4",
+        }
+        normalized = aliases.get(planner_name)
+        if normalized is None:
+            rospy.logwarn(
+                "[astar] unsupported global_path_grid_planner=%s, falling back to astar8",
+                planner_name,
+            )
+            return "astar8"
+        return normalized
+
+    def _global_grid_planner_label(self):
+        if self.global_path_grid_planner == "theta":
+            return "Theta*"
+        if self.global_path_grid_planner == "astar4":
+            return "A* (4-connected)"
+        return "A* (8-connected)"
+
     def _grid_neighbors(self, blocked, cell, allow_diagonal=True):
         cx, cy = cell
         nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -1668,10 +1709,15 @@ class AStarPlanner:
             )
             return None
 
-        if self.global_path_use_any_angle:
+        if self.global_path_grid_planner == "theta":
             grid_path = self._theta_star_on_grid(blocked, start_cell, goal_cell)
             planner_name = "Theta*"
             grid_path = self._simplify_grid_path(grid_path, blocked)
+        elif self.global_path_grid_planner == "astar8":
+            grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
+            planner_name = "A* (8-connected)"
+            if grid_path:
+                grid_path = self._simplify_grid_path(grid_path, blocked)
         else:
             grid_path = self._astar_on_grid(
                 blocked,
@@ -1679,12 +1725,12 @@ class AStarPlanner:
                 goal_cell,
                 allow_diagonal=False,
             )
-            planner_name = "A* (cardinal)"
-        if (not grid_path) and self.global_path_use_any_angle:
+            planner_name = "A* (4-connected)"
+        if (not grid_path) and self.global_path_grid_planner == "theta":
             grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
             if grid_path:
                 grid_path = self._simplify_grid_path(grid_path, blocked)
-                planner_name = "A* fallback"
+                planner_name = "A* (8-connected) fallback"
         if not grid_path:
             rospy.logwarn_throttle(
                 1.0,
@@ -2165,7 +2211,7 @@ if __name__ == "__main__":
         if dst_str:
             a.set_dst_node_list([int(s) for s in dst_str.split(',') if s.strip()])
 
-        rate = rospy.Rate(2)
+        rate = rospy.Rate(a.planner_loop_hz)
         path_nodes = []
         world_path = None
 

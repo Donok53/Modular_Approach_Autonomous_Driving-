@@ -25,7 +25,7 @@
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="enable_cloud_tracker" default="true"/>
   <arg name="enable_dynamic_risk_manager" default="true"/>
-  <arg name="enable_local_replanner" default="true"/>
+  <arg name="enable_local_replanner" default="false"/>
   <arg name="use_dynamic_risk_grid" default="true"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
@@ -58,7 +58,7 @@
   <arg name="local_replan_lookahead_m" default="4.0"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
-  <arg name="enable_avoidance_path" default="true"/>
+  <arg name="enable_avoidance_path" default="false"/>
   <arg name="enable_graph_planner" default="true"/>
   <arg name="enable_robot_send" default="true"/>
   <arg name="enable_wave_cmd_bridge" default="true"/>
@@ -66,7 +66,7 @@
   <arg name="wave_baud_rate" default="19200"/>
   <arg name="wave_linear_scale" default="1.0"/>
   <arg name="wave_angular_scale" default="1.0"/>
-  <arg name="local_planner_mode" default="teb"/>
+  <arg name="local_planner_mode" default="custom"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
@@ -143,6 +143,7 @@
   <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="global_path_grid_planner" default="astar8"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
@@ -152,12 +153,13 @@
   <arg name="global_path_enable_graph_fallback" default="false"/>
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
-  <arg name="global_path_continuous_replan" default="true"/>
+  <arg name="global_path_continuous_replan" default="false"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.15"/>
   <arg name="global_path_replan_min_interval_s" default="0.25"/>
   <arg name="global_path_replan_validation_lookahead_m" default="8.0"/>
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
+  <arg name="global_path_planner_loop_hz" default="8.0"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -409,6 +411,7 @@
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+        <arg name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -424,6 +427,7 @@
         <arg name="replan_path_validation_lookahead_m" value="$(arg global_path_replan_validation_lookahead_m)"/>
         <arg name="replan_path_start_ignore_m" value="$(arg global_path_replan_start_ignore_m)"/>
         <arg name="replan_path_start_deviation_m" value="$(arg global_path_replan_start_deviation_m)"/>
+        <arg name="planner_loop_hz" value="$(arg global_path_planner_loop_hz)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -440,6 +444,7 @@
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+        <arg name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -455,6 +460,7 @@
         <arg name="replan_path_validation_lookahead_m" value="$(arg global_path_replan_validation_lookahead_m)"/>
         <arg name="replan_path_start_ignore_m" value="$(arg global_path_replan_start_ignore_m)"/>
         <arg name="replan_path_start_deviation_m" value="$(arg global_path_replan_start_deviation_m)"/>
+        <arg name="planner_loop_hz" value="$(arg global_path_planner_loop_hz)"/>
       </include>
     </group>
   </group>
@@ -597,22 +603,6 @@
       <arg name="near_field_object_memory_max_range_m" value="$(arg near_field_object_memory_max_range_m)"/>
       <arg name="near_field_object_memory_merge_radius_m" value="$(arg near_field_object_memory_merge_radius_m)"/>
       <arg name="near_field_object_memory_max_points" value="$(arg near_field_object_memory_max_points)"/>
-      <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
-      <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
-      <arg name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
-      <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
-      <arg name="global_pointcloud_overlay_static_lock_frames" value="$(arg global_pointcloud_overlay_static_lock_frames)"/>
-      <arg name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
-      <arg name="global_pointcloud_overlay_static_lock_ttl_s" value="$(arg global_pointcloud_overlay_static_lock_ttl_s)"/>
-      <arg name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
-      <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
-      <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
-      <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
-      <arg name="global_pointcloud_overlay_static_lock_keep_range_m" value="$(arg global_pointcloud_overlay_static_lock_keep_range_m)"/>
-      <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
-      <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
-      <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
-      <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="dynamic_speed_thresh_mps" value="$(arg dynamic_speed_thresh_mps)"/>
       <arg name="pedestrian_dynamic_speed_thresh_mps" value="$(arg pedestrian_dynamic_speed_thresh_mps)"/>
       <arg name="prediction_horizon_s" value="$(arg prediction_horizon_s)"/>

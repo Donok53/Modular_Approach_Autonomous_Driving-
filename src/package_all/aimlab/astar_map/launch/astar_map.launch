@@ -23,6 +23,7 @@
   <arg name="robot_width_m" default="0.58"/>
   <arg name="robot_length_m" default="0.612"/>
   <arg name="footprint_padding_m" default="0.0"/>
+  <arg name="global_path_grid_planner" default="astar8"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
@@ -38,6 +39,7 @@
   <arg name="replan_path_validation_lookahead_m" default="8.0"/>
   <arg name="replan_path_start_ignore_m" default="0.35"/>
   <arg name="replan_path_start_deviation_m" default="0.60"/>
+  <arg name="planner_loop_hz" default="8.0"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -66,6 +68,7 @@
     <param name="robot_width_m" value="$(arg robot_width_m)"/>
     <param name="robot_length_m" value="$(arg robot_length_m)"/>
     <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+    <param name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
     <param name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
     <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
     <param name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -81,6 +84,7 @@
     <param name="replan_path_validation_lookahead_m" value="$(arg replan_path_validation_lookahead_m)"/>
     <param name="replan_path_start_ignore_m" value="$(arg replan_path_start_ignore_m)"/>
     <param name="replan_path_start_deviation_m" value="$(arg replan_path_start_deviation_m)"/>
+    <param name="planner_loop_hz" value="$(arg planner_loop_hz)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>
