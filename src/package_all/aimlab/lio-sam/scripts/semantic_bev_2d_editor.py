@@ -47,6 +47,8 @@ class SemanticBEV2DEditor:
         self._last_drag_px = None
         self._panning = False
         self._last_pan_px = None
+        self._zoom_dragging = False
+        self._last_zoom_px = None
         self._last_pub_time = rospy.Time(0)
 
         self.pub_paint = rospy.Publisher(self.paint_point_topic, PointStamped, queue_size=50)
@@ -58,12 +60,15 @@ class SemanticBEV2DEditor:
 
         self.sub_grid = rospy.Subscriber(self.grid_topic, OccupancyGrid, self.grid_callback, queue_size=1)
 
-        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        window_flags = cv2.WINDOW_NORMAL
+        if hasattr(cv2, "WINDOW_GUI_EXPANDED"):
+            window_flags |= cv2.WINDOW_GUI_EXPANDED
+        cv2.namedWindow(self.window_name, window_flags)
         cv2.setMouseCallback(self.window_name, self.on_mouse)
         rospy.on_shutdown(self.on_shutdown)
         self._publish_mode()
         rospy.loginfo(
-            "semantic_bev_2d_editor started | grid=%s | keys=[1 sidewalk, 2 road, 3 curb, 0 observed, +/- zoom, f fit, u/s/l/c/q]",
+            "semantic_bev_2d_editor started | grid=%s | keys=[1 sidewalk, 2 road, 3 curb, 0 observed, wheel zoom, ctrl+drag zoom, middle drag pan, +/- zoom, f fit, u/s/l/c/q]",
             self.grid_topic,
         )
 
@@ -110,7 +115,7 @@ class SemanticBEV2DEditor:
     def _draw_hud(self, disp):
         cv2.putText(
             disp,
-            "Mode: {} | [1]sidewalk [2]road [3]curb [0]observed | wheel zoom | middle drag pan | [+/-] zoom [f]fit [u]undo [s]save [l]load [c]reset [q]quit".format(self.mode),
+            "Mode: {} | [1]sidewalk [2]road [3]curb [0]observed | wheel zoom | ctrl+drag zoom | middle drag pan | [+/-] zoom [f]fit [u]undo [s]save [l]load [c]reset [q]quit".format(self.mode),
             (10, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
@@ -118,6 +123,18 @@ class SemanticBEV2DEditor:
             1,
             cv2.LINE_AA,
         )
+
+    @staticmethod
+    def _mouse_wheel_delta(flags):
+        if hasattr(cv2, "getMouseWheelDelta"):
+            try:
+                return int(cv2.getMouseWheelDelta(flags))
+            except Exception:
+                pass
+        delta = (int(flags) >> 16) & 0xFFFF
+        if delta >= 0x8000:
+            delta -= 0x10000
+        return int(delta)
 
     def _clamp_view_origin(self, origin_x, origin_y, scaled_w, scaled_h):
         viewport_w = min(self.max_display_px, scaled_w)
@@ -258,11 +275,15 @@ class SemanticBEV2DEditor:
 
     def on_mouse(self, event, x, y, flags, _userdata):
         if hasattr(cv2, "EVENT_MOUSEWHEEL") and event == cv2.EVENT_MOUSEWHEEL:
-            direction = 1.0 if flags > 0 else -1.0
-            if direction > 0:
+            delta = self._mouse_wheel_delta(flags)
+            if delta > 0:
                 self._set_scale_around_pixel(self._display_scale * self.zoom_step, x, y)
-            else:
+            elif delta < 0:
                 self._set_scale_around_pixel(self._display_scale / self.zoom_step, x, y)
+            return
+        if event == cv2.EVENT_LBUTTONDOWN and (flags & cv2.EVENT_FLAG_CTRLKEY):
+            self._zoom_dragging = True
+            self._last_zoom_px = (x, y)
             return
         if event == cv2.EVENT_LBUTTONDOWN:
             self._dragging = True
@@ -270,6 +291,8 @@ class SemanticBEV2DEditor:
             self._handle_point_action(x, y, None)
             return
         if event == cv2.EVENT_LBUTTONUP:
+            self._zoom_dragging = False
+            self._last_zoom_px = None
             self._dragging = False
             self._last_drag_px = None
             return
@@ -283,6 +306,21 @@ class SemanticBEV2DEditor:
         if event == cv2.EVENT_MBUTTONUP:
             self._panning = False
             self._last_pan_px = None
+            return
+        if event == cv2.EVENT_MOUSEMOVE and self._zoom_dragging:
+            if self._last_zoom_px is None:
+                self._last_zoom_px = (x, y)
+                return
+            dy = y - self._last_zoom_px[1]
+            self._last_zoom_px = (x, y)
+            if abs(dy) < self.drag_min_step_px:
+                return
+            steps = max(1, int(abs(dy) / float(self.drag_min_step_px)))
+            factor = self.zoom_step ** steps
+            if dy < 0:
+                self._set_scale_around_pixel(self._display_scale * factor, x, y)
+            else:
+                self._set_scale_around_pixel(self._display_scale / factor, x, y)
             return
         if event == cv2.EVENT_MOUSEMOVE and self._panning:
             if self._last_pan_px is None:
