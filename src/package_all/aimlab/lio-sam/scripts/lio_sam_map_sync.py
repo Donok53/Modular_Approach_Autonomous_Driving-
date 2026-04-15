@@ -29,6 +29,7 @@ class LioSamMapSync:
         self.wait_timeout_s = max(0.0, float(rospy.get_param("~wait_timeout_s", 120.0)))
         self.poll_period_s = max(0.05, float(rospy.get_param("~poll_period_s", 0.5)))
         self.stable_checks = max(1, int(rospy.get_param("~stable_checks", 3)))
+        self.freshness_slack_s = max(0.0, float(rospy.get_param("~freshness_slack_s", 1.0)))
         self.delete_extra = bool(rospy.get_param("~delete_extra", True))
         self.copy_on_start = bool(rospy.get_param("~copy_on_start", False))
         self.required_files = rospy.get_param(
@@ -70,9 +71,10 @@ class LioSamMapSync:
             self.sync_once("startup")
         rospy.on_shutdown(self.on_shutdown)
 
-    def _file_signature(self):
+    def _file_signature(self, fresh_after_ns=None):
         # Signature over required files to detect write completion (stable mtime+size).
         sig = []
+        freshness_slack_ns = int(self.freshness_slack_s * 1e9)
         for rel in self.required_files:
             path = os.path.join(self.source_dir, rel)
             if not os.path.isfile(path):
@@ -80,10 +82,12 @@ class LioSamMapSync:
             st = os.stat(path)
             if st.st_size <= 0:
                 return None
+            if fresh_after_ns is not None and st.st_mtime_ns + freshness_slack_ns < fresh_after_ns:
+                return None
             sig.append((rel, st.st_mtime_ns, st.st_size))
         return tuple(sig)
 
-    def _wait_until_stable(self):
+    def _wait_until_stable(self, fresh_after_ns=None):
         if self.wait_timeout_s <= 0.0:
             return True
         deadline = time.time() + self.wait_timeout_s
@@ -93,7 +97,7 @@ class LioSamMapSync:
         while time.time() < deadline:
             if os.path.isdir(self.source_dir):
                 saw_source = True
-                sig = self._file_signature()
+                sig = self._file_signature(fresh_after_ns=fresh_after_ns)
                 if sig is not None:
                     if sig == last_sig:
                         stable += 1
@@ -543,11 +547,18 @@ class LioSamMapSync:
             f.write("- 2D/2.5D 관제 화면: DrivableAreaMap.pcd + path/osm + localization pose\n")
             f.write("- 설명 가능한 주행 화면: 위 자산들에 path, tracked objects, explainability topic을 함께 겹쳐서 사용\n")
 
-    def sync_once(self, reason):
+    def sync_once(self, reason, fresh_after_ns=None):
         if not self.enabled:
             return
         if not os.path.isdir(self.source_dir):
             rospy.logwarn("lio_sam_map_sync skipped (%s): source does not exist: %s", reason, self.source_dir)
+            return
+        if fresh_after_ns is not None and self._file_signature(fresh_after_ns=fresh_after_ns) is None:
+            rospy.logwarn(
+                "lio_sam_map_sync skipped (%s): source files are not newer than shutdown trigger (src=%s)",
+                reason,
+                self.source_dir,
+            )
             return
         os.makedirs(self.destination_dir, exist_ok=True)
 
@@ -592,8 +603,9 @@ class LioSamMapSync:
         if not self.enabled:
             return
         try:
-            self._wait_until_stable()
-            self.sync_once("shutdown")
+            shutdown_trigger_ns = time.time_ns()
+            self._wait_until_stable(fresh_after_ns=shutdown_trigger_ns)
+            self.sync_once("shutdown", fresh_after_ns=shutdown_trigger_ns)
         except Exception as e:
             rospy.logwarn("lio_sam_map_sync failed on shutdown: %s", str(e))
 

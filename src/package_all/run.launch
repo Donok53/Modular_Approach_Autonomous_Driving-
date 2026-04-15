@@ -1,4 +1,6 @@
 <launch>
+  <arg name="use_sim_time" default="false"/>
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
   <arg name="use_lio_sam" default="false"/>
   <arg name="localization_environment" default="indoor"/>
   <arg name="enable_localizer_drivable_area" default="true"/>
