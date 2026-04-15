@@ -16,8 +16,6 @@ Panels:
       - /2D Nav Goal1
       - /2D Nav Goal2
       - /2D Nav Goal3
-      - /Publish Point1
-      - /Publish Point2
     Name: Tool Properties
     Splitter Ratio: 0.5886790156364441
   - Class: rviz/Views
@@ -628,12 +626,6 @@ Visualization Manager:
       Topic: /lio_sam/drivable_area/add_goal
     - Class: rviz/SetGoal
       Topic: /lio_sam/drivable_area/erase_goal
-    - Class: rviz/PublishPoint
-      Single click: true
-      Topic: /lio_sam/drivable_area/add_point
-    - Class: rviz/PublishPoint
-      Single click: true
-      Topic: /lio_sam/drivable_area/erase_point
   Value: true
   Views:
     Current:
