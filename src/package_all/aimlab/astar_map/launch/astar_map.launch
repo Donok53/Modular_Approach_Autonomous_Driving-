@@ -41,6 +41,7 @@
   <arg name="replan_path_start_ignore_m" default="0.35"/>
   <arg name="replan_path_start_deviation_m" default="0.60"/>
   <arg name="planner_loop_hz" default="8.0"/>
+  <arg name="path_repub_period" default="0.20"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -87,6 +88,7 @@
     <param name="replan_path_start_ignore_m" value="$(arg replan_path_start_ignore_m)"/>
     <param name="replan_path_start_deviation_m" value="$(arg replan_path_start_deviation_m)"/>
     <param name="planner_loop_hz" value="$(arg planner_loop_hz)"/>
+    <param name="path_repub_period" value="$(arg path_repub_period)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>

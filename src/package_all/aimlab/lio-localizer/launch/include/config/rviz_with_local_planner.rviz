@@ -621,6 +621,14 @@ Visualization Manager:
       Topic: /astar/path_display
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /astar/candidate_paths
+      Name: astar_candidate_paths
+      Namespaces:
+        astar_candidate_paths: true
+      Queue Size: 20
+      Value: true
     - Class: rviz/Marker
       Enabled: true
       Marker Topic: /astar/clicked_goal_marker

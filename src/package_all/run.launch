@@ -161,6 +161,7 @@
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
   <arg name="global_path_planner_loop_hz" default="8.0"/>
+  <arg name="global_path_republish_period_s" default="0.20"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -430,6 +431,7 @@
         <arg name="replan_path_start_ignore_m" value="$(arg global_path_replan_start_ignore_m)"/>
         <arg name="replan_path_start_deviation_m" value="$(arg global_path_replan_start_deviation_m)"/>
         <arg name="planner_loop_hz" value="$(arg global_path_planner_loop_hz)"/>
+        <arg name="path_repub_period" value="$(arg global_path_republish_period_s)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -464,6 +466,7 @@
         <arg name="replan_path_start_ignore_m" value="$(arg global_path_replan_start_ignore_m)"/>
         <arg name="replan_path_start_deviation_m" value="$(arg global_path_replan_start_deviation_m)"/>
         <arg name="planner_loop_hz" value="$(arg global_path_planner_loop_hz)"/>
+        <arg name="path_repub_period" value="$(arg global_path_republish_period_s)"/>
       </include>
     </group>
   </group>

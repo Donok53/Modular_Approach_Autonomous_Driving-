@@ -231,6 +231,7 @@ class AStarPlanner:
         self.path_repub_period = float(rospy.get_param("~path_repub_period", 0.0))
         self._last_path_nodes = None
         self._last_path_pub_t = 0.0
+        self._last_candidate_paths_pub_t = 0.0
         self.publish_smoothed_path = bool(rospy.get_param("~publish_smoothed_path", True))
         self.path_simplify_epsilon_m = max(
             0.0, float(rospy.get_param("~path_simplify_epsilon_m", 0.20))
@@ -866,10 +867,57 @@ class AStarPlanner:
                 out.append((x0 + t * (x1 - x0), y0 + t * (y1 - y0)))
         return out
 
+    @staticmethod
+    def _project_point_to_segment(point, seg_a, seg_b):
+        px, py = float(point[0]), float(point[1])
+        ax, ay = float(seg_a[0]), float(seg_a[1])
+        bx, by = float(seg_b[0]), float(seg_b[1])
+        vx = bx - ax
+        vy = by - ay
+        denom = vx * vx + vy * vy
+        if denom <= 1e-9:
+            return (ax, ay), 0.0, (px - ax) * (px - ax) + (py - ay) * (py - ay)
+        t = ((px - ax) * vx + (py - ay) * vy) / denom
+        t = max(0.0, min(1.0, t))
+        proj = (ax + t * vx, ay + t * vy)
+        d2 = (px - proj[0]) * (px - proj[0]) + (py - proj[1]) * (py - proj[1])
+        return proj, t, d2
+
+    def _trim_world_path_from_current_start(self, world_points):
+        pts = self._dedupe_world_points(world_points)
+        if len(pts) <= 1 or self._display_start_xy is None:
+            return pts
+
+        best_idx = 0
+        best_t = 0.0
+        best_proj = pts[0]
+        best_d2 = self._xy_distance(self._display_start_xy, pts[0]) ** 2
+        for idx in range(len(pts) - 1):
+            proj, t, d2 = self._project_point_to_segment(
+                self._display_start_xy, pts[idx], pts[idx + 1]
+            )
+            if d2 < best_d2:
+                best_idx = idx
+                best_t = t
+                best_proj = proj
+                best_d2 = d2
+
+        trimmed = []
+        if best_t <= 1e-3:
+            trimmed.append(pts[best_idx])
+            trimmed.extend(pts[best_idx + 1 :])
+        elif best_t >= 1.0 - 1e-3:
+            trimmed.append(pts[best_idx + 1])
+            trimmed.extend(pts[best_idx + 2 :])
+        else:
+            trimmed.append(best_proj)
+            trimmed.extend(pts[best_idx + 1 :])
+        return self._dedupe_world_points(trimmed)
+
     def _prepare_display_path(self, world_points, simplify=True):
         if len(world_points) <= 1:
             return list(world_points)
-        pts = list(world_points)
+        pts = self._trim_world_path_from_current_start(world_points)
         if simplify and self.publish_smoothed_path and self.path_simplify_epsilon_m > 0.0:
             pts = self._rdp(pts, self.path_simplify_epsilon_m)
         return self._resample_path(pts, self.published_path_spacing_m)
@@ -1028,18 +1076,6 @@ class AStarPlanner:
         clear.action = Marker.DELETEALL
         msg.markers.append(clear)
 
-        palette = [
-            (0.10, 0.75, 0.95),
-            (0.95, 0.55, 0.20),
-            (0.45, 0.90, 0.35),
-            (0.90, 0.35, 0.95),
-            (0.95, 0.85, 0.20),
-            (0.35, 0.80, 0.95),
-            (0.95, 0.35, 0.50),
-            (0.60, 0.95, 0.35),
-            (0.75, 0.60, 0.95),
-            (0.95, 0.65, 0.65),
-        ]
         for idx, world_points in enumerate(world_paths):
             if not world_points:
                 continue
@@ -1052,11 +1088,16 @@ class AStarPlanner:
             marker.action = Marker.ADD
             marker.pose.orientation.w = 1.0
             marker.scale.x = 0.06 if idx == 0 else 0.04
-            r, g, b = palette[idx % len(palette)]
-            marker.color.r = r
-            marker.color.g = g
-            marker.color.b = b
-            marker.color.a = 0.85 if idx == 0 else 0.55
+            if idx == 0:
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                marker.color.a = 0.95
+            else:
+                marker.color.r = 0.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+                marker.color.a = 0.85
             for x, y in self._prepare_visualization_path(world_points, simplify=False):
                 marker.points.append(Point(float(x), float(y), 0.03))
             msg.markers.append(marker)
@@ -1068,12 +1109,30 @@ class AStarPlanner:
         if (not force) and signature == self._last_candidate_world_paths_signature:
             return
         self._last_candidate_world_paths_signature = signature
+        self._last_candidate_paths_pub_t = time.monotonic()
+        self._publish_candidate_world_paths_messages(world_paths, stamp=stamp)
+
+    def publish_candidate_world_paths_if_needed(self, world_paths, stamp=None):
+        signature = self._candidate_world_paths_signature(world_paths)
+        changed = signature != self._last_candidate_world_paths_signature
+        do_periodic = False
+        if (not changed) and self.path_repub_period > 0.0:
+            tnow = time.monotonic()
+            if (tnow - self._last_candidate_paths_pub_t) >= self.path_repub_period:
+                do_periodic = True
+                self._last_candidate_paths_pub_t = tnow
+        if not changed and not do_periodic:
+            return
+        self._last_candidate_world_paths_signature = signature
+        if changed:
+            self._last_candidate_paths_pub_t = time.monotonic()
         self._publish_candidate_world_paths_messages(world_paths, stamp=stamp)
 
     def clear_candidate_world_paths(self, stamp=None, force=False):
         if (not force) and self._last_candidate_world_paths_signature is None:
             return
         self._last_candidate_world_paths_signature = None
+        self._last_candidate_paths_pub_t = 0.0
         self._publish_candidate_world_paths_messages([], stamp=stamp)
 
     def _publish_path_fallback_state(self, is_fallback, force=False):
@@ -1281,6 +1340,7 @@ class AStarPlanner:
         self._last_world_path_signature = None
         self._last_world_path = None
         self._last_path_pub_t = 0.0
+        self._last_candidate_paths_pub_t = 0.0
         self._clear_published_path_context()
         self.clear_candidate_world_paths(stamp=stamp, force=True)
         self._publish_path_fallback_state(False, force=True)
@@ -2580,6 +2640,10 @@ if __name__ == "__main__":
 
             if (not a._path_is_fallback) and world_path and a.path_repub_period > 0.0:
                 a.publish_world_path_if_changed(world_path)
+                if candidate_world_paths:
+                    a.publish_candidate_world_paths_if_needed(
+                        candidate_world_paths, stamp=rospy.Time.now()
+                    )
             elif (not a._path_is_fallback) and path_nodes and a.path_repub_period > 0.0:
                 a.publish_path_if_changed(path_nodes)
 
