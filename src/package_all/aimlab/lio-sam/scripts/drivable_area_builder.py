@@ -180,6 +180,8 @@ class DrivableAreaBuilder:
         self.grid_topic = rospy.get_param("~grid_topic", "/lio_sam/drivable_area/grid")
         self.marker_max_cells = max(1000, int(rospy.get_param("~marker_max_cells", 40000)))
         self.publish_period_s = max(0.1, float(rospy.get_param("~publish_period_s", 0.5)))
+        self.use_flat_cell_z = bool(rospy.get_param("~use_flat_cell_z", False))
+        self.flat_cell_z_m = float(rospy.get_param("~flat_cell_z_m", 0.0))
 
         self._cells = set()
         self._cell_z = {}
@@ -529,6 +531,30 @@ class DrivableAreaBuilder:
                 ref_z = float(odom_z)
         return self._reference_z_at_xy_locked(x, y, ref_z)
 
+    def _edit_reference_z_at_xy_locked(self, x, y, fallback_z):
+        # For manual edits in localization stage, prefer nearby existing
+        # drivable cell heights over the robot's current odom z. This makes
+        # add-point edits land on the locally visible surface instead of
+        # appearing not to apply when the clicked area is far from the robot.
+        search_radius = max(self.edit_brush_radius_m, 1.5 * self.grid_resolution_m)
+        center_key = self.xy_to_key(x, y)
+        search_cells = max(1, int(math.ceil(search_radius / self.grid_resolution_m)))
+        nearby_z = []
+        for di in range(-search_cells, search_cells + 1):
+            for dj in range(-search_cells, search_cells + 1):
+                key = (center_key[0] + di, center_key[1] + dj)
+                z = self._cell_z.get(key, None)
+                if z is None:
+                    continue
+                kx, ky = self.key_to_center(key[0], key[1])
+                if math.hypot(kx - x, ky - y) <= search_radius:
+                    nearby_z.append(float(z))
+        if nearby_z:
+            z_med = self._percentile(nearby_z, 50.0)
+            if z_med is not None:
+                return float(z_med)
+        return self._fallback_ground_z_at_xy_locked(x, y, fallback_z)
+
     def _update_adaptive_ground_reference_locked(self, sampled_points):
         if not self.use_adaptive_ground_reference:
             return
@@ -806,6 +832,8 @@ class DrivableAreaBuilder:
                         z = self._fallback_ground_z_at_xy_locked(x, y, cz)
                     else:
                         z = cz
+                if allow and self.use_flat_cell_z:
+                    z = self.flat_cell_z_m
                 rec = self._paint_key(key, z, allow)
                 if rec is not None:
                     changed = True
@@ -1073,7 +1101,11 @@ class DrivableAreaBuilder:
             rospy.logwarn_throttle(1.0, "drivable_area %s ignored: builder is in read-only mode", source)
             return
         with self._lock:
-            z = self._last_odom_z
+            fallback_z = self._last_odom_z
+            if allow:
+                z = self._edit_reference_z_at_xy_locked(x, y, fallback_z)
+            else:
+                z = fallback_z
         changed = self.paint_circle(
             x,
             y,
@@ -1169,7 +1201,13 @@ class DrivableAreaBuilder:
 
     def _build_state_snapshot(self):
         with self._lock:
-            cells = [[ix, iy, float(self._cell_z.get((ix, iy), self._last_odom_z))] for ix, iy in sorted(self._cells)]
+            cells = []
+            for ix, iy in sorted(self._cells):
+                if self.use_flat_cell_z:
+                    z = self.flat_cell_z_m
+                else:
+                    z = float(self._cell_z.get((ix, iy), self._last_odom_z))
+                cells.append([ix, iy, float(z)])
             risk_cells = [[ix, iy] for ix, iy in sorted(self._risk_cells)]
             payload = {
                 "version": 1,
@@ -1231,7 +1269,10 @@ class DrivableAreaBuilder:
                     continue
                 ix = int(row[0])
                 iy = int(row[1])
-                z = float(row[2])
+                if self.use_flat_cell_z:
+                    z = self.flat_cell_z_m
+                else:
+                    z = float(row[2])
                 key = (ix, iy)
                 self._cells.add(key)
                 self._cell_z[key] = z
@@ -1331,7 +1372,10 @@ class DrivableAreaBuilder:
         for ix, iy in cells[::step]:
             p = Point()
             p.x, p.y = self.key_to_center(ix, iy)
-            p.z = cell_z.get((ix, iy), last_odom_z) + self.marker_z_offset
+            if self.use_flat_cell_z:
+                p.z = self.flat_cell_z_m + self.marker_z_offset
+            else:
+                p.z = cell_z.get((ix, iy), last_odom_z) + self.marker_z_offset
             marker.points.append(p)
 
         self.pub_marker.publish(marker)

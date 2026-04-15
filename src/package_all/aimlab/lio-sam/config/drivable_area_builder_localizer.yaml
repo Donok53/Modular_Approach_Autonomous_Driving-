@@ -23,15 +23,22 @@ use_local_slope_model: false
 use_adaptive_ground_reference: false
 
 # Manual editing
-edit_brush_radius_m: 0.35
+# In run.launch RViz, use explicit add/erase Publish Point tools instead of
+# ambiguous toggle edits so corrections reflect immediately and predictably.
+edit_brush_radius_m: 0.55
 manual_edit_enforce_ground_filter: false
-use_clicked_point: true
+add_point_topic: /lio_sam/drivable_area/add_point
+erase_point_topic: /lio_sam/drivable_area/erase_point
+use_clicked_point: false
 clicked_point_topic: /clicked_point
 clicked_point_mode: toggle
 
 # Visualization (warm drivable overlay for RViz edit workflow)
 marker_topic: /lio_sam/drivable_area/marker
 grid_topic: /lio_sam/drivable_area/grid
+marker_max_cells: 200000
+use_flat_cell_z: true
+flat_cell_z_m: 0.0
 marker_z_offset: 0.03
 marker_height: 0.08
 marker_color_r: 1.00
