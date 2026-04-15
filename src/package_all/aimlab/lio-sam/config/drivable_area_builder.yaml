@@ -10,6 +10,14 @@ seed_radius_m: 1.20
 seed_step_m: 0.30
 force_trail_from_odom: true
 force_trail_radius_m: 0.35
+robot_width_m: 0.58
+robot_length_m: 0.612
+footprint_padding_m: 0.05
+paint_robot_footprint_from_odom: true
+footprint_trail_step_m: 0.10
+footprint_trail_extra_width_m: 0.00
+footprint_trail_extra_length_m: 0.00
+footprint_trail_enforce_ground_filter: true
 edit_brush_radius_m: 1.00
 height_update_alpha: 0.35
 marker_z_offset: 0.03
@@ -63,6 +71,7 @@ use_lidar_height_prior: true
 lidar_height_m: 0.46
 lidar_height_tolerance_m: 0.30
 lidar_prior_mode: clamp   # clamp | reject
+# Paint odom-seeded area using ground-height reference rather than raw lidar z.
 max_drop_m: 0.22
 max_step_up_m: 0.24
 max_neighbor_height_diff_m: 0.28

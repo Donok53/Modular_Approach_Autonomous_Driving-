@@ -29,6 +29,22 @@ class DrivableAreaBuilder:
         # Always keep a narrow guaranteed drivable trail on the actually traversed path.
         self.force_trail_from_odom = bool(rospy.get_param("~force_trail_from_odom", True))
         self.force_trail_radius_m = max(0.05, float(rospy.get_param("~force_trail_radius_m", 0.35)))
+        self.robot_width_m = max(0.05, float(rospy.get_param("~robot_width_m", 0.58)))
+        self.robot_length_m = max(0.05, float(rospy.get_param("~robot_length_m", 0.612)))
+        self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.05)))
+        self.paint_robot_footprint_from_odom = bool(
+            rospy.get_param("~paint_robot_footprint_from_odom", True)
+        )
+        self.footprint_trail_step_m = max(0.02, float(rospy.get_param("~footprint_trail_step_m", 0.10)))
+        self.footprint_trail_extra_width_m = max(
+            0.0, float(rospy.get_param("~footprint_trail_extra_width_m", 0.00))
+        )
+        self.footprint_trail_extra_length_m = max(
+            0.0, float(rospy.get_param("~footprint_trail_extra_length_m", 0.00))
+        )
+        self.footprint_trail_enforce_ground_filter = bool(
+            rospy.get_param("~footprint_trail_enforce_ground_filter", True)
+        )
         self.edit_brush_radius_m = float(rospy.get_param("~edit_brush_radius_m", 1.00))
         self.height_update_alpha = float(rospy.get_param("~height_update_alpha", 0.35))
         self.marker_z_offset = float(rospy.get_param("~marker_z_offset", 0.03))
@@ -152,6 +168,7 @@ class DrivableAreaBuilder:
         self._cell_z = {}
         self._last_seed_xy = None
         self._last_odom_xy = None
+        self._last_odom_trail_pose = None
         self._last_odom_z = 0.0
         self._adaptive_ground_z = 0.0
         self._adaptive_ground_valid = False
@@ -233,6 +250,15 @@ class DrivableAreaBuilder:
             self.lidar_height_tolerance_m,
             self.lidar_prior_mode,
         )
+        rospy.loginfo(
+            "drivable_area_builder footprint trail | enabled=%s, footprint=%.2fm x %.2fm, padding=%.2fm, step=%.2fm, safe_only=%s",
+            "on" if self.paint_robot_footprint_from_odom else "off",
+            self.robot_length_m,
+            self.robot_width_m,
+            self.footprint_padding_m,
+            self.footprint_trail_step_m,
+            "on" if self.footprint_trail_enforce_ground_filter else "off",
+        )
 
     def xy_to_key(self, x, y):
         r = self.grid_resolution_m
@@ -276,6 +302,14 @@ class DrivableAreaBuilder:
         if self.use_adaptive_ground_reference and self.adaptive_reference_strict:
             return None
         return fallback_z
+
+    def _seed_reference_ground_z_locked(self, fallback_z):
+        ref_z = self._get_ground_reference_z_locked(fallback_z)
+        if ref_z is None:
+            return None
+        if self.use_adaptive_ground_reference and self._adaptive_ground_valid:
+            return ref_z
+        return self._apply_lidar_height_prior_locked(ref_z)
 
     def _apply_lidar_height_prior_locked(self, ground_z):
         if ground_z is None:
@@ -650,6 +684,18 @@ class DrivableAreaBuilder:
         if changes:
             self._push_history(("delta", changes))
 
+    @staticmethod
+    def _yaw_from_quaternion(q):
+        return math.atan2(
+            2.0 * ((q.w * q.z) + (q.x * q.y)),
+            1.0 - (2.0 * ((q.y * q.y) + (q.z * q.z))),
+        )
+
+    @staticmethod
+    def _interp_angle(a0, a1, t):
+        da = math.atan2(math.sin(a1 - a0), math.cos(a1 - a0))
+        return a0 + (float(t) * da)
+
     def _paint_key(self, key, z, allow):
         # Caller must hold self._lock.
         before_exists = key in self._cells
@@ -682,18 +728,16 @@ class DrivableAreaBuilder:
             self._risk_cells.discard(key)
         return (key, before_exists, before_z, after_exists, after_z)
 
-    def paint_circle(self, cx, cy, cz, radius_m, allow=True, record_history=False, enforce_ground_filter=True):
-        if radius_m <= 0.0:
+    def _paint_keys(self, keys, cz, allow=True, record_history=False, enforce_ground_filter=True):
+        key_list = sorted(set(keys))
+        if not key_list:
             return False
+
         with self._lock:
-            r = self.grid_resolution_m
-            ic, jc = self.xy_to_key(cx, cy)
-            n = int(math.ceil(radius_m / r))
-            rr = radius_m * radius_m
             changed = False
             risk_changed = False
             changes = []
-            ref_z = self._get_ground_reference_z_locked(cz)
+            ref_z = self._seed_reference_ground_z_locked(cz)
             use_ground_filter = (enforce_ground_filter and self.use_ground_filter)
             if allow and use_ground_filter and ref_z is None:
                 if self.allow_degraded_seeding_when_ref_missing:
@@ -702,51 +746,46 @@ class DrivableAreaBuilder:
                 else:
                     return False
 
-            for di in range(-n, n + 1):
-                for dj in range(-n, n + 1):
-                    ix = ic + di
-                    iy = jc + dj
-                    x, y = self.key_to_center(ix, iy)
-                    if (x - cx) * (x - cx) + (y - cy) * (y - cy) > rr:
-                        continue
-                    key = (ix, iy)
-                    if allow and use_ground_filter:
-                        safe, gz, reason = self._is_key_ground_safe(key, ref_z)
-                        if not safe:
-                            if self.track_risk_cells:
-                                should_mark_risk = True
-                                if self.risk_require_confirmed_hazard:
-                                    should_mark_risk = reason in ("drop", "step", "neighbor_jump")
-                                if should_mark_risk:
-                                    before_risk = key in self._risk_cells
-                                    self._risk_cells.add(key)
-                                    if not before_risk:
-                                        risk_changed = True
-                                else:
-                                    if key in self._risk_cells:
-                                        self._risk_cells.discard(key)
-                                        risk_changed = True
-                            elif key in self._risk_cells:
-                                self._risk_cells.discard(key)
-                                risk_changed = True
-                            continue
-                        if key in self._risk_cells:
+            for key in key_list:
+                ix, iy = key
+                x, y = self.key_to_center(ix, iy)
+                if allow and use_ground_filter:
+                    safe, gz, reason = self._is_key_ground_safe(key, ref_z)
+                    if not safe:
+                        if self.track_risk_cells:
+                            should_mark_risk = True
+                            if self.risk_require_confirmed_hazard:
+                                should_mark_risk = reason in ("drop", "step", "neighbor_jump")
+                            if should_mark_risk:
+                                before_risk = key in self._risk_cells
+                                self._risk_cells.add(key)
+                                if not before_risk:
+                                    risk_changed = True
+                            else:
+                                if key in self._risk_cells:
+                                    self._risk_cells.discard(key)
+                                    risk_changed = True
+                        elif key in self._risk_cells:
                             self._risk_cells.discard(key)
                             risk_changed = True
-                        if gz is not None:
-                            z = gz
-                        else:
-                            z = ref_z
+                        continue
+                    if key in self._risk_cells:
+                        self._risk_cells.discard(key)
+                        risk_changed = True
+                    if gz is not None:
+                        z = gz
                     else:
-                        if allow:
-                            z = self._fallback_ground_z_at_xy_locked(x, y, cz)
-                        else:
-                            z = cz
-                    rec = self._paint_key(key, z, allow)
-                    if rec is not None:
-                        changed = True
-                        if record_history:
-                            changes.append(rec)
+                        z = ref_z
+                else:
+                    if allow:
+                        z = self._fallback_ground_z_at_xy_locked(x, y, cz)
+                    else:
+                        z = cz
+                rec = self._paint_key(key, z, allow)
+                if rec is not None:
+                    changed = True
+                    if record_history:
+                        changes.append(rec)
 
             if changed or risk_changed:
                 self._dirty = True
@@ -756,16 +795,116 @@ class DrivableAreaBuilder:
                     self._record_delta(changes)
             return changed
 
+    def paint_circle(self, cx, cy, cz, radius_m, allow=True, record_history=False, enforce_ground_filter=True):
+        if radius_m <= 0.0:
+            return False
+        r = self.grid_resolution_m
+        ic, jc = self.xy_to_key(cx, cy)
+        n = int(math.ceil(radius_m / r))
+        rr = radius_m * radius_m
+        keys = []
+        for di in range(-n, n + 1):
+            for dj in range(-n, n + 1):
+                ix = ic + di
+                iy = jc + dj
+                x, y = self.key_to_center(ix, iy)
+                if (x - cx) * (x - cx) + (y - cy) * (y - cy) <= rr:
+                    keys.append((ix, iy))
+        return self._paint_keys(
+            keys,
+            cz,
+            allow=allow,
+            record_history=record_history,
+            enforce_ground_filter=enforce_ground_filter,
+        )
+
+    def _footprint_keys(self, cx, cy, yaw, half_length_m, half_width_m):
+        if half_length_m <= 0.0 or half_width_m <= 0.0:
+            return []
+        raster_margin = 0.5 * self.grid_resolution_m
+        half_length = half_length_m + raster_margin
+        half_width = half_width_m + raster_margin
+        c = math.cos(yaw)
+        s = math.sin(yaw)
+        bbox_x = abs(c) * half_length + abs(s) * half_width
+        bbox_y = abs(s) * half_length + abs(c) * half_width
+        min_ix, min_iy = self.xy_to_key(cx - bbox_x, cy - bbox_y)
+        max_ix, max_iy = self.xy_to_key(cx + bbox_x, cy + bbox_y)
+        keys = []
+        for ix in range(min_ix, max_ix + 1):
+            for iy in range(min_iy, max_iy + 1):
+                x, y = self.key_to_center(ix, iy)
+                dx = x - cx
+                dy = y - cy
+                local_x = c * dx + s * dy
+                local_y = (-s * dx) + (c * dy)
+                if abs(local_x) <= half_length and abs(local_y) <= half_width:
+                    keys.append((ix, iy))
+        return keys
+
+    def paint_footprint(
+        self,
+        cx,
+        cy,
+        cz,
+        yaw,
+        allow=True,
+        record_history=False,
+        enforce_ground_filter=True,
+        half_length_m=None,
+        half_width_m=None,
+    ):
+        if half_length_m is None:
+            half_length_m = 0.5 * self.robot_length_m + self.footprint_padding_m + self.footprint_trail_extra_length_m
+        if half_width_m is None:
+            half_width_m = 0.5 * self.robot_width_m + self.footprint_padding_m + self.footprint_trail_extra_width_m
+        keys = self._footprint_keys(cx, cy, yaw, half_length_m, half_width_m)
+        return self._paint_keys(
+            keys,
+            cz,
+            allow=allow,
+            record_history=record_history,
+            enforce_ground_filter=enforce_ground_filter,
+        )
+
+    def paint_swept_footprint(self, start_pose, end_pose, allow=True, record_history=False, enforce_ground_filter=True):
+        if start_pose is None or end_pose is None:
+            return False
+        sx, sy, sz, syaw = start_pose
+        ex, ey, ez, eyaw = end_pose
+        dist = math.hypot(ex - sx, ey - sy)
+        steps = max(1, int(math.ceil(dist / self.footprint_trail_step_m)))
+        changed = False
+        for idx in range(steps + 1):
+            t = float(idx) / float(steps)
+            px = sx + ((ex - sx) * t)
+            py = sy + ((ey - sy) * t)
+            pz = sz + ((ez - sz) * t)
+            pyaw = self._interp_angle(syaw, eyaw, t)
+            changed = self.paint_footprint(
+                px,
+                py,
+                pz,
+                pyaw,
+                allow=allow,
+                record_history=record_history,
+                enforce_ground_filter=enforce_ground_filter,
+            ) or changed
+        return changed
+
     def odom_callback(self, msg):
         x = float(msg.pose.pose.position.x)
         y = float(msg.pose.pose.position.y)
         z = float(msg.pose.pose.position.z)
+        yaw = self._yaw_from_quaternion(msg.pose.pose.orientation)
 
         with self._lock:
+            prev_trail_pose = self._last_odom_trail_pose
             self._last_odom_z = z
             self._last_odom_xy = (x, y)
             last_seed_xy = self._last_seed_xy
             trail_z = self._fallback_ground_z_at_xy_locked(x, y, z)
+            self._last_odom_trail_pose = (x, y, trail_z, yaw)
 
         if self.read_only_mode:
             return
@@ -777,10 +916,29 @@ class DrivableAreaBuilder:
             self.paint_circle(
                 x, y, trail_z, self.force_trail_radius_m, allow=True, record_history=False, enforce_ground_filter=False
             )
+        if self.paint_robot_footprint_from_odom:
+            if prev_trail_pose is None:
+                self.paint_footprint(
+                    x,
+                    y,
+                    trail_z,
+                    yaw,
+                    allow=True,
+                    record_history=False,
+                    enforce_ground_filter=self.footprint_trail_enforce_ground_filter,
+                )
+            else:
+                self.paint_swept_footprint(
+                    prev_trail_pose,
+                    (x, y, trail_z, yaw),
+                    allow=True,
+                    record_history=False,
+                    enforce_ground_filter=self.footprint_trail_enforce_ground_filter,
+                )
 
         if last_seed_xy is None:
             self.paint_circle(
-                x, y, z, self.seed_radius_m, allow=True, record_history=False, enforce_ground_filter=True
+                x, y, trail_z, self.seed_radius_m, allow=True, record_history=False, enforce_ground_filter=True
             )
             with self._lock:
                 self._last_seed_xy = (x, y)
@@ -789,7 +947,7 @@ class DrivableAreaBuilder:
         dist = math.hypot(x - last_seed_xy[0], y - last_seed_xy[1])
         if dist >= self.seed_step_m:
             self.paint_circle(
-                x, y, z, self.seed_radius_m, allow=True, record_history=False, enforce_ground_filter=True
+                x, y, trail_z, self.seed_radius_m, allow=True, record_history=False, enforce_ground_filter=True
             )
             with self._lock:
                 self._last_seed_xy = (x, y)
