@@ -18,6 +18,12 @@ footprint_trail_step_m: 0.10
 footprint_trail_extra_width_m: 0.00
 footprint_trail_extra_length_m: 0.00
 footprint_trail_enforce_ground_filter: true
+same_level_fill_from_odom: true
+same_level_fill_lateral_margin_m: 0.80
+same_level_fill_longitudinal_margin_m: 0.30
+same_level_fill_height_tolerance_m: 0.10
+same_level_fill_max_cells: 1200
+same_level_fill_use_eight_connected: true
 edit_brush_radius_m: 1.00
 height_update_alpha: 0.35
 marker_z_offset: 0.03
@@ -66,9 +72,9 @@ use_local_slope_model: true
 slope_model_history_size: 80
 slope_model_min_samples: 12
 slope_model_max_tilt_deg: 30.0
-# Lidar height prior (sensor ~0.46m above ground): reject/clamp wrong-floor candidates
+# Lidar height prior (sensor center ~0.525m above ground): reject/clamp wrong-floor candidates
 use_lidar_height_prior: true
-lidar_height_m: 0.46
+lidar_height_m: 0.525
 lidar_height_tolerance_m: 0.30
 lidar_prior_mode: clamp   # clamp | reject
 # Paint odom-seeded area using ground-height reference rather than raw lidar z.

@@ -6,6 +6,7 @@ import threading
 import json
 import os
 import rospy
+from collections import deque
 
 from geometry_msgs.msg import Point, PointStamped
 from nav_msgs.msg import Odometry, OccupancyGrid
@@ -44,6 +45,22 @@ class DrivableAreaBuilder:
         )
         self.footprint_trail_enforce_ground_filter = bool(
             rospy.get_param("~footprint_trail_enforce_ground_filter", True)
+        )
+        self.same_level_fill_from_odom = bool(rospy.get_param("~same_level_fill_from_odom", True))
+        self.same_level_fill_lateral_margin_m = max(
+            0.0, float(rospy.get_param("~same_level_fill_lateral_margin_m", 0.80))
+        )
+        self.same_level_fill_longitudinal_margin_m = max(
+            0.0, float(rospy.get_param("~same_level_fill_longitudinal_margin_m", 0.30))
+        )
+        self.same_level_fill_height_tolerance_m = max(
+            0.01, float(rospy.get_param("~same_level_fill_height_tolerance_m", 0.10))
+        )
+        self.same_level_fill_max_cells = max(
+            50, int(rospy.get_param("~same_level_fill_max_cells", 1200))
+        )
+        self.same_level_fill_use_eight_connected = bool(
+            rospy.get_param("~same_level_fill_use_eight_connected", True)
         )
         self.edit_brush_radius_m = float(rospy.get_param("~edit_brush_radius_m", 1.00))
         self.height_update_alpha = float(rospy.get_param("~height_update_alpha", 0.35))
@@ -109,7 +126,7 @@ class DrivableAreaBuilder:
         self.slope_model_max_tilt_deg = max(1.0, float(rospy.get_param("~slope_model_max_tilt_deg", 30.0)))
         # Optional prior: lidar is mounted above ground (helps reject wrong-floor/outlier ground picks)
         self.use_lidar_height_prior = bool(rospy.get_param("~use_lidar_height_prior", True))
-        self.lidar_height_m = max(0.0, float(rospy.get_param("~lidar_height_m", 0.46)))
+        self.lidar_height_m = max(0.0, float(rospy.get_param("~lidar_height_m", 0.525)))
         self.lidar_height_tolerance_m = max(0.01, float(rospy.get_param("~lidar_height_tolerance_m", 0.20)))
         self.lidar_prior_mode = str(rospy.get_param("~lidar_prior_mode", "clamp")).strip().lower()
         if self.lidar_prior_mode not in ("clamp", "reject"):
@@ -258,6 +275,14 @@ class DrivableAreaBuilder:
             self.footprint_padding_m,
             self.footprint_trail_step_m,
             "on" if self.footprint_trail_enforce_ground_filter else "off",
+        )
+        rospy.loginfo(
+            "drivable_area_builder same-level fill | enabled=%s, lateral=%.2fm, longitudinal=%.2fm, dz=%.2fm, max_cells=%d",
+            "on" if self.same_level_fill_from_odom else "off",
+            self.same_level_fill_lateral_margin_m,
+            self.same_level_fill_longitudinal_margin_m,
+            self.same_level_fill_height_tolerance_m,
+            self.same_level_fill_max_cells,
         )
 
     def xy_to_key(self, x, y):
@@ -842,6 +867,16 @@ class DrivableAreaBuilder:
                     keys.append((ix, iy))
         return keys
 
+    def _key_within_oriented_box(self, key, cx, cy, yaw, half_length_m, half_width_m):
+        x, y = self.key_to_center(key[0], key[1])
+        dx = x - cx
+        dy = y - cy
+        c = math.cos(yaw)
+        s = math.sin(yaw)
+        local_x = c * dx + s * dy
+        local_y = (-s * dx) + (c * dy)
+        return abs(local_x) <= half_length_m and abs(local_y) <= half_width_m
+
     def paint_footprint(
         self,
         cx,
@@ -892,6 +927,85 @@ class DrivableAreaBuilder:
             ) or changed
         return changed
 
+    def paint_same_level_local_fill(self, cx, cy, cz, yaw):
+        if (not self.same_level_fill_from_odom) or (not self.use_ground_filter):
+            return False
+
+        with self._lock:
+            ref_z = self._seed_reference_ground_z_locked(cz)
+        if ref_z is None:
+            return False
+
+        seed_half_length = 0.5 * self.robot_length_m + self.footprint_padding_m + self.footprint_trail_extra_length_m
+        seed_half_width = 0.5 * self.robot_width_m + self.footprint_padding_m + self.footprint_trail_extra_width_m
+        envelope_half_length = seed_half_length + self.same_level_fill_longitudinal_margin_m
+        envelope_half_width = seed_half_width + self.same_level_fill_lateral_margin_m
+        seed_keys = self._footprint_keys(cx, cy, yaw, seed_half_length, seed_half_width)
+        if not seed_keys:
+            return False
+
+        target_z_samples = []
+        accepted = set()
+        q = deque()
+        for key in seed_keys:
+            if key in accepted:
+                continue
+            safe, gz, _reason = self._is_key_ground_safe(key, ref_z)
+            if not safe:
+                continue
+            accepted.add(key)
+            q.append(key)
+            if gz is not None:
+                target_z_samples.append(float(gz))
+
+        if not accepted:
+            return False
+
+        target_z = self._percentile(target_z_samples, 50.0)
+        if target_z is None:
+            with self._lock:
+                target_z = self._reference_z_at_xy_locked(cx, cy, ref_z)
+        if target_z is None:
+            return False
+
+        visited = set(accepted)
+        if self.same_level_fill_use_eight_connected:
+            neighbor_offsets = (
+                (1, 0), (-1, 0), (0, 1), (0, -1),
+                (1, 1), (1, -1), (-1, 1), (-1, -1),
+            )
+        else:
+            neighbor_offsets = ((1, 0), (-1, 0), (0, 1), (0, -1))
+
+        while q and len(accepted) < self.same_level_fill_max_cells:
+            key = q.popleft()
+            for dx, dy in neighbor_offsets:
+                nk = (key[0] + dx, key[1] + dy)
+                if nk in visited:
+                    continue
+                visited.add(nk)
+                if not self._key_within_oriented_box(
+                    nk, cx, cy, yaw, envelope_half_length, envelope_half_width
+                ):
+                    continue
+                safe, gz, _reason = self._is_key_ground_safe(nk, ref_z)
+                if (not safe) or (gz is None):
+                    continue
+                if abs(float(gz) - float(target_z)) > self.same_level_fill_height_tolerance_m:
+                    continue
+                accepted.add(nk)
+                q.append(nk)
+                if len(accepted) >= self.same_level_fill_max_cells:
+                    break
+
+        return self._paint_keys(
+            accepted,
+            cz,
+            allow=True,
+            record_history=False,
+            enforce_ground_filter=True,
+        )
+
     def odom_callback(self, msg):
         x = float(msg.pose.pose.position.x)
         y = float(msg.pose.pose.position.y)
@@ -935,6 +1049,8 @@ class DrivableAreaBuilder:
                     record_history=False,
                     enforce_ground_filter=self.footprint_trail_enforce_ground_filter,
                 )
+        if self.same_level_fill_from_odom:
+            self.paint_same_level_local_fill(x, y, trail_z, yaw)
 
         if last_seed_xy is None:
             self.paint_circle(
