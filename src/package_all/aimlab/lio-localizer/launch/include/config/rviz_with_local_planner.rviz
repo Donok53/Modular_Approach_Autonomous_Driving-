@@ -355,7 +355,7 @@ Visualization Manager:
       Namespaces:
         {}
       Queue Size: 20
-      Value: false
+      Value: true
     - Class: rviz/Marker
       Enabled: false
       Marker Topic: /lio_sam/drivable_area/risk_marker
