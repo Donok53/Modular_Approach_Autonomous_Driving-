@@ -1,11 +1,14 @@
 <launch>
 
     <arg name="project" default="lio_sam"/>
+    <arg name="real_mode" default="false"/>
+    <arg name="map_profile_name" default="$(eval 'real' if arg('real_mode') == 'true' else 'test')"/>
+    <arg name="map_profile_suffix" default="$(eval '_real' if arg('real_mode') == 'true' else '')"/>
     <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
     <arg name="environment" default="indoor"/>
     <arg name="enable_map_sync" default="true"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
-    <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/test"/>
+    <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
     <arg name="enable_semantic_sidewalk_pipeline" default="true"/>
     <arg name="semantic_source_bag" default=""/>
     <arg name="semantic_auto_detect_source_bag" default="true"/>
@@ -23,12 +26,13 @@
     <arg name="shutdown_worker_log_file" default="lio_sam_map_sync_worker.log"/>
     <arg name="map_sync_astar_ref_enable" default="true"/>
     <arg name="map_sync_astar_ref_source_file" default="map_reference_coordinate.csv"/>
-    <arg name="map_sync_astar_ref_destination_file" default="$(find astar_map)/map/map_reference_coordinate.csv"/>
+    <arg name="map_sync_astar_ref_destination_file" default="$(find astar_map)/map/map_reference_coordinate$(arg map_profile_suffix).csv"/>
+    <arg name="semantic_runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
     <arg name="enable_trajectory_export" default="true"/>
     <arg name="trajectory_export_path_topic" default="/lio_sam/mapping/path"/>
     <arg name="trajectory_export_path_mode" default="local"/>
-    <arg name="trajectory_export_output_csv" default="$(find astar_map)/map/auto_trajectory_local.csv"/>
-    <arg name="trajectory_export_output_osm" default="$(find astar_map)/map/auto_trajectory.osm"/>
+    <arg name="trajectory_export_output_csv" default="$(find astar_map)/map/auto_trajectory_local$(arg map_profile_suffix).csv"/>
+    <arg name="trajectory_export_output_osm" default="$(find astar_map)/map/auto_trajectory$(arg map_profile_suffix).osm"/>
     <arg name="trajectory_export_auto_write" default="false"/>
     <arg name="trajectory_export_save_on_shutdown" default="true"/>
     <arg name="trajectory_export_publish_reload" default="false"/>
@@ -66,7 +70,7 @@
       <arg name="semantic_sidewalk_output_dir" value="semantic_sidewalk"/>
       <arg name="semantic_state_output" value="semantic_sidewalk_state.json"/>
       <arg name="semantic_drivable_state_output" value="lio_sam_drivable_area_state.json"/>
-      <arg name="semantic_global_drivable_state_file" value="$(env HOME)/.ros/lio_sam_drivable_area_state.json"/>
+      <arg name="semantic_global_drivable_state_file" value="$(arg semantic_runtime_drivable_state_file)"/>
       <arg name="semantic_source_bag" value="$(arg semantic_source_bag)"/>
       <arg name="semantic_auto_detect_source_bag" value="$(arg semantic_auto_detect_source_bag)"/>
       <arg name="semantic_detect_bag_poll_period_s" value="$(arg semantic_detect_bag_poll_period_s)"/>

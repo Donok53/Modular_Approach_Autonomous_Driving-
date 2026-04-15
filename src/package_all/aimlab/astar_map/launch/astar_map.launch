@@ -42,6 +42,13 @@
   <arg name="replan_path_start_deviation_m" default="0.60"/>
   <arg name="planner_loop_hz" default="8.0"/>
   <arg name="path_repub_period" default="0.20"/>
+  <arg name="candidate_route_switching_enabled" default="true"/>
+  <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
+  <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
+  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
+  <arg name="candidate_route_switch_blocked_score_threshold" default="3.0"/>
+  <arg name="candidate_route_switch_score_margin" default="1.0"/>
+  <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -89,6 +96,13 @@
     <param name="replan_path_start_deviation_m" value="$(arg replan_path_start_deviation_m)"/>
     <param name="planner_loop_hz" value="$(arg planner_loop_hz)"/>
     <param name="path_repub_period" value="$(arg path_repub_period)"/>
+    <param name="candidate_route_switching_enabled" value="$(arg candidate_route_switching_enabled)"/>
+    <param name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
+    <param name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
+    <param name="candidate_route_switch_corridor_radius_m" value="$(arg candidate_route_switch_corridor_radius_m)"/>
+    <param name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
+    <param name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
+    <param name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>

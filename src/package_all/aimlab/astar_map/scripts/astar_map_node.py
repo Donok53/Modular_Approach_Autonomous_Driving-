@@ -221,6 +221,34 @@ class AStarPlanner:
                 0.0, float(rospy.get_param("~global_path_candidate_max_similarity", 0.85))
             ),
         )
+        self.candidate_route_switching_enabled = bool(
+            rospy.get_param("~candidate_route_switching_enabled", True)
+        )
+        self.candidate_route_switch_lookahead_m = max(
+            0.5, float(rospy.get_param("~candidate_route_switch_lookahead_m", 6.0))
+        )
+        self.candidate_route_switch_start_ignore_m = max(
+            0.0, float(rospy.get_param("~candidate_route_switch_start_ignore_m", 0.35))
+        )
+        self.candidate_route_switch_corridor_radius_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~candidate_route_switch_corridor_radius_m",
+                    max(0.20, 0.5 * self.robot_width_m + self.footprint_padding_m),
+                )
+            ),
+        )
+        self.candidate_route_switch_blocked_score_threshold = max(
+            1.0,
+            float(rospy.get_param("~candidate_route_switch_blocked_score_threshold", 3.0)),
+        )
+        self.candidate_route_switch_score_margin = max(
+            0.0, float(rospy.get_param("~candidate_route_switch_score_margin", 1.0))
+        )
+        self.candidate_route_switch_min_hold_s = max(
+            0.0, float(rospy.get_param("~candidate_route_switch_min_hold_s", 0.8))
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -258,6 +286,7 @@ class AStarPlanner:
         self._last_world_path_signature = None
         self._last_world_path = None
         self._last_candidate_world_paths_signature = None
+        self._last_candidate_selected_index = 0
         self._last_snapped_goal_xy = None
         self._last_graph_goal_snap_xy = None
         self._goal_marker_xy = None
@@ -274,6 +303,7 @@ class AStarPlanner:
         self._last_planned_goal_id = None
         self._last_plan_stamp_s = 0.0
         self._last_plan_success = False
+        self._last_candidate_switch_s = 0.0
         self.dynamic_risk_grid = None
         self.global_obstacle_overlay = None
         self._dynamic_risk_grid_change_seq = 0
@@ -985,8 +1015,11 @@ class AStarPlanner:
     def _world_path_signature(world_points):
         return tuple((round(float(x), 2), round(float(y), 2)) for x, y in world_points)
 
-    def _candidate_world_paths_signature(self, world_paths):
-        return tuple(self._world_path_signature(path) for path in world_paths if path)
+    def _candidate_world_paths_signature(self, world_paths, selected_index=0):
+        return (
+            int(selected_index),
+            tuple(self._world_path_signature(path) for path in world_paths if path),
+        )
 
     @staticmethod
     def _dedupe_world_points(world_points):
@@ -1065,7 +1098,7 @@ class AStarPlanner:
         ids_msg.data = []
         self.pub_path_node_id_list.publish(ids_msg)
 
-    def _publish_candidate_world_paths_messages(self, world_paths, stamp=None):
+    def _publish_candidate_world_paths_messages(self, world_paths, stamp=None, selected_index=0):
         if stamp is None:
             stamp = rospy.Time.now()
         msg = MarkerArray()
@@ -1076,6 +1109,7 @@ class AStarPlanner:
         clear.action = Marker.DELETEALL
         msg.markers.append(clear)
 
+        selected_index = int(max(0, selected_index))
         for idx, world_points in enumerate(world_paths):
             if not world_points:
                 continue
@@ -1087,8 +1121,9 @@ class AStarPlanner:
             marker.type = Marker.LINE_STRIP
             marker.action = Marker.ADD
             marker.pose.orientation.w = 1.0
-            marker.scale.x = 0.06 if idx == 0 else 0.04
-            if idx == 0:
+            is_selected = idx == selected_index
+            marker.scale.x = 0.06 if is_selected else 0.04
+            if is_selected:
                 marker.color.r = 0.0
                 marker.color.g = 1.0
                 marker.color.b = 0.0
@@ -1104,16 +1139,19 @@ class AStarPlanner:
 
         self.pub_candidate_paths.publish(msg)
 
-    def publish_candidate_world_paths_if_changed(self, world_paths, stamp=None, force=False):
-        signature = self._candidate_world_paths_signature(world_paths)
+    def publish_candidate_world_paths_if_changed(self, world_paths, stamp=None, force=False, selected_index=0):
+        signature = self._candidate_world_paths_signature(world_paths, selected_index=selected_index)
         if (not force) and signature == self._last_candidate_world_paths_signature:
             return
         self._last_candidate_world_paths_signature = signature
+        self._last_candidate_selected_index = int(max(0, selected_index))
         self._last_candidate_paths_pub_t = time.monotonic()
-        self._publish_candidate_world_paths_messages(world_paths, stamp=stamp)
+        self._publish_candidate_world_paths_messages(
+            world_paths, stamp=stamp, selected_index=selected_index
+        )
 
-    def publish_candidate_world_paths_if_needed(self, world_paths, stamp=None):
-        signature = self._candidate_world_paths_signature(world_paths)
+    def publish_candidate_world_paths_if_needed(self, world_paths, stamp=None, selected_index=0):
+        signature = self._candidate_world_paths_signature(world_paths, selected_index=selected_index)
         changed = signature != self._last_candidate_world_paths_signature
         do_periodic = False
         if (not changed) and self.path_repub_period > 0.0:
@@ -1124,14 +1162,18 @@ class AStarPlanner:
         if not changed and not do_periodic:
             return
         self._last_candidate_world_paths_signature = signature
+        self._last_candidate_selected_index = int(max(0, selected_index))
         if changed:
             self._last_candidate_paths_pub_t = time.monotonic()
-        self._publish_candidate_world_paths_messages(world_paths, stamp=stamp)
+        self._publish_candidate_world_paths_messages(
+            world_paths, stamp=stamp, selected_index=selected_index
+        )
 
     def clear_candidate_world_paths(self, stamp=None, force=False):
         if (not force) and self._last_candidate_world_paths_signature is None:
             return
         self._last_candidate_world_paths_signature = None
+        self._last_candidate_selected_index = 0
         self._last_candidate_paths_pub_t = 0.0
         self._publish_candidate_world_paths_messages([], stamp=stamp)
 
@@ -1180,6 +1222,149 @@ class AStarPlanner:
         if not path_points:
             return float("inf")
         return self._distance_point_to_polyline(self._display_start_xy, path_points)
+
+    def _sampled_world_points_within_lookahead(
+        self, world_points, lookahead_m, start_ignore_m, sample_spacing_m
+    ):
+        pts = self._dedupe_world_points(self._trim_world_path_from_current_start(world_points))
+        if len(pts) < 2:
+            return []
+        out = []
+        accumulated_m = 0.0
+        for idx in range(len(pts) - 1):
+            ax, ay = pts[idx]
+            bx, by = pts[idx + 1]
+            seg_len = math.hypot(float(bx) - float(ax), float(by) - float(ay))
+            if seg_len <= 1e-6:
+                continue
+            seg_start_m = accumulated_m
+            seg_end_m = accumulated_m + seg_len
+            accumulated_m = seg_end_m
+            if seg_end_m <= start_ignore_m:
+                continue
+            if seg_start_m >= lookahead_m:
+                break
+
+            t0 = 0.0
+            t1 = 1.0
+            if seg_start_m < start_ignore_m:
+                t0 = (start_ignore_m - seg_start_m) / seg_len
+            if seg_end_m > lookahead_m:
+                t1 = (lookahead_m - seg_start_m) / seg_len
+            t0 = max(0.0, min(1.0, t0))
+            t1 = max(0.0, min(1.0, t1))
+            if t1 <= t0:
+                continue
+
+            sub_len = max(1e-6, (t1 - t0) * seg_len)
+            steps = max(1, int(math.ceil(sub_len / max(0.05, sample_spacing_m))))
+            for step_idx in range(steps + 1):
+                t = t0 + (t1 - t0) * (float(step_idx) / float(max(1, steps)))
+                out.append(
+                    (
+                        float(ax) + (float(bx) - float(ax)) * t,
+                        float(ay) + (float(by) - float(ay)) * t,
+                    )
+                )
+        return self._dedupe_world_points(out)
+
+    def _overlay_world_path_obstacle_score(self, overlay_grid, world_points, occupied_threshold):
+        if overlay_grid is None or len(world_points) < 2:
+            return 0.0
+        res = max(1e-6, float(overlay_grid.info.resolution))
+        sampled = self._sampled_world_points_within_lookahead(
+            world_points,
+            self.candidate_route_switch_lookahead_m,
+            self.candidate_route_switch_start_ignore_m,
+            max(0.10, 0.5 * res),
+        )
+        if not sampled:
+            return 0.0
+
+        radius_cells = int(
+            math.ceil(self.candidate_route_switch_corridor_radius_m / res)
+        )
+        w = int(overlay_grid.info.width)
+        h = int(overlay_grid.info.height)
+        data = overlay_grid.data
+        visited = set()
+        score = 0.0
+        for wx, wy in sampled:
+            gx, gy = self._world_to_grid_cell(overlay_grid, wx, wy)
+            for dy in range(-radius_cells, radius_cells + 1):
+                for dx in range(-radius_cells, radius_cells + 1):
+                    if radius_cells > 0 and (dx * dx + dy * dy) > (radius_cells * radius_cells):
+                        continue
+                    nx = gx + dx
+                    ny = gy + dy
+                    if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                        continue
+                    key = (nx, ny)
+                    if key in visited:
+                        continue
+                    visited.add(key)
+                    val = int(data[ny * w + nx])
+                    if val >= occupied_threshold:
+                        score += max(1.0, float(val) / 100.0)
+        return score
+
+    def select_best_candidate_world_path(self, world_paths, active_index=0):
+        if not world_paths:
+            return 0, []
+        active_index = int(max(0, min(active_index, len(world_paths) - 1)))
+        if (
+            (not self.candidate_route_switching_enabled)
+            or len(world_paths) <= 1
+            or (not self.use_global_obstacle_overlay)
+            or self.global_obstacle_overlay is None
+        ):
+            return active_index, [0.0 for _ in world_paths]
+
+        scores = [
+            self._overlay_world_path_obstacle_score(
+                self.global_obstacle_overlay,
+                path,
+                self.global_obstacle_overlay_threshold,
+            )
+            for path in world_paths
+        ]
+        best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        if best_index == active_index:
+            return active_index, scores
+
+        current_score = scores[active_index]
+        best_score = scores[best_index]
+        current_blocked = current_score >= self.candidate_route_switch_blocked_score_threshold
+        now = rospy.get_time()
+        can_switch = (
+            self._last_candidate_switch_s <= 0.0
+            or (now - self._last_candidate_switch_s) >= self.candidate_route_switch_min_hold_s
+        )
+        should_switch = (
+            current_blocked
+            and (best_score + self.candidate_route_switch_score_margin) < current_score
+        )
+        if should_switch and can_switch:
+            self._last_candidate_switch_s = now
+            if self.debug_log_enable:
+                rospy.loginfo(
+                    "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s",
+                    active_index,
+                    best_index,
+                    ",".join("%.1f" % s for s in scores),
+                )
+            return best_index, scores
+
+        if self.debug_log_enable and current_blocked:
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f)",
+                active_index,
+                current_score,
+                best_index,
+                best_score,
+            )
+        return active_index, scores
 
     def _world_path_conflicts_with_blocked_grid(self, g, blocked, world_points):
         pts = self._dedupe_world_points(world_points)
@@ -2537,6 +2722,7 @@ if __name__ == "__main__":
         path_nodes = []
         world_path = None
         candidate_world_paths = []
+        active_candidate_index = 0
 
         while not rospy.is_shutdown():
             if a.consume_reload_request():
@@ -2544,6 +2730,7 @@ if __name__ == "__main__":
                     path_nodes = []
                     world_path = None
                     candidate_world_paths = []
+                    active_candidate_index = 0
                     a.clear_published_path()
             a.visualize_graph()
             a.show_clicked_goal_marker()
@@ -2599,16 +2786,25 @@ if __name__ == "__main__":
                 replan_success = bool(new_world_path or new_path_nodes)
                 a._mark_plan_context(replan_success)
                 if new_world_path:
-                    world_path = list(new_world_path)
                     candidate_world_paths = list(new_candidate_world_paths)
+                    active_candidate_index, _ = a.select_best_candidate_world_path(
+                        candidate_world_paths, active_index=0
+                    )
+                    if candidate_world_paths:
+                        world_path = list(candidate_world_paths[active_candidate_index])
+                    else:
+                        world_path = list(new_world_path)
                     path_nodes = []
                     a.publish_candidate_world_paths_if_changed(
-                        candidate_world_paths, stamp=rospy.Time.now()
+                        candidate_world_paths,
+                        stamp=rospy.Time.now(),
+                        selected_index=active_candidate_index,
                     )
                     a.publish_world_path_if_changed(world_path)
                 elif new_path_nodes:
                     world_path = None
                     candidate_world_paths = []
+                    active_candidate_index = 0
                     path_nodes = list(new_path_nodes)
                     a.clear_candidate_world_paths(stamp=rospy.Time.now())
                     a.publish_path_if_changed(path_nodes)
@@ -2617,11 +2813,16 @@ if __name__ == "__main__":
                     if keep_prev_path and (prev_world_path or prev_path_nodes):
                         world_path = prev_world_path
                         candidate_world_paths = prev_candidate_world_paths
+                        active_candidate_index = int(
+                            max(0, min(active_candidate_index, max(0, len(candidate_world_paths) - 1)))
+                        )
                         path_nodes = prev_path_nodes
                         a._publish_path_fallback_state(True)
                         if world_path:
                             a.publish_candidate_world_paths_if_changed(
-                                candidate_world_paths, stamp=rospy.Time.now()
+                                candidate_world_paths,
+                                stamp=rospy.Time.now(),
+                                selected_index=active_candidate_index,
                             )
                         rospy.logwarn_throttle(
                             1.0,
@@ -2630,6 +2831,7 @@ if __name__ == "__main__":
                     else:
                         world_path = None
                         candidate_world_paths = []
+                        active_candidate_index = 0
                         path_nodes = []
                         a.clear_published_path(stamp=rospy.Time.now())
                         rospy.logwarn_throttle(
@@ -2639,10 +2841,25 @@ if __name__ == "__main__":
                         )
 
             if (not a._path_is_fallback) and world_path and a.path_repub_period > 0.0:
+                if candidate_world_paths:
+                    new_active_candidate_index, _ = a.select_best_candidate_world_path(
+                        candidate_world_paths, active_index=active_candidate_index
+                    )
+                    if new_active_candidate_index != active_candidate_index:
+                        active_candidate_index = new_active_candidate_index
+                        world_path = list(candidate_world_paths[active_candidate_index])
+                        a.publish_candidate_world_paths_if_changed(
+                            candidate_world_paths,
+                            stamp=rospy.Time.now(),
+                            force=True,
+                            selected_index=active_candidate_index,
+                        )
                 a.publish_world_path_if_changed(world_path)
                 if candidate_world_paths:
                     a.publish_candidate_world_paths_if_needed(
-                        candidate_world_paths, stamp=rospy.Time.now()
+                        candidate_world_paths,
+                        stamp=rospy.Time.now(),
+                        selected_index=active_candidate_index,
                     )
             elif (not a._path_is_fallback) and path_nodes and a.path_repub_period > 0.0:
                 a.publish_path_if_changed(path_nodes)

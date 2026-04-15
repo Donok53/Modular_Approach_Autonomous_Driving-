@@ -2,6 +2,12 @@
   <arg name="use_sim_time" default="false"/>
   <param name="/use_sim_time" value="$(arg use_sim_time)"/>
   <arg name="use_lio_sam" default="false"/>
+  <arg name="real_mode" default="false"/>
+  <arg name="map_profile_name" default="$(eval 'real' if arg('real_mode') == 'true' else 'test')"/>
+  <arg name="map_profile_suffix" default="$(eval '_real' if arg('real_mode') == 'true' else '')"/>
+  <arg name="localizer_map_relative_path" default="$(eval '/map/real' if arg('real_mode') == 'true' else '/map/test')"/>
+  <arg name="localizer_map_bundle_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
+  <arg name="runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
   <arg name="localization_environment" default="indoor"/>
   <arg name="enable_localizer_drivable_area" default="true"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
@@ -162,6 +168,13 @@
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
   <arg name="global_path_planner_loop_hz" default="8.0"/>
   <arg name="global_path_republish_period_s" default="0.20"/>
+  <arg name="candidate_route_switching_enabled" default="true"/>
+  <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
+  <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
+  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
+  <arg name="candidate_route_switch_blocked_score_threshold" default="3.0"/>
+  <arg name="candidate_route_switch_score_margin" default="1.0"/>
+  <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.25"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -328,21 +341,26 @@
   <arg name="obstacle_ignore_traj_steps" default="3"/>
   <arg name="use_auto_osm" default="true"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
-  <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory.osm"/>
-  <arg name="astar_ref_file" default="$(find lio_localizer)/map/test/map_reference_coordinate.csv"/>
+  <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory$(arg map_profile_suffix).osm"/>
+  <arg name="astar_ref_file" default="$(arg localizer_map_bundle_dir)/map_reference_coordinate.csv"/>
   <arg name="enable_monitoring_asset_bundle" default="true"/>
-  <arg name="monitoring_asset_bundle_dir" default="$(find lio_localizer)/../../monitoring_delivery/latest"/>
-  <arg name="monitoring_bundle_source_dir" default="$(find lio_localizer)/map/test"/>
+  <arg name="monitoring_asset_bundle_dir" default="$(find lio_localizer)/../../monitoring_delivery/latest$(arg map_profile_suffix)"/>
+  <arg name="monitoring_bundle_source_dir" default="$(arg localizer_map_bundle_dir)"/>
   <arg name="monitoring_bundle_osm_file" default="$(eval arg('auto_osm_file') if arg('use_auto_osm') == 'true' else arg('default_osm_file'))"/>
-  <arg name="monitoring_bundle_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state.json"/>
+  <arg name="monitoring_bundle_drivable_state_file" default="$(arg runtime_drivable_state_file)"/>
 
   <group if="$(arg use_lio_sam)">
     <include file="$(find lio_sam)/launch/run-robot.launch">
+      <arg name="real_mode" value="$(arg real_mode)"/>
       <arg name="environment" value="$(arg localization_environment)"/>
     </include>
   </group>
   <group unless="$(arg use_lio_sam)">
     <include file="$(find lio_localizer)/launch/run-robot.launch">
+      <arg name="real_mode" value="$(arg real_mode)"/>
+      <arg name="map_relative_path" value="$(arg localizer_map_relative_path)"/>
+      <arg name="global_map_2d_background_pcd" value="$(arg localizer_map_bundle_dir)/GlobalMap2D.pcd"/>
+      <arg name="drivable_area_state_file_path" value="$(arg runtime_drivable_state_file)"/>
       <arg name="environment" value="$(arg localization_environment)"/>
       <arg name="enable_drivable_area" value="$(arg enable_localizer_drivable_area)"/>
       <arg name="enable_drivable_area_2d_editor" value="$(arg enable_localizer_drivable_area_2d_editor)"/>
@@ -432,6 +450,13 @@
         <arg name="replan_path_start_deviation_m" value="$(arg global_path_replan_start_deviation_m)"/>
         <arg name="planner_loop_hz" value="$(arg global_path_planner_loop_hz)"/>
         <arg name="path_repub_period" value="$(arg global_path_republish_period_s)"/>
+        <arg name="candidate_route_switching_enabled" value="$(arg candidate_route_switching_enabled)"/>
+        <arg name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
+        <arg name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
+        <arg name="candidate_route_switch_corridor_radius_m" value="$(arg candidate_route_switch_corridor_radius_m)"/>
+        <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
+        <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
+        <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -467,6 +492,13 @@
         <arg name="replan_path_start_deviation_m" value="$(arg global_path_replan_start_deviation_m)"/>
         <arg name="planner_loop_hz" value="$(arg global_path_planner_loop_hz)"/>
         <arg name="path_repub_period" value="$(arg global_path_republish_period_s)"/>
+        <arg name="candidate_route_switching_enabled" value="$(arg candidate_route_switching_enabled)"/>
+        <arg name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
+        <arg name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
+        <arg name="candidate_route_switch_corridor_radius_m" value="$(arg candidate_route_switch_corridor_radius_m)"/>
+        <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
+        <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
+        <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
       </include>
     </group>
   </group>

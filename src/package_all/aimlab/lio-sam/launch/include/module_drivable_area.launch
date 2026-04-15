@@ -1,9 +1,13 @@
 <launch>
   <arg name="config_file" default="$(find lio_sam)/config/drivable_area_builder.yaml"/>
   <arg name="enable" default="true"/>
+  <arg name="state_file_path" default=""/>
 
   <group if="$(arg enable)">
     <rosparam command="load" file="$(arg config_file)" ns="lio_sam_drivable_area_builder"/>
+    <param if="$(eval arg('state_file_path') != '')"
+           name="lio_sam_drivable_area_builder/state_file_path"
+           value="$(arg state_file_path)"/>
     <node pkg="lio_sam" type="drivable_area_builder.py"
           name="lio_sam_drivable_area_builder" output="screen" respawn="true"/>
   </group>

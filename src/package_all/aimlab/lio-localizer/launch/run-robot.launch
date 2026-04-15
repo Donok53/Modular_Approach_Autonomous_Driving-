@@ -1,12 +1,16 @@
 <launch>
     <arg name="project" default="lio_sam"/>
+    <arg name="real_mode" default="false"/>
+    <arg name="map_profile_name" default="$(eval 'real' if arg('real_mode') == 'true' else 'test')"/>
     <arg name="base_config_file" default="$(find lio_localizer)/config/params-robot_scout.yaml"/>
     <arg name="environment" default="indoor"/>
     <arg name="enable_drivable_area" default="true"/>
     <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
+    <arg name="drivable_area_state_file_path" default="$(eval env('HOME') + '/.ros/lio_sam_drivable_area_state_real.json' if arg('real_mode') == 'true' else env('HOME') + '/.ros/lio_sam_drivable_area_state.json')"/>
     <arg name="enable_drivable_area_2d_editor" default="false"/>
     <arg name="enable_global_map_2d_background" default="true"/>
-    <arg name="global_map_2d_background_pcd" default="$(find lio_localizer)/map/test/GlobalMap2D.pcd"/>
+    <arg name="map_relative_path" default="$(eval '/map/real' if arg('real_mode') == 'true' else '/map/test')"/>
+    <arg name="global_map_2d_background_pcd" default="$(find lio_localizer)/map/$(arg map_profile_name)/GlobalMap2D.pcd"/>
     <arg name="global_map_2d_background_topic" default="/lio_localizer/localization/global_map_2d"/>
     <arg name="global_map_2d_background_z_offset_m" default="0.0"/>
     <arg name="rviz_config_file" default="$(find lio_localizer)/launch/include/config/rviz.rviz"/>
@@ -20,6 +24,7 @@
     
     <!-- Parameters -->
     <rosparam file="$(arg base_config_file)" command="load" />
+    <param name="lio_localizer/mapFilePath" value="$(arg map_relative_path)"/>
     <param name="lio_localizer/cfg_use_initial_pose_setup" value="$(arg use_internal_initial_pose)"/>
     <rosparam param="lio_localizer/cfg_initial_pose_m_deg" subst_value="true">
       [$(arg initial_pose_x_m), $(arg initial_pose_y_m), $(arg initial_pose_z_m), $(arg initial_pose_roll_deg), $(arg initial_pose_pitch_deg), $(arg initial_pose_yaw_deg)]
@@ -41,6 +46,7 @@
     <include file="$(find lio_sam)/launch/include/module_drivable_area.launch">
       <arg name="enable" value="$(arg enable_drivable_area)"/>
       <arg name="config_file" value="$(arg drivable_area_config_file)"/>
+      <arg name="state_file_path" value="$(arg drivable_area_state_file_path)"/>
     </include>
 
     <!-- Optional OpenCV 2D editor window (independent from RViz) -->
