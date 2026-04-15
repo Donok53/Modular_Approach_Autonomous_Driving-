@@ -1,0 +1,51 @@
+<launch>
+  <arg name="enable" default="false"/>
+  <arg name="enable_2d_editor" default="true"/>
+  <arg name="frame_id" default="map"/>
+  <arg name="state_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_state.json"/>
+  <arg name="edited_state_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_state.edited.json"/>
+  <arg name="override_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_override.edited.json"/>
+  <arg name="grid_topic" default="/semantic_bev_editor/grid"/>
+  <arg name="cloud_topic" default="/semantic_bev_editor/cloud"/>
+  <arg name="paint_point_topic" default="/semantic_bev_editor/paint_point"/>
+  <arg name="mode_topic" default="/semantic_bev_editor/mode"/>
+  <arg name="clear_topic" default="/semantic_bev_editor/clear"/>
+  <arg name="undo_topic" default="/semantic_bev_editor/undo"/>
+  <arg name="save_topic" default="/semantic_bev_editor/save"/>
+  <arg name="load_topic" default="/semantic_bev_editor/load"/>
+  <arg name="clicked_point_topic" default="/clicked_point"/>
+  <arg name="brush_radius_m" default="0.8"/>
+
+  <group if="$(arg enable)">
+    <node pkg="lio_sam" type="semantic_bev_editor.py"
+          name="lio_sam_semantic_bev_editor" output="screen" respawn="false">
+      <param name="frame_id" value="$(arg frame_id)"/>
+      <param name="state_file_path" value="$(arg state_file_path)"/>
+      <param name="edited_state_file_path" value="$(arg edited_state_file_path)"/>
+      <param name="override_file_path" value="$(arg override_file_path)"/>
+      <param name="grid_topic" value="$(arg grid_topic)"/>
+      <param name="cloud_topic" value="$(arg cloud_topic)"/>
+      <param name="paint_point_topic" value="$(arg paint_point_topic)"/>
+      <param name="mode_topic" value="$(arg mode_topic)"/>
+      <param name="clear_topic" value="$(arg clear_topic)"/>
+      <param name="undo_topic" value="$(arg undo_topic)"/>
+      <param name="save_topic" value="$(arg save_topic)"/>
+      <param name="load_topic" value="$(arg load_topic)"/>
+      <param name="clicked_point_topic" value="$(arg clicked_point_topic)"/>
+      <param name="use_clicked_point" value="true"/>
+      <param name="brush_radius_m" value="$(arg brush_radius_m)"/>
+    </node>
+
+    <node if="$(arg enable_2d_editor)"
+          pkg="lio_sam" type="semantic_bev_2d_editor.py"
+          name="lio_sam_semantic_bev_2d_editor" output="screen" respawn="false">
+      <param name="grid_topic" value="$(arg grid_topic)"/>
+      <param name="paint_point_topic" value="$(arg paint_point_topic)"/>
+      <param name="mode_topic" value="$(arg mode_topic)"/>
+      <param name="clear_topic" value="$(arg clear_topic)"/>
+      <param name="undo_topic" value="$(arg undo_topic)"/>
+      <param name="save_topic" value="$(arg save_topic)"/>
+      <param name="load_topic" value="$(arg load_topic)"/>
+    </node>
+  </group>
+</launch>

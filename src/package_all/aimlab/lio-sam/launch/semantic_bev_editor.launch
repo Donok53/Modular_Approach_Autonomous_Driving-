@@ -1,0 +1,18 @@
+<launch>
+  <arg name="enable_2d_editor" default="true"/>
+  <arg name="frame_id" default="map"/>
+  <arg name="state_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_state.json"/>
+  <arg name="edited_state_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_state.edited.json"/>
+  <arg name="override_file_path" default="/home/byeongjae/code/Modular_Approach_Autonomous_Driving-/generated/raw_semantic_bev_map_fullbag/raw_semantic_bev_override.edited.json"/>
+  <arg name="brush_radius_m" default="0.8"/>
+
+  <include file="$(find lio_sam)/launch/include/module_semantic_bev_editor.launch">
+    <arg name="enable" value="true"/>
+    <arg name="enable_2d_editor" value="$(arg enable_2d_editor)"/>
+    <arg name="frame_id" value="$(arg frame_id)"/>
+    <arg name="state_file_path" value="$(arg state_file_path)"/>
+    <arg name="edited_state_file_path" value="$(arg edited_state_file_path)"/>
+    <arg name="override_file_path" value="$(arg override_file_path)"/>
+    <arg name="brush_radius_m" value="$(arg brush_radius_m)"/>
+  </include>
+</launch>

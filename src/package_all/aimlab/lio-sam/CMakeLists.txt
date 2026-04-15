@@ -110,6 +110,8 @@ catkin_install_python(PROGRAMS
   scripts/build_sidewalk_semantic_map.py
   scripts/build_sidewalk_semantic_fusion.py
   scripts/build_raw_semantic_bev_map.py
+  scripts/semantic_bev_editor.py
+  scripts/semantic_bev_2d_editor.py
   scripts/tune_sidewalk_fusion_projection.py
   scripts/lio_sam_map_sync.py
   scripts/trajectory_osm_exporter.py
