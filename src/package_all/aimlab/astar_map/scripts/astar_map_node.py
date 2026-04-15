@@ -42,7 +42,7 @@ Topics:
 import rospy, math, sys, time, csv, colorsys, struct, heapq, xml.etree.ElementTree as ET
 from geometry_msgs.msg import Point, PoseStamped, Quaternion, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA, Header, Int32MultiArray, Empty, Bool
 from sensor_msgs.msg import PointCloud2, PointField
 from astar_map.msg import server_to_robot
@@ -200,6 +200,27 @@ class AStarPlanner:
             float(rospy.get_param("~keep_last_path_max_start_path_deviation_m", 0.80)),
         )
         self.planner_loop_hz = max(2.0, float(rospy.get_param("~planner_loop_hz", 8.0)))
+        self.global_path_candidate_count = max(
+            1, int(rospy.get_param("~global_path_candidate_count", 5))
+        )
+        self.global_path_candidate_penalty_radius_m = max(
+            0.1,
+            float(
+                rospy.get_param(
+                    "~global_path_candidate_penalty_radius_m",
+                    max(0.60, self.robot_width_m + self.footprint_padding_m),
+                )
+            ),
+        )
+        self.global_path_candidate_penalty_cost = max(
+            0.0, float(rospy.get_param("~global_path_candidate_penalty_cost", 6.0))
+        )
+        self.global_path_candidate_max_similarity = min(
+            0.999,
+            max(
+                0.0, float(rospy.get_param("~global_path_candidate_max_similarity", 0.85))
+            ),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -235,6 +256,7 @@ class AStarPlanner:
         self.drivable_grid = None
         self._last_world_path_signature = None
         self._last_world_path = None
+        self._last_candidate_world_paths_signature = None
         self._last_snapped_goal_xy = None
         self._last_graph_goal_snap_xy = None
         self._goal_marker_xy = None
@@ -266,6 +288,7 @@ class AStarPlanner:
         self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10, latch=True)
         self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10, latch=True)
         self.pub_path_is_fallback = rospy.Publisher('/astar/path_is_fallback', Bool, queue_size=10, latch=True)
+        self.pub_candidate_paths = rospy.Publisher('/astar/candidate_paths', MarkerArray, queue_size=5, latch=True)
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
 
         self.sub_start_from_rviz = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.callback_start)
@@ -312,8 +335,9 @@ class AStarPlanner:
                     self.global_obstacle_overlay_threshold,
                 )
             rospy.loginfo(
-                "[astar] global grid planner: %s, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s",
+                "[astar] global grid planner: %s, candidates=%d, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s",
                 self._global_grid_planner_label(),
+                self.global_path_candidate_count,
                 self._global_path_clearance_radius_m(),
                 self._global_path_goal_tail_clearance_radius(),
                 (
@@ -913,6 +937,9 @@ class AStarPlanner:
     def _world_path_signature(world_points):
         return tuple((round(float(x), 2), round(float(y), 2)) for x, y in world_points)
 
+    def _candidate_world_paths_signature(self, world_paths):
+        return tuple(self._world_path_signature(path) for path in world_paths if path)
+
     @staticmethod
     def _dedupe_world_points(world_points):
         out = []
@@ -989,6 +1016,65 @@ class AStarPlanner:
         ids_msg = Int32MultiArray()
         ids_msg.data = []
         self.pub_path_node_id_list.publish(ids_msg)
+
+    def _publish_candidate_world_paths_messages(self, world_paths, stamp=None):
+        if stamp is None:
+            stamp = rospy.Time.now()
+        msg = MarkerArray()
+
+        clear = Marker()
+        clear.header.frame_id = "map"
+        clear.header.stamp = stamp
+        clear.action = Marker.DELETEALL
+        msg.markers.append(clear)
+
+        palette = [
+            (0.10, 0.75, 0.95),
+            (0.95, 0.55, 0.20),
+            (0.45, 0.90, 0.35),
+            (0.90, 0.35, 0.95),
+            (0.95, 0.85, 0.20),
+            (0.35, 0.80, 0.95),
+            (0.95, 0.35, 0.50),
+            (0.60, 0.95, 0.35),
+            (0.75, 0.60, 0.95),
+            (0.95, 0.65, 0.65),
+        ]
+        for idx, world_points in enumerate(world_paths):
+            if not world_points:
+                continue
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = stamp
+            marker.ns = "astar_candidate_paths"
+            marker.id = idx
+            marker.type = Marker.LINE_STRIP
+            marker.action = Marker.ADD
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.06 if idx == 0 else 0.04
+            r, g, b = palette[idx % len(palette)]
+            marker.color.r = r
+            marker.color.g = g
+            marker.color.b = b
+            marker.color.a = 0.85 if idx == 0 else 0.55
+            for x, y in self._prepare_visualization_path(world_points, simplify=False):
+                marker.points.append(Point(float(x), float(y), 0.03))
+            msg.markers.append(marker)
+
+        self.pub_candidate_paths.publish(msg)
+
+    def publish_candidate_world_paths_if_changed(self, world_paths, stamp=None, force=False):
+        signature = self._candidate_world_paths_signature(world_paths)
+        if (not force) and signature == self._last_candidate_world_paths_signature:
+            return
+        self._last_candidate_world_paths_signature = signature
+        self._publish_candidate_world_paths_messages(world_paths, stamp=stamp)
+
+    def clear_candidate_world_paths(self, stamp=None, force=False):
+        if (not force) and self._last_candidate_world_paths_signature is None:
+            return
+        self._last_candidate_world_paths_signature = None
+        self._publish_candidate_world_paths_messages([], stamp=stamp)
 
     def _publish_path_fallback_state(self, is_fallback, force=False):
         is_fallback = bool(is_fallback)
@@ -1179,6 +1265,7 @@ class AStarPlanner:
     def clear_published_path(self, stamp=None):
         if self._last_path_nodes is None and self._last_world_path_signature is None:
             self._clear_published_path_context()
+            self.clear_candidate_world_paths(stamp=stamp, force=True)
             self._publish_path_fallback_state(False, force=True)
             return
         if stamp is None:
@@ -1195,6 +1282,7 @@ class AStarPlanner:
         self._last_world_path = None
         self._last_path_pub_t = 0.0
         self._clear_published_path_context()
+        self.clear_candidate_world_paths(stamp=stamp, force=True)
         self._publish_path_fallback_state(False, force=True)
         if self.debug_log_enable:
             rospy.loginfo("[astar] cleared published path")
@@ -1604,7 +1692,187 @@ class AStarPlanner:
             anchor_idx = farthest_idx
         return simplified
 
-    def _astar_on_grid(self, blocked, start_cell, goal_cell, allow_diagonal=True):
+    def _plan_single_grid_path(
+        self,
+        blocked,
+        start_cell,
+        goal_cell,
+        planner_mode=None,
+        cell_penalties=None,
+    ):
+        planner_mode = planner_mode or self.global_path_grid_planner
+        if planner_mode == "theta":
+            grid_path = self._theta_star_on_grid(
+                blocked, start_cell, goal_cell, cell_penalties=cell_penalties
+            )
+            planner_name = "Theta*"
+            if grid_path:
+                grid_path = self._simplify_grid_path(grid_path, blocked)
+            if not grid_path:
+                grid_path = self._astar_on_grid(
+                    blocked,
+                    start_cell,
+                    goal_cell,
+                    cell_penalties=cell_penalties,
+                )
+                if grid_path:
+                    grid_path = self._simplify_grid_path(grid_path, blocked)
+                    planner_name = "A* (8-connected) fallback"
+            return grid_path, planner_name
+
+        allow_diagonal = planner_mode != "astar4"
+        planner_name = "A* (8-connected)" if allow_diagonal else "A* (4-connected)"
+        grid_path = self._astar_on_grid(
+            blocked,
+            start_cell,
+            goal_cell,
+            allow_diagonal=allow_diagonal,
+            cell_penalties=cell_penalties,
+        )
+        if grid_path and allow_diagonal:
+            grid_path = self._simplify_grid_path(grid_path, blocked)
+        return grid_path, planner_name
+
+    @staticmethod
+    def _grid_path_similarity(path_a, path_b):
+        if not path_a or not path_b:
+            return 0.0
+        cells_a = set(path_a)
+        cells_b = set(path_b)
+        denom = float(min(len(cells_a), len(cells_b)))
+        if denom <= 0.0:
+            return 0.0
+        return float(len(cells_a & cells_b)) / denom
+
+    def _candidate_penalty_offsets(self, g):
+        res = max(1e-6, float(g.info.resolution))
+        radius_cells = max(
+            1, int(math.ceil(self.global_path_candidate_penalty_radius_m / res))
+        )
+        radius_sq = radius_cells * radius_cells
+        offsets = []
+        for dy in range(-radius_cells, radius_cells + 1):
+            for dx in range(-radius_cells, radius_cells + 1):
+                dist_sq = dx * dx + dy * dy
+                if dist_sq > radius_sq:
+                    continue
+                if dist_sq == 0:
+                    weight = 1.0
+                else:
+                    dist = math.sqrt(float(dist_sq))
+                    weight = max(0.20, 1.0 - dist / float(radius_cells + 1))
+                offsets.append((dx, dy, weight))
+        return offsets
+
+    def _accumulate_candidate_penalties(self, penalty_map, path, offsets):
+        if not path:
+            return
+        endpoint_skip = max(1, int(round(0.80 / max(1e-6, float(self.drivable_grid.info.resolution)))))
+        if len(path) <= (2 * endpoint_skip + 1):
+            cells = path[1:-1]
+        else:
+            cells = path[endpoint_skip:-endpoint_skip]
+        for gx, gy in cells:
+            for dx, dy, weight in offsets:
+                key = (gx + dx, gy + dy)
+                penalty_map[key] = penalty_map.get(key, 0.0) + (
+                    self.global_path_candidate_penalty_cost * weight
+                )
+
+    def _generate_candidate_grid_paths(self, blocked, start_cell, goal_cell, primary_path):
+        if not primary_path:
+            return []
+
+        candidate_paths = [list(primary_path)]
+        if self.global_path_candidate_count <= 1:
+            return candidate_paths
+
+        penalty_map = {}
+        offsets = self._candidate_penalty_offsets(self.drivable_grid)
+        self._accumulate_candidate_penalties(penalty_map, primary_path, offsets)
+        planner_mode = "astar4" if self.global_path_grid_planner == "astar4" else "astar8"
+        max_attempts = max(
+            self.global_path_candidate_count * 4,
+            self.global_path_candidate_count + 2,
+        )
+        attempts = 0
+        while len(candidate_paths) < self.global_path_candidate_count and attempts < max_attempts:
+            attempts += 1
+            alt_path, _ = self._plan_single_grid_path(
+                blocked,
+                start_cell,
+                goal_cell,
+                planner_mode=planner_mode,
+                cell_penalties=penalty_map,
+            )
+            if not alt_path:
+                break
+            similarity = max(
+                self._grid_path_similarity(alt_path, existing)
+                for existing in candidate_paths
+            )
+            self._accumulate_candidate_penalties(penalty_map, alt_path, offsets)
+            if similarity >= self.global_path_candidate_max_similarity:
+                continue
+            candidate_paths.append(list(alt_path))
+        return candidate_paths
+
+    def _grid_path_to_world_points(
+        self,
+        g,
+        grid_path,
+        start_xy,
+        goal_xy,
+        start_cell,
+        goal_raw,
+        goal_cell,
+        goal_tail_blocked,
+    ):
+        snapped_start_xy = self._grid_cell_to_world(g, start_cell[0], start_cell[1])
+        snapped_goal_xy = self._grid_cell_to_world(g, goal_cell[0], goal_cell[1])
+        world_points = [tuple(start_xy)]
+        if self._xy_distance(start_xy, snapped_start_xy) > 0.05:
+            world_points.append(snapped_start_xy)
+        for gx, gy in grid_path[1:-1]:
+            world_points.append(self._grid_cell_to_world(g, gx, gy))
+        clicked_goal_xy = (float(goal_xy[0]), float(goal_xy[1]))
+        goal_gap_m = math.hypot(
+            clicked_goal_xy[0] - float(snapped_goal_xy[0]),
+            clicked_goal_xy[1] - float(snapped_goal_xy[1]),
+        )
+        goal_raw_is_free = self._blocked_cell_is_free(
+            goal_tail_blocked, goal_raw[0], goal_raw[1]
+        )
+        snapped_goal_has_los_to_clicked = self._has_line_of_sight(
+            goal_tail_blocked, goal_cell, goal_raw
+        )
+        extend_to_clicked_goal = goal_cell == goal_raw
+        if (
+            (not extend_to_clicked_goal)
+            and goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
+            and goal_raw_is_free
+            and snapped_goal_has_los_to_clicked
+        ):
+            extend_to_clicked_goal = True
+        preserve_goal_gap_cap_m = max(
+            1e-6, float(self.drivable_grid_goal_extension_max_gap_m)
+        )
+        preserve_exact_goal = (
+            self.preserve_user_goal_on_drivable_grid
+            and goal_gap_m > 1e-6
+            and goal_gap_m <= preserve_goal_gap_cap_m
+        )
+        if preserve_exact_goal and goal_cell != goal_raw:
+            world_points.append(snapped_goal_xy)
+        path_goal_xy = (
+            clicked_goal_xy
+            if (extend_to_clicked_goal or preserve_exact_goal)
+            else snapped_goal_xy
+        )
+        world_points.append(path_goal_xy)
+        return self._dedupe_world_points(world_points), snapped_goal_xy, goal_gap_m, goal_raw_is_free, snapped_goal_has_los_to_clicked, extend_to_clicked_goal, preserve_exact_goal
+
+    def _astar_on_grid(self, blocked, start_cell, goal_cell, allow_diagonal=True, cell_penalties=None):
         if not blocked or not blocked[0]:
             return None
         if not self._blocked_cell_is_free(blocked, start_cell[0], start_cell[1]):
@@ -1625,7 +1893,8 @@ class AStarPlanner:
                 continue
             for nb in self._grid_neighbors(blocked, cur, allow_diagonal=allow_diagonal):
                 step = self._grid_heur(cur, nb)
-                ng = gc + step
+                penalty = float(cell_penalties.get(nb, 0.0)) if cell_penalties else 0.0
+                ng = gc + step + penalty
                 if ng >= g_cost.get(nb, float("inf")):
                     continue
                 g_cost[nb] = ng
@@ -1636,7 +1905,7 @@ class AStarPlanner:
             return None
         return self._reconstruct_grid_path(parent, goal_cell)
 
-    def _theta_star_on_grid(self, blocked, start_cell, goal_cell):
+    def _theta_star_on_grid(self, blocked, start_cell, goal_cell, cell_penalties=None):
         if not blocked or not blocked[0]:
             return None
         if not self._blocked_cell_is_free(blocked, start_cell[0], start_cell[1]):
@@ -1660,11 +1929,12 @@ class AStarPlanner:
 
             cur_parent = parent.get(cur)
             for nb in self._grid_neighbors(blocked, cur):
+                penalty = float(cell_penalties.get(nb, 0.0)) if cell_penalties else 0.0
                 best_parent = cur
-                best_g = g_cost[cur] + self._grid_heur(cur, nb)
+                best_g = g_cost[cur] + self._grid_heur(cur, nb) + penalty
 
                 if cur_parent is not None and self._has_line_of_sight(blocked, cur_parent, nb):
-                    los_g = g_cost[cur_parent] + self._grid_heur(cur_parent, nb)
+                    los_g = g_cost[cur_parent] + self._grid_heur(cur_parent, nb) + penalty
                     if los_g < best_g:
                         best_g = los_g
                         best_parent = cur_parent
@@ -1709,28 +1979,11 @@ class AStarPlanner:
             )
             return None
 
-        if self.global_path_grid_planner == "theta":
-            grid_path = self._theta_star_on_grid(blocked, start_cell, goal_cell)
-            planner_name = "Theta*"
-            grid_path = self._simplify_grid_path(grid_path, blocked)
-        elif self.global_path_grid_planner == "astar8":
-            grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
-            planner_name = "A* (8-connected)"
-            if grid_path:
-                grid_path = self._simplify_grid_path(grid_path, blocked)
-        else:
-            grid_path = self._astar_on_grid(
-                blocked,
-                start_cell,
-                goal_cell,
-                allow_diagonal=False,
-            )
-            planner_name = "A* (4-connected)"
-        if (not grid_path) and self.global_path_grid_planner == "theta":
-            grid_path = self._astar_on_grid(blocked, start_cell, goal_cell)
-            if grid_path:
-                grid_path = self._simplify_grid_path(grid_path, blocked)
-                planner_name = "A* (8-connected) fallback"
+        grid_path, planner_name = self._plan_single_grid_path(
+            blocked,
+            start_cell,
+            goal_cell,
+        )
         if not grid_path:
             rospy.logwarn_throttle(
                 1.0,
@@ -1750,38 +2003,26 @@ class AStarPlanner:
                 len(grid_path),
             )
 
-        snapped_start_xy = self._grid_cell_to_world(g, start_cell[0], start_cell[1])
-        snapped_goal_xy = self._grid_cell_to_world(g, goal_cell[0], goal_cell[1])
+        (
+            world_points,
+            snapped_goal_xy,
+            goal_gap_m,
+            goal_raw_is_free,
+            snapped_goal_has_los_to_clicked,
+            extend_to_clicked_goal,
+            preserve_exact_goal,
+        ) = self._grid_path_to_world_points(
+            g,
+            grid_path,
+            start_xy,
+            goal_xy,
+            start_cell,
+            goal_raw,
+            goal_cell,
+            goal_tail_blocked,
+        )
         self._last_snapped_goal_xy = snapped_goal_xy
-        world_points = [tuple(start_xy)]
-        if self._xy_distance(start_xy, snapped_start_xy) > 0.05:
-            world_points.append(snapped_start_xy)
-        for gx, gy in grid_path[1:-1]:
-            world_points.append(self._grid_cell_to_world(g, gx, gy))
-        clicked_goal_xy = (float(goal_xy[0]), float(goal_xy[1]))
-        goal_gap_m = math.hypot(
-            clicked_goal_xy[0] - float(snapped_goal_xy[0]),
-            clicked_goal_xy[1] - float(snapped_goal_xy[1]),
-        )
-        goal_raw_is_free = self._blocked_cell_is_free(
-            goal_tail_blocked, goal_raw[0], goal_raw[1]
-        )
-        snapped_goal_has_los_to_clicked = self._has_line_of_sight(
-            goal_tail_blocked, goal_cell, goal_raw
-        )
-        extend_to_clicked_goal = goal_cell == goal_raw
-        if (
-            (not extend_to_clicked_goal)
-            and goal_gap_m <= self.drivable_grid_goal_extension_max_gap_m
-            and goal_raw_is_free
-            and snapped_goal_has_los_to_clicked
-        ):
-            extend_to_clicked_goal = True
-        if (
-            extend_to_clicked_goal
-            and goal_cell != goal_raw
-            and self.debug_log_enable
-        ):
+        if extend_to_clicked_goal and goal_cell != goal_raw and self.debug_log_enable:
             rospy.loginfo_throttle(
                 1.0,
                 "[astar] extending drivable-grid path from snapped goal to clicked goal (gap=%.2f m, limit=%.2f m)",
@@ -1790,20 +2031,6 @@ class AStarPlanner:
             )
         preserve_goal_gap_cap_m = max(
             1e-6, float(self.drivable_grid_goal_extension_max_gap_m)
-        )
-        preserve_exact_goal = (
-            self.preserve_user_goal_on_drivable_grid
-            and goal_gap_m > 1e-6
-            and goal_gap_m <= preserve_goal_gap_cap_m
-        )
-        if preserve_exact_goal and goal_cell != goal_raw:
-            world_points.append(snapped_goal_xy)
-        # Keep the terminal pose aligned with the user-selected destination even
-        # when the grid search needs a snapped anchor cell internally.
-        path_goal_xy = (
-            clicked_goal_xy
-            if (extend_to_clicked_goal or preserve_exact_goal)
-            else snapped_goal_xy
         )
         if preserve_exact_goal and goal_cell != goal_raw and self.debug_log_enable:
             rospy.loginfo_throttle(
@@ -1844,8 +2071,43 @@ class AStarPlanner:
                 float(snapped_goal_xy[1]),
                 goal_gap_m,
             )
-        world_points.append(path_goal_xy)
-        return self._dedupe_world_points(world_points)
+        candidate_grid_paths = self._generate_candidate_grid_paths(
+            blocked,
+            start_cell,
+            goal_cell,
+            grid_path,
+        )
+        candidate_world_paths = []
+        for idx, cand_grid_path in enumerate(candidate_grid_paths):
+            cand_world_points, _, _, _, _, _, _ = self._grid_path_to_world_points(
+                g,
+                cand_grid_path,
+                start_xy,
+                goal_xy,
+                start_cell,
+                goal_raw,
+                goal_cell,
+                goal_tail_blocked,
+            )
+            if idx > 0 and candidate_world_paths:
+                similarity = max(
+                    self._grid_path_similarity(cand_grid_path, candidate_grid_paths[j])
+                    for j in range(min(idx, len(candidate_grid_paths)))
+                )
+                if similarity >= self.global_path_candidate_max_similarity:
+                    continue
+            candidate_world_paths.append(cand_world_points)
+        if self.debug_log_enable and self.global_path_candidate_count > 1:
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] generated %d/%d drivable-grid candidate paths",
+                len(candidate_world_paths),
+                self.global_path_candidate_count,
+            )
+        return {
+            "selected_world_path": self._dedupe_world_points(world_points),
+            "candidate_world_paths": candidate_world_paths,
+        }
 
     # -------------------- Visualization --------------------
     def show_path(self, path, stamp=None):
@@ -2214,12 +2476,14 @@ if __name__ == "__main__":
         rate = rospy.Rate(a.planner_loop_hz)
         path_nodes = []
         world_path = None
+        candidate_world_paths = []
 
         while not rospy.is_shutdown():
             if a.consume_reload_request():
                 if a.reload_map():
                     path_nodes = []
                     world_path = None
+                    candidate_world_paths = []
                     a.clear_published_path()
             a.visualize_graph()
             a.show_clicked_goal_marker()
@@ -2231,12 +2495,14 @@ if __name__ == "__main__":
                     if world_path
                     else (list(a._last_world_path) if a._last_world_path else None)
                 )
+                prev_candidate_world_paths = list(candidate_world_paths)
                 prev_path_nodes = (
                     list(path_nodes)
                     if path_nodes
                     else (list(a._last_path_nodes) if a._last_path_nodes else [])
                 )
                 new_world_path = None
+                new_candidate_world_paths = []
                 new_path_nodes = []
                 if (
                     a.use_drivable_grid_global
@@ -2244,9 +2510,14 @@ if __name__ == "__main__":
                     and a._display_start_xy is not None
                     and a._goal_display_xy is not None
                 ):
-                    new_world_path = a._plan_with_drivable_grid(
+                    grid_plan_result = a._plan_with_drivable_grid(
                         a._display_start_xy, a._goal_display_xy
                     )
+                    if grid_plan_result:
+                        new_world_path = grid_plan_result.get("selected_world_path")
+                        new_candidate_world_paths = list(
+                            grid_plan_result.get("candidate_world_paths", [])
+                        )
                 if (not new_world_path) and a._allow_graph_fallback_for_goal():
                     a.graph_setup()
                     new_path_nodes = a.planning(a.start_id, a.goal_id)
@@ -2269,24 +2540,36 @@ if __name__ == "__main__":
                 a._mark_plan_context(replan_success)
                 if new_world_path:
                     world_path = list(new_world_path)
+                    candidate_world_paths = list(new_candidate_world_paths)
                     path_nodes = []
+                    a.publish_candidate_world_paths_if_changed(
+                        candidate_world_paths, stamp=rospy.Time.now()
+                    )
                     a.publish_world_path_if_changed(world_path)
                 elif new_path_nodes:
                     world_path = None
+                    candidate_world_paths = []
                     path_nodes = list(new_path_nodes)
+                    a.clear_candidate_world_paths(stamp=rospy.Time.now())
                     a.publish_path_if_changed(path_nodes)
                 else:
                     keep_prev_path, keep_reason = a._can_keep_last_path_on_replan_failure()
                     if keep_prev_path and (prev_world_path or prev_path_nodes):
                         world_path = prev_world_path
+                        candidate_world_paths = prev_candidate_world_paths
                         path_nodes = prev_path_nodes
                         a._publish_path_fallback_state(True)
+                        if world_path:
+                            a.publish_candidate_world_paths_if_changed(
+                                candidate_world_paths, stamp=rospy.Time.now()
+                            )
                         rospy.logwarn_throttle(
                             1.0,
                             "[astar] replanning failed; keeping last valid global path until replacement is ready",
                         )
                     else:
                         world_path = None
+                        candidate_world_paths = []
                         path_nodes = []
                         a.clear_published_path(stamp=rospy.Time.now())
                         rospy.logwarn_throttle(

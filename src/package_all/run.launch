@@ -144,6 +144,7 @@
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
+  <arg name="global_path_candidate_count" default="5"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
@@ -412,6 +413,7 @@
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
+        <arg name="global_path_candidate_count" value="$(arg global_path_candidate_count)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -445,6 +447,7 @@
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
+        <arg name="global_path_candidate_count" value="$(arg global_path_candidate_count)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
