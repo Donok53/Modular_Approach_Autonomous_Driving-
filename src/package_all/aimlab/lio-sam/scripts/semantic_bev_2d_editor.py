@@ -32,16 +32,21 @@ class SemanticBEV2DEditor:
         self.load_topic = rospy.get_param("~load_topic", "/semantic_bev_editor/load")
 
         self.max_display_px = max(400, int(rospy.get_param("~max_display_px", 1200)))
-        self.max_scale = max(1.0, float(rospy.get_param("~max_scale", 6.0)))
+        self.max_scale = max(1.0, float(rospy.get_param("~max_scale", 24.0)))
+        self.zoom_step = max(1.01, float(rospy.get_param("~zoom_step", 1.25)))
         self.drag_min_step_px = max(1, int(rospy.get_param("~drag_min_step_px", 3)))
         self.paint_throttle_hz = max(1.0, float(rospy.get_param("~paint_throttle_hz", 30.0)))
 
         self.mode = "sidewalk"
         self._lock = threading.RLock()
         self._grid_msg = None
+        self._fit_scale = 1.0
         self._display_scale = 1.0
+        self._view_origin_px = (0, 0)
         self._dragging = False
         self._last_drag_px = None
+        self._panning = False
+        self._last_pan_px = None
         self._last_pub_time = rospy.Time(0)
 
         self.pub_paint = rospy.Publisher(self.paint_point_topic, PointStamped, queue_size=50)
@@ -58,7 +63,7 @@ class SemanticBEV2DEditor:
         rospy.on_shutdown(self.on_shutdown)
         self._publish_mode()
         rospy.loginfo(
-            "semantic_bev_2d_editor started | grid=%s | keys=[1 sidewalk, 2 road, 3 curb, 0 observed, u/s/l/c/q]",
+            "semantic_bev_2d_editor started | grid=%s | keys=[1 sidewalk, 2 road, 3 curb, 0 observed, +/- zoom, f fit, u/s/l/c/q]",
             self.grid_topic,
         )
 
@@ -72,8 +77,21 @@ class SemanticBEV2DEditor:
         self.pub_mode.publish(String(data=self.mode))
 
     def grid_callback(self, msg):
+        reset_needed = False
         with self._lock:
+            prev = self._grid_msg
             self._grid_msg = msg
+            if prev is None:
+                reset_needed = True
+            else:
+                if (
+                    int(prev.info.width) != int(msg.info.width)
+                    or int(prev.info.height) != int(msg.info.height)
+                    or abs(float(prev.info.resolution) - float(msg.info.resolution)) > 1e-9
+                ):
+                    reset_needed = True
+        if reset_needed:
+            self._reset_view()
 
     @staticmethod
     def _empty_canvas():
@@ -92,14 +110,71 @@ class SemanticBEV2DEditor:
     def _draw_hud(self, disp):
         cv2.putText(
             disp,
-            "Mode: {} | [1]sidewalk [2]road [3]curb [0]observed | [u]undo [s]save [l]load [c]reset [q]quit".format(self.mode),
+            "Mode: {} | [1]sidewalk [2]road [3]curb [0]observed | wheel zoom | middle drag pan | [+/-] zoom [f]fit [u]undo [s]save [l]load [c]reset [q]quit".format(self.mode),
             (10, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.52,
+            0.48,
             (240, 240, 240),
             1,
             cv2.LINE_AA,
         )
+
+    def _clamp_view_origin(self, origin_x, origin_y, scaled_w, scaled_h):
+        viewport_w = min(self.max_display_px, scaled_w)
+        viewport_h = min(self.max_display_px, scaled_h)
+        max_x = max(0, scaled_w - viewport_w)
+        max_y = max(0, scaled_h - viewport_h)
+        origin_x = min(max(0, int(round(origin_x))), max_x)
+        origin_y = min(max(0, int(round(origin_y))), max_y)
+        return origin_x, origin_y
+
+    def _set_scale_around_pixel(self, new_scale, anchor_x=None, anchor_y=None):
+        with self._lock:
+            grid = self._grid_msg
+            old_scale = self._display_scale
+            origin_x, origin_y = self._view_origin_px
+        if grid is None:
+            return
+        w = int(grid.info.width)
+        h = int(grid.info.height)
+        old_scale = max(1.0, old_scale)
+        new_scale = max(self._fit_scale, min(self.max_scale, new_scale))
+        scaled_w = max(1, int(round(w * new_scale)))
+        scaled_h = max(1, int(round(h * new_scale)))
+        if anchor_x is None:
+            anchor_x = 0.5 * min(self.max_display_px, max(1, int(round(w * old_scale))))
+        if anchor_y is None:
+            anchor_y = 0.5 * min(self.max_display_px, max(1, int(round(h * old_scale))))
+        map_x = (origin_x + anchor_x) / old_scale
+        map_y = (origin_y + anchor_y) / old_scale
+        new_origin_x = map_x * new_scale - anchor_x
+        new_origin_y = map_y * new_scale - anchor_y
+        new_origin_x, new_origin_y = self._clamp_view_origin(new_origin_x, new_origin_y, scaled_w, scaled_h)
+        with self._lock:
+            self._display_scale = new_scale
+            self._view_origin_px = (new_origin_x, new_origin_y)
+
+    def _reset_view(self):
+        with self._lock:
+            grid = self._grid_msg
+        if grid is None:
+            return
+        w = int(grid.info.width)
+        h = int(grid.info.height)
+        if w <= 0 or h <= 0:
+            return
+        if w >= h:
+            fit = min(self.max_scale, float(self.max_display_px) / float(max(1, w)))
+        else:
+            fit = min(self.max_scale, float(self.max_display_px) / float(max(1, h)))
+        fit = max(1.0, fit)
+        scaled_w = max(1, int(round(w * fit)))
+        scaled_h = max(1, int(round(h * fit)))
+        origin_x, origin_y = self._clamp_view_origin(0, 0, scaled_w, scaled_h)
+        with self._lock:
+            self._fit_scale = fit
+            self._display_scale = fit
+            self._view_origin_px = (origin_x, origin_y)
 
     def _build_display_image(self):
         with self._lock:
@@ -116,18 +191,27 @@ class SemanticBEV2DEditor:
         for val, color in LABEL_COLORS.items():
             img[data_img == val] = color
 
-        if w >= h:
-            scale = min(self.max_scale, float(self.max_display_px) / float(max(1, w)))
-        else:
-            scale = min(self.max_scale, float(self.max_display_px) / float(max(1, h)))
-        scale = max(1.0, scale)
-        self._display_scale = scale
+        with self._lock:
+            if self._display_scale <= 0.0:
+                self._reset_view()
+            current_scale = self._display_scale
+            if self._fit_scale <= 0.0:
+                self._fit_scale = current_scale
+            origin_x, origin_y = self._view_origin_px
 
-        disp = cv2.resize(
+        disp_full = cv2.resize(
             img,
-            (max(1, int(round(w * scale))), max(1, int(round(h * scale)))),
+            (max(1, int(round(w * current_scale))), max(1, int(round(h * current_scale)))),
             interpolation=cv2.INTER_NEAREST,
         )
+        scaled_h, scaled_w = disp_full.shape[:2]
+        origin_x, origin_y = self._clamp_view_origin(origin_x, origin_y, scaled_w, scaled_h)
+        viewport_w = min(self.max_display_px, scaled_w)
+        viewport_h = min(self.max_display_px, scaled_h)
+        disp = disp_full[origin_y:origin_y + viewport_h, origin_x:origin_x + viewport_w].copy()
+        with self._lock:
+            self._view_origin_px = (origin_x, origin_y)
+            self._display_scale = current_scale
         self._draw_hud(disp)
         return disp, grid
 
@@ -135,12 +219,13 @@ class SemanticBEV2DEditor:
         with self._lock:
             grid = self._grid_msg
             scale = self._display_scale
+            origin_x, origin_y = self._view_origin_px
         if grid is None or scale <= 0.0:
             return None
         w = int(grid.info.width)
         h = int(grid.info.height)
-        gx = int(px / scale)
-        gy_img = int(py / scale)
+        gx = int((px + origin_x) / scale)
+        gy_img = int((py + origin_y) / scale)
         gy = (h - 1) - gy_img
         if gx < 0 or gy < 0 or gx >= w or gy >= h:
             return None
@@ -172,6 +257,13 @@ class SemanticBEV2DEditor:
         self._publish_point(x, y, frame_id)
 
     def on_mouse(self, event, x, y, flags, _userdata):
+        if hasattr(cv2, "EVENT_MOUSEWHEEL") and event == cv2.EVENT_MOUSEWHEEL:
+            direction = 1.0 if flags > 0 else -1.0
+            if direction > 0:
+                self._set_scale_around_pixel(self._display_scale * self.zoom_step, x, y)
+            else:
+                self._set_scale_around_pixel(self._display_scale / self.zoom_step, x, y)
+            return
         if event == cv2.EVENT_LBUTTONDOWN:
             self._dragging = True
             self._last_drag_px = (x, y)
@@ -183,6 +275,33 @@ class SemanticBEV2DEditor:
             return
         if event == cv2.EVENT_RBUTTONDOWN:
             self._handle_point_action(x, y, "observed")
+            return
+        if event == cv2.EVENT_MBUTTONDOWN:
+            self._panning = True
+            self._last_pan_px = (x, y)
+            return
+        if event == cv2.EVENT_MBUTTONUP:
+            self._panning = False
+            self._last_pan_px = None
+            return
+        if event == cv2.EVENT_MOUSEMOVE and self._panning:
+            if self._last_pan_px is None:
+                self._last_pan_px = (x, y)
+                return
+            dx = x - self._last_pan_px[0]
+            dy = y - self._last_pan_px[1]
+            self._last_pan_px = (x, y)
+            with self._lock:
+                grid = self._grid_msg
+                origin_x, origin_y = self._view_origin_px
+                scale = self._display_scale
+            if grid is None:
+                return
+            scaled_w = max(1, int(round(int(grid.info.width) * scale)))
+            scaled_h = max(1, int(round(int(grid.info.height) * scale)))
+            origin_x, origin_y = self._clamp_view_origin(origin_x - dx, origin_y - dy, scaled_w, scaled_h)
+            with self._lock:
+                self._view_origin_px = (origin_x, origin_y)
             return
         if event == cv2.EVENT_MOUSEMOVE and self._dragging:
             if self._last_drag_px is None:
@@ -210,6 +329,12 @@ class SemanticBEV2DEditor:
             self._publish_mode()
         elif key == ord("u"):
             self.pub_undo.publish(Empty())
+        elif key == ord("+") or key == ord("="):
+            self._set_scale_around_pixel(self._display_scale * self.zoom_step)
+        elif key == ord("-") or key == ord("_"):
+            self._set_scale_around_pixel(self._display_scale / self.zoom_step)
+        elif key == ord("f"):
+            self._reset_view()
         elif key == ord("s"):
             self.pub_save.publish(Empty())
         elif key == ord("l"):
