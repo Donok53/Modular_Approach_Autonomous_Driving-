@@ -29,6 +29,8 @@ edit_brush_radius_m: 0.55
 manual_edit_enforce_ground_filter: false
 add_point_topic: /lio_sam/drivable_area/add_point
 erase_point_topic: /lio_sam/drivable_area/erase_point
+add_goal_topic: /lio_sam/drivable_area/add_goal
+erase_goal_topic: /lio_sam/drivable_area/erase_goal
 use_clicked_point: false
 clicked_point_topic: /clicked_point
 clicked_point_mode: toggle

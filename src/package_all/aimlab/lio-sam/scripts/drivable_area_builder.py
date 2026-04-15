@@ -8,7 +8,7 @@ import os
 import rospy
 from collections import deque
 
-from geometry_msgs.msg import Point, PointStamped
+from geometry_msgs.msg import Point, PointStamped, PoseStamped
 from nav_msgs.msg import Odometry, OccupancyGrid
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
@@ -150,6 +150,8 @@ class DrivableAreaBuilder:
         # Editing topics
         self.add_point_topic = rospy.get_param("~add_point_topic", "/lio_sam/drivable_area/add_point")
         self.erase_point_topic = rospy.get_param("~erase_point_topic", "/lio_sam/drivable_area/erase_point")
+        self.add_goal_topic = rospy.get_param("~add_goal_topic", "/lio_sam/drivable_area/add_goal")
+        self.erase_goal_topic = rospy.get_param("~erase_goal_topic", "/lio_sam/drivable_area/erase_goal")
         self.clear_topic = rospy.get_param("~clear_topic", "/lio_sam/drivable_area/clear")
         self.undo_topic = rospy.get_param("~undo_topic", "/lio_sam/drivable_area/undo")
         self.mode_topic = rospy.get_param("~mode_topic", "/lio_sam/drivable_area/mode")
@@ -220,6 +222,8 @@ class DrivableAreaBuilder:
             )
         self.sub_add = rospy.Subscriber(self.add_point_topic, PointStamped, self.add_point_callback, queue_size=20)
         self.sub_erase = rospy.Subscriber(self.erase_point_topic, PointStamped, self.erase_point_callback, queue_size=20)
+        self.sub_add_goal = rospy.Subscriber(self.add_goal_topic, PoseStamped, self.add_goal_callback, queue_size=20)
+        self.sub_erase_goal = rospy.Subscriber(self.erase_goal_topic, PoseStamped, self.erase_goal_callback, queue_size=20)
         self.sub_clear = rospy.Subscriber(self.clear_topic, Empty, self.clear_callback, queue_size=2)
         self.sub_undo = rospy.Subscriber(self.undo_topic, Empty, self.undo_callback, queue_size=2)
         self.sub_save = rospy.Subscriber(self.save_topic, Empty, self.save_callback, queue_size=2)
@@ -1124,6 +1128,12 @@ class DrivableAreaBuilder:
 
     def erase_point_callback(self, msg):
         self.apply_edit(float(msg.point.x), float(msg.point.y), False, "erase_point")
+
+    def add_goal_callback(self, msg):
+        self.apply_edit(float(msg.pose.position.x), float(msg.pose.position.y), True, "add_goal")
+
+    def erase_goal_callback(self, msg):
+        self.apply_edit(float(msg.pose.position.x), float(msg.pose.position.y), False, "erase_goal")
 
     def clicked_point_callback(self, msg):
         if self.clicked_point_mode == "toggle":

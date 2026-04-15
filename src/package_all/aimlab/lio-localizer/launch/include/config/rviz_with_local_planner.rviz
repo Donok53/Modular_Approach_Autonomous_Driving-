@@ -14,6 +14,8 @@ Panels:
     Expanded:
       - /2D Pose Estimate1
       - /2D Nav Goal1
+      - /2D Nav Goal2
+      - /2D Nav Goal3
       - /Publish Point1
       - /Publish Point2
     Name: Tool Properties
@@ -622,6 +624,10 @@ Visualization Manager:
       Y std deviation: 0.5
     - Class: rviz/SetGoal
       Topic: /move_base_simple/goal
+    - Class: rviz/SetGoal
+      Topic: /lio_sam/drivable_area/add_goal
+    - Class: rviz/SetGoal
+      Topic: /lio_sam/drivable_area/erase_goal
     - Class: rviz/PublishPoint
       Single click: true
       Topic: /lio_sam/drivable_area/add_point
