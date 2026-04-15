@@ -623,10 +623,10 @@ Visualization Manager:
     - Class: rviz/SetGoal
       Topic: /move_base_simple/goal
     - Class: rviz/PublishPoint
-      Single click: false
+      Single click: true
       Topic: /lio_sam/drivable_area/add_point
     - Class: rviz/PublishPoint
-      Single click: false
+      Single click: true
       Topic: /lio_sam/drivable_area/erase_point
   Value: true
   Views:
