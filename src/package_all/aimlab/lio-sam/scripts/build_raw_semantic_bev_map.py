@@ -575,6 +575,52 @@ def write_ascii_pcd(path, keys, scores, resolution):
             f.write("%.4f %.4f %.4f\n" % (x, y, z))
 
 
+def rgb_to_pcd_float(rgb):
+    packed = (int(rgb[0]) << 16) | (int(rgb[1]) << 8) | int(rgb[2])
+    return struct.unpack("f", struct.pack("I", packed))[0]
+
+
+def semantic_color_for_key(key, classes):
+    if key in classes["curb"]:
+        return (220, 70, 60)
+    if key in classes["sidewalk"]:
+        return (210, 230, 210)
+    if key in classes["road"]:
+        return (70, 120, 200)
+    return (70, 72, 78)
+
+
+def semantic_label_for_key(key, classes):
+    if key in classes["curb"]:
+        return "curb"
+    if key in classes["sidewalk"]:
+        return "sidewalk"
+    if key in classes["road"]:
+        return "road"
+    return "observed"
+
+
+def write_rgb_semantic_pcd(path, keys, scores, resolution, classes):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("# .PCD v0.7 - Point Cloud Data file format\n")
+        f.write("VERSION 0.7\n")
+        f.write("FIELDS x y z rgb\n")
+        f.write("SIZE 4 4 4 4\n")
+        f.write("TYPE F F F F\n")
+        f.write("COUNT 1 1 1 1\n")
+        f.write("WIDTH %d\n" % len(keys))
+        f.write("HEIGHT 1\n")
+        f.write("VIEWPOINT 0 0 0 1 0 0 0\n")
+        f.write("POINTS %d\n" % len(keys))
+        f.write("DATA ascii\n")
+        for ix, iy in sorted(keys):
+            x, y = key_to_center(ix, iy, resolution)
+            entry = scores[(ix, iy)]
+            z = entry["ground_z_sum"] / max(1.0, entry["ground_z_count"])
+            rgb = rgb_to_pcd_float(semantic_color_for_key((ix, iy), classes))
+            f.write("%.4f %.4f %.4f %.8e\n" % (x, y, z, rgb))
+
+
 def write_png(path, width, height, rgb_data):
     SEMANTIC_MAP_MODULE.write_png(path, width, height, rgb_data)
 
@@ -728,7 +774,7 @@ def write_editable_state(path, classes, scores, args, source_override_path):
         "meta": {
             "bag": args.bag,
             "grid_resolution": args.grid_resolution,
-            "labels": ["sidewalk", "road", "curb"],
+            "labels": ["sidewalk", "road", "curb", "observed"],
             "bounds_index": {
                 "ix_min": min_ix,
                 "ix_max": max_ix,
@@ -744,6 +790,15 @@ def write_editable_state(path, classes, scores, args, source_override_path):
             "source_override_json": source_override_path or "",
         },
         "classes": sorted_cell_lists(classes),
+        "observed_cells": [
+            [
+                ix,
+                iy,
+                float(scores[(ix, iy)]["ground_z_sum"] / max(1.0, scores[(ix, iy)]["ground_z_count"])),
+                semantic_label_for_key((ix, iy), classes),
+            ]
+            for ix, iy in sorted(keys)
+        ],
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
@@ -910,6 +965,8 @@ def main():
     sidewalk_pcd = os.path.join(args.output_dir, "SidewalkMap.raw_bev.pcd")
     road_pcd = os.path.join(args.output_dir, "RoadMap.raw_bev.pcd")
     curb_pcd = os.path.join(args.output_dir, "CurbMap.raw_bev.pcd")
+    observed_pcd = os.path.join(args.output_dir, "ObservedMap.raw_bev.pcd")
+    semantic_rgb_pcd = os.path.join(args.output_dir, "SemanticObservedMap.raw_bev.pcd")
     preview_png = os.path.join(args.output_dir, "raw_semantic_bev_preview.png")
     manifest_json = os.path.join(args.output_dir, "raw_semantic_bev_manifest.json")
     editable_state_json = os.path.join(args.output_dir, "raw_semantic_bev_state.json")
@@ -920,6 +977,8 @@ def main():
     write_ascii_pcd(sidewalk_pcd, final_classes["sidewalk"], scores, args.grid_resolution)
     write_ascii_pcd(road_pcd, final_classes["road"], scores, args.grid_resolution)
     write_ascii_pcd(curb_pcd, final_classes["curb"], scores, args.grid_resolution)
+    write_ascii_pcd(observed_pcd, set(scores.keys()), scores, args.grid_resolution)
+    write_rgb_semantic_pcd(semantic_rgb_pcd, set(scores.keys()), scores, args.grid_resolution, final_classes)
     write_preview_png(preview_png, final_classes, scores, args.grid_resolution, args.preview_cell_size)
     write_editable_state(editable_state_json, final_classes, scores, args, args.override_json)
     write_override_template(override_template_json)
@@ -947,6 +1006,8 @@ def main():
             "sidewalk_pcd": sidewalk_pcd,
             "road_pcd": road_pcd,
             "curb_pcd": curb_pcd,
+            "observed_pcd": observed_pcd,
+            "semantic_rgb_pcd": semantic_rgb_pcd,
             "preview_png": preview_png,
             "editable_state_json": editable_state_json,
             "override_template_json": override_template_json,
@@ -963,6 +1024,8 @@ def main():
     print("  cells_sidewalk    :", len(final_classes["sidewalk"]))
     print("  cells_road        :", len(final_classes["road"]))
     print("  cells_curb        :", len(final_classes["curb"]))
+    print("  observed_pcd      :", observed_pcd)
+    print("  semantic_rgb_pcd  :", semantic_rgb_pcd)
     print("  preview           :", preview_png)
     print("  editable_state    :", editable_state_json)
     print("  override_template :", override_template_json)
