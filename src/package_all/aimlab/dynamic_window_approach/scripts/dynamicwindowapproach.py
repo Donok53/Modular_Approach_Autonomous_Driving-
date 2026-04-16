@@ -6,7 +6,8 @@ DWA local planner — stable path tracking for A* overlap/crossing segments
 Fixes vs. original:
   • Ignore /astar/path if it hasn't actually changed (hash signature).
   • Track along-path progress with arc-length s (monotonic, jitter tolerant).
-  • Pure-Pursuit style target: point at s + lookahead_distance on the polyline.
+  • Segment-following target: stay on the selected active path and advance
+    vertex-by-vertex instead of shortcutting across the polyline.
   • Progress cost to discourage backwards/sideways motions near junctions.
   • Rotate-only mode with clean hysteresis and path-tangent gating.
   • Minimal forward obstacle stop using front ROI from PointCloud2.
@@ -976,12 +977,19 @@ class DWAControl:
 
         base_s = max(self.s_cur, s_proj)
 
-        # Off-path recovery should still look forward along the path, otherwise
-        # the target jumps to the perpendicular foot-point and causes zig-zag.
-        if abs(lat_err) > self.snap_lat_err:
-            s_target = min(self.s_total, base_s + self.snap_target_ahead_m)
-        else:
-            s_target = min(self.s_total, base_s + self.lookahead_distance)
+        # Follow the currently selected active-path segment directly.
+        # Keep the target only a short distance ahead on the same segment so
+        # the robot does not cut diagonally across corners or skip ahead to a
+        # visually different shortcut.
+        target_seg_idx = idx
+        if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
+            target_seg_idx += 1
+        segment_end_s = self.cum_len[target_seg_idx + 1]
+        segment_target_step = min(0.12, 0.5 * self.seg_lens[target_seg_idx])
+        s_target = min(
+            self.s_total,
+            min(segment_end_s, max(base_s, s_proj + segment_target_step)),
+        )
 
         tx, ty, t_hat = self._interp_xy_tangent_at_s(s_target)
 
@@ -1010,11 +1018,9 @@ class DWAControl:
             -self.path_tracking_goal_bearing_cap,
             min(self.path_tracking_goal_bearing_cap, goal_bearing_err),
         )
-        goal_heading_weight = self.path_tracking_goal_bearing_gain
-        if abs(lat_err) > self.snap_lat_err:
-            goal_heading_weight = max(goal_heading_weight, 0.75)
-        if remaining_dist <= max(self.lookahead_distance * 1.5, 1.0):
-            goal_heading_weight = min(1.0, goal_heading_weight + 0.20)
+        goal_heading_weight = 0.0
+        if remaining_dist <= max(self.lookahead_distance, 0.8):
+            goal_heading_weight = min(0.20, self.path_tracking_goal_bearing_gain)
         cte_correction = math.atan2(
             self.path_tracking_cte_gain * lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
@@ -1023,8 +1029,9 @@ class DWAControl:
             -self.path_tracking_cte_yaw_cap,
             min(self.path_tracking_cte_yaw_cap, cte_correction),
         )
-        # Blend the preview tangent with the actual lookahead-point bearing so the
-        # robot follows the shown path geometry instead of only the path direction.
+        # Keep the robot aligned to the chosen active-path segment.
+        # Only add a very small point-bearing bias near the final goal so the
+        # robot does not peel away from the selected route during normal travel.
         desired_yaw_raw = path_yaw_raw + goal_heading_weight * goal_bearing_err - cte_correction
         if self._path_tracking_prev_desired_yaw is None:
             desired_yaw = desired_yaw_raw
