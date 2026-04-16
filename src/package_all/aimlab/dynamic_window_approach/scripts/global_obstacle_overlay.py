@@ -139,6 +139,17 @@ class GlobalObstacleOverlayPublisher:
         self.global_pointcloud_overlay_max_points = max(
             0, int(rospy.get_param("~global_pointcloud_overlay_max_points", 200))
         )
+        self.global_pointcloud_overlay_far_field_candidate_blocking_enabled = bool(
+            rospy.get_param("~global_pointcloud_overlay_far_field_candidate_blocking_enabled", True)
+        )
+        self.global_pointcloud_overlay_far_field_candidate_min_distance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~global_pointcloud_overlay_far_field_candidate_min_distance_m", 2.5
+                )
+            ),
+        )
         self.global_pointcloud_overlay_blind_zone_radius_m = max(
             0.0,
             float(rospy.get_param("~global_pointcloud_overlay_blind_zone_radius_m", 1.40)),
@@ -201,7 +212,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm map_subtract=%s radius=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -226,6 +237,8 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_max_range_m,
             self.global_pointcloud_overlay_lookahead_m,
             self.global_pointcloud_overlay_corridor_margin_m,
+            "on" if self.global_pointcloud_overlay_far_field_candidate_blocking_enabled else "off",
+            self.global_pointcloud_overlay_far_field_candidate_min_distance_m,
             "on" if self.known_map_subtraction_enabled else "off",
             self.known_map_subtraction_radius_m,
         )
@@ -797,12 +810,25 @@ class GlobalObstacleOverlayPublisher:
             return False
         if self.drivable_grid is None:
             return True
-        if self._box_overlaps_known_map_obstacle(box):
+        far_field_relaxed = (
+            self.global_pointcloud_overlay_far_field_candidate_blocking_enabled
+            and math.hypot(dx, dy)
+            >= self.global_pointcloud_overlay_far_field_candidate_min_distance_m
+        )
+        overlaps_known_map_obstacle = self._box_overlaps_known_map_obstacle(box)
+        center_is_drivable_free = self._world_cell_is_drivable_free(self.drivable_grid, wx, wy)
+        if (
+            (not overlaps_known_map_obstacle)
+            and center_is_drivable_free
+            and self._has_drivable_grid_line_of_sight(
+                self.drivable_grid, best_proj[0], best_proj[1], wx, wy
+            )
+        ):
+            return True
+        if not far_field_relaxed:
             return False
-        if not self._world_cell_is_drivable_free(self.drivable_grid, wx, wy):
-            return False
-        return self._has_drivable_grid_line_of_sight(
-            self.drivable_grid, best_proj[0], best_proj[1], wx, wy
+        return self._world_cell_is_drivable_free(
+            self.drivable_grid, best_proj[0], best_proj[1]
         )
 
     def _pointcloud_corridor_half_width_m(self, margin_m):
