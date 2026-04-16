@@ -31,7 +31,7 @@
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="enable_cloud_tracker" default="true"/>
   <arg name="enable_dynamic_risk_manager" default="true"/>
-  <arg name="enable_local_replanner" default="false"/>
+  <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
   <arg name="use_dynamic_risk_grid" default="true"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
@@ -65,7 +65,7 @@
   <arg name="local_replan_lookahead_m" default="4.0"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
-  <arg name="enable_avoidance_path" default="false"/>
+  <arg name="enable_avoidance_path" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
   <arg name="enable_graph_planner" default="true"/>
   <arg name="enable_robot_send" default="true"/>
   <arg name="enable_wave_cmd_bridge" default="true"/>
@@ -265,7 +265,7 @@
   <arg name="local_blind_zone_guard_lookahead_m" default="1.0"/>
   <arg name="local_blind_zone_guard_heading_deadband_deg" default="12.0"/>
   <arg name="tracked_object_virtual_obstacles_enabled" default="true"/>
-  <arg name="tracked_object_avoidance_enabled" default="false"/>
+  <arg name="tracked_object_avoidance_enabled" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
   <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
   <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
   <arg name="tracked_object_prediction_step_s" default="0.3"/>
