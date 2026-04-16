@@ -61,6 +61,8 @@
     <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
     <arg name="enable_tracked_objects_marker_viz" default="true"/>
     <arg name="tracked_objects_marker_topic" default="/perception/tracked_objects_markers"/>
+    <arg name="persistent_obstacle_grid_topic" default="/perception/persistent_obstacle_grid"/>
+    <arg name="persistent_obstacle_detector_marker_topic" default="/perception/persistent_obstacle_detector_markers"/>
     <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
     <arg name="enable_cloud_tracker" default="true"/>
     <arg name="enable_dynamic_risk_manager" default="true"/>
@@ -276,6 +278,14 @@
     <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
     <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
     <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
+    <arg name="cloud_tracker_far_field_min_points_per_cell" default="1"/>
+    <arg name="cloud_tracker_far_field_min_cluster_cells" default="1"/>
+    <arg name="cloud_tracker_persistence_hit_value" default="28.0"/>
+    <arg name="cloud_tracker_persistence_point_gain" default="2.0"/>
+    <arg name="cloud_tracker_persistence_decay_per_s" default="8.0"/>
+    <arg name="cloud_tracker_persistence_confirm_threshold" default="40.0"/>
+    <arg name="cloud_tracker_persistence_publish_threshold" default="12.0"/>
+    <arg name="cloud_tracker_persistence_delete_threshold" default="3.0"/>
     <arg name="include_static_objects_in_behavior" default="true"/>
     <arg name="include_static_objects_in_risk_grid" default="false"/>
     <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -314,12 +324,14 @@
     </node>
 
     <group if="$(arg enable_cloud_tracker)">
-        <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
+        <node pkg="dynamic_window_approach" type="persistent_obstacle_detector.py" name="persistent_obstacle_detector" output="screen" respawn="false">
             <param name="pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
             <param name="odom_topic" value="$(arg planning_pose_topic)"/>
             <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
             <param name="output_topic" value="$(arg tracked_objects_topic)"/>
+            <param name="persistence_grid_topic" value="$(arg persistent_obstacle_grid_topic)"/>
+            <param name="detector_markers_topic" value="$(arg persistent_obstacle_detector_marker_topic)"/>
             <param name="max_range_m" value="$(arg cloud_tracker_max_range_m)"/>
             <param name="max_assoc_dist_m" value="$(arg cloud_tracker_max_assoc_dist_m)"/>
             <param name="dynamic_assoc_bonus_m" value="$(arg cloud_tracker_dynamic_assoc_bonus_m)"/>
@@ -328,6 +340,8 @@
             <param name="cell_size_m" value="$(arg cloud_tracker_cell_size_m)"/>
             <param name="min_points_per_cell" value="$(arg cloud_tracker_min_points_per_cell)"/>
             <param name="min_cluster_cells" value="$(arg cloud_tracker_min_cluster_cells)"/>
+            <param name="far_field_min_points_per_cell" value="$(arg cloud_tracker_far_field_min_points_per_cell)"/>
+            <param name="far_field_min_cluster_cells" value="$(arg cloud_tracker_far_field_min_cluster_cells)"/>
             <param name="vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
             <param name="static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
             <param name="dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
@@ -346,6 +360,14 @@
             <param name="free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
             <param name="free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
             <param name="far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
+            <param name="persistence_hit_value" value="$(arg cloud_tracker_persistence_hit_value)"/>
+            <param name="persistence_point_gain" value="$(arg cloud_tracker_persistence_point_gain)"/>
+            <param name="persistence_decay_per_s" value="$(arg cloud_tracker_persistence_decay_per_s)"/>
+            <param name="persistence_confirm_threshold" value="$(arg cloud_tracker_persistence_confirm_threshold)"/>
+            <param name="persistence_publish_threshold" value="$(arg cloud_tracker_persistence_publish_threshold)"/>
+            <param name="persistence_delete_threshold" value="$(arg cloud_tracker_persistence_delete_threshold)"/>
+            <param name="show_labels" value="true"/>
+            <param name="show_velocity" value="true"/>
         </node>
     </group>
 

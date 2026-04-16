@@ -35,6 +35,8 @@
   <arg name="follow_global_path_only" default="true"/>
   <arg name="use_dynamic_risk_grid" default="true"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+  <arg name="persistent_obstacle_grid_topic" default="/perception/persistent_obstacle_grid"/>
+  <arg name="persistent_obstacle_detector_marker_topic" default="/perception/persistent_obstacle_detector_markers"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
@@ -366,6 +368,14 @@
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
   <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
   <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
+  <arg name="cloud_tracker_far_field_min_points_per_cell" default="1"/>
+  <arg name="cloud_tracker_far_field_min_cluster_cells" default="1"/>
+  <arg name="cloud_tracker_persistence_hit_value" default="$(eval '30.0' if str(arg('real_mode')).lower() == 'true' else '28.0')"/>
+  <arg name="cloud_tracker_persistence_point_gain" default="2.0"/>
+  <arg name="cloud_tracker_persistence_decay_per_s" default="$(eval '7.0' if str(arg('real_mode')).lower() == 'true' else '8.0')"/>
+  <arg name="cloud_tracker_persistence_confirm_threshold" default="$(eval '42.0' if str(arg('real_mode')).lower() == 'true' else '40.0')"/>
+  <arg name="cloud_tracker_persistence_publish_threshold" default="12.0"/>
+  <arg name="cloud_tracker_persistence_delete_threshold" default="3.0"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -590,7 +600,7 @@
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
-      <arg name="obstacle_pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="obstacle_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
@@ -600,6 +610,8 @@
       <arg name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
       <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
       <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+      <arg name="persistent_obstacle_grid_topic" value="$(arg persistent_obstacle_grid_topic)"/>
+      <arg name="persistent_obstacle_detector_marker_topic" value="$(arg persistent_obstacle_detector_marker_topic)"/>
       <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
@@ -795,6 +807,14 @@
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
+      <arg name="cloud_tracker_far_field_min_points_per_cell" value="$(arg cloud_tracker_far_field_min_points_per_cell)"/>
+      <arg name="cloud_tracker_far_field_min_cluster_cells" value="$(arg cloud_tracker_far_field_min_cluster_cells)"/>
+      <arg name="cloud_tracker_persistence_hit_value" value="$(arg cloud_tracker_persistence_hit_value)"/>
+      <arg name="cloud_tracker_persistence_point_gain" value="$(arg cloud_tracker_persistence_point_gain)"/>
+      <arg name="cloud_tracker_persistence_decay_per_s" value="$(arg cloud_tracker_persistence_decay_per_s)"/>
+      <arg name="cloud_tracker_persistence_confirm_threshold" value="$(arg cloud_tracker_persistence_confirm_threshold)"/>
+      <arg name="cloud_tracker_persistence_publish_threshold" value="$(arg cloud_tracker_persistence_publish_threshold)"/>
+      <arg name="cloud_tracker_persistence_delete_threshold" value="$(arg cloud_tracker_persistence_delete_threshold)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
