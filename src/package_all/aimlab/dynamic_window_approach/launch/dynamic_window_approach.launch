@@ -286,6 +286,10 @@
     <arg name="cloud_tracker_persistence_confirm_threshold" default="40.0"/>
     <arg name="cloud_tracker_persistence_publish_threshold" default="12.0"/>
     <arg name="cloud_tracker_persistence_delete_threshold" default="3.0"/>
+    <arg name="cloud_tracker_publish_confirmed_only" default="true"/>
+    <arg name="cloud_tracker_persistence_grid_confirmed_only" default="true"/>
+    <arg name="cloud_tracker_show_provisional_cells" default="false"/>
+    <arg name="cloud_tracker_show_provisional_clusters" default="false"/>
     <arg name="include_static_objects_in_behavior" default="true"/>
     <arg name="include_static_objects_in_risk_grid" default="false"/>
     <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -366,8 +370,12 @@
             <param name="persistence_confirm_threshold" value="$(arg cloud_tracker_persistence_confirm_threshold)"/>
             <param name="persistence_publish_threshold" value="$(arg cloud_tracker_persistence_publish_threshold)"/>
             <param name="persistence_delete_threshold" value="$(arg cloud_tracker_persistence_delete_threshold)"/>
+            <param name="publish_confirmed_only" value="$(arg cloud_tracker_publish_confirmed_only)"/>
+            <param name="grid_confirmed_only" value="$(arg cloud_tracker_persistence_grid_confirmed_only)"/>
             <param name="show_labels" value="true"/>
             <param name="show_velocity" value="true"/>
+            <param name="show_provisional_cells" value="$(arg cloud_tracker_show_provisional_cells)"/>
+            <param name="show_provisional_clusters" value="$(arg cloud_tracker_show_provisional_clusters)"/>
         </node>
     </group>
 

@@ -497,22 +497,22 @@ Visualization Manager:
       Class: rviz/Map
       Color Scheme: costmap
       Draw Behind: true
-      Enabled: true
+      Enabled: false
       Name: persistent_obstacle_grid
       Topic: /perception/persistent_obstacle_grid
       Unreliable: false
       Use Timestamp: false
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /perception/persistent_obstacle_detector_markers
       Name: persistent_obstacle_detector
       Namespaces:
         cluster_boxes: true
-        cluster_labels: true
+        cluster_labels: false
         confirmed_cells: true
-        provisional_cells: true
-        velocity: true
+        provisional_cells: false
+        velocity: false
       Queue Size: 20
       Value: true
     - Class: rviz/MarkerArray
