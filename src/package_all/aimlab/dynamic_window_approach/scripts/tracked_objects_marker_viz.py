@@ -40,14 +40,14 @@ class TrackedObjectsMarkerViz:
             self.plan_range_m, float(rospy.get_param("~perception_range_m", 45.0))
         )
         self.plan_color = (
-            max(0.0, min(1.0, float(rospy.get_param("~plan_color_r", 0.95)))),
-            max(0.0, min(1.0, float(rospy.get_param("~plan_color_g", 0.10)))),
-            max(0.0, min(1.0, float(rospy.get_param("~plan_color_b", 0.08)))),
+            max(0.0, min(1.0, float(rospy.get_param("~plan_color_r", 0.05)))),
+            max(0.0, min(1.0, float(rospy.get_param("~plan_color_g", 0.05)))),
+            max(0.0, min(1.0, float(rospy.get_param("~plan_color_b", 0.05)))),
         )
         self.perception_color = (
-            max(0.0, min(1.0, float(rospy.get_param("~perception_color_r", 0.05)))),
-            max(0.0, min(1.0, float(rospy.get_param("~perception_color_g", 0.05)))),
-            max(0.0, min(1.0, float(rospy.get_param("~perception_color_b", 0.05)))),
+            max(0.0, min(1.0, float(rospy.get_param("~perception_color_r", 0.45)))),
+            max(0.0, min(1.0, float(rospy.get_param("~perception_color_g", 0.12)))),
+            max(0.0, min(1.0, float(rospy.get_param("~perception_color_b", 0.72)))),
         )
         self.odom_x = 0.0
         self.odom_y = 0.0

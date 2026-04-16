@@ -279,6 +279,8 @@
     <arg name="cloud_tracker_forward_non_drivable_forward_range_m" default="$(arg cloud_tracker_max_range_m)"/>
     <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="6.0"/>
     <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" default="-0.4"/>
+    <arg name="cloud_tracker_forward_non_drivable_max_cluster_span_m" default="8.0"/>
+    <arg name="cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio" default="6.0"/>
     <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
     <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
     <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
@@ -353,6 +355,8 @@
             <param name="forward_non_drivable_forward_range_m" value="$(arg cloud_tracker_forward_non_drivable_forward_range_m)"/>
             <param name="forward_non_drivable_side_lateral_m" value="$(arg cloud_tracker_forward_non_drivable_side_lateral_m)"/>
             <param name="forward_non_drivable_rear_margin_m" value="$(arg cloud_tracker_forward_non_drivable_rear_margin_m)"/>
+            <param name="forward_non_drivable_max_cluster_span_m" value="$(arg cloud_tracker_forward_non_drivable_max_cluster_span_m)"/>
+            <param name="forward_non_drivable_max_cluster_aspect_ratio" value="$(arg cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio)"/>
             <param name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
             <param name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>
             <param name="free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
@@ -370,12 +374,12 @@
             <param name="perception_range_m" value="$(arg cloud_tracker_max_range_m)"/>
             <param name="show_labels" value="false"/>
             <param name="show_velocity" value="false"/>
-            <param name="plan_color_r" value="0.95"/>
-            <param name="plan_color_g" value="0.10"/>
-            <param name="plan_color_b" value="0.08"/>
-            <param name="perception_color_r" value="0.05"/>
-            <param name="perception_color_g" value="0.05"/>
-            <param name="perception_color_b" value="0.05"/>
+            <param name="plan_color_r" value="0.05"/>
+            <param name="plan_color_g" value="0.05"/>
+            <param name="plan_color_b" value="0.05"/>
+            <param name="perception_color_r" value="0.45"/>
+            <param name="perception_color_g" value="0.12"/>
+            <param name="perception_color_b" value="0.72"/>
         </node>
     </group>
 

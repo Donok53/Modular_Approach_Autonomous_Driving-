@@ -369,6 +369,8 @@
   <arg name="cloud_tracker_forward_non_drivable_forward_range_m" default="$(arg cloud_tracker_max_range_m)"/>
   <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" default="-0.4"/>
+  <arg name="cloud_tracker_forward_non_drivable_max_cluster_span_m" default="8.0"/>
+  <arg name="cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio" default="6.0"/>
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
   <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
   <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
@@ -804,6 +806,8 @@
       <arg name="cloud_tracker_forward_non_drivable_forward_range_m" value="$(arg cloud_tracker_forward_non_drivable_forward_range_m)"/>
       <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" value="$(arg cloud_tracker_forward_non_drivable_side_lateral_m)"/>
       <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" value="$(arg cloud_tracker_forward_non_drivable_rear_margin_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_max_cluster_span_m" value="$(arg cloud_tracker_forward_non_drivable_max_cluster_span_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio" value="$(arg cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
@@ -1033,6 +1037,8 @@
       <arg name="cloud_tracker_forward_non_drivable_forward_range_m" value="$(arg cloud_tracker_forward_non_drivable_forward_range_m)"/>
       <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" value="$(arg cloud_tracker_forward_non_drivable_side_lateral_m)"/>
       <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" value="$(arg cloud_tracker_forward_non_drivable_rear_margin_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_max_cluster_span_m" value="$(arg cloud_tracker_forward_non_drivable_max_cluster_span_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio" value="$(arg cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>

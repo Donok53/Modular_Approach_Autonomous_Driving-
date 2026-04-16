@@ -122,6 +122,12 @@ class CloudClusterTracker:
         self.forward_non_drivable_rear_margin_m = float(
             rospy.get_param("~forward_non_drivable_rear_margin_m", -0.4)
         )
+        self.forward_non_drivable_max_cluster_span_m = max(
+            0.5, float(rospy.get_param("~forward_non_drivable_max_cluster_span_m", 8.0))
+        )
+        self.forward_non_drivable_max_cluster_aspect_ratio = max(
+            1.0, float(rospy.get_param("~forward_non_drivable_max_cluster_aspect_ratio", 6.0))
+        )
         self.free_space_support_radius_m = max(
             0.0, float(rospy.get_param("~free_space_support_radius_m", 0.35))
         )
@@ -159,7 +165,7 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm lead=%.2fs ped_lead=%.2fs decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm forward_non_drivable=%s front=%.1fm side=%.1fm rear=%.1fm free_support=%.2fm/%dcells far_support=%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm lead=%.2fs ped_lead=%.2fs decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm forward_non_drivable=%s front=%.1fm side=%.1fm rear=%.1fm span<=%.1fm aspect<=%.1f free_support=%.2fm/%dcells far_support=%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
@@ -192,6 +198,8 @@ class CloudClusterTracker:
             self.forward_non_drivable_forward_range_m,
             self.forward_non_drivable_side_lateral_m,
             self.forward_non_drivable_rear_margin_m,
+            self.forward_non_drivable_max_cluster_span_m,
+            self.forward_non_drivable_max_cluster_aspect_ratio,
             self.free_space_support_radius_m,
             self.free_space_support_min_cells,
             self.far_field_free_space_support_min_cells,
@@ -240,6 +248,18 @@ class CloudClusterTracker:
     def _cluster_in_forward_non_drivable_roi(self, cluster):
         return self._pose_in_forward_non_drivable_roi(cluster["x"], cluster["y"])
 
+    def _cluster_matches_forward_non_drivable_profile(self, cluster):
+        if not self._cluster_in_forward_non_drivable_roi(cluster):
+            return False
+        size_x = max(0.05, float(cluster.get("size_x", 0.0)))
+        size_y = max(0.05, float(cluster.get("size_y", 0.0)))
+        span = max(size_x, size_y)
+        aspect = span / max(0.05, min(size_x, size_y))
+        return (
+            span <= self.forward_non_drivable_max_cluster_span_m
+            and aspect <= self.forward_non_drivable_max_cluster_aspect_ratio
+        )
+
     @staticmethod
     def _world_to_grid(g, x, y):
         res = float(g.info.resolution)
@@ -277,14 +297,14 @@ class CloudClusterTracker:
                 saw_in_bounds = True
                 if self._grid_cell_is_drivable_free(g, gx, gy):
                     continue
-                if self._cluster_in_forward_non_drivable_roi(cluster):
+                if self._cluster_matches_forward_non_drivable_profile(cluster):
                     cluster["relaxed_forward_roi"] = True
                     return False
                 return True
         if saw_in_bounds:
             return False
         if not self.allow_out_of_grid_clusters:
-            if self._cluster_in_forward_non_drivable_roi(cluster):
+            if self._cluster_matches_forward_non_drivable_profile(cluster):
                 cluster["relaxed_forward_roi"] = True
                 return False
             return True
