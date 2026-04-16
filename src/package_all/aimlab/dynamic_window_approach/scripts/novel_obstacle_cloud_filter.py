@@ -29,24 +29,6 @@ class NovelObstacleCloudFilter:
 
         self.min_z = float(rospy.get_param("~min_z", -0.35))
         self.max_z = float(rospy.get_param("~max_z", 2.20))
-        self.enable_slope_compensation = bool(
-            rospy.get_param("~enable_slope_compensation", True)
-        )
-        self.slope_compensation_max_abs_rad = math.radians(
-            max(0.0, float(rospy.get_param("~slope_compensation_max_abs_deg", 25.0)))
-        )
-        self.enable_ground_band_rejection = bool(
-            rospy.get_param("~enable_ground_band_rejection", True)
-        )
-        self.lidar_height_m = max(
-            0.0, float(rospy.get_param("~lidar_height_m", 0.46))
-        )
-        self.ground_reject_min_m = float(
-            rospy.get_param("~ground_reject_min_m", -0.20)
-        )
-        self.ground_reject_max_m = float(
-            rospy.get_param("~ground_reject_max_m", 0.04)
-        )
         self.max_range_m = max(0.1, float(rospy.get_param("~max_range_m", 20.0)))
         self.input_downsample = max(1, int(rospy.get_param("~input_downsample", 2)))
         self.map_downsample = max(1, int(rospy.get_param("~map_downsample", 1)))
@@ -81,9 +63,6 @@ class NovelObstacleCloudFilter:
         self.qy = 0.0
         self.qz = 0.0
         self.qw = 1.0
-        self.odom_roll = 0.0
-        self.odom_pitch = 0.0
-        self.odom_yaw = 0.0
 
         self.have_map = False
         self.global_map_frame_id = "map"
@@ -116,9 +95,8 @@ class NovelObstacleCloudFilter:
 
         rospy.loginfo(
             "novel_obstacle_cloud_filter started | in=%s map=%s pose=%s out=%s out_map=%s "
-            "z=[%.2f, %.2f] slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm "
-            "ground=[%.2f, %.2f] range=%.1fm downsample=%d map_voxel=%.2fm match_xy=%.2fm "
-            "match_z=%.2fm cluster_cell=%.2fm support>=%d output_voxel=%.2fm",
+            "z=[%.2f, %.2f] range=%.1fm downsample=%d map_voxel=%.2fm match_xy=%.2fm match_z=%.2fm "
+            "cluster_cell=%.2fm support>=%d output_voxel=%.2fm",
             self.input_cloud_topic,
             self.global_map_topic,
             self.pose_topic,
@@ -126,12 +104,6 @@ class NovelObstacleCloudFilter:
             self.output_map_cloud_topic,
             self.min_z,
             self.max_z,
-            "on" if self.enable_slope_compensation else "off",
-            math.degrees(self.slope_compensation_max_abs_rad),
-            "on" if self.enable_ground_band_rejection else "off",
-            self.lidar_height_m,
-            self.ground_reject_min_m,
-            self.ground_reject_max_m,
             self.max_range_m,
             self.input_downsample,
             self.map_voxel_size_m,
@@ -143,21 +115,10 @@ class NovelObstacleCloudFilter:
         )
 
     @staticmethod
-    def _quat_to_roll_pitch_yaw(q):
-        sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z)
-        cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
-        roll = math.atan2(sinr_cosp, cosr_cosp)
-
-        sinp = 2.0 * (q.w * q.y - q.z * q.x)
-        if abs(sinp) >= 1.0:
-            pitch = math.copysign(math.pi / 2.0, sinp)
-        else:
-            pitch = math.asin(sinp)
-
+    def _yaw_from_quaternion(q):
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        yaw = math.atan2(siny_cosp, cosy_cosp)
-        return roll, pitch, yaw
+        return math.atan2(siny_cosp, cosy_cosp)
 
     def pose_callback(self, msg):
         self.odom_x = float(msg.pose.pose.position.x)
@@ -167,14 +128,6 @@ class NovelObstacleCloudFilter:
         self.qy = float(msg.pose.pose.orientation.y)
         self.qz = float(msg.pose.pose.orientation.z)
         self.qw = float(msg.pose.pose.orientation.w)
-        roll, pitch, yaw = self._quat_to_roll_pitch_yaw(msg.pose.pose.orientation)
-        max_abs = self.slope_compensation_max_abs_rad
-        if max_abs > 0.0:
-            roll = max(-max_abs, min(max_abs, roll))
-            pitch = max(-max_abs, min(max_abs, pitch))
-        self.odom_roll = float(roll)
-        self.odom_pitch = float(pitch)
-        self.odom_yaw = float(yaw)
         self.have_pose = True
 
     def _voxel_key(self, x, y, z, voxel_size_m):
@@ -204,22 +157,6 @@ class NovelObstacleCloudFilter:
         my = self.odom_y + r10 * x + r11 * y + r12 * z
         mz = self.odom_z + r20 * x + r21 * y + r22 * z
         return mx, my, mz
-
-    def _leveled_z(self, x, y, z):
-        if (not self.enable_slope_compensation) or (not self.have_pose):
-            return z
-
-        cr = math.cos(self.odom_roll)
-        sr = math.sin(self.odom_roll)
-        cp = math.cos(self.odom_pitch)
-        sp = math.sin(self.odom_pitch)
-
-        y1 = cr * y - sr * z
-        z1 = sr * y + cr * z
-        return (-sp * x) + (cp * z1)
-
-    def _ground_relative_height(self, x, y, z):
-        return self._leveled_z(x, y, z) + self.lidar_height_m
 
     def global_map_callback(self, msg):
         voxels = set()
@@ -331,7 +268,6 @@ class NovelObstacleCloudFilter:
         candidate_pairs = []
         in_points = 0
         z_filtered = 0
-        ground_filtered = 0
         map_matched = 0
         for i, p in enumerate(
             point_cloud2.read_points(
@@ -342,14 +278,7 @@ class NovelObstacleCloudFilter:
                 continue
             x, y, z = float(p[0]), float(p[1]), float(p[2])
             in_points += 1
-            if self.enable_ground_band_rejection:
-                ground_h = self._ground_relative_height(x, y, z)
-                if self.ground_reject_min_m <= ground_h <= self.ground_reject_max_m:
-                    ground_filtered += 1
-                    continue
-
-            z_eval = self._leveled_z(x, y, z)
-            if z_eval < self.min_z or z_eval > self.max_z:
+            if z < self.min_z or z > self.max_z:
                 continue
             z_filtered += 1
             if (x * x + y * y) > self.range_sq:
@@ -379,9 +308,8 @@ class NovelObstacleCloudFilter:
         if self.debug_log_period_s > 0.0:
             rospy.loginfo_throttle(
                 self.debug_log_period_s,
-                "novel_obstacle_cloud_filter: in=%d ground_drop=%d z_ok=%d novel=%d support=%d out=%d map_match=%d",
+                "novel_obstacle_cloud_filter: in=%d z_ok=%d novel=%d support=%d out=%d map_match=%d",
                 in_points,
-                ground_filtered,
                 z_filtered,
                 len(candidate_pairs),
                 len(supported_pairs),
