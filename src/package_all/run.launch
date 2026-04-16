@@ -151,7 +151,12 @@
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
-  <arg name="global_path_candidate_count" default="5"/>
+  <arg name="global_path_candidate_count" default="$(eval '7' if str(arg('real_mode')).lower() == 'true' else '5')"/>
+  <arg name="global_path_candidate_fanout_enabled" default="true"/>
+  <arg name="global_path_candidate_fanout_anchor_count" default="2"/>
+  <arg name="global_path_candidate_fanout_levels" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '1')"/>
+  <arg name="global_path_candidate_fanout_lateral_step_m" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.75')"/>
+  <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="$(eval '0.00' if str(arg('real_mode')).lower() == 'true' else '0.02')"/>
   <arg name="global_path_clearance_model" default="$(eval 'width' if str(arg('real_mode')).lower() == 'true' else 'circumscribed')"/>
@@ -191,12 +196,15 @@
   <arg name="path_tracking_yaw_accel_max_deg" default="180.0"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="$(eval '55.0' if str(arg('real_mode')).lower() == 'true' else '40.0')"/>
   <arg name="path_tracking_stop_yaw_deg" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
-  <arg name="path_tracking_cte_gain" default="$(eval '0.9' if str(arg('real_mode')).lower() == 'true' else '1.2')"/>
+  <arg name="path_tracking_cte_gain" default="$(eval '0.65' if str(arg('real_mode')).lower() == 'true' else '1.2')"/>
   <arg name="path_tracking_cte_soft_mps" default="0.25"/>
+  <arg name="path_tracking_cte_deadband_m" default="$(eval '0.05' if str(arg('real_mode')).lower() == 'true' else '0.03')"/>
+  <arg name="path_tracking_cte_filter_gain" default="$(eval '0.20' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
   <arg name="path_tracking_heading_filter_gain" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_goal_bearing_gain" default="$(eval '0.65' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
+  <arg name="path_tracking_target_step_m" default="$(eval '0.22' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_crawl_speed" default="$(eval '0.16' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
   <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.12' if str(arg('real_mode')).lower() == 'true' else '0.07')"/>
   <arg name="final_approach_window_m" default="$(eval '1.5' if str(arg('real_mode')).lower() == 'true' else '2.5')"/>
@@ -453,6 +461,11 @@
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
         <arg name="global_path_candidate_count" value="$(arg global_path_candidate_count)"/>
+        <arg name="global_path_candidate_fanout_enabled" value="$(arg global_path_candidate_fanout_enabled)"/>
+        <arg name="global_path_candidate_fanout_anchor_count" value="$(arg global_path_candidate_fanout_anchor_count)"/>
+        <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
+        <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
+        <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -606,10 +619,13 @@
       <arg name="path_tracking_stop_yaw_deg" value="$(arg path_tracking_stop_yaw_deg)"/>
       <arg name="path_tracking_cte_gain" value="$(arg path_tracking_cte_gain)"/>
       <arg name="path_tracking_cte_soft_mps" value="$(arg path_tracking_cte_soft_mps)"/>
+      <arg name="path_tracking_cte_deadband_m" value="$(arg path_tracking_cte_deadband_m)"/>
+      <arg name="path_tracking_cte_filter_gain" value="$(arg path_tracking_cte_filter_gain)"/>
       <arg name="path_tracking_cte_yaw_cap_deg" value="$(arg path_tracking_cte_yaw_cap_deg)"/>
       <arg name="path_tracking_heading_filter_gain" value="$(arg path_tracking_heading_filter_gain)"/>
       <arg name="path_tracking_goal_bearing_gain" value="$(arg path_tracking_goal_bearing_gain)"/>
       <arg name="path_tracking_goal_bearing_cap_deg" value="$(arg path_tracking_goal_bearing_cap_deg)"/>
+      <arg name="path_tracking_target_step_m" value="$(arg path_tracking_target_step_m)"/>
       <arg name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
       <arg name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
       <arg name="final_approach_window_m" value="$(arg final_approach_window_m)"/>

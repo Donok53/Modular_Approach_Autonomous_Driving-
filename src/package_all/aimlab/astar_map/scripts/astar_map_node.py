@@ -203,6 +203,28 @@ class AStarPlanner:
         self.global_path_candidate_count = max(
             1, int(rospy.get_param("~global_path_candidate_count", 5))
         )
+        self.global_path_candidate_fanout_enabled = bool(
+            rospy.get_param("~global_path_candidate_fanout_enabled", True)
+        )
+        self.global_path_candidate_fanout_anchor_count = max(
+            1, int(rospy.get_param("~global_path_candidate_fanout_anchor_count", 2))
+        )
+        self.global_path_candidate_fanout_levels = max(
+            1, int(rospy.get_param("~global_path_candidate_fanout_levels", 2))
+        )
+        self.global_path_candidate_fanout_lateral_step_m = max(
+            0.10,
+            float(
+                rospy.get_param(
+                    "~global_path_candidate_fanout_lateral_step_m",
+                    max(0.80, self.robot_width_m + self.footprint_padding_m),
+                )
+            ),
+        )
+        self.global_path_candidate_fanout_snap_radius_cells = max(
+            1,
+            int(rospy.get_param("~global_path_candidate_fanout_snap_radius_cells", 8)),
+        )
         self.global_path_candidate_penalty_radius_m = max(
             0.1,
             float(
@@ -1780,6 +1802,106 @@ class AStarPlanner:
                     return ordered
         return ordered
 
+    def _nearest_free_grid_cell_with_radius(self, blocked, cell, max_radius_cells):
+        cx, cy = cell
+        if self._blocked_cell_is_free(blocked, cx, cy):
+            return (cx, cy)
+
+        best = None
+        best_d2 = float("inf")
+        max_radius = max(1, int(max_radius_cells))
+        for r in range(1, max_radius + 1):
+            found_this_ring = False
+            for gx in range(cx - r, cx + r + 1):
+                for gy in range(cy - r, cy + r + 1):
+                    if max(abs(gx - cx), abs(gy - cy)) != r:
+                        continue
+                    if not self._blocked_cell_is_free(blocked, gx, gy):
+                        continue
+                    d2 = float((gx - cx) * (gx - cx) + (gy - cy) * (gy - cy))
+                    if d2 < best_d2:
+                        best_d2 = d2
+                        best = (gx, gy)
+                        found_this_ring = True
+            if found_this_ring:
+                return best
+        return best
+
+    @staticmethod
+    def _merge_grid_paths(path_a, path_b):
+        if not path_a:
+            return list(path_b) if path_b else None
+        if not path_b:
+            return list(path_a)
+        merged = list(path_a)
+        for cell in path_b[1:]:
+            if cell != merged[-1]:
+                merged.append(cell)
+        return merged
+
+    def _path_fanout_anchor_indices(self, path):
+        if len(path) < 5:
+            return []
+        anchor_count = max(1, self.global_path_candidate_fanout_anchor_count)
+        end_margin = max(1, int(round(0.15 * float(len(path) - 1))))
+        low = min(len(path) - 3, max(1, end_margin))
+        high = max(low, len(path) - 2 - end_margin)
+        if anchor_count == 1:
+            return [int(round(0.5 * float(low + high)))]
+
+        indices = []
+        for n in range(anchor_count):
+            frac = float(n + 1) / float(anchor_count + 1)
+            idx = int(round(float(low) + frac * float(high - low)))
+            idx = max(1, min(len(path) - 2, idx))
+            if idx not in indices:
+                indices.append(idx)
+        return indices
+
+    def _candidate_fanout_via_cells(self, blocked, primary_path):
+        if (not self.global_path_candidate_fanout_enabled) or len(primary_path) < 5:
+            return []
+
+        res = max(1e-6, float(self.drivable_grid.info.resolution))
+        lateral_step_cells = max(
+            1,
+            int(math.ceil(self.global_path_candidate_fanout_lateral_step_m / res)),
+        )
+        via_cells = []
+        seen = set()
+        for anchor_idx in self._path_fanout_anchor_indices(primary_path):
+            prev_cell = primary_path[max(0, anchor_idx - 1)]
+            cur_cell = primary_path[anchor_idx]
+            next_cell = primary_path[min(len(primary_path) - 1, anchor_idx + 1)]
+            dx = float(next_cell[0] - prev_cell[0])
+            dy = float(next_cell[1] - prev_cell[1])
+            norm = math.hypot(dx, dy)
+            if norm <= 1e-6:
+                continue
+            nx = -dy / norm
+            ny = dx / norm
+            for level in range(1, self.global_path_candidate_fanout_levels + 1):
+                lateral_cells = float(level * lateral_step_cells)
+                for side in (-1.0, 1.0):
+                    hint = (
+                        int(round(float(cur_cell[0]) + side * nx * lateral_cells)),
+                        int(round(float(cur_cell[1]) + side * ny * lateral_cells)),
+                    )
+                    snapped = self._nearest_free_grid_cell_with_radius(
+                        blocked,
+                        hint,
+                        max(
+                            self.global_path_candidate_fanout_snap_radius_cells,
+                            int(math.ceil(lateral_cells)),
+                        ),
+                    )
+                    if snapped is None or snapped == tuple(cur_cell) or snapped in seen:
+                        continue
+                    seen.add(snapped)
+                    via_cells.append((anchor_idx, snapped))
+        via_cells.sort(key=lambda item: (item[0], item[1][0], item[1][1]))
+        return via_cells
+
     def _nearest_free_start_grid_cell(self, g, blocked, start_xy, goal_xy=None):
         start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
         if self._blocked_cell_is_free(blocked, start_raw[0], start_raw[1]):
@@ -2045,6 +2167,35 @@ class AStarPlanner:
                     self.global_path_candidate_penalty_cost * weight
                 )
 
+    def _plan_grid_path_via(
+        self,
+        blocked,
+        start_cell,
+        via_cell,
+        goal_cell,
+        planner_mode,
+        cell_penalties=None,
+    ):
+        first_leg, _ = self._plan_single_grid_path(
+            blocked,
+            start_cell,
+            via_cell,
+            planner_mode=planner_mode,
+            cell_penalties=cell_penalties,
+        )
+        if not first_leg:
+            return None
+        second_leg, _ = self._plan_single_grid_path(
+            blocked,
+            via_cell,
+            goal_cell,
+            planner_mode=planner_mode,
+            cell_penalties=cell_penalties,
+        )
+        if not second_leg:
+            return None
+        return self._merge_grid_paths(first_leg, second_leg)
+
     def _generate_candidate_grid_paths(
         self,
         blocked,
@@ -2070,8 +2221,8 @@ class AStarPlanner:
         self._accumulate_candidate_penalties(penalty_map, primary_path, offsets)
         planner_mode = "astar4" if self.global_path_grid_planner == "astar4" else "astar8"
         max_attempts = max(
-            self.global_path_candidate_count * 4,
-            self.global_path_candidate_count + 2,
+            self.global_path_candidate_count * 8,
+            self.global_path_candidate_count + 4,
         )
         attempts = 0
         start_candidates = [tuple(start_cell)]
@@ -2094,22 +2245,42 @@ class AStarPlanner:
                     continue
                 combo_queue.append((s_idx + g_idx, s_idx, g_idx, cand_start, cand_goal))
         combo_queue.sort(key=lambda item: (item[0], item[1], item[2]))
+        via_queue = self._candidate_fanout_via_cells(blocked, primary_path)
 
         combo_idx = 0
         while len(candidate_specs) < self.global_path_candidate_count and attempts < max_attempts:
             attempts += 1
             cand_start = tuple(start_cell)
             cand_goal = tuple(goal_cell)
-            if combo_idx < len(combo_queue):
+            alt_path = None
+            if via_queue:
+                _, via_cell = via_queue.pop(0)
+                alt_path = self._plan_grid_path_via(
+                    blocked,
+                    cand_start,
+                    via_cell,
+                    cand_goal,
+                    planner_mode=planner_mode,
+                    cell_penalties=penalty_map,
+                )
+            elif combo_idx < len(combo_queue):
                 _, _, _, cand_start, cand_goal = combo_queue[combo_idx]
                 combo_idx += 1
-            alt_path, _ = self._plan_single_grid_path(
-                blocked,
-                cand_start,
-                cand_goal,
-                planner_mode=planner_mode,
-                cell_penalties=penalty_map,
-            )
+                alt_path, _ = self._plan_single_grid_path(
+                    blocked,
+                    cand_start,
+                    cand_goal,
+                    planner_mode=planner_mode,
+                    cell_penalties=penalty_map,
+                )
+            else:
+                alt_path, _ = self._plan_single_grid_path(
+                    blocked,
+                    cand_start,
+                    cand_goal,
+                    planner_mode=planner_mode,
+                    cell_penalties=penalty_map,
+                )
             if not alt_path:
                 continue
             similarity = max(

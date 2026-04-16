@@ -25,6 +25,11 @@
   <arg name="footprint_padding_m" default="0.0"/>
   <arg name="global_path_grid_planner" default="astar8"/>
   <arg name="global_path_candidate_count" default="5"/>
+  <arg name="global_path_candidate_fanout_enabled" default="true"/>
+  <arg name="global_path_candidate_fanout_anchor_count" default="2"/>
+  <arg name="global_path_candidate_fanout_levels" default="1"/>
+  <arg name="global_path_candidate_fanout_lateral_step_m" default="0.75"/>
+  <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
@@ -79,6 +84,11 @@
     <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
     <param name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
     <param name="global_path_candidate_count" value="$(arg global_path_candidate_count)"/>
+    <param name="global_path_candidate_fanout_enabled" value="$(arg global_path_candidate_fanout_enabled)"/>
+    <param name="global_path_candidate_fanout_anchor_count" value="$(arg global_path_candidate_fanout_anchor_count)"/>
+    <param name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
+    <param name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
+    <param name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
     <param name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
     <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
     <param name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>

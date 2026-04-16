@@ -109,10 +109,13 @@
     <arg name="path_tracking_stop_yaw_deg" default="85.0"/>
     <arg name="path_tracking_cte_gain" default="1.2"/>
     <arg name="path_tracking_cte_soft_mps" default="0.25"/>
+    <arg name="path_tracking_cte_deadband_m" default="0.03"/>
+    <arg name="path_tracking_cte_filter_gain" default="0.25"/>
     <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
     <arg name="path_tracking_heading_filter_gain" default="0.18"/>
     <arg name="path_tracking_goal_bearing_gain" default="0.45"/>
     <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
+    <arg name="path_tracking_target_step_m" default="0.18"/>
     <arg name="path_tracking_crawl_speed" default="0.10"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
     <arg name="final_approach_window_m" default="2.5"/>
@@ -567,10 +570,13 @@
         <param name="path_tracking_stop_yaw_deg" value="$(arg path_tracking_stop_yaw_deg)"/>
         <param name="path_tracking_cte_gain" value="$(arg path_tracking_cte_gain)"/>
         <param name="path_tracking_cte_soft_mps" value="$(arg path_tracking_cte_soft_mps)"/>
+        <param name="path_tracking_cte_deadband_m" value="$(arg path_tracking_cte_deadband_m)"/>
+        <param name="path_tracking_cte_filter_gain" value="$(arg path_tracking_cte_filter_gain)"/>
         <param name="path_tracking_cte_yaw_cap_deg" value="$(arg path_tracking_cte_yaw_cap_deg)"/>
         <param name="path_tracking_heading_filter_gain" value="$(arg path_tracking_heading_filter_gain)"/>
         <param name="path_tracking_goal_bearing_gain" value="$(arg path_tracking_goal_bearing_gain)"/>
         <param name="path_tracking_goal_bearing_cap_deg" value="$(arg path_tracking_goal_bearing_cap_deg)"/>
+        <param name="path_tracking_target_step_m" value="$(arg path_tracking_target_step_m)"/>
         <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
         <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
         <param name="final_approach_window_m" value="$(arg final_approach_window_m)"/>

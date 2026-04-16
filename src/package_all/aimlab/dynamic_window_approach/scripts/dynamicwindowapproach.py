@@ -293,6 +293,13 @@ class DWAControl:
         self.path_tracking_cte_soft_mps = max(
             0.05, float(rospy.get_param("~path_tracking_cte_soft_mps", 0.25))
         )
+        self.path_tracking_cte_deadband_m = max(
+            0.0, float(rospy.get_param("~path_tracking_cte_deadband_m", 0.03))
+        )
+        self.path_tracking_cte_filter_gain = min(
+            1.0,
+            max(0.05, float(rospy.get_param("~path_tracking_cte_filter_gain", 0.25))),
+        )
         self.path_tracking_cte_yaw_cap = math.radians(
             rospy.get_param("~path_tracking_cte_yaw_cap_deg", 35.0)
         )
@@ -306,6 +313,9 @@ class DWAControl:
         )
         self.path_tracking_goal_bearing_cap = math.radians(
             rospy.get_param("~path_tracking_goal_bearing_cap_deg", 35.0)
+        )
+        self.path_tracking_target_step_m = max(
+            0.05, float(rospy.get_param("~path_tracking_target_step_m", 0.18))
         )
         self.path_tracking_crawl_speed = max(
             0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.10))
@@ -342,6 +352,7 @@ class DWAControl:
         )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
+        self._path_tracking_filtered_lat_err = 0.0
 
         # Internal path buffers
         self.global_path_msg = None
@@ -802,6 +813,7 @@ class DWAControl:
         if reset_tracking:
             self._path_tracking_prev_w = 0.0
             self._path_tracking_prev_desired_yaw = None
+            self._path_tracking_filtered_lat_err = 0.0
             self._rot_mode = False
             self._rot_yaw_target = None
         if path_msg is None or len(path_msg.poses) < 2:
@@ -1015,7 +1027,10 @@ class DWAControl:
         if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
             target_seg_idx += 1
         segment_end_s = self.cum_len[target_seg_idx + 1]
-        segment_target_step = min(0.12, 0.5 * self.seg_lens[target_seg_idx])
+        segment_target_step = min(
+            max(0.05, self.path_tracking_target_step_m),
+            max(0.05, 0.8 * self.seg_lens[target_seg_idx]),
+        )
         s_target = min(
             self.s_total,
             min(segment_end_s, max(base_s, s_proj + segment_target_step)),
@@ -1039,6 +1054,17 @@ class DWAControl:
 
     def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap, remaining_dist):
         path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
+        if abs(lat_err) <= self.path_tracking_cte_deadband_m:
+            lat_err_ctrl = 0.0
+        else:
+            lat_err_ctrl = math.copysign(
+                abs(lat_err) - self.path_tracking_cte_deadband_m,
+                lat_err,
+            )
+        self._path_tracking_filtered_lat_err = (
+            self.path_tracking_cte_filter_gain * lat_err_ctrl
+            + (1.0 - self.path_tracking_cte_filter_gain) * self._path_tracking_filtered_lat_err
+        )
         target_dx = float(goal_xy[0]) - float(x[0])
         target_dy = float(goal_xy[1]) - float(x[1])
         target_dist = math.hypot(target_dx, target_dy)
@@ -1052,7 +1078,7 @@ class DWAControl:
         if remaining_dist <= max(self.lookahead_distance, 0.8):
             goal_heading_weight = min(0.20, self.path_tracking_goal_bearing_gain)
         cte_correction = math.atan2(
-            self.path_tracking_cte_gain * lat_err,
+            self.path_tracking_cte_gain * self._path_tracking_filtered_lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
         )
         cte_correction = max(
