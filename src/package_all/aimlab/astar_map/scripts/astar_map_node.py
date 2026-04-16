@@ -1759,6 +1759,33 @@ class AStarPlanner:
                 return best
         return None
 
+    def _nearest_free_grid_cells(self, blocked, cell, max_cells=4):
+        cx, cy = cell
+        ordered = []
+        seen = set()
+        if self._blocked_cell_is_free(blocked, cx, cy):
+            ordered.append((cx, cy))
+            seen.add((cx, cy))
+        for r in range(1, self.grid_snap_search_radius_cells + 1):
+            ring = []
+            for gx in range(cx - r, cx + r + 1):
+                for gy in range(cy - r, cy + r + 1):
+                    if max(abs(gx - cx), abs(gy - cy)) != r:
+                        continue
+                    if not self._blocked_cell_is_free(blocked, gx, gy):
+                        continue
+                    if (gx, gy) in seen:
+                        continue
+                    d2 = float((gx - cx) * (gx - cx) + (gy - cy) * (gy - cy))
+                    ring.append((d2, gx, gy))
+            ring.sort(key=lambda item: item[0])
+            for _, gx, gy in ring:
+                ordered.append((gx, gy))
+                seen.add((gx, gy))
+                if len(ordered) >= max_cells:
+                    return ordered
+        return ordered
+
     def _nearest_free_start_grid_cell(self, g, blocked, start_xy, goal_xy=None):
         start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
         if self._blocked_cell_is_free(blocked, start_raw[0], start_raw[1]):
@@ -2024,13 +2051,25 @@ class AStarPlanner:
                     self.global_path_candidate_penalty_cost * weight
                 )
 
-    def _generate_candidate_grid_paths(self, blocked, start_cell, goal_cell, primary_path):
+    def _generate_candidate_grid_paths(
+        self,
+        blocked,
+        start_cell,
+        goal_cell,
+        primary_path,
+        alt_start_cells=None,
+        alt_goal_cells=None,
+    ):
         if not primary_path:
             return []
 
-        candidate_paths = [list(primary_path)]
+        candidate_specs = [{
+            "grid_path": list(primary_path),
+            "start_cell": tuple(start_cell),
+            "goal_cell": tuple(goal_cell),
+        }]
         if self.global_path_candidate_count <= 1:
-            return candidate_paths
+            return candidate_specs
 
         penalty_map = {}
         offsets = self._candidate_penalty_offsets(self.drivable_grid)
@@ -2041,26 +2080,57 @@ class AStarPlanner:
             self.global_path_candidate_count + 2,
         )
         attempts = 0
-        while len(candidate_paths) < self.global_path_candidate_count and attempts < max_attempts:
+        start_candidates = [tuple(start_cell)]
+        goal_candidates = [tuple(goal_cell)]
+        if alt_start_cells:
+            for cell in alt_start_cells:
+                cell = tuple(cell)
+                if cell not in start_candidates:
+                    start_candidates.append(cell)
+        if alt_goal_cells:
+            for cell in alt_goal_cells:
+                cell = tuple(cell)
+                if cell not in goal_candidates:
+                    goal_candidates.append(cell)
+
+        combo_queue = []
+        for s_idx, cand_start in enumerate(start_candidates):
+            for g_idx, cand_goal in enumerate(goal_candidates):
+                if cand_start == tuple(start_cell) and cand_goal == tuple(goal_cell):
+                    continue
+                combo_queue.append((s_idx + g_idx, s_idx, g_idx, cand_start, cand_goal))
+        combo_queue.sort(key=lambda item: (item[0], item[1], item[2]))
+
+        combo_idx = 0
+        while len(candidate_specs) < self.global_path_candidate_count and attempts < max_attempts:
             attempts += 1
+            cand_start = tuple(start_cell)
+            cand_goal = tuple(goal_cell)
+            if combo_idx < len(combo_queue):
+                _, _, _, cand_start, cand_goal = combo_queue[combo_idx]
+                combo_idx += 1
             alt_path, _ = self._plan_single_grid_path(
                 blocked,
-                start_cell,
-                goal_cell,
+                cand_start,
+                cand_goal,
                 planner_mode=planner_mode,
                 cell_penalties=penalty_map,
             )
             if not alt_path:
-                break
+                continue
             similarity = max(
-                self._grid_path_similarity(alt_path, existing)
-                for existing in candidate_paths
+                self._grid_path_similarity(alt_path, existing["grid_path"])
+                for existing in candidate_specs
             )
             self._accumulate_candidate_penalties(penalty_map, alt_path, offsets)
             if similarity >= self.global_path_candidate_max_similarity:
                 continue
-            candidate_paths.append(list(alt_path))
-        return candidate_paths
+            candidate_specs.append({
+                "grid_path": list(alt_path),
+                "start_cell": cand_start,
+                "goal_cell": cand_goal,
+            })
+        return candidate_specs
 
     def _grid_path_to_world_points(
         self,
@@ -2316,28 +2386,47 @@ class AStarPlanner:
                 float(snapped_goal_xy[1]),
                 goal_gap_m,
             )
-        candidate_grid_paths = self._generate_candidate_grid_paths(
+        alt_start_cells = self._nearest_free_grid_cells(
+            blocked,
+            start_raw,
+            max_cells=max(3, min(8, self.global_path_candidate_count + 1)),
+        )
+        if start_cell not in alt_start_cells:
+            alt_start_cells.insert(0, start_cell)
+        alt_goal_cells = self._nearest_free_grid_cells(
+            blocked,
+            goal_raw,
+            max_cells=max(3, min(8, self.global_path_candidate_count + 1)),
+        )
+        if goal_cell not in alt_goal_cells:
+            alt_goal_cells.insert(0, goal_cell)
+        candidate_specs = self._generate_candidate_grid_paths(
             blocked,
             start_cell,
             goal_cell,
             grid_path,
+            alt_start_cells=alt_start_cells,
+            alt_goal_cells=alt_goal_cells,
         )
         candidate_world_paths = []
-        for idx, cand_grid_path in enumerate(candidate_grid_paths):
+        for idx, candidate_spec in enumerate(candidate_specs):
+            cand_grid_path = candidate_spec["grid_path"]
+            cand_start_cell = candidate_spec["start_cell"]
+            cand_goal_cell = candidate_spec["goal_cell"]
             cand_world_points, _, _, _, _, _, _ = self._grid_path_to_world_points(
                 g,
                 cand_grid_path,
                 start_xy,
                 goal_xy,
-                start_cell,
+                cand_start_cell,
                 goal_raw,
-                goal_cell,
+                cand_goal_cell,
                 goal_tail_blocked,
             )
             if idx > 0 and candidate_world_paths:
                 similarity = max(
-                    self._grid_path_similarity(cand_grid_path, candidate_grid_paths[j])
-                    for j in range(min(idx, len(candidate_grid_paths)))
+                    self._grid_path_similarity(cand_grid_path, candidate_specs[j]["grid_path"])
+                    for j in range(min(idx, len(candidate_specs)))
                 )
                 if similarity >= self.global_path_candidate_max_similarity:
                     continue

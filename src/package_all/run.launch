@@ -152,8 +152,8 @@
   <arg name="global_path_grid_planner" default="astar8"/>
   <arg name="global_path_candidate_count" default="5"/>
   <arg name="global_path_use_any_angle" default="true"/>
-  <arg name="global_path_clearance_m" default="0.02"/>
-  <arg name="global_path_clearance_model" default="circumscribed"/>
+  <arg name="global_path_clearance_m" default="$(eval '0.00' if arg('real_mode') == 'true' else '0.02')"/>
+  <arg name="global_path_clearance_model" default="$(eval 'width' if arg('real_mode') == 'true' else 'circumscribed')"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
   <arg name="global_path_goal_tail_clearance_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
@@ -168,6 +168,7 @@
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
   <arg name="global_path_planner_loop_hz" default="8.0"/>
   <arg name="global_path_republish_period_s" default="0.20"/>
+  <arg name="grid_snap_search_radius_cells" default="$(eval '60' if arg('real_mode') == 'true' else '30')"/>
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
