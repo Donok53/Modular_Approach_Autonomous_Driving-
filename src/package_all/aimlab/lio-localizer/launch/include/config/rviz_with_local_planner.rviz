@@ -64,7 +64,7 @@ Visualization Manager:
       Color: 120; 170; 170
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -148,7 +148,7 @@ Visualization Manager:
       Color: 255; 255; 0
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -163,7 +163,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Alpha: 0.5
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -435,13 +435,13 @@ Visualization Manager:
       Buffer Length: 1
       Class: rviz/Path
       Color: 255; 140; 0
-      Enabled: false
+      Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Lines
       Line Width: 0.10000000149011612
-      Name: active_local_path
+      Name: selected_active_path
       Offset:
         X: 0
         Y: 0
@@ -452,9 +452,9 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /planning/tracking_reference_path
+      Topic: /planning/active_path_viz
       Unreliable: false
-      Value: false
+      Value: true
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
@@ -618,7 +618,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /planning/active_path_viz
+      Topic: /planning/tracking_reference_path
       Unreliable: false
       Value: true
     - Class: rviz/MarkerArray
