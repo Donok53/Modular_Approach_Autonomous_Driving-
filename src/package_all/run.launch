@@ -26,11 +26,6 @@
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="cloud_tracker_pointcloud_topic" default="$(eval '/lio_sam/deskew/cloud_deskewed' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/cloud_deskewed')"/>
-  <arg name="global_map_pointcloud_topic" default="$(eval '/lio_sam/mapping/map_global' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/global_map')"/>
-  <arg name="enable_novel_obstacle_cloud_filter" default="true"/>
-  <arg name="novel_obstacle_input_cloud_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
-  <arg name="novel_obstacle_cloud_topic" default="/perception/novel_obstacle_cloud"/>
-  <arg name="novel_obstacle_cloud_map_topic" default="/perception/novel_obstacle_cloud_map"/>
   <arg name="use_drivable_grid" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
@@ -373,19 +368,6 @@
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
   <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
   <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
-  <arg name="novel_obstacle_min_z" default="-0.35"/>
-  <arg name="novel_obstacle_max_z" default="2.20"/>
-  <arg name="novel_obstacle_max_range_m" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '12.0')"/>
-  <arg name="novel_obstacle_input_downsample" default="2"/>
-  <arg name="novel_obstacle_map_downsample" default="1"/>
-  <arg name="novel_obstacle_map_voxel_size_m" default="0.15"/>
-  <arg name="novel_obstacle_match_xy_radius_m" default="0.30"/>
-  <arg name="novel_obstacle_match_z_radius_m" default="0.45"/>
-  <arg name="novel_obstacle_cluster_cell_size_m" default="0.20"/>
-  <arg name="novel_obstacle_cluster_min_support_points" default="3"/>
-  <arg name="novel_obstacle_output_voxel_size_m" default="0.08"/>
-  <arg name="novel_obstacle_blind_zone_radius_m" default="0.0"/>
-  <arg name="novel_obstacle_debug_log_period_s" default="1.0"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -609,26 +591,8 @@
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
-      <arg name="cloud_tracker_pointcloud_topic" value="$(eval arg('novel_obstacle_cloud_topic') if str(arg('enable_novel_obstacle_cloud_filter')).lower() == 'true' else arg('cloud_tracker_pointcloud_topic'))"/>
-      <arg name="obstacle_pointcloud_topic" value="$(eval arg('novel_obstacle_cloud_topic') if str(arg('enable_novel_obstacle_cloud_filter')).lower() == 'true' else arg('pointcloud_topic'))"/>
-      <arg name="enable_novel_obstacle_cloud_filter" value="$(arg enable_novel_obstacle_cloud_filter)"/>
-      <arg name="novel_obstacle_input_cloud_topic" value="$(arg novel_obstacle_input_cloud_topic)"/>
-      <arg name="global_map_pointcloud_topic" value="$(arg global_map_pointcloud_topic)"/>
-      <arg name="novel_obstacle_cloud_topic" value="$(arg novel_obstacle_cloud_topic)"/>
-      <arg name="novel_obstacle_cloud_map_topic" value="$(arg novel_obstacle_cloud_map_topic)"/>
-      <arg name="novel_obstacle_min_z" value="$(arg novel_obstacle_min_z)"/>
-      <arg name="novel_obstacle_max_z" value="$(arg novel_obstacle_max_z)"/>
-      <arg name="novel_obstacle_max_range_m" value="$(arg novel_obstacle_max_range_m)"/>
-      <arg name="novel_obstacle_input_downsample" value="$(arg novel_obstacle_input_downsample)"/>
-      <arg name="novel_obstacle_map_downsample" value="$(arg novel_obstacle_map_downsample)"/>
-      <arg name="novel_obstacle_map_voxel_size_m" value="$(arg novel_obstacle_map_voxel_size_m)"/>
-      <arg name="novel_obstacle_match_xy_radius_m" value="$(arg novel_obstacle_match_xy_radius_m)"/>
-      <arg name="novel_obstacle_match_z_radius_m" value="$(arg novel_obstacle_match_z_radius_m)"/>
-      <arg name="novel_obstacle_cluster_cell_size_m" value="$(arg novel_obstacle_cluster_cell_size_m)"/>
-      <arg name="novel_obstacle_cluster_min_support_points" value="$(arg novel_obstacle_cluster_min_support_points)"/>
-      <arg name="novel_obstacle_output_voxel_size_m" value="$(arg novel_obstacle_output_voxel_size_m)"/>
-      <arg name="novel_obstacle_blind_zone_radius_m" value="$(arg novel_obstacle_blind_zone_radius_m)"/>
-      <arg name="novel_obstacle_debug_log_period_s" value="$(arg novel_obstacle_debug_log_period_s)"/>
+      <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
+      <arg name="obstacle_pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>

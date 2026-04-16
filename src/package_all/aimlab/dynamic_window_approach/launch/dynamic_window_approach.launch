@@ -44,24 +44,6 @@
     <arg name="pointcloud_topic" default="/ouster/points"/>
     <arg name="cloud_tracker_pointcloud_topic" default="$(arg pointcloud_topic)"/>
     <arg name="obstacle_pointcloud_topic" default="$(arg pointcloud_topic)"/>
-    <arg name="enable_novel_obstacle_cloud_filter" default="false"/>
-    <arg name="novel_obstacle_input_cloud_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
-    <arg name="global_map_pointcloud_topic" default="/lio_localizer/localization/global_map"/>
-    <arg name="novel_obstacle_cloud_topic" default="/perception/novel_obstacle_cloud"/>
-    <arg name="novel_obstacle_cloud_map_topic" default="/perception/novel_obstacle_cloud_map"/>
-    <arg name="novel_obstacle_min_z" default="-0.35"/>
-    <arg name="novel_obstacle_max_z" default="2.20"/>
-    <arg name="novel_obstacle_max_range_m" default="20.0"/>
-    <arg name="novel_obstacle_input_downsample" default="2"/>
-    <arg name="novel_obstacle_map_downsample" default="1"/>
-    <arg name="novel_obstacle_map_voxel_size_m" default="0.15"/>
-    <arg name="novel_obstacle_match_xy_radius_m" default="0.30"/>
-    <arg name="novel_obstacle_match_z_radius_m" default="0.45"/>
-    <arg name="novel_obstacle_cluster_cell_size_m" default="0.20"/>
-    <arg name="novel_obstacle_cluster_min_support_points" default="3"/>
-    <arg name="novel_obstacle_output_voxel_size_m" default="0.08"/>
-    <arg name="novel_obstacle_blind_zone_radius_m" default="0.0"/>
-    <arg name="novel_obstacle_debug_log_period_s" default="1.0"/>
     <arg name="use_drivable_grid" default="true"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
     <arg name="grid_unknown_is_occupied" default="true"/>
@@ -332,29 +314,6 @@
         <param name="active_path_viz_topic" value="$(arg active_path_viz_topic)"/>
         <param name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
     </node>
-
-    <group if="$(arg enable_novel_obstacle_cloud_filter)">
-        <node pkg="dynamic_window_approach" type="novel_obstacle_cloud_filter.py" name="novel_obstacle_cloud_filter" output="screen" respawn="false">
-            <param name="input_cloud_topic" value="$(arg novel_obstacle_input_cloud_topic)"/>
-            <param name="global_map_topic" value="$(arg global_map_pointcloud_topic)"/>
-            <param name="pose_topic" value="$(arg pose_topic)"/>
-            <param name="output_cloud_topic" value="$(arg novel_obstacle_cloud_topic)"/>
-            <param name="output_map_cloud_topic" value="$(arg novel_obstacle_cloud_map_topic)"/>
-            <param name="min_z" value="$(arg novel_obstacle_min_z)"/>
-            <param name="max_z" value="$(arg novel_obstacle_max_z)"/>
-            <param name="max_range_m" value="$(arg novel_obstacle_max_range_m)"/>
-            <param name="input_downsample" value="$(arg novel_obstacle_input_downsample)"/>
-            <param name="map_downsample" value="$(arg novel_obstacle_map_downsample)"/>
-            <param name="map_voxel_size_m" value="$(arg novel_obstacle_map_voxel_size_m)"/>
-            <param name="match_xy_radius_m" value="$(arg novel_obstacle_match_xy_radius_m)"/>
-            <param name="match_z_radius_m" value="$(arg novel_obstacle_match_z_radius_m)"/>
-            <param name="cluster_cell_size_m" value="$(arg novel_obstacle_cluster_cell_size_m)"/>
-            <param name="cluster_min_support_points" value="$(arg novel_obstacle_cluster_min_support_points)"/>
-            <param name="output_voxel_size_m" value="$(arg novel_obstacle_output_voxel_size_m)"/>
-            <param name="blind_zone_radius_m" value="$(arg novel_obstacle_blind_zone_radius_m)"/>
-            <param name="debug_log_period_s" value="$(arg novel_obstacle_debug_log_period_s)"/>
-        </node>
-    </group>
 
     <group if="$(arg enable_cloud_tracker)">
         <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
