@@ -586,7 +586,7 @@
   <group if="$(eval arg('local_planner_mode') == 'custom')">
     <group if="$(arg enable_custom_obstacle_cloud_filter)">
       <node pkg="dynamic_window_approach" type="teb_obstacle_cloud_filter.py" name="custom_obstacle_cloud_filter" output="screen" respawn="false">
-        <param name="input_topic" value="$(arg pointcloud_topic)"/>
+        <param name="input_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
         <param name="output_topic" value="$(arg filtered_obstacle_topic)"/>
         <param name="odom_topic" value="$(arg pose_topic)"/>
         <param name="max_range" value="$(arg teb_filter_max_range_m)"/>
