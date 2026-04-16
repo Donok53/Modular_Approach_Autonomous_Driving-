@@ -241,7 +241,7 @@
     <arg name="rear_vehicle_min_closing_speed_mps" default="0.60"/>
     <arg name="rear_vehicle_caution_speed_mps" default="0.30"/>
     <arg name="cross_path_vehicle_caution_enabled" default="true"/>
-    <arg name="cross_path_vehicle_forward_distance_m" default="22.0"/>
+    <arg name="cross_path_vehicle_forward_distance_m" default="25.0"/>
     <arg name="cross_path_vehicle_lateral_distance_m" default="4.00"/>
     <arg name="cross_path_vehicle_caution_ttc_s" default="3.5"/>
     <arg name="cross_path_vehicle_min_relative_speed_mps" default="0.50"/>
@@ -252,7 +252,7 @@
     <arg name="behavior_stop_on_count" default="2"/>
     <arg name="behavior_stop_off_count" default="4"/>
     <arg name="behavior_stop_hold_s" default="0.25"/>
-    <arg name="cloud_tracker_max_range_m" default="30.0"/>
+    <arg name="cloud_tracker_max_range_m" default="45.0"/>
     <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
     <arg name="cloud_tracker_dynamic_assoc_bonus_m" default="0.5"/>
     <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
@@ -365,11 +365,17 @@
         <node pkg="dynamic_window_approach" type="tracked_objects_marker_viz.py" name="tracked_objects_marker_viz" output="screen" respawn="false">
             <param name="input_topic" value="$(arg tracked_objects_topic)"/>
             <param name="output_topic" value="$(arg tracked_objects_marker_topic)"/>
+            <param name="odom_topic" value="$(arg pose_topic)"/>
+            <param name="plan_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
+            <param name="perception_range_m" value="$(arg cloud_tracker_max_range_m)"/>
             <param name="show_labels" value="false"/>
             <param name="show_velocity" value="false"/>
-            <param name="box_color_r" value="0.98"/>
-            <param name="box_color_g" value="0.82"/>
-            <param name="box_color_b" value="0.20"/>
+            <param name="plan_color_r" value="0.95"/>
+            <param name="plan_color_g" value="0.10"/>
+            <param name="plan_color_b" value="0.08"/>
+            <param name="perception_color_r" value="0.05"/>
+            <param name="perception_color_g" value="0.05"/>
+            <param name="perception_color_b" value="0.05"/>
         </node>
     </group>
 

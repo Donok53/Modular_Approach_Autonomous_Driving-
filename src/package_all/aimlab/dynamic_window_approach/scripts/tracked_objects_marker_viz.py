@@ -4,6 +4,7 @@ import math
 import rospy
 from dynamic_window_approach.msg import TrackedObjectArray
 from geometry_msgs.msg import Point
+from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -33,20 +34,62 @@ class TrackedObjectsMarkerViz:
             max(0.0, min(1.0, float(rospy.get_param("~box_color_g", 0.82)))),
             max(0.0, min(1.0, float(rospy.get_param("~box_color_b", 0.20)))),
         )
+        self.odom_topic = rospy.get_param("~odom_topic", "/lio_localizer/odometry/optimization")
+        self.plan_range_m = max(0.0, float(rospy.get_param("~plan_range_m", 25.0)))
+        self.perception_range_m = max(
+            self.plan_range_m, float(rospy.get_param("~perception_range_m", 45.0))
+        )
+        self.plan_color = (
+            max(0.0, min(1.0, float(rospy.get_param("~plan_color_r", 0.95)))),
+            max(0.0, min(1.0, float(rospy.get_param("~plan_color_g", 0.10)))),
+            max(0.0, min(1.0, float(rospy.get_param("~plan_color_b", 0.08)))),
+        )
+        self.perception_color = (
+            max(0.0, min(1.0, float(rospy.get_param("~perception_color_r", 0.05)))),
+            max(0.0, min(1.0, float(rospy.get_param("~perception_color_g", 0.05)))),
+            max(0.0, min(1.0, float(rospy.get_param("~perception_color_b", 0.05)))),
+        )
+        self.odom_x = 0.0
+        self.odom_y = 0.0
+        self.have_odom = False
 
         self.pub = rospy.Publisher(self.output_topic, MarkerArray, queue_size=2)
         self.sub = rospy.Subscriber(self.input_topic, TrackedObjectArray, self.callback, queue_size=5)
+        self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
 
         rospy.loginfo(
-            "tracked_objects_marker_viz started | in=%s out=%s labels=%s velocity=%s color=(%.2f, %.2f, %.2f)",
+            "tracked_objects_marker_viz started | in=%s out=%s odom=%s labels=%s velocity=%s plan=%.1fm perception=%.1fm plan_color=(%.2f, %.2f, %.2f) perception_color=(%.2f, %.2f, %.2f)",
             self.input_topic,
             self.output_topic,
+            self.odom_topic,
             "on" if self.show_labels else "off",
             "on" if self.show_velocity else "off",
-            self.box_color[0],
-            self.box_color[1],
-            self.box_color[2],
+            self.plan_range_m,
+            self.perception_range_m,
+            self.plan_color[0],
+            self.plan_color[1],
+            self.plan_color[2],
+            self.perception_color[0],
+            self.perception_color[1],
+            self.perception_color[2],
         )
+
+    def odom_callback(self, msg):
+        self.odom_x = float(msg.pose.pose.position.x)
+        self.odom_y = float(msg.pose.pose.position.y)
+        self.have_odom = True
+
+    def _marker_color_for_object(self, obj):
+        if not self.have_odom:
+            return self.box_color
+        dx = float(obj.pose.position.x) - self.odom_x
+        dy = float(obj.pose.position.y) - self.odom_y
+        dist = math.hypot(dx, dy)
+        if dist <= self.plan_range_m:
+            return self.plan_color
+        if dist <= self.perception_range_m:
+            return self.perception_color
+        return self.box_color
 
     def callback(self, msg):
         frame_id = self.frame_id_override or msg.header.frame_id or "map"
@@ -62,7 +105,7 @@ class TrackedObjectsMarkerViz:
 
         marker_id = 0
         for obj in msg.objects:
-            color = self.box_color
+            color = self._marker_color_for_object(obj)
             size_x = max(0.10, abs(float(obj.size.x)))
             size_y = max(0.10, abs(float(obj.size.y)))
             size_z = max(0.10, abs(float(obj.size.z)))

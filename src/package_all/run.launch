@@ -331,7 +331,7 @@
   <arg name="rear_vehicle_min_closing_speed_mps" default="0.60"/>
   <arg name="rear_vehicle_caution_speed_mps" default="0.30"/>
   <arg name="cross_path_vehicle_caution_enabled" default="true"/>
-  <arg name="cross_path_vehicle_forward_distance_m" default="22.0"/>
+  <arg name="cross_path_vehicle_forward_distance_m" default="25.0"/>
   <arg name="cross_path_vehicle_lateral_distance_m" default="4.00"/>
   <arg name="cross_path_vehicle_caution_ttc_s" default="3.5"/>
   <arg name="cross_path_vehicle_min_relative_speed_mps" default="0.50"/>
@@ -342,7 +342,7 @@
   <arg name="behavior_stop_on_count" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
   <arg name="behavior_stop_off_count" default="4"/>
   <arg name="behavior_stop_hold_s" default="0.25"/>
-  <arg name="cloud_tracker_max_range_m" default="30.0"/>
+  <arg name="cloud_tracker_max_range_m" default="$(eval '45.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
   <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
   <arg name="cloud_tracker_dynamic_assoc_bonus_m" default="0.5"/>
   <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
