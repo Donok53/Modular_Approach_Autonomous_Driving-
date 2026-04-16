@@ -65,14 +65,6 @@
     <arg name="novel_obstacle_match_z_radius_m" default="0.45"/>
     <arg name="novel_obstacle_cluster_cell_size_m" default="0.20"/>
     <arg name="novel_obstacle_cluster_min_support_points" default="3"/>
-    <arg name="novel_obstacle_cluster_z_layer_size_m" default="0.18"/>
-    <arg name="novel_obstacle_cluster_min_z_layers" default="2"/>
-    <arg name="novel_obstacle_cluster_min_height_m" default="0.12"/>
-    <arg name="novel_obstacle_vertical_support_min_span_m" default="0.45"/>
-    <arg name="novel_obstacle_reject_wide_low_clusters" default="true"/>
-    <arg name="novel_obstacle_wide_low_min_span_m" default="0.90"/>
-    <arg name="novel_obstacle_wide_low_min_area_m2" default="0.45"/>
-    <arg name="novel_obstacle_wide_low_max_height_m" default="0.12"/>
     <arg name="novel_obstacle_output_voxel_size_m" default="0.08"/>
     <arg name="novel_obstacle_blind_zone_radius_m" default="0.0"/>
     <arg name="novel_obstacle_debug_log_period_s" default="1.0"/>
@@ -370,14 +362,6 @@
             <param name="match_z_radius_m" value="$(arg novel_obstacle_match_z_radius_m)"/>
             <param name="cluster_cell_size_m" value="$(arg novel_obstacle_cluster_cell_size_m)"/>
             <param name="cluster_min_support_points" value="$(arg novel_obstacle_cluster_min_support_points)"/>
-            <param name="cluster_z_layer_size_m" value="$(arg novel_obstacle_cluster_z_layer_size_m)"/>
-            <param name="cluster_min_z_layers" value="$(arg novel_obstacle_cluster_min_z_layers)"/>
-            <param name="cluster_min_height_m" value="$(arg novel_obstacle_cluster_min_height_m)"/>
-            <param name="vertical_support_min_span_m" value="$(arg novel_obstacle_vertical_support_min_span_m)"/>
-            <param name="reject_wide_low_clusters" value="$(arg novel_obstacle_reject_wide_low_clusters)"/>
-            <param name="wide_low_min_span_m" value="$(arg novel_obstacle_wide_low_min_span_m)"/>
-            <param name="wide_low_min_area_m2" value="$(arg novel_obstacle_wide_low_min_area_m2)"/>
-            <param name="wide_low_max_height_m" value="$(arg novel_obstacle_wide_low_max_height_m)"/>
             <param name="output_voxel_size_m" value="$(arg novel_obstacle_output_voxel_size_m)"/>
             <param name="blind_zone_radius_m" value="$(arg novel_obstacle_blind_zone_radius_m)"/>
             <param name="debug_log_period_s" value="$(arg novel_obstacle_debug_log_period_s)"/>
