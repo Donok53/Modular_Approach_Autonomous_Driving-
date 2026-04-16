@@ -190,6 +190,8 @@
     <arg name="enable_global_pointcloud_overlay" default="false"/>
     <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
     <arg name="global_obstacle_overlay_boxes_topic" default="/planning/global_obstacle_overlay_boxes"/>
+    <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
+    <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
     <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
     <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
     <arg name="global_pointcloud_overlay_ttl_s" default="2.0"/>
@@ -544,6 +546,9 @@
         <param name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
         <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
         <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+        <param name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
+        <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
+        <param name="global_obstacle_overlay_box_timeout_s" value="$(arg global_obstacle_overlay_box_timeout_s)"/>
         <param name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
         <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
         <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>

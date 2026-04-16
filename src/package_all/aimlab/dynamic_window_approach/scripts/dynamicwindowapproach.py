@@ -21,7 +21,7 @@ import tf.transformations as transformations
 
 from geometry_msgs.msg import Twist, Point, PoseStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Float32MultiArray
 
 from sensor_msgs.msg import PointCloud2
@@ -187,6 +187,28 @@ class DWAControl:
         self.front_obstacle_clearance = float("inf")
         self._last_emergency_close_points = 0
         self._last_emergency_intrusion_points = 0
+        self.use_global_obstacle_overlay_boxes_for_stop = bool(
+            rospy.get_param("~use_global_obstacle_overlay_boxes_for_stop", True)
+        )
+        self.global_obstacle_overlay_boxes_topic = str(
+            rospy.get_param(
+                "~global_obstacle_overlay_boxes_topic",
+                "/planning/global_obstacle_overlay_boxes",
+            )
+        ).strip()
+        self.global_obstacle_overlay_box_timeout_s = max(
+            0.0,
+            float(rospy.get_param("~global_obstacle_overlay_box_timeout_s", 1.5)),
+        )
+        self.global_obstacle_overlay_boxes = []
+        self.global_obstacle_overlay_boxes_stamp = rospy.Time(0)
+        self.overlay_box_front_clearance = float("inf")
+        self.overlay_box_blocked = False
+        self._overlay_box_match_count = 0
+        self._raw_front_obstacle_clearance = float("inf")
+        self._raw_emergency_band_blocked = False
+        self._raw_immediate_contact_blocked = False
+        self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
 
@@ -418,6 +440,17 @@ class DWAControl:
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
         self.sub_behavior = rospy.Subscriber(self.behavior_cmd_topic, BehaviorCommand, self.behavior_cmd_callback, queue_size=10)
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        self.sub_global_obstacle_overlay_boxes = None
+        if (
+            self.use_global_obstacle_overlay_boxes_for_stop
+            and self.global_obstacle_overlay_boxes_topic
+        ):
+            self.sub_global_obstacle_overlay_boxes = rospy.Subscriber(
+                self.global_obstacle_overlay_boxes_topic,
+                MarkerArray,
+                self.global_obstacle_overlay_boxes_callback,
+                queue_size=2,
+            )
         self.sub_grid = None
         if self.use_drivable_grid:
             self.sub_grid = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=5)
@@ -437,6 +470,129 @@ class DWAControl:
 
     def _cmd_timer_callback(self, _event):
         self.cmd_vel_pub.publish(self.last_cmd)
+
+    @staticmethod
+    def _transform_world_to_local(wx, wy, pose_x, pose_y, yaw):
+        dx = float(wx) - float(pose_x)
+        dy = float(wy) - float(pose_y)
+        c = math.cos(float(yaw))
+        s = math.sin(float(yaw))
+        return c * dx + s * dy, -s * dx + c * dy
+
+    def _world_box_to_local_bounds(self, box, pose_x, pose_y, yaw):
+        corners = (
+            (float(box["min_x"]), float(box["min_y"])),
+            (float(box["min_x"]), float(box["max_y"])),
+            (float(box["max_x"]), float(box["min_y"])),
+            (float(box["max_x"]), float(box["max_y"])),
+        )
+        local_pts = [
+            self._transform_world_to_local(wx, wy, pose_x, pose_y, yaw)
+            for wx, wy in corners
+        ]
+        xs = [pt[0] for pt in local_pts]
+        ys = [pt[1] for pt in local_pts]
+        return min(xs), max(xs), min(ys), max(ys)
+
+    def _overlay_boxes_are_fresh(self):
+        if not self.use_global_obstacle_overlay_boxes_for_stop:
+            return False
+        stamp_sec = self.global_obstacle_overlay_boxes_stamp.to_sec()
+        if stamp_sec <= 0.0:
+            return False
+        if self.global_obstacle_overlay_box_timeout_s <= 0.0:
+            return True
+        return (
+            rospy.Time.now() - self.global_obstacle_overlay_boxes_stamp
+        ).to_sec() <= self.global_obstacle_overlay_box_timeout_s
+
+    def _evaluate_overlay_box_blocking(self):
+        if not self._overlay_boxes_are_fresh() or not self.global_obstacle_overlay_boxes:
+            return False, float("inf"), 0
+
+        pose = self.current_pose.pose.pose.position
+        yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
+        stop_half_w = 0.5 * max(self.stop_width, self.robot_width_m) + self.footprint_padding_m
+        footprint_front = self.robot_half_length_m + self.footprint_padding_m
+        relevant_boxes = 0
+        min_clearance = float("inf")
+        blocked = False
+
+        for box in self.global_obstacle_overlay_boxes:
+            local_min_x, local_max_x, local_min_y, local_max_y = self._world_box_to_local_bounds(
+                box,
+                pose.x,
+                pose.y,
+                yaw,
+            )
+            if local_max_x < self.obstacle_consider_back_m:
+                continue
+            if local_min_y > stop_half_w or local_max_y < -stop_half_w:
+                continue
+            relevant_boxes += 1
+            clearance = local_min_x - footprint_front
+            if clearance < min_clearance:
+                min_clearance = clearance
+            if local_max_x >= footprint_front and clearance <= self.emergency_stop_distance:
+                blocked = True
+
+        return blocked, min_clearance, relevant_boxes
+
+    def _update_emergency_stop_state(self):
+        overlay_blocked, overlay_clearance, overlay_match_count = self._evaluate_overlay_box_blocking()
+        self.overlay_box_blocked = bool(overlay_blocked)
+        self.overlay_box_front_clearance = overlay_clearance
+        self._overlay_box_match_count = int(overlay_match_count)
+
+        raw_fallback_blocked = self._raw_immediate_contact_blocked or (
+            self._raw_emergency_band_blocked
+            and self._raw_front_obstacle_clearance <= self.avoidance_hard_stop_distance
+        )
+        if self.use_global_obstacle_overlay_boxes_for_stop:
+            near = self.overlay_box_blocked or raw_fallback_blocked
+            source_parts = []
+            if self.overlay_box_blocked:
+                source_parts.append("overlay_boxes")
+            if self._raw_immediate_contact_blocked:
+                source_parts.append("raw_intrusion")
+            elif raw_fallback_blocked:
+                source_parts.append("raw_near_fallback")
+        else:
+            near = self._raw_immediate_contact_blocked or self._raw_emergency_band_blocked
+            source_parts = []
+            if self._raw_immediate_contact_blocked:
+                source_parts.append("raw_intrusion")
+            elif self._raw_emergency_band_blocked:
+                source_parts.append("raw_band")
+
+        self.front_obstacle_clearance = min(
+            self._raw_front_obstacle_clearance,
+            self.overlay_box_front_clearance,
+        )
+        self._last_emergency_source = ",".join(source_parts) if source_parts else "clear"
+
+        if near:
+            self._blk_on += 1
+            self._blk_off = 0
+        else:
+            self._blk_off += 1
+            self._blk_on = 0
+        if not self.emergency_blocked and self._blk_on >= self.block_on_count:
+            self.emergency_blocked = True
+            rospy.logwarn(
+                "Emergency STOP: obstacle <= %.2fm | clearance=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s",
+                self.emergency_stop_distance,
+                self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                self._raw_front_obstacle_clearance if math.isfinite(self._raw_front_obstacle_clearance) else float("inf"),
+                self.overlay_box_front_clearance if math.isfinite(self.overlay_box_front_clearance) else float("inf"),
+                self._last_emergency_close_points,
+                self._last_emergency_intrusion_points,
+                self._overlay_box_match_count,
+                self._last_emergency_source,
+            )
+        elif self.emergency_blocked and self._blk_off >= self.block_off_count:
+            self.emergency_blocked = False
+            rospy.loginfo("Emergency STOP cleared")
 
     def _point_in_local_rect(self, x, y, half_length, half_width):
         return abs(x) <= half_length and abs(y) <= half_width
@@ -545,10 +701,11 @@ class DWAControl:
                     close_points.append((x, y))
 
             immediate_contact = len(intrusion_points) >= self.emergency_immediate_contact_min_points
-            near = immediate_contact or self._emergency_band_is_blocked(
+            self._raw_emergency_band_blocked = self._emergency_band_is_blocked(
                 close_points,
                 self.obstacle_consider_side_m,
             )
+            self._raw_immediate_contact_blocked = bool(immediate_contact)
             self._last_emergency_close_points = len(close_points)
             self._last_emergency_intrusion_points = len(intrusion_points)
 
@@ -557,28 +714,44 @@ class DWAControl:
                 self.obstacle_local_points = np.array(obs[::step], dtype=np.float32)
             else:
                 self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
-            self.front_obstacle_clearance = min_front_clearance
-
-            if near:
-                self._blk_on += 1
-                self._blk_off = 0
-            else:
-                self._blk_off += 1
-                self._blk_on = 0
-            if not self.emergency_blocked and self._blk_on >= self.block_on_count:
-                self.emergency_blocked = True
-                rospy.logwarn(
-                    "Emergency STOP: obstacle <= %.2fm | clearance=%.2f close=%d intrusion=%d",
-                    self.emergency_stop_distance,
-                    min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
-                    len(close_points),
-                    len(intrusion_points),
-                )
-            elif self.emergency_blocked and self._blk_off >= self.block_off_count:
-                self.emergency_blocked = False
-                rospy.loginfo("Emergency STOP cleared")
+            self._raw_front_obstacle_clearance = min_front_clearance
+            self._update_emergency_stop_state()
         except Exception as e:
             rospy.logwarn("cloud_callback error: %s", str(e))
+
+    def global_obstacle_overlay_boxes_callback(self, msg):
+        try:
+            boxes = []
+            latest_stamp = rospy.Time(0)
+            for marker in msg.markers:
+                if marker.action == Marker.DELETEALL:
+                    continue
+                if marker.action != Marker.ADD or marker.type != Marker.CUBE:
+                    continue
+                if marker.ns and marker.ns != "global_obstacle_overlay_boxes":
+                    continue
+                size_x = max(0.0, float(marker.scale.x))
+                size_y = max(0.0, float(marker.scale.y))
+                cx = float(marker.pose.position.x)
+                cy = float(marker.pose.position.y)
+                boxes.append(
+                    {
+                        "min_x": cx - 0.5 * size_x,
+                        "max_x": cx + 0.5 * size_x,
+                        "min_y": cy - 0.5 * size_y,
+                        "max_y": cy + 0.5 * size_y,
+                        "locked": float(marker.color.a) >= 0.5,
+                    }
+                )
+                if marker.header.stamp.to_sec() > latest_stamp.to_sec():
+                    latest_stamp = marker.header.stamp
+            self.global_obstacle_overlay_boxes = boxes
+            self.global_obstacle_overlay_boxes_stamp = (
+                latest_stamp if latest_stamp.to_sec() > 0.0 else rospy.Time.now()
+            )
+            self._update_emergency_stop_state()
+        except Exception as e:
+            rospy.logwarn("global_obstacle_overlay_boxes_callback error: %s", str(e))
 
     def drivable_grid_callback(self, msg):
         try:
@@ -896,6 +1069,7 @@ class DWAControl:
 
     def pose_callback(self, msg):
         self.current_pose = msg
+        self._update_emergency_stop_state()
 
     def server_to_robot_callback(self, msg):
         self.server_cmd_drive_mode = msg.Cmd_drive_mode
@@ -1511,7 +1685,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s overlay_topic=%s footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -1523,6 +1697,8 @@ class DWAControl:
             "on" if self.use_dynamic_risk_grid else "off",
             self.emergency_stop_distance,
             self.avoidance_hard_stop_distance,
+            "on" if self.use_global_obstacle_overlay_boxes_for_stop else "off",
+            self.global_obstacle_overlay_boxes_topic if self.global_obstacle_overlay_boxes_topic else "-",
             self.robot_length_m,
             self.robot_width_m,
             self.cmd_publish_hz,
@@ -1539,6 +1715,7 @@ class DWAControl:
 
         while not rospy.is_shutdown():
             self._refresh_active_path()
+            self._update_emergency_stop_state()
 
             # emergency stop only (avoidance can proceed unless obstacle is critically close)
             avoidance_can_continue = (
@@ -1548,10 +1725,14 @@ class DWAControl:
             if self.emergency_blocked and not self._rot_mode and not avoidance_can_continue:
                 self._log_nav_reason(
                     "stop_emergency",
-                    "front obstacle stop active clr=%.2f close=%d intrusion=%d" % (
+                    "front obstacle stop active clr=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s" % (
                         self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                        self._raw_front_obstacle_clearance if math.isfinite(self._raw_front_obstacle_clearance) else float("inf"),
+                        self.overlay_box_front_clearance if math.isfinite(self.overlay_box_front_clearance) else float("inf"),
                         self._last_emergency_close_points,
                         self._last_emergency_intrusion_points,
+                        self._overlay_box_match_count,
+                        self._last_emergency_source,
                     ),
                     warn=True,
                 )
