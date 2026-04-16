@@ -55,6 +55,8 @@
   <arg name="candidate_route_switch_score_margin" default="1.0"/>
   <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
+  <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="0.0"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>
@@ -115,6 +117,8 @@
     <param name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
     <param name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
     <param name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
+    <param name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
+    <param name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>
     <param name="publish_smoothed_path" value="$(arg publish_smoothed_path)"/>

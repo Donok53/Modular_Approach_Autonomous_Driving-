@@ -274,6 +274,13 @@ class AStarPlanner:
         self.candidate_route_switch_confirm_count = max(
             1, int(rospy.get_param("~candidate_route_switch_confirm_count", 2))
         )
+        self.candidate_route_switch_require_centerline_blocked = bool(
+            rospy.get_param("~candidate_route_switch_require_centerline_blocked", False)
+        )
+        self.candidate_route_switch_centerline_clearance_m = max(
+            0.0,
+            float(rospy.get_param("~candidate_route_switch_centerline_clearance_m", 0.0)),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -1329,6 +1336,43 @@ class AStarPlanner:
                         score += max(1.0, float(val) / 100.0)
         return score
 
+    def _overlay_world_path_centerline_blocked(
+        self,
+        overlay_grid,
+        world_points,
+        occupied_threshold,
+        clearance_m=0.0,
+    ):
+        if overlay_grid is None or len(world_points) < 2:
+            return False
+        res = max(1e-6, float(overlay_grid.info.resolution))
+        sampled = self._sampled_world_points_within_lookahead(
+            world_points,
+            self.candidate_route_switch_lookahead_m,
+            self.candidate_route_switch_start_ignore_m,
+            max(0.10, 0.5 * res),
+        )
+        if not sampled:
+            return False
+
+        radius_cells = int(math.ceil(max(0.0, clearance_m) / res))
+        w = int(overlay_grid.info.width)
+        h = int(overlay_grid.info.height)
+        data = overlay_grid.data
+        for wx, wy in sampled:
+            gx, gy = self._world_to_grid_cell(overlay_grid, wx, wy)
+            for dy in range(-radius_cells, radius_cells + 1):
+                for dx in range(-radius_cells, radius_cells + 1):
+                    if radius_cells > 0 and (dx * dx + dy * dy) > (radius_cells * radius_cells):
+                        continue
+                    nx = gx + dx
+                    ny = gy + dy
+                    if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                        continue
+                    if int(data[ny * w + nx]) >= occupied_threshold:
+                        return True
+        return False
+
     def select_best_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
             return 0, []
@@ -1358,6 +1402,14 @@ class AStarPlanner:
         current_score = scores[active_index]
         best_score = scores[best_index]
         current_blocked = current_score >= self.candidate_route_switch_blocked_score_threshold
+        current_centerline_blocked = True
+        if self.candidate_route_switch_require_centerline_blocked:
+            current_centerline_blocked = self._overlay_world_path_centerline_blocked(
+                self.global_obstacle_overlay,
+                world_paths[active_index],
+                self.global_obstacle_overlay_threshold,
+                clearance_m=self.candidate_route_switch_centerline_clearance_m,
+            )
         now = rospy.get_time()
         can_switch = (
             self._last_candidate_switch_s <= 0.0
@@ -1365,6 +1417,7 @@ class AStarPlanner:
         )
         should_switch = (
             current_blocked
+            and current_centerline_blocked
             and (best_score + self.candidate_route_switch_score_margin) < current_score
         )
         if should_switch:
@@ -1387,7 +1440,7 @@ class AStarPlanner:
             self._pending_candidate_switch_count = 0
             if self.debug_log_enable:
                 rospy.loginfo(
-                    "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s",
+                    "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s centerline=blocked",
                     active_index,
                     best_index,
                     ",".join("%.1f" % s for s in scores),
@@ -1397,13 +1450,14 @@ class AStarPlanner:
         if self.debug_log_enable and current_blocked:
             rospy.loginfo_throttle(
                 1.0,
-                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f pending=%d/%d)",
+                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f pending=%d/%d centerline=%s)",
                 active_index,
                 current_score,
                 best_index,
                 best_score,
                 self._pending_candidate_switch_count,
                 self.candidate_route_switch_confirm_count,
+                "blocked" if current_centerline_blocked else "clear",
             )
         return active_index, scores
 

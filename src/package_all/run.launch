@@ -183,6 +183,8 @@
   <arg name="candidate_route_switch_score_margin" default="$(eval '2.5' if str(arg('real_mode')).lower() == 'true' else '1.0')"/>
   <arg name="candidate_route_switch_min_hold_s" default="$(eval '1.5' if str(arg('real_mode')).lower() == 'true' else '0.8')"/>
   <arg name="candidate_route_switch_confirm_count" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '2')"/>
+  <arg name="candidate_route_switch_require_centerline_blocked" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.50' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -496,6 +498,8 @@
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
         <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
+        <arg name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
+        <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -540,6 +544,8 @@
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
         <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
+        <arg name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
+        <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
       </include>
     </group>
   </group>
