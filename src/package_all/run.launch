@@ -31,7 +31,8 @@
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="enable_cloud_tracker" default="true"/>
   <arg name="enable_dynamic_risk_manager" default="true"/>
-  <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
+  <arg name="enable_local_replanner" default="false"/>
+  <arg name="follow_global_path_only" default="true"/>
   <arg name="use_dynamic_risk_grid" default="true"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
@@ -65,7 +66,7 @@
   <arg name="local_replan_lookahead_m" default="4.0"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
-  <arg name="enable_avoidance_path" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
+  <arg name="enable_avoidance_path" default="false"/>
   <arg name="enable_graph_planner" default="true"/>
   <arg name="enable_robot_send" default="true"/>
   <arg name="enable_wave_cmd_bridge" default="true"/>
@@ -596,6 +597,7 @@
       <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+      <arg name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
       <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
       <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
       <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>

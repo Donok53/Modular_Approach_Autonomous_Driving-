@@ -73,11 +73,17 @@ class DWAControl:
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
+        self.follow_global_path_only = bool(
+            rospy.get_param("~follow_global_path_only", False)
+        )
         self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
         self.avoidance_path_timeout_s = float(
             rospy.get_param("~avoidance_path_timeout_s", max(0.5, self.local_path_timeout_s))
         )
-        self.use_muxed_active_path = bool(rospy.get_param("~use_muxed_active_path", True))
+        self.use_muxed_active_path = (
+            bool(rospy.get_param("~use_muxed_active_path", True))
+            and not self.follow_global_path_only
+        )
         self.active_path_timeout_s = float(
             rospy.get_param(
                 "~active_path_timeout_s",
@@ -461,13 +467,18 @@ class DWAControl:
 
         # ===== ROS I/O =====
         self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
-        self.sub_path_local = rospy.Subscriber(self.local_path_topic, Path, self.path_callback_local, queue_size=5)
-        self.sub_path_avoidance = rospy.Subscriber(
-            self.avoidance_path_topic,
-            Path,
-            self.path_callback_avoidance,
-            queue_size=5,
-        )
+        self.sub_path_local = None
+        self.sub_path_avoidance = None
+        if not self.follow_global_path_only:
+            self.sub_path_local = rospy.Subscriber(
+                self.local_path_topic, Path, self.path_callback_local, queue_size=5
+            )
+            self.sub_path_avoidance = rospy.Subscriber(
+                self.avoidance_path_topic,
+                Path,
+                self.path_callback_avoidance,
+                queue_size=5,
+            )
         self.sub_path_active = None
         if self.use_muxed_active_path:
             self.sub_path_active = rospy.Subscriber(
@@ -478,7 +489,14 @@ class DWAControl:
             )
         self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
-        self.sub_behavior = rospy.Subscriber(self.behavior_cmd_topic, BehaviorCommand, self.behavior_cmd_callback, queue_size=10)
+        self.sub_behavior = None
+        if not self.follow_global_path_only:
+            self.sub_behavior = rospy.Subscriber(
+                self.behavior_cmd_topic,
+                BehaviorCommand,
+                self.behavior_cmd_callback,
+                queue_size=10,
+            )
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
         self.sub_global_obstacle_overlay_boxes = None
         if (
@@ -1064,6 +1082,15 @@ class DWAControl:
 
     def _refresh_active_path(self):
         now = rospy.Time.now()
+        if self.follow_global_path_only:
+            if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
+                if self.active_path_source != "global" or self.path_sig != self.global_path_sig:
+                    self._activate_path(self.global_path_msg, self.global_path_sig, "global")
+                return
+            if self.path_msg is not None or self.active_path_source != "none":
+                self._activate_path(None, None, "none")
+            return
+
         if self.use_muxed_active_path:
             active_fresh = (
                 self.active_path_stamp.to_sec() > 0.0
@@ -1782,16 +1809,18 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
             self.avoidance_path_topic,
             self.active_path_topic,
+            "on" if self.follow_global_path_only else "off",
             "on" if self.use_muxed_active_path else "off",
-            self.behavior_cmd_topic,
+            self.behavior_cmd_topic if not self.follow_global_path_only else "-",
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
+            "off" if self.follow_global_path_only else "on",
             self.emergency_stop_distance,
             self.avoidance_hard_stop_distance,
             "on" if self.use_global_obstacle_overlay_boxes_for_stop else "off",
@@ -1817,7 +1846,8 @@ class DWAControl:
 
             # emergency stop only (avoidance can proceed unless obstacle is critically close)
             avoidance_can_continue = (
-                self.active_path_source == "avoidance"
+                (not self.follow_global_path_only)
+                and self.active_path_source == "avoidance"
                 and self.front_obstacle_clearance > self.avoidance_hard_stop_distance
             )
             if self.emergency_blocked and not self._rot_mode and not avoidance_can_continue:
@@ -1839,7 +1869,7 @@ class DWAControl:
                 continue
 
             # behavior-layer hard stop
-            if self.behavior_stop and not self._rot_mode:
+            if (not self.follow_global_path_only) and self.behavior_stop and not self._rot_mode:
                 self._log_nav_reason(
                     "stop_behavior",
                     "reason=%s speed_limit=%.2f" % (self.behavior_reason, self.behavior_speed_limit),
@@ -1850,17 +1880,27 @@ class DWAControl:
                 continue
 
             if not self.path_pts:
-                local_age = (rospy.Time.now() - self.local_path_stamp).to_sec() if self.local_path_stamp.to_sec() > 0.0 else -1.0
-                self._log_nav_reason(
-                    "stop_no_path",
-                    "active=%s local_age=%.2fs global_pts=%d local_pts=%d" % (
-                        self.active_path_source,
-                        local_age,
-                        len(self.global_path_msg.poses) if self.global_path_msg else 0,
-                        len(self.local_path_msg.poses) if self.local_path_msg else 0,
-                    ),
-                    warn=True,
-                )
+                if self.follow_global_path_only:
+                    self._log_nav_reason(
+                        "stop_no_path",
+                        "active=%s global_pts=%d" % (
+                            self.active_path_source,
+                            len(self.global_path_msg.poses) if self.global_path_msg else 0,
+                        ),
+                        warn=True,
+                    )
+                else:
+                    local_age = (rospy.Time.now() - self.local_path_stamp).to_sec() if self.local_path_stamp.to_sec() > 0.0 else -1.0
+                    self._log_nav_reason(
+                        "stop_no_path",
+                        "active=%s local_age=%.2fs global_pts=%d local_pts=%d" % (
+                            self.active_path_source,
+                            local_age,
+                            len(self.global_path_msg.poses) if self.global_path_msg else 0,
+                            len(self.local_path_msg.poses) if self.local_path_msg else 0,
+                        ),
+                        warn=True,
+                    )
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -1944,7 +1984,8 @@ class DWAControl:
                             min(self.max_speed, self.final_speed_k * max(dist_to_goal, 0.0)))
             else:
                 v_cap = self.max_speed
-            v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
+            if not self.follow_global_path_only:
+                v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
 
             if self.path_tracking_only:
                 u, predicted = self.path_tracking_control(

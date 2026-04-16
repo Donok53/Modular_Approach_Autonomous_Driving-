@@ -64,7 +64,8 @@
     <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
     <arg name="enable_cloud_tracker" default="true"/>
     <arg name="enable_dynamic_risk_manager" default="true"/>
-    <arg name="enable_local_replanner" default="true"/>
+    <arg name="enable_local_replanner" default="false"/>
+    <arg name="follow_global_path_only" default="true"/>
     <arg name="use_dynamic_risk_grid" default="true"/>
     <arg name="use_direct_goal" default="false"/>
     <arg name="direct_goal_topic" default="/move_base_simple/goal"/>
@@ -83,7 +84,7 @@
     <arg name="lookahead_m" default="4.0"/>
     <arg name="allow_best_effort_path" default="true"/>
     <arg name="best_effort_max_goal_gap_m" default="0.60"/>
-    <arg name="enable_avoidance_path" default="true"/>
+    <arg name="enable_avoidance_path" default="false"/>
     <arg name="use_pointcloud_obstacle_cost" default="false"/>
     <arg name="obstacle_collision_radius" default="0.0"/>
     <arg name="robot_width_m" default="0.58"/>
@@ -302,7 +303,7 @@
     <arg name="debug_dwa_stats" default="true"/>
     <arg name="stop_log_period_s" default="1.0"/>
 
-    <node pkg="dynamic_window_approach" type="active_path_mux.py" name="active_path_mux" output="screen" respawn="false">
+    <node unless="$(arg follow_global_path_only)" pkg="dynamic_window_approach" type="active_path_mux.py" name="active_path_mux" output="screen" respawn="false">
         <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
@@ -429,7 +430,7 @@
             <param name="suppress_dynamic_tracked_boxes" value="$(arg suppress_dynamic_tracked_boxes)"/>
             <param name="promote_dynamic_tracked_boxes_to_global_overlay" value="$(arg promote_dynamic_tracked_boxes_to_global_overlay)"/>
             <param name="dynamic_tracked_overlay_confirm_immediately" value="$(arg dynamic_tracked_overlay_confirm_immediately)"/>
-            <param name="enable_travel_history" value="$(eval 'true' if arg('enable_local_replanner') == 'false' else 'false')"/>
+            <param name="enable_travel_history" value="$(eval 'true' if str(arg('enable_local_replanner')).lower() == 'false' or str(arg('follow_global_path_only')).lower() == 'true' else 'false')"/>
             <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
@@ -458,6 +459,7 @@
     </group>
 
     <group if="$(arg enable_local_replanner)">
+        <group unless="$(arg follow_global_path_only)">
         <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
             <param name="odom_topic" value="$(arg planning_pose_topic)"/>
             <param name="global_path_topic" value="$(arg global_path_topic)"/>
@@ -562,6 +564,7 @@
             <param name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
             <param name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
         </node>
+        </group>
     </group>
 
     <node pkg="dynamic_window_approach" type="dynamicwindowapproach.py" name="dynamic_window_approach" output="screen" respawn="false">
@@ -570,7 +573,8 @@
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
         <param name="active_path_topic" value="$(arg active_path_topic)"/>
-        <param name="use_muxed_active_path" value="true"/>
+        <param name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
+        <param name="use_muxed_active_path" value="false"/>
         <param name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
         <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
         <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
