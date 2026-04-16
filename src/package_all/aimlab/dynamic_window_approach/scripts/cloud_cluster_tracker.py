@@ -119,6 +119,16 @@ class CloudClusterTracker:
         self.far_field_free_space_support_min_cells = max(
             1, int(rospy.get_param("~far_field_free_space_support_min_cells", 1))
         )
+        self.prediction_lead_s = max(
+            0.0, min(self.track_timeout_s, float(rospy.get_param("~prediction_lead_s", 0.10)))
+        )
+        self.pedestrian_prediction_lead_s = max(
+            0.0,
+            min(
+                self.track_timeout_s,
+                float(rospy.get_param("~pedestrian_prediction_lead_s", 0.18)),
+            ),
+        )
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -137,7 +147,7 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm free_support=%.2fm/%dcells far_support=%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm lead=%.2fs ped_lead=%.2fs decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm free_support=%.2fm/%dcells far_support=%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
@@ -156,6 +166,8 @@ class CloudClusterTracker:
             self.pedestrian_dynamic_min_displacement_m,
             self.recent_dynamic_hold_s,
             self.dynamic_assoc_bonus_m,
+            self.prediction_lead_s,
+            self.pedestrian_prediction_lead_s,
             self.recent_dynamic_velocity_decay,
             "on" if self.publish_static else "off",
             "on" if self.publish_static_persons else "off",
@@ -290,9 +302,31 @@ class CloudClusterTracker:
             mx, my = self._local_to_map(x, y)
             ix = int(math.floor(mx / self.cell_size_m))
             iy = int(math.floor(my / self.cell_size_m))
-            cells[(ix, iy)] = cells.get((ix, iy), 0) + 1
+            cell = cells.setdefault(
+                (ix, iy),
+                {
+                    "count": 0,
+                    "sum_x": 0.0,
+                    "sum_y": 0.0,
+                    "min_x": mx,
+                    "max_x": mx,
+                    "min_y": my,
+                    "max_y": my,
+                },
+            )
+            cell["count"] += 1
+            cell["sum_x"] += mx
+            cell["sum_y"] += my
+            cell["min_x"] = min(float(cell["min_x"]), mx)
+            cell["max_x"] = max(float(cell["max_x"]), mx)
+            cell["min_y"] = min(float(cell["min_y"]), my)
+            cell["max_y"] = max(float(cell["max_y"]), my)
 
-        occ = {k for k, c in cells.items() if c >= self.min_points_per_cell}
+        occ = {
+            k
+            for k, cell in cells.items()
+            if int(cell.get("count", 0)) >= self.min_points_per_cell
+        }
         visited = set()
         clusters = []
         for seed in occ:
@@ -324,13 +358,16 @@ class CloudClusterTracker:
             weighted_x_sum = 0.0
             weighted_y_sum = 0.0
             for (ix, iy) in comp:
-                cx = (ix + 0.5) * self.cell_size_m
-                cy = (iy + 0.5) * self.cell_size_m
-                w = float(cells.get((ix, iy), 1))
-                min_x = min(min_x, cx)
-                min_y = min(min_y, cy)
-                max_x = max(max_x, cx)
-                max_y = max(max_y, cy)
+                cell = cells.get((ix, iy))
+                if cell is None:
+                    continue
+                w = float(max(1, int(cell.get("count", 1))))
+                cx = float(cell.get("sum_x", 0.0)) / w
+                cy = float(cell.get("sum_y", 0.0)) / w
+                min_x = min(min_x, float(cell.get("min_x", cx)))
+                min_y = min(min_y, float(cell.get("min_y", cy)))
+                max_x = max(max_x, float(cell.get("max_x", cx)))
+                max_y = max(max_y, float(cell.get("max_y", cy)))
                 weight_sum += w
                 weighted_x_sum += cx * w
                 weighted_y_sum += cy * w
@@ -345,8 +382,8 @@ class CloudClusterTracker:
                 "max_x": max_x,
                 "min_y": min_y,
                 "max_y": max_y,
-                "size_x": max(0.2, max_x - min_x + self.cell_size_m),
-                "size_y": max(0.2, max_y - min_y + self.cell_size_m),
+                "size_x": max(0.2, max_x - min_x + 0.5 * self.cell_size_m),
+                "size_y": max(0.2, max_y - min_y + 0.5 * self.cell_size_m),
                 "score": min(1.0, len(comp) / 20.0),
             }
             if self._cluster_overlaps_known_map_obstacle(cluster):
@@ -560,10 +597,17 @@ class CloudClusterTracker:
             label = self._label_track(t["size_x"], t["size_y"], effective_speed)
             if recent_dynamic and effective_speed < static_speed_thresh:
                 label = "recent_" + label
+            lead_s = (
+                self.pedestrian_prediction_lead_s
+                if is_person_like
+                else self.prediction_lead_s
+            )
+            if (not recent_dynamic) or effective_speed < static_speed_thresh:
+                lead_s = 0.0
             obj.label = label
             obj.confidence = float(t["score"])
-            obj.pose.position.x = float(t["x"])
-            obj.pose.position.y = float(t["y"])
+            obj.pose.position.x = float(t["x"]) + effective_vx * lead_s
+            obj.pose.position.y = float(t["y"]) + effective_vy * lead_s
             obj.pose.position.z = 0.0
             obj.pose.orientation.w = 1.0
             obj.twist.linear.x = effective_vx

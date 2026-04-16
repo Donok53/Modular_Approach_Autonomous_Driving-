@@ -361,6 +361,8 @@
   <arg name="cloud_tracker_recent_dynamic_hold_s" default="2.5"/>
   <arg name="cloud_tracker_recent_dynamic_velocity_decay" default="0.65"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
+  <arg name="cloud_tracker_prediction_lead_s" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.08')"/>
+  <arg name="cloud_tracker_pedestrian_prediction_lead_s" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.14')"/>
   <arg name="cloud_tracker_allow_out_of_grid_clusters" default="true"/>
   <arg name="cloud_tracker_grid_relaxation_distance_m" default="$(eval '10.0' if str(arg('real_mode')).lower() == 'true' else '8.0')"/>
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
@@ -790,6 +792,8 @@
       <arg name="cloud_tracker_recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <arg name="cloud_tracker_recent_dynamic_velocity_decay" value="$(arg cloud_tracker_recent_dynamic_velocity_decay)"/>
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="cloud_tracker_prediction_lead_s" value="$(arg cloud_tracker_prediction_lead_s)"/>
+      <arg name="cloud_tracker_pedestrian_prediction_lead_s" value="$(arg cloud_tracker_pedestrian_prediction_lead_s)"/>
       <arg name="cloud_tracker_allow_out_of_grid_clusters" value="$(arg cloud_tracker_allow_out_of_grid_clusters)"/>
       <arg name="cloud_tracker_grid_relaxation_distance_m" value="$(arg cloud_tracker_grid_relaxation_distance_m)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
@@ -1013,6 +1017,8 @@
       <arg name="cloud_tracker_recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <arg name="cloud_tracker_recent_dynamic_velocity_decay" value="$(arg cloud_tracker_recent_dynamic_velocity_decay)"/>
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="cloud_tracker_prediction_lead_s" value="$(arg cloud_tracker_prediction_lead_s)"/>
+      <arg name="cloud_tracker_pedestrian_prediction_lead_s" value="$(arg cloud_tracker_pedestrian_prediction_lead_s)"/>
       <arg name="cloud_tracker_allow_out_of_grid_clusters" value="$(arg cloud_tracker_allow_out_of_grid_clusters)"/>
       <arg name="cloud_tracker_grid_relaxation_distance_m" value="$(arg cloud_tracker_grid_relaxation_distance_m)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
