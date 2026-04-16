@@ -208,15 +208,15 @@
     <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
     <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="6.0"/>
     <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
-    <arg name="global_pointcloud_overlay_max_range_m" default="18.0"/>
+    <arg name="global_pointcloud_overlay_max_range_m" default="25.0"/>
     <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
     <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.08"/>
-    <arg name="global_pointcloud_overlay_lookahead_m" default="18.0"/>
+    <arg name="global_pointcloud_overlay_lookahead_m" default="25.0"/>
     <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
     <arg name="global_pointcloud_overlay_max_points" default="200"/>
     <arg name="global_pointcloud_overlay_far_field_candidate_blocking_enabled" default="true"/>
     <arg name="global_pointcloud_overlay_far_field_candidate_min_distance_m" default="2.5"/>
-    <arg name="global_obstacle_overlay_obstacle_max_range_m" default="20.0"/>
+    <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
     <arg name="dynamic_speed_thresh_mps" default="0.08"/>
     <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
     <arg name="prediction_horizon_s" default="2.2"/>
@@ -241,8 +241,8 @@
     <arg name="rear_vehicle_min_closing_speed_mps" default="0.60"/>
     <arg name="rear_vehicle_caution_speed_mps" default="0.30"/>
     <arg name="cross_path_vehicle_caution_enabled" default="true"/>
-    <arg name="cross_path_vehicle_forward_distance_m" default="10.0"/>
-    <arg name="cross_path_vehicle_lateral_distance_m" default="1.60"/>
+    <arg name="cross_path_vehicle_forward_distance_m" default="22.0"/>
+    <arg name="cross_path_vehicle_lateral_distance_m" default="4.00"/>
     <arg name="cross_path_vehicle_caution_ttc_s" default="3.5"/>
     <arg name="cross_path_vehicle_min_relative_speed_mps" default="0.50"/>
     <arg name="pedestrian_stop_distance_m" default="1.05"/>
@@ -252,7 +252,7 @@
     <arg name="behavior_stop_on_count" default="2"/>
     <arg name="behavior_stop_off_count" default="4"/>
     <arg name="behavior_stop_hold_s" default="0.25"/>
-    <arg name="cloud_tracker_max_range_m" default="25.0"/>
+    <arg name="cloud_tracker_max_range_m" default="30.0"/>
     <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
     <arg name="cloud_tracker_dynamic_assoc_bonus_m" default="0.5"/>
     <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
@@ -276,8 +276,8 @@
     <arg name="cloud_tracker_allow_out_of_grid_clusters" default="true"/>
     <arg name="cloud_tracker_grid_relaxation_distance_m" default="10.0"/>
     <arg name="cloud_tracker_forward_non_drivable_detection_enabled" default="true"/>
-    <arg name="cloud_tracker_forward_non_drivable_forward_range_m" default="18.0"/>
-    <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="4.0"/>
+    <arg name="cloud_tracker_forward_non_drivable_forward_range_m" default="$(arg cloud_tracker_max_range_m)"/>
+    <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="6.0"/>
     <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" default="-0.4"/>
     <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
     <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
@@ -288,7 +288,7 @@
     <arg name="include_static_pedestrians_in_risk_grid" default="true"/>
     <arg name="risk_grid_forward_projection_enabled" default="true"/>
     <arg name="risk_grid_rear_exclusion_m" default="0.20"/>
-    <arg name="risk_grid_forward_lateral_m" default="2.00"/>
+    <arg name="risk_grid_forward_lateral_m" default="4.00"/>
     <arg name="pedestrian_risk_grid_forward_lateral_extra_m" default="0.60"/>
     <arg name="static_risk_min_span_m" default="1.4"/>
     <arg name="static_risk_min_area_m2" default="1.2"/>
