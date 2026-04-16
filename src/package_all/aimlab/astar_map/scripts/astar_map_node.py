@@ -2270,6 +2270,8 @@ class AStarPlanner:
             return None
         if int(g.info.width) <= 0 or int(g.info.height) <= 0:
             return None
+        start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
+        goal_raw = self._world_to_grid_cell(g, goal_xy[0], goal_xy[1])
         blocked = self._build_blocked_grid(g)
         goal_tail_clearance_radius = self._global_path_goal_tail_clearance_radius()
         if goal_tail_clearance_radius + 1e-6 < self._global_path_clearance_radius_m():
@@ -2279,10 +2281,23 @@ class AStarPlanner:
         else:
             goal_tail_blocked = blocked
 
-        start_raw = self._world_to_grid_cell(g, start_xy[0], start_xy[1])
-        goal_raw = self._world_to_grid_cell(g, goal_xy[0], goal_xy[1])
-        start_cell = self._nearest_free_start_grid_cell(g, blocked, start_xy, goal_xy)
-        goal_cell = self._nearest_free_grid_cell(blocked, goal_raw)
+        def _snap_and_plan(blocked_grid):
+            snapped_start = self._nearest_free_start_grid_cell(g, blocked_grid, start_xy, goal_xy)
+            snapped_goal = self._nearest_free_grid_cell(blocked_grid, goal_raw)
+            if snapped_start is None or snapped_goal is None:
+                return snapped_start, snapped_goal, None, None
+            planned_grid_path, planned_planner_name = self._plan_single_grid_path(
+                blocked_grid,
+                snapped_start,
+                snapped_goal,
+            )
+            return snapped_start, snapped_goal, planned_grid_path, planned_planner_name
+
+        start_cell, goal_cell, grid_path, planner_name = _snap_and_plan(blocked)
+        planning_blocked = blocked
+        planning_goal_tail_blocked = goal_tail_blocked
+        planning_mode = "clearance"
+
         if start_cell is None or goal_cell is None:
             rospy.logwarn_throttle(
                 1.0,
@@ -2292,14 +2307,7 @@ class AStarPlanner:
                 str(start_cell),
                 str(goal_cell),
             )
-            return None
-
-        grid_path, planner_name = self._plan_single_grid_path(
-            blocked,
-            start_cell,
-            goal_cell,
-        )
-        if not grid_path:
+        elif not grid_path:
             rospy.logwarn_throttle(
                 1.0,
                 "[astar] drivable-grid path not found (start=%s goal=%s radius=%.2f m)",
@@ -2307,13 +2315,34 @@ class AStarPlanner:
                 str(goal_cell),
                 self._global_path_clearance_radius_m(),
             )
-            return None
+
+        if (start_cell is None or goal_cell is None or not grid_path):
+            raw_blocked = self._build_blocked_grid(g, clearance_radius_m=0.0)
+            raw_start_cell, raw_goal_cell, raw_grid_path, raw_planner_name = _snap_and_plan(raw_blocked)
+            if raw_start_cell is not None and raw_goal_cell is not None and raw_grid_path:
+                start_cell = raw_start_cell
+                goal_cell = raw_goal_cell
+                grid_path = raw_grid_path
+                planner_name = raw_planner_name
+                planning_blocked = raw_blocked
+                planning_goal_tail_blocked = raw_blocked
+                planning_mode = "raw-drivable-fallback"
+                if self.debug_log_enable:
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "[astar] using raw drivable-grid fallback path (start=%s goal=%s)",
+                        str(start_cell),
+                        str(goal_cell),
+                    )
+            else:
+                return None
 
         if self.debug_log_enable:
             rospy.loginfo_throttle(
                 1.0,
-                "[astar] drivable-grid planner=%s radius=%.2f m grid_pts=%d",
+                "[astar] drivable-grid planner=%s mode=%s radius=%.2f m grid_pts=%d",
                 planner_name,
+                planning_mode,
                 self._global_path_clearance_radius_m(),
                 len(grid_path),
             )
@@ -2334,7 +2363,7 @@ class AStarPlanner:
             start_cell,
             goal_raw,
             goal_cell,
-            goal_tail_blocked,
+            planning_goal_tail_blocked,
         )
         self._last_snapped_goal_xy = snapped_goal_xy
         if extend_to_clicked_goal and goal_cell != goal_raw and self.debug_log_enable:
@@ -2387,21 +2416,21 @@ class AStarPlanner:
                 goal_gap_m,
             )
         alt_start_cells = self._nearest_free_grid_cells(
-            blocked,
+            planning_blocked,
             start_raw,
             max_cells=max(3, min(8, self.global_path_candidate_count + 1)),
         )
         if start_cell not in alt_start_cells:
             alt_start_cells.insert(0, start_cell)
         alt_goal_cells = self._nearest_free_grid_cells(
-            blocked,
+            planning_blocked,
             goal_raw,
             max_cells=max(3, min(8, self.global_path_candidate_count + 1)),
         )
         if goal_cell not in alt_goal_cells:
             alt_goal_cells.insert(0, goal_cell)
         candidate_specs = self._generate_candidate_grid_paths(
-            blocked,
+            planning_blocked,
             start_cell,
             goal_cell,
             grid_path,
@@ -2421,7 +2450,7 @@ class AStarPlanner:
                 cand_start_cell,
                 goal_raw,
                 cand_goal_cell,
-                goal_tail_blocked,
+                planning_goal_tail_blocked,
             )
             if idx > 0 and candidate_world_paths:
                 similarity = max(

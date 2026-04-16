@@ -154,7 +154,7 @@
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="$(eval '0.00' if arg('real_mode') == 'true' else '0.02')"/>
   <arg name="global_path_clearance_model" default="$(eval 'width' if arg('real_mode') == 'true' else 'circumscribed')"/>
-  <arg name="global_path_drivable_area_is_center_safe" default="false"/>
+  <arg name="global_path_drivable_area_is_center_safe" default="$(eval 'true' if arg('real_mode') == 'true' else 'false')"/>
   <arg name="global_path_goal_tail_clearance_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="global_path_enable_graph_fallback" default="false"/>
