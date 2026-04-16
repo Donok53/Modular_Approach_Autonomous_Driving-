@@ -190,6 +190,7 @@
   <arg name="path_tracking_cte_gain" default="1.2"/>
   <arg name="path_tracking_cte_soft_mps" default="0.25"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
+  <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.45"/>
   <arg name="rotate_only_deg" default="110.0"/>
   <arg name="rotate_exit_deg" default="40.0"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
@@ -582,6 +583,7 @@
       <arg name="path_tracking_cte_gain" value="$(arg path_tracking_cte_gain)"/>
       <arg name="path_tracking_cte_soft_mps" value="$(arg path_tracking_cte_soft_mps)"/>
       <arg name="path_tracking_cte_yaw_cap_deg" value="$(arg path_tracking_cte_yaw_cap_deg)"/>
+      <arg name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
       <arg name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
       <arg name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
       <arg name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>

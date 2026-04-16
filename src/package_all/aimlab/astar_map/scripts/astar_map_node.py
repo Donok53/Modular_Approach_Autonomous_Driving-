@@ -213,12 +213,12 @@ class AStarPlanner:
             ),
         )
         self.global_path_candidate_penalty_cost = max(
-            0.0, float(rospy.get_param("~global_path_candidate_penalty_cost", 6.0))
+            0.0, float(rospy.get_param("~global_path_candidate_penalty_cost", 12.0))
         )
         self.global_path_candidate_max_similarity = min(
             0.999,
             max(
-                0.0, float(rospy.get_param("~global_path_candidate_max_similarity", 0.85))
+                0.0, float(rospy.get_param("~global_path_candidate_max_similarity", 0.97))
             ),
         )
         self.candidate_route_switching_enabled = bool(

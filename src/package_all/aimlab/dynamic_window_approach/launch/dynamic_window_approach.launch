@@ -111,6 +111,7 @@
     <arg name="path_tracking_crawl_speed" default="0.10"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
     <arg name="path_tracking_stop_distance_m" default="0.80"/>
+    <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.45"/>
     <arg name="rotate_only_deg" default="110.0"/>
     <arg name="rotate_exit_deg" default="40.0"/>
     <arg name="rotate_reentry_cooldown_s" default="4.0"/>
@@ -553,6 +554,7 @@
         <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
         <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
         <param name="path_tracking_stop_distance_m" value="$(arg path_tracking_stop_distance_m)"/>
+        <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
         <param name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
         <param name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>

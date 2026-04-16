@@ -282,6 +282,15 @@ class DWAControl:
         self.path_tracking_stop_distance_m = max(
             0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.80))
         )
+        self.path_tracking_drivable_ignore_start_distance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_tracking_drivable_ignore_start_distance_m",
+                    0.45,
+                )
+            ),
+        )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
 
@@ -931,7 +940,10 @@ class DWAControl:
         self._path_tracking_prev_w = w_cmd
 
         traj = self.predict_trajectory(x, v_cmd, w_cmd)
-        if not self._trajectory_in_drivable_area(traj):
+        if not self._trajectory_in_drivable_area(
+            traj,
+            ignore_start_distance_m=self.path_tracking_drivable_ignore_start_distance_m,
+        ):
             v_cmd = 0.0
             traj = self.predict_trajectory(x, v_cmd, w_cmd)
         return [v_cmd, w_cmd], traj
@@ -973,11 +985,10 @@ class DWAControl:
             t += self.dt
         return trajectory
 
-    def _is_xy_drivable(self, x, y):
-        drivable_ok = True
+    def _is_xy_drivable_grid_ok(self, x, y):
         if self.use_drivable_grid:
             if self.grid_data is None or self.grid_width <= 0 or self.grid_height <= 0:
-                drivable_ok = True
+                return True
             else:
                 gx = int(math.floor((x - self.grid_origin_x) / self.grid_resolution))
                 gy = int(math.floor((y - self.grid_origin_y) / self.grid_resolution))
@@ -986,13 +997,13 @@ class DWAControl:
                 idx = gy * self.grid_width + gx
                 occ = self.grid_data[idx]
                 if occ < 0:
-                    drivable_ok = (not self.grid_unknown_is_occupied)
+                    return (not self.grid_unknown_is_occupied)
                 else:
-                    drivable_ok = (occ == 0)
-        if not drivable_ok:
-            return False
+                    return (occ == 0)
+        return True
 
-        if (
+    def _is_xy_risk_ok(self, x, y):
+        if not (
             self.use_dynamic_risk_grid
             and self.risk_grid_data is not None
             and self.risk_grid_width > 0
@@ -1000,20 +1011,23 @@ class DWAControl:
             and self.risk_grid_resolution is not None
             and self.risk_grid_resolution > 0.0
         ):
-            rgx = int(math.floor((x - self.risk_grid_origin_x) / self.risk_grid_resolution))
-            rgy = int(math.floor((y - self.risk_grid_origin_y) / self.risk_grid_resolution))
-            if rgx < 0 or rgy < 0 or rgx >= self.risk_grid_width or rgy >= self.risk_grid_height:
-                return (not self.risk_unknown_is_occupied)
-            ridx = rgy * self.risk_grid_width + rgx
-            rocc = int(self.risk_grid_data[ridx])
-            if rocc < 0:
-                return (not self.risk_unknown_is_occupied)
-            if rocc >= self.risk_occupied_threshold:
-                return False
-
+            return True
+        rgx = int(math.floor((x - self.risk_grid_origin_x) / self.risk_grid_resolution))
+        rgy = int(math.floor((y - self.risk_grid_origin_y) / self.risk_grid_resolution))
+        if rgx < 0 or rgy < 0 or rgx >= self.risk_grid_width or rgy >= self.risk_grid_height:
+            return (not self.risk_unknown_is_occupied)
+        ridx = rgy * self.risk_grid_width + rgx
+        rocc = int(self.risk_grid_data[ridx])
+        if rocc < 0:
+            return (not self.risk_unknown_is_occupied)
+        if rocc >= self.risk_occupied_threshold:
+            return False
         return True
 
-    def _trajectory_in_drivable_area(self, traj):
+    def _is_xy_drivable(self, x, y):
+        return self._is_xy_drivable_grid_ok(x, y) and self._is_xy_risk_ok(x, y)
+
+    def _trajectory_in_drivable_area(self, traj, ignore_start_distance_m=0.0):
         if not self.use_drivable_grid and not self.use_dynamic_risk_grid:
             return True
         res_candidates = []
@@ -1023,13 +1037,21 @@ class DWAControl:
             res_candidates.append(float(self.risk_grid_resolution))
         sample_step = min(res_candidates) if res_candidates else 0.1
         offsets = self._footprint_sample_offsets(sample_step)
+        traveled_m = 0.0
+        prev_row = traj[0]
         for row in traj[1::self.traj_check_step]:
+            traveled_m += math.hypot(float(row[0]) - float(prev_row[0]), float(row[1]) - float(prev_row[1]))
+            prev_row = row
             yaw = float(row[2])
             c = math.cos(yaw)
             s = math.sin(yaw)
             for ox, oy in offsets:
                 wx = float(row[0]) + c * float(ox) - s * float(oy)
                 wy = float(row[1]) + s * float(ox) + c * float(oy)
+                if traveled_m < ignore_start_distance_m:
+                    if not self._is_xy_risk_ok(wx, wy):
+                        return False
+                    continue
                 if not self._is_xy_drivable(wx, wy):
                     return False
         return True
