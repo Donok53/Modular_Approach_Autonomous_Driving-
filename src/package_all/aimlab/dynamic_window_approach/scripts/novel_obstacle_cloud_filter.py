@@ -63,6 +63,30 @@ class NovelObstacleCloudFilter:
         self.cluster_min_support_points = max(
             1, int(rospy.get_param("~cluster_min_support_points", 3))
         )
+        self.cluster_z_layer_size_m = max(
+            0.03, float(rospy.get_param("~cluster_z_layer_size_m", 0.18))
+        )
+        self.cluster_min_z_layers = max(
+            1, int(rospy.get_param("~cluster_min_z_layers", 2))
+        )
+        self.cluster_min_height_m = max(
+            0.0, float(rospy.get_param("~cluster_min_height_m", 0.12))
+        )
+        self.vertical_support_min_span_m = max(
+            0.0, float(rospy.get_param("~vertical_support_min_span_m", 0.45))
+        )
+        self.reject_wide_low_clusters = bool(
+            rospy.get_param("~reject_wide_low_clusters", True)
+        )
+        self.wide_low_min_span_m = max(
+            0.0, float(rospy.get_param("~wide_low_min_span_m", 0.90))
+        )
+        self.wide_low_min_area_m2 = max(
+            0.0, float(rospy.get_param("~wide_low_min_area_m2", 0.45))
+        )
+        self.wide_low_max_height_m = max(
+            0.0, float(rospy.get_param("~wide_low_max_height_m", 0.12))
+        )
         self.output_voxel_size_m = max(
             0.0, float(rospy.get_param("~output_voxel_size_m", 0.08))
         )
@@ -118,7 +142,8 @@ class NovelObstacleCloudFilter:
             "novel_obstacle_cloud_filter started | in=%s map=%s pose=%s out=%s out_map=%s "
             "z=[%.2f, %.2f] slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm "
             "ground=[%.2f, %.2f] range=%.1fm downsample=%d map_voxel=%.2fm match_xy=%.2fm "
-            "match_z=%.2fm cluster_cell=%.2fm support>=%d output_voxel=%.2fm",
+            "match_z=%.2fm cluster_cell=%.2fm support>=%d z_layers>=%d layer=%.2fm min_h=%.2fm "
+            "wide_low=%s span>=%.2fm area>=%.2fm2 h<=%.2fm output_voxel=%.2fm",
             self.input_cloud_topic,
             self.global_map_topic,
             self.pose_topic,
@@ -139,6 +164,13 @@ class NovelObstacleCloudFilter:
             self.match_z_radius_m,
             self.cluster_cell_size_m,
             self.cluster_min_support_points,
+            self.cluster_min_z_layers,
+            self.cluster_z_layer_size_m,
+            self.cluster_min_height_m,
+            "on" if self.reject_wide_low_clusters else "off",
+            self.wide_low_min_span_m,
+            self.wide_low_min_area_m2,
+            self.wide_low_max_height_m,
             self.output_voxel_size_m,
         )
 
@@ -288,6 +320,111 @@ class NovelObstacleCloudFilter:
                 kept.append((local_pt, map_pt))
         return kept
 
+    def _component_filter_pairs(self, pairs):
+        if not pairs:
+            return [], {
+                "components": 0,
+                "kept_components": 0,
+                "rejected_wide_low": 0,
+                "rejected_flat": 0,
+            }
+
+        res = self.cluster_cell_size_m
+        cell_pairs = {}
+        for local_pt, map_pt in pairs:
+            cell = (
+                int(math.floor(float(local_pt[0]) / res)),
+                int(math.floor(float(local_pt[1]) / res)),
+            )
+            cell_pairs.setdefault(cell, []).append((local_pt, map_pt))
+
+        kept = []
+        visited = set()
+        rejected_wide_low = 0
+        rejected_flat = 0
+        components = 0
+        kept_components = 0
+
+        for start_cell in cell_pairs.keys():
+            if start_cell in visited:
+                continue
+            components += 1
+            stack = [start_cell]
+            visited.add(start_cell)
+            component_pairs = []
+            min_x = float("inf")
+            max_x = float("-inf")
+            min_y = float("inf")
+            max_y = float("-inf")
+            min_z_eval = float("inf")
+            max_z_eval = float("-inf")
+            z_layers = set()
+
+            while stack:
+                cell = stack.pop()
+                for local_pt, map_pt in cell_pairs.get(cell, []):
+                    component_pairs.append((local_pt, map_pt))
+                    lx = float(local_pt[0])
+                    ly = float(local_pt[1])
+                    lz = float(local_pt[2])
+                    z_eval = self._leveled_z(lx, ly, lz)
+                    min_x = min(min_x, lx)
+                    max_x = max(max_x, lx)
+                    min_y = min(min_y, ly)
+                    max_y = max(max_y, ly)
+                    min_z_eval = min(min_z_eval, z_eval)
+                    max_z_eval = max(max_z_eval, z_eval)
+                    z_layers.add(
+                        int(math.floor(z_eval / self.cluster_z_layer_size_m))
+                    )
+                cx, cy = cell
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        nbr = (cx + dx, cy + dy)
+                        if nbr in cell_pairs and nbr not in visited:
+                            visited.add(nbr)
+                            stack.append(nbr)
+
+            if not component_pairs:
+                continue
+
+            span_x = max(0.0, max_x - min_x)
+            span_y = max(0.0, max_y - min_y)
+            span_xy = max(span_x, span_y)
+            area_xy = max(span_x, self.cluster_cell_size_m) * max(
+                span_y, self.cluster_cell_size_m
+            )
+            height_m = max(0.0, max_z_eval - min_z_eval)
+            z_layer_count = len(z_layers)
+            has_vertical_support = (
+                z_layer_count >= self.cluster_min_z_layers
+                or height_m >= self.cluster_min_height_m
+            )
+
+            if (
+                self.reject_wide_low_clusters
+                and span_xy >= self.wide_low_min_span_m
+                and area_xy >= self.wide_low_min_area_m2
+                and height_m <= self.wide_low_max_height_m
+                and z_layer_count < self.cluster_min_z_layers
+            ):
+                rejected_wide_low += 1
+                continue
+
+            if (not has_vertical_support) and span_xy >= self.vertical_support_min_span_m:
+                rejected_flat += 1
+                continue
+
+            kept.extend(component_pairs)
+            kept_components += 1
+
+        return kept, {
+            "components": components,
+            "kept_components": kept_components,
+            "rejected_wide_low": rejected_wide_low,
+            "rejected_flat": rejected_flat,
+        }
+
     def _voxelize_pairs(self, pairs):
         if (not pairs) or self.output_voxel_size_m <= 0.0:
             return list(pairs)
@@ -364,7 +501,8 @@ class NovelObstacleCloudFilter:
             candidate_pairs.append(((x, y, z), (mx, my, mz)))
 
         supported_pairs = self._support_filter_pairs(candidate_pairs)
-        output_pairs = self._voxelize_pairs(supported_pairs)
+        validated_pairs, component_stats = self._component_filter_pairs(supported_pairs)
+        output_pairs = self._voxelize_pairs(validated_pairs)
 
         local_points = [local_pt for local_pt, _ in output_pairs]
         map_points = [map_pt for _, map_pt in output_pairs]
@@ -379,12 +517,16 @@ class NovelObstacleCloudFilter:
         if self.debug_log_period_s > 0.0:
             rospy.loginfo_throttle(
                 self.debug_log_period_s,
-                "novel_obstacle_cloud_filter: in=%d ground_drop=%d z_ok=%d novel=%d support=%d out=%d map_match=%d",
+                "novel_obstacle_cloud_filter: in=%d ground_drop=%d z_ok=%d novel=%d support=%d comps=%d keep=%d reject_wide_low=%d reject_flat=%d out=%d map_match=%d",
                 in_points,
                 ground_filtered,
                 z_filtered,
                 len(candidate_pairs),
                 len(supported_pairs),
+                int(component_stats.get("components", 0)),
+                int(component_stats.get("kept_components", 0)),
+                int(component_stats.get("rejected_wide_low", 0)),
+                int(component_stats.get("rejected_flat", 0)),
                 len(output_pairs),
                 map_matched,
             )
