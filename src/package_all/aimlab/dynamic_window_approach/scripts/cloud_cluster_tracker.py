@@ -110,6 +110,18 @@ class CloudClusterTracker:
         self.grid_relaxation_distance_m = max(
             0.0, float(rospy.get_param("~grid_relaxation_distance_m", 10.0))
         )
+        self.forward_non_drivable_detection_enabled = bool(
+            rospy.get_param("~forward_non_drivable_detection_enabled", True)
+        )
+        self.forward_non_drivable_forward_range_m = max(
+            0.0, float(rospy.get_param("~forward_non_drivable_forward_range_m", 18.0))
+        )
+        self.forward_non_drivable_side_lateral_m = max(
+            0.0, float(rospy.get_param("~forward_non_drivable_side_lateral_m", 4.0))
+        )
+        self.forward_non_drivable_rear_margin_m = float(
+            rospy.get_param("~forward_non_drivable_rear_margin_m", -0.4)
+        )
         self.free_space_support_radius_m = max(
             0.0, float(rospy.get_param("~free_space_support_radius_m", 0.35))
         )
@@ -147,7 +159,7 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm lead=%.2fs ped_lead=%.2fs decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm free_support=%.2fm/%dcells far_support=%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm lead=%.2fs ped_lead=%.2fs decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm forward_non_drivable=%s front=%.1fm side=%.1fm rear=%.1fm free_support=%.2fm/%dcells far_support=%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
@@ -176,6 +188,10 @@ class CloudClusterTracker:
             self.known_map_subtraction_radius_m,
             "on" if self.allow_out_of_grid_clusters else "off",
             self.grid_relaxation_distance_m,
+            "on" if self.forward_non_drivable_detection_enabled else "off",
+            self.forward_non_drivable_forward_range_m,
+            self.forward_non_drivable_side_lateral_m,
+            self.forward_non_drivable_rear_margin_m,
             self.free_space_support_radius_m,
             self.free_space_support_min_cells,
             self.far_field_free_space_support_min_cells,
@@ -201,6 +217,28 @@ class CloudClusterTracker:
 
     def _map_distance_from_robot(self, x, y):
         return math.hypot(float(x) - self.odom_x, float(y) - self.odom_y)
+
+    def _map_to_local(self, x, y):
+        dx = float(x) - self.odom_x
+        dy = float(y) - self.odom_y
+        c = math.cos(self.odom_yaw)
+        s = math.sin(self.odom_yaw)
+        lx = c * dx + s * dy
+        ly = -s * dx + c * dy
+        return lx, ly
+
+    def _pose_in_forward_non_drivable_roi(self, x, y):
+        if not self.forward_non_drivable_detection_enabled:
+            return False
+        lx, ly = self._map_to_local(x, y)
+        if lx < self.forward_non_drivable_rear_margin_m:
+            return False
+        if lx > self.forward_non_drivable_forward_range_m:
+            return False
+        return abs(ly) <= self.forward_non_drivable_side_lateral_m
+
+    def _cluster_in_forward_non_drivable_roi(self, cluster):
+        return self._pose_in_forward_non_drivable_roi(cluster["x"], cluster["y"])
 
     @staticmethod
     def _world_to_grid(g, x, y):
@@ -239,16 +277,22 @@ class CloudClusterTracker:
                 saw_in_bounds = True
                 if self._grid_cell_is_drivable_free(g, gx, gy):
                     continue
+                if self._cluster_in_forward_non_drivable_roi(cluster):
+                    cluster["relaxed_forward_roi"] = True
+                    return False
                 return True
         if saw_in_bounds:
             return False
         if not self.allow_out_of_grid_clusters:
+            if self._cluster_in_forward_non_drivable_roi(cluster):
+                cluster["relaxed_forward_roi"] = True
+                return False
             return True
         return self._map_distance_from_robot(
             cluster["x"], cluster["y"]
         ) < self.grid_relaxation_distance_m
 
-    def _pose_has_free_space_support(self, x, y):
+    def _pose_has_free_space_support(self, x, y, relaxed_forward_ok=False):
         if (not self.known_map_subtraction_enabled) or self.drivable_grid is None:
             return True
 
@@ -260,7 +304,9 @@ class CloudClusterTracker:
             and range_m >= self.grid_relaxation_distance_m
         )
         if not self._in_bounds(g, gx, gy):
-            return far_field_relaxed
+            return far_field_relaxed or (
+                relaxed_forward_ok and self._pose_in_forward_non_drivable_roi(x, y)
+            )
 
         required_free_cells = self.free_space_support_min_cells
         if far_field_relaxed:
@@ -281,7 +327,9 @@ class CloudClusterTracker:
                     free_cells += 1
                     if free_cells >= required_free_cells:
                         return True
-        return far_field_relaxed and free_cells > 0
+        return (far_field_relaxed and free_cells > 0) or (
+            relaxed_forward_ok and self._pose_in_forward_non_drivable_roi(x, y)
+        )
 
     def _extract_clusters(self, msg):
         if not self.have_odom:
@@ -385,10 +433,15 @@ class CloudClusterTracker:
                 "size_x": max(0.2, max_x - min_x + 0.5 * self.cell_size_m),
                 "size_y": max(0.2, max_y - min_y + 0.5 * self.cell_size_m),
                 "score": min(1.0, len(comp) / 20.0),
+                "relaxed_forward_roi": False,
             }
             if self._cluster_overlaps_known_map_obstacle(cluster):
                 continue
-            if not self._pose_has_free_space_support(cluster["x"], cluster["y"]):
+            if not self._pose_has_free_space_support(
+                cluster["x"],
+                cluster["y"],
+                relaxed_forward_ok=bool(cluster.get("relaxed_forward_roi", False)),
+            ):
                 continue
             clusters.append(cluster)
         return clusters
@@ -444,6 +497,7 @@ class CloudClusterTracker:
             t["size_x"] = c["size_x"]
             t["size_y"] = c["size_y"]
             t["score"] = c["score"]
+            t["relaxed_forward_roi"] = bool(c.get("relaxed_forward_roi", False))
             t["last_t"] = now_sec
             t["age"] += 1
 
@@ -461,6 +515,7 @@ class CloudClusterTracker:
                 "size_x": c["size_x"],
                 "size_y": c["size_y"],
                 "score": c["score"],
+                "relaxed_forward_roi": bool(c.get("relaxed_forward_roi", False)),
                 "last_t": now_sec,
                 "age": 1,
                 "last_dynamic_t": 0.0,
@@ -590,7 +645,11 @@ class CloudClusterTracker:
                 and (not self._should_publish_static_track(raw_label, t))
             ):
                 continue
-            if not self._pose_has_free_space_support(t["x"], t["y"]):
+            if not self._pose_has_free_space_support(
+                t["x"],
+                t["y"],
+                relaxed_forward_ok=bool(t.get("relaxed_forward_roi", False)),
+            ):
                 continue
             obj = TrackedObject()
             obj.id = int(tid)

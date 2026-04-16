@@ -365,6 +365,10 @@
   <arg name="cloud_tracker_pedestrian_prediction_lead_s" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.14')"/>
   <arg name="cloud_tracker_allow_out_of_grid_clusters" default="true"/>
   <arg name="cloud_tracker_grid_relaxation_distance_m" default="$(eval '10.0' if str(arg('real_mode')).lower() == 'true' else '8.0')"/>
+  <arg name="cloud_tracker_forward_non_drivable_detection_enabled" default="true"/>
+  <arg name="cloud_tracker_forward_non_drivable_forward_range_m" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '12.0')"/>
+  <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '3.0')"/>
+  <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" default="-0.4"/>
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
   <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
   <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
@@ -796,6 +800,10 @@
       <arg name="cloud_tracker_pedestrian_prediction_lead_s" value="$(arg cloud_tracker_pedestrian_prediction_lead_s)"/>
       <arg name="cloud_tracker_allow_out_of_grid_clusters" value="$(arg cloud_tracker_allow_out_of_grid_clusters)"/>
       <arg name="cloud_tracker_grid_relaxation_distance_m" value="$(arg cloud_tracker_grid_relaxation_distance_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_detection_enabled" value="$(arg cloud_tracker_forward_non_drivable_detection_enabled)"/>
+      <arg name="cloud_tracker_forward_non_drivable_forward_range_m" value="$(arg cloud_tracker_forward_non_drivable_forward_range_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" value="$(arg cloud_tracker_forward_non_drivable_side_lateral_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" value="$(arg cloud_tracker_forward_non_drivable_rear_margin_m)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
@@ -1021,6 +1029,10 @@
       <arg name="cloud_tracker_pedestrian_prediction_lead_s" value="$(arg cloud_tracker_pedestrian_prediction_lead_s)"/>
       <arg name="cloud_tracker_allow_out_of_grid_clusters" value="$(arg cloud_tracker_allow_out_of_grid_clusters)"/>
       <arg name="cloud_tracker_grid_relaxation_distance_m" value="$(arg cloud_tracker_grid_relaxation_distance_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_detection_enabled" value="$(arg cloud_tracker_forward_non_drivable_detection_enabled)"/>
+      <arg name="cloud_tracker_forward_non_drivable_forward_range_m" value="$(arg cloud_tracker_forward_non_drivable_forward_range_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" value="$(arg cloud_tracker_forward_non_drivable_side_lateral_m)"/>
+      <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" value="$(arg cloud_tracker_forward_non_drivable_rear_margin_m)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
       <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
