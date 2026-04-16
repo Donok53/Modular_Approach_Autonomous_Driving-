@@ -493,28 +493,6 @@ Visualization Manager:
       Namespaces: {}
       Queue Size: 20
       Value: true
-    - Alpha: 0.25
-      Class: rviz/Map
-      Color Scheme: costmap
-      Draw Behind: true
-      Enabled: true
-      Name: persistent_obstacle_grid
-      Topic: /perception/persistent_obstacle_grid
-      Unreliable: false
-      Use Timestamp: false
-      Value: true
-    - Class: rviz/MarkerArray
-      Enabled: true
-      Marker Topic: /perception/persistent_obstacle_detector_markers
-      Name: persistent_obstacle_detector
-      Namespaces:
-        cluster_boxes: true
-        cluster_labels: true
-        confirmed_cells: true
-        provisional_cells: true
-        velocity: true
-      Queue Size: 20
-      Value: true
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /perception/tracked_objects_markers
