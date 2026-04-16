@@ -104,11 +104,20 @@ class CloudClusterTracker:
         self.known_map_subtraction_radius_m = max(
             0.0, float(rospy.get_param("~known_map_subtraction_radius_m", 0.30))
         )
+        self.allow_out_of_grid_clusters = bool(
+            rospy.get_param("~allow_out_of_grid_clusters", True)
+        )
+        self.grid_relaxation_distance_m = max(
+            0.0, float(rospy.get_param("~grid_relaxation_distance_m", 10.0))
+        )
         self.free_space_support_radius_m = max(
             0.0, float(rospy.get_param("~free_space_support_radius_m", 0.35))
         )
         self.free_space_support_min_cells = max(
             1, int(rospy.get_param("~free_space_support_min_cells", 3))
+        )
+        self.far_field_free_space_support_min_cells = max(
+            1, int(rospy.get_param("~far_field_free_space_support_min_cells", 1))
         )
 
         self.odom_x = 0.0
@@ -128,7 +137,7 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm free_support=%.2fm/%dcells far_support=%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
@@ -153,8 +162,11 @@ class CloudClusterTracker:
             "on" if self.publish_static_large_obstacles else "off",
             "on" if self.known_map_subtraction_enabled else "off",
             self.known_map_subtraction_radius_m,
+            "on" if self.allow_out_of_grid_clusters else "off",
+            self.grid_relaxation_distance_m,
             self.free_space_support_radius_m,
             self.free_space_support_min_cells,
+            self.far_field_free_space_support_min_cells,
         )
 
     def odom_callback(self, msg):
@@ -174,6 +186,9 @@ class CloudClusterTracker:
         mx = self.odom_x + c * x - s * y
         my = self.odom_y + s * x + c * y
         return mx, my
+
+    def _map_distance_from_robot(self, x, y):
+        return math.hypot(float(x) - self.odom_x, float(y) - self.odom_y)
 
     @staticmethod
     def _world_to_grid(g, x, y):
@@ -213,7 +228,13 @@ class CloudClusterTracker:
                 if self._grid_cell_is_drivable_free(g, gx, gy):
                     continue
                 return True
-        return not saw_in_bounds
+        if saw_in_bounds:
+            return False
+        if not self.allow_out_of_grid_clusters:
+            return True
+        return self._map_distance_from_robot(
+            cluster["x"], cluster["y"]
+        ) < self.grid_relaxation_distance_m
 
     def _pose_has_free_space_support(self, x, y):
         if (not self.known_map_subtraction_enabled) or self.drivable_grid is None:
@@ -221,8 +242,20 @@ class CloudClusterTracker:
 
         g = self.drivable_grid
         gx, gy = self._world_to_grid(g, x, y)
+        range_m = self._map_distance_from_robot(x, y)
+        far_field_relaxed = (
+            self.allow_out_of_grid_clusters
+            and range_m >= self.grid_relaxation_distance_m
+        )
         if not self._in_bounds(g, gx, gy):
-            return False
+            return far_field_relaxed
+
+        required_free_cells = self.free_space_support_min_cells
+        if far_field_relaxed:
+            required_free_cells = min(
+                required_free_cells, self.far_field_free_space_support_min_cells
+            )
+        required_free_cells = max(1, required_free_cells)
 
         radius_cells = int(
             math.ceil(self.free_space_support_radius_m / float(g.info.resolution))
@@ -234,9 +267,9 @@ class CloudClusterTracker:
                     continue
                 if self._grid_cell_is_drivable_free(g, nx, ny):
                     free_cells += 1
-                    if free_cells >= self.free_space_support_min_cells:
+                    if free_cells >= required_free_cells:
                         return True
-        return False
+        return far_field_relaxed and free_cells > 0
 
     def _extract_clusters(self, msg):
         if not self.have_odom:

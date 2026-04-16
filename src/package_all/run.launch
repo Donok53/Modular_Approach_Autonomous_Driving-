@@ -120,7 +120,7 @@
   <arg name="teb_slowdown_side_margin" default="0.08"/>
   <arg name="teb_slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
-  <arg name="teb_filter_max_range_m" default="10.0"/>
+  <arg name="teb_filter_max_range_m" default="$(eval '20.0' if str(arg('real_mode')).lower() == 'true' else '10.0')"/>
   <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
   <arg name="teb_filter_self_margin_m" default="0.11"/>
   <arg name="teb_filter_self_padding_m" default="0.03"/>
@@ -299,12 +299,13 @@
   <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
   <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="6.0"/>
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
-  <arg name="global_pointcloud_overlay_max_range_m" default="10.0"/>
+  <arg name="global_pointcloud_overlay_max_range_m" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '10.0')"/>
   <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
   <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.06"/>
-  <arg name="global_pointcloud_overlay_lookahead_m" default="10.0"/>
+  <arg name="global_pointcloud_overlay_lookahead_m" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '10.0')"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
+  <arg name="global_obstacle_overlay_obstacle_max_range_m" default="$(eval '20.0' if str(arg('real_mode')).lower() == 'true' else '12.0')"/>
   <arg name="dynamic_speed_thresh_mps" default="0.08"/>
   <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
   <arg name="prediction_horizon_s" default="2.2"/>
@@ -359,8 +360,11 @@
   <arg name="cloud_tracker_recent_dynamic_hold_s" default="2.5"/>
   <arg name="cloud_tracker_recent_dynamic_velocity_decay" default="0.65"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
+  <arg name="cloud_tracker_allow_out_of_grid_clusters" default="true"/>
+  <arg name="cloud_tracker_grid_relaxation_distance_m" default="$(eval '10.0' if str(arg('real_mode')).lower() == 'true' else '8.0')"/>
   <arg name="cloud_tracker_free_space_support_radius_m" default="0.35"/>
   <arg name="cloud_tracker_free_space_support_min_cells" default="3"/>
+  <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -620,6 +624,7 @@
       <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
+      <arg name="global_obstacle_overlay_obstacle_max_range_m" value="$(arg global_obstacle_overlay_obstacle_max_range_m)"/>
       <arg name="global_pointcloud_overlay_static_lock_keep_range_m" value="$(arg global_pointcloud_overlay_static_lock_keep_range_m)"/>
       <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
@@ -783,8 +788,11 @@
       <arg name="cloud_tracker_recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <arg name="cloud_tracker_recent_dynamic_velocity_decay" value="$(arg cloud_tracker_recent_dynamic_velocity_decay)"/>
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="cloud_tracker_allow_out_of_grid_clusters" value="$(arg cloud_tracker_allow_out_of_grid_clusters)"/>
+      <arg name="cloud_tracker_grid_relaxation_distance_m" value="$(arg cloud_tracker_grid_relaxation_distance_m)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
+      <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
@@ -935,6 +943,7 @@
       <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
+      <arg name="global_obstacle_overlay_obstacle_max_range_m" value="$(arg global_obstacle_overlay_obstacle_max_range_m)"/>
       <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
@@ -1002,8 +1011,11 @@
       <arg name="cloud_tracker_recent_dynamic_hold_s" value="$(arg cloud_tracker_recent_dynamic_hold_s)"/>
       <arg name="cloud_tracker_recent_dynamic_velocity_decay" value="$(arg cloud_tracker_recent_dynamic_velocity_decay)"/>
       <arg name="cloud_tracker_position_jitter_m" value="$(arg cloud_tracker_position_jitter_m)"/>
+      <arg name="cloud_tracker_allow_out_of_grid_clusters" value="$(arg cloud_tracker_allow_out_of_grid_clusters)"/>
+      <arg name="cloud_tracker_grid_relaxation_distance_m" value="$(arg cloud_tracker_grid_relaxation_distance_m)"/>
       <arg name="cloud_tracker_free_space_support_radius_m" value="$(arg cloud_tracker_free_space_support_radius_m)"/>
       <arg name="cloud_tracker_free_space_support_min_cells" value="$(arg cloud_tracker_free_space_support_min_cells)"/>
+      <arg name="cloud_tracker_far_field_free_space_support_min_cells" value="$(arg cloud_tracker_far_field_free_space_support_min_cells)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
