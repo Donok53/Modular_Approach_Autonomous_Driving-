@@ -107,7 +107,7 @@ class DWAControl:
             rospy.get_param("~stop_distance", 0.6),
         )
         self.avoidance_hard_stop_distance = max(
-            0.05, float(rospy.get_param("~avoidance_hard_stop_distance", 0.20))
+            0.05, float(rospy.get_param("~avoidance_hard_stop_distance", 0.30))
         )
         self.obstacle_influence_distance = rospy.get_param("~obstacle_influence_distance", 1.8)
         legacy_robot_radius = float(rospy.get_param("~robot_radius", 0.35))
@@ -135,7 +135,7 @@ class DWAControl:
         )
         self.stop_width = rospy.get_param("~stop_width", self.robot_width_m)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
-        self.max_z = rospy.get_param("~max_z", 1.5)
+        self.max_z = rospy.get_param("~max_z", 2.2)
         self.self_filter_margin_m = max(
             0.0, float(rospy.get_param("~self_filter_margin_m", 0.08))
         )
@@ -164,11 +164,11 @@ class DWAControl:
             0.05, float(rospy.get_param("~emergency_bin_size_m", 0.10))
         )
         self.emergency_min_close_points = max(
-            1, int(rospy.get_param("~emergency_min_close_points", 4))
+            1, int(rospy.get_param("~emergency_min_close_points", 2))
         )
         self.emergency_immediate_contact_min_points = max(
             1,
-            int(rospy.get_param("~emergency_immediate_contact_min_points", 3)),
+            int(rospy.get_param("~emergency_immediate_contact_min_points", 1)),
         )
         self.emergency_passable_width_m = max(
             0.10,

@@ -176,7 +176,7 @@ class ConstrainedLocalReplanner:
             0.0, float(rospy.get_param("~blocking_obstacles_marker_lifetime_s", 0.8))
         )
         self.obstacle_min_z = float(rospy.get_param("~obstacle_min_z", -0.15))
-        self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 1.5))
+        self.obstacle_max_z = float(rospy.get_param("~obstacle_max_z", 2.2))
         self.enable_slope_compensation = bool(
             rospy.get_param("~enable_slope_compensation", True)
         )

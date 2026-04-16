@@ -109,6 +109,13 @@ class DynamicRiskManager:
             self.pedestrian_stop_distance_m,
             float(rospy.get_param("~pedestrian_caution_distance_m", 2.00)),
         )
+        self.static_stop_distance_m = max(
+            0.1, float(rospy.get_param("~static_stop_distance_m", 1.10))
+        )
+        self.static_caution_distance_m = max(
+            self.static_stop_distance_m,
+            float(rospy.get_param("~static_caution_distance_m", 2.00)),
+        )
         self.dynamic_speed_thresh_mps = max(
             0.01, float(rospy.get_param("~dynamic_speed_thresh_mps", 0.15))
         )
@@ -521,12 +528,20 @@ class DynamicRiskManager:
             stop_ttc = self.ped_stop_ttc_s if is_ped else self.vehicle_stop_ttc_s
             lateral_stop = self.front_lateral_stop_m
             lateral_caution = self.front_lateral_caution_m
+            static_distance_stop = (not is_dynamic) and (dist <= self.static_stop_distance_m)
+            static_distance_caution = (not is_dynamic) and (
+                dist <= self.static_caution_distance_m
+            )
 
             stop_hit = rx >= 0.0 and abs(ry) <= lateral_stop and (
-                ttc <= stop_ttc or (is_ped and dist <= self.pedestrian_stop_distance_m)
+                ttc <= stop_ttc
+                or (is_ped and dist <= self.pedestrian_stop_distance_m)
+                or static_distance_stop
             )
             caution_hit = rx >= 0.0 and abs(ry) <= lateral_caution and (
-                ttc <= self.caution_ttc_s or (is_ped and dist <= self.pedestrian_caution_distance_m)
+                ttc <= self.caution_ttc_s
+                or (is_ped and dist <= self.pedestrian_caution_distance_m)
+                or static_distance_caution
             )
             cross_path_ttc = float("inf")
             if self.cross_path_vehicle_caution_enabled and is_vehicle and is_dynamic:
@@ -553,6 +568,11 @@ class DynamicRiskManager:
                         stop_reason = "ped_distance_stop:{:.2f}m".format(dist)
                     elif is_ped and not math.isfinite(ttc):
                         stop_reason = "ped_distance_stop:{:.2f}m".format(dist)
+                    elif static_distance_stop and (not is_ped):
+                        stop_reason = "static_distance_stop:{}:{:.2f}m".format(
+                            obj.label if obj.label else "obj",
+                            dist,
+                        )
                     else:
                         stop_reason = "ttc_stop:{}:{:.2f}s".format(
                             obj.label if obj.label else "obj", ttc
@@ -578,6 +598,11 @@ class DynamicRiskManager:
                     candidate_caution_reason = "ped_distance_caution:{:.2f}m".format(dist)
                 elif is_ped and not math.isfinite(ttc):
                     candidate_caution_reason = "ped_distance_caution:{:.2f}m".format(dist)
+                elif static_distance_caution and (not is_ped):
+                    candidate_caution_reason = "static_distance_caution:{}:{:.2f}m".format(
+                        obj.label if obj.label else "obj",
+                        dist,
+                    )
                 else:
                     candidate_caution_reason = "ttc_caution"
                 if caution_ttc is None or candidate_caution_ttc < caution_ttc:

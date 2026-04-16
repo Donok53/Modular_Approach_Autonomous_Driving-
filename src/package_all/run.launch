@@ -227,7 +227,7 @@
   <arg name="rotate_exit_deg" default="40.0"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
-  <arg name="avoidance_hard_stop_distance" default="0.20"/>
+  <arg name="avoidance_hard_stop_distance" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
   <arg name="pointcloud_static_block_margin_m" default="0.06"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
@@ -335,7 +335,9 @@
   <arg name="cross_path_vehicle_min_relative_speed_mps" default="0.50"/>
   <arg name="pedestrian_stop_distance_m" default="1.05"/>
   <arg name="pedestrian_caution_distance_m" default="2.00"/>
-  <arg name="behavior_stop_on_count" default="4"/>
+  <arg name="static_stop_distance_m" default="$(eval '1.30' if str(arg('real_mode')).lower() == 'true' else '1.10')"/>
+  <arg name="static_caution_distance_m" default="$(eval '2.20' if str(arg('real_mode')).lower() == 'true' else '2.00')"/>
+  <arg name="behavior_stop_on_count" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
   <arg name="behavior_stop_off_count" default="4"/>
   <arg name="behavior_stop_hold_s" default="0.25"/>
   <arg name="cloud_tracker_max_range_m" default="25.0"/>
@@ -349,6 +351,8 @@
   <arg name="cloud_tracker_vel_alpha" default="0.25"/>
   <arg name="cloud_tracker_static_speed_thresh_mps" default="0.12"/>
   <arg name="cloud_tracker_dynamic_min_age" default="3"/>
+  <arg name="cloud_tracker_publish_static_persons" default="true"/>
+  <arg name="cloud_tracker_publish_static_large_obstacles" default="true"/>
   <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" default="0.06"/>
   <arg name="cloud_tracker_pedestrian_dynamic_min_age" default="2"/>
   <arg name="cloud_tracker_pedestrian_dynamic_min_displacement_m" default="0.14"/>
@@ -369,12 +373,12 @@
   <arg name="static_risk_min_area_m2" default="1.2"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
-  <arg name="emergency_stop_distance" default="0.35"/>
+  <arg name="emergency_stop_distance" default="$(eval '0.50' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
   <arg name="emergency_bin_size_m" default="0.10"/>
-  <arg name="emergency_min_close_points" default="4"/>
-  <arg name="emergency_immediate_contact_min_points" default="3"/>
+  <arg name="emergency_min_close_points" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
+  <arg name="emergency_immediate_contact_min_points" default="$(eval '1' if str(arg('real_mode')).lower() == 'true' else '3')"/>
   <arg name="emergency_passable_width_m" default="0.62"/>
-  <arg name="block_on_count" default="4"/>
+  <arg name="block_on_count" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
   <arg name="block_off_count" default="4"/>
   <arg name="obstacle_consider_side_m" default="0.80"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
@@ -755,6 +759,8 @@
       <arg name="cross_path_vehicle_min_relative_speed_mps" value="$(arg cross_path_vehicle_min_relative_speed_mps)"/>
       <arg name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
       <arg name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
+      <arg name="static_stop_distance_m" value="$(arg static_stop_distance_m)"/>
+      <arg name="static_caution_distance_m" value="$(arg static_caution_distance_m)"/>
       <arg name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
       <arg name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
       <arg name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
@@ -769,6 +775,8 @@
       <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
       <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+      <arg name="cloud_tracker_publish_static_persons" value="$(arg cloud_tracker_publish_static_persons)"/>
+      <arg name="cloud_tracker_publish_static_large_obstacles" value="$(arg cloud_tracker_publish_static_large_obstacles)"/>
       <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
       <arg name="cloud_tracker_pedestrian_dynamic_min_displacement_m" value="$(arg cloud_tracker_pedestrian_dynamic_min_displacement_m)"/>
@@ -970,6 +978,8 @@
       <arg name="cross_path_vehicle_min_relative_speed_mps" value="$(arg cross_path_vehicle_min_relative_speed_mps)"/>
       <arg name="pedestrian_stop_distance_m" value="$(arg pedestrian_stop_distance_m)"/>
       <arg name="pedestrian_caution_distance_m" value="$(arg pedestrian_caution_distance_m)"/>
+      <arg name="static_stop_distance_m" value="$(arg static_stop_distance_m)"/>
+      <arg name="static_caution_distance_m" value="$(arg static_caution_distance_m)"/>
       <arg name="behavior_stop_on_count" value="$(arg behavior_stop_on_count)"/>
       <arg name="behavior_stop_off_count" value="$(arg behavior_stop_off_count)"/>
       <arg name="behavior_stop_hold_s" value="$(arg behavior_stop_hold_s)"/>
@@ -984,6 +994,8 @@
       <arg name="cloud_tracker_vel_alpha" value="$(arg cloud_tracker_vel_alpha)"/>
       <arg name="cloud_tracker_static_speed_thresh_mps" value="$(arg cloud_tracker_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_dynamic_min_age" value="$(arg cloud_tracker_dynamic_min_age)"/>
+      <arg name="cloud_tracker_publish_static_persons" value="$(arg cloud_tracker_publish_static_persons)"/>
+      <arg name="cloud_tracker_publish_static_large_obstacles" value="$(arg cloud_tracker_publish_static_large_obstacles)"/>
       <arg name="cloud_tracker_pedestrian_static_speed_thresh_mps" value="$(arg cloud_tracker_pedestrian_static_speed_thresh_mps)"/>
       <arg name="cloud_tracker_pedestrian_dynamic_min_age" value="$(arg cloud_tracker_pedestrian_dynamic_min_age)"/>
       <arg name="cloud_tracker_pedestrian_dynamic_min_displacement_m" value="$(arg cloud_tracker_pedestrian_dynamic_min_displacement_m)"/>

@@ -16,7 +16,7 @@ class TebObstacleCloudFilter:
             rospy.get_param("~odom_topic", "/lio_localizer/odometry/planning")
         ).strip()
         self.min_z = float(rospy.get_param("~min_z", -0.05))
-        self.max_z = float(rospy.get_param("~max_z", 1.50))
+        self.max_z = float(rospy.get_param("~max_z", 2.20))
         self.enable_slope_compensation = bool(
             rospy.get_param("~enable_slope_compensation", True)
         )

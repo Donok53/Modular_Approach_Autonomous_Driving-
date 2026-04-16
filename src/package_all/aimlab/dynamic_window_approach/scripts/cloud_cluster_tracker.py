@@ -23,7 +23,7 @@ class CloudClusterTracker:
         )
 
         self.min_z = float(rospy.get_param("~min_z", -0.4))
-        self.max_z = float(rospy.get_param("~max_z", 1.7))
+        self.max_z = float(rospy.get_param("~max_z", 2.2))
         self.max_range_m = float(rospy.get_param("~max_range_m", 25.0))
         self.downsample = max(1, int(rospy.get_param("~downsample", 5)))
         self.cell_size_m = max(0.1, float(rospy.get_param("~cell_size_m", 0.40)))
@@ -41,6 +41,12 @@ class CloudClusterTracker:
         # to create false "static_vehicle" behavior stops from walls or map
         # structures when localization jitters.
         self.publish_static = bool(rospy.get_param("~publish_static", False))
+        self.publish_static_persons = bool(
+            rospy.get_param("~publish_static_persons", True)
+        )
+        self.publish_static_large_obstacles = bool(
+            rospy.get_param("~publish_static_large_obstacles", True)
+        )
         self.static_speed_thresh_mps = max(0.01, float(rospy.get_param("~static_speed_thresh_mps", 0.15)))
         self.dynamic_min_age = max(1, int(rospy.get_param("~dynamic_min_age", 4)))
         self.pedestrian_static_speed_thresh_mps = max(
@@ -122,11 +128,13 @@ class CloudClusterTracker:
         self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
+            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm free_support=%.2fm/%dcells",
             self.pointcloud_topic,
             self.odom_topic,
             self.drivable_grid_topic,
             self.output_topic,
+            self.min_z,
+            self.max_z,
             self.max_range_m,
             self.downsample,
             self.cell_size_m,
@@ -140,6 +148,9 @@ class CloudClusterTracker:
             self.recent_dynamic_hold_s,
             self.dynamic_assoc_bonus_m,
             self.recent_dynamic_velocity_decay,
+            "on" if self.publish_static else "off",
+            "on" if self.publish_static_persons else "off",
+            "on" if self.publish_static_large_obstacles else "off",
             "on" if self.known_map_subtraction_enabled else "off",
             self.known_map_subtraction_radius_m,
             self.free_space_support_radius_m,
@@ -403,6 +414,23 @@ class CloudClusterTracker:
         text = (label or "").lower()
         return ("ped" in text) or ("person" in text) or ("walker" in text)
 
+    @staticmethod
+    def _is_large_static_track(track):
+        size_x = max(0.0, float(track.get("size_x", 0.0)))
+        size_y = max(0.0, float(track.get("size_y", 0.0)))
+        span = max(size_x, size_y)
+        area = size_x * size_y
+        return span >= 1.0 or area >= 0.8
+
+    def _should_publish_static_track(self, label, track):
+        if self.publish_static:
+            return True
+        if self._is_person_like_label(label):
+            return self.publish_static_persons
+        if self.publish_static_large_obstacles and self._is_large_static_track(track):
+            return True
+        return False
+
     def _dynamic_min_displacement_for_label(self, label):
         if self._is_person_like_label(label):
             return self.pedestrian_dynamic_min_displacement_m
@@ -486,7 +514,11 @@ class CloudClusterTracker:
                     and (stamp_sec - float(t.get("last_dynamic_t", 0.0))) <= self.recent_dynamic_hold_s
                 )
             )
-            if (not self.publish_static) and effective_speed < static_speed_thresh and not recent_dynamic:
+            if (
+                effective_speed < static_speed_thresh
+                and (not recent_dynamic)
+                and (not self._should_publish_static_track(raw_label, t))
+            ):
                 continue
             if not self._pose_has_free_space_support(t["x"], t["y"]):
                 continue
