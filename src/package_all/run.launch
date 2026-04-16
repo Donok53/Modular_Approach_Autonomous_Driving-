@@ -26,8 +26,6 @@
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="cloud_tracker_pointcloud_topic" default="$(eval '/lio_sam/deskew/cloud_deskewed' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/cloud_deskewed')"/>
-  <arg name="filtered_obstacle_topic" default="/move_base/filtered_obstacles"/>
-  <arg name="enable_custom_obstacle_cloud_filter" default="true"/>
   <arg name="use_drivable_grid" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
@@ -584,17 +582,6 @@
   </group>
 
   <group if="$(eval arg('local_planner_mode') == 'custom')">
-    <group if="$(arg enable_custom_obstacle_cloud_filter)">
-      <node pkg="dynamic_window_approach" type="teb_obstacle_cloud_filter.py" name="custom_obstacle_cloud_filter" output="screen" respawn="false">
-        <param name="input_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
-        <param name="output_topic" value="$(arg filtered_obstacle_topic)"/>
-        <param name="odom_topic" value="$(arg pose_topic)"/>
-        <param name="max_range" value="$(arg teb_filter_max_range_m)"/>
-        <param name="lateral_limit_y" value="$(arg teb_filter_lateral_limit_y_m)"/>
-        <param name="self_filter_padding_m" value="$(arg teb_filter_self_padding_m)"/>
-      </node>
-    </group>
-
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
       <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
@@ -603,7 +590,7 @@
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
-      <arg name="obstacle_pointcloud_topic" value="$(eval arg('filtered_obstacle_topic') if str(arg('enable_custom_obstacle_cloud_filter')).lower() == 'true' else arg('cloud_tracker_pointcloud_topic'))"/>
+      <arg name="obstacle_pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
