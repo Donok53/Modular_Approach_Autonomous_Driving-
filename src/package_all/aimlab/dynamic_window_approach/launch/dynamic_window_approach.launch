@@ -116,12 +116,14 @@
     <arg name="path_tracking_goal_bearing_gain" default="0.45"/>
     <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
     <arg name="path_tracking_target_step_m" default="0.18"/>
+    <arg name="path_tracking_tangent_window_m" default="0.60"/>
     <arg name="path_tracking_crawl_speed" default="0.10"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
     <arg name="final_approach_window_m" default="2.5"/>
     <arg name="final_speed_k" default="0.75"/>
     <arg name="final_speed_min" default="0.22"/>
     <arg name="path_tracking_stop_distance_m" default="0.80"/>
+    <arg name="path_tracking_goal_yaw_rate_max_deg" default="25.0"/>
     <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.45"/>
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.90"/>
     <arg name="rotate_only_deg" default="110.0"/>
@@ -131,6 +133,8 @@
     <arg name="forward_motion_deadband" default="0.01"/>
     <arg name="min_forward_cmd" default="0.12"/>
     <arg name="min_forward_cmd_distance" default="0.60"/>
+    <arg name="cruise_min_speed" default="0.0"/>
+    <arg name="cruise_distance_m" default="2.5"/>
     <arg name="avoidance_hard_stop_distance" default="0.20"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
     <arg name="pointcloud_static_block_margin_m" default="0.08"/>
@@ -584,6 +588,7 @@
         <param name="path_tracking_goal_bearing_gain" value="$(arg path_tracking_goal_bearing_gain)"/>
         <param name="path_tracking_goal_bearing_cap_deg" value="$(arg path_tracking_goal_bearing_cap_deg)"/>
         <param name="path_tracking_target_step_m" value="$(arg path_tracking_target_step_m)"/>
+        <param name="path_tracking_tangent_window_m" value="$(arg path_tracking_tangent_window_m)"/>
         <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
         <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
         <param name="final_approach_window_m" value="$(arg final_approach_window_m)"/>
@@ -591,6 +596,7 @@
         <param name="final_speed_min" value="$(arg final_speed_min)"/>
         <param name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
         <param name="path_tracking_stop_distance_m" value="$(arg path_tracking_stop_distance_m)"/>
+        <param name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
         <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
         <param name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
@@ -599,6 +605,8 @@
         <param name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>
         <param name="min_forward_cmd" value="$(arg min_forward_cmd)"/>
         <param name="min_forward_cmd_distance" value="$(arg min_forward_cmd_distance)"/>
+        <param name="cruise_min_speed" value="$(arg cruise_min_speed)"/>
+        <param name="cruise_distance_m" value="$(arg cruise_distance_m)"/>
         <param name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
         <param name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
         <param name="emergency_bin_size_m" value="$(arg emergency_bin_size_m)"/>
