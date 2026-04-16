@@ -51,6 +51,12 @@
     <arg name="novel_obstacle_cloud_map_topic" default="/perception/novel_obstacle_cloud_map"/>
     <arg name="novel_obstacle_min_z" default="-0.35"/>
     <arg name="novel_obstacle_max_z" default="2.20"/>
+    <arg name="novel_obstacle_enable_slope_compensation" default="true"/>
+    <arg name="novel_obstacle_slope_compensation_max_abs_deg" default="25.0"/>
+    <arg name="novel_obstacle_enable_ground_band_rejection" default="true"/>
+    <arg name="novel_obstacle_lidar_height_m" default="0.46"/>
+    <arg name="novel_obstacle_ground_reject_min_m" default="-0.20"/>
+    <arg name="novel_obstacle_ground_reject_max_m" default="0.04"/>
     <arg name="novel_obstacle_max_range_m" default="20.0"/>
     <arg name="novel_obstacle_input_downsample" default="2"/>
     <arg name="novel_obstacle_map_downsample" default="1"/>
@@ -342,6 +348,12 @@
             <param name="output_map_cloud_topic" value="$(arg novel_obstacle_cloud_map_topic)"/>
             <param name="min_z" value="$(arg novel_obstacle_min_z)"/>
             <param name="max_z" value="$(arg novel_obstacle_max_z)"/>
+            <param name="enable_slope_compensation" value="$(arg novel_obstacle_enable_slope_compensation)"/>
+            <param name="slope_compensation_max_abs_deg" value="$(arg novel_obstacle_slope_compensation_max_abs_deg)"/>
+            <param name="enable_ground_band_rejection" value="$(arg novel_obstacle_enable_ground_band_rejection)"/>
+            <param name="lidar_height_m" value="$(arg novel_obstacle_lidar_height_m)"/>
+            <param name="ground_reject_min_m" value="$(arg novel_obstacle_ground_reject_min_m)"/>
+            <param name="ground_reject_max_m" value="$(arg novel_obstacle_ground_reject_max_m)"/>
             <param name="max_range_m" value="$(arg novel_obstacle_max_range_m)"/>
             <param name="input_downsample" value="$(arg novel_obstacle_input_downsample)"/>
             <param name="map_downsample" value="$(arg novel_obstacle_map_downsample)"/>

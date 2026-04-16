@@ -375,6 +375,12 @@
   <arg name="cloud_tracker_far_field_free_space_support_min_cells" default="1"/>
   <arg name="novel_obstacle_min_z" default="-0.35"/>
   <arg name="novel_obstacle_max_z" default="2.20"/>
+  <arg name="novel_obstacle_enable_slope_compensation" default="true"/>
+  <arg name="novel_obstacle_slope_compensation_max_abs_deg" default="25.0"/>
+  <arg name="novel_obstacle_enable_ground_band_rejection" default="true"/>
+  <arg name="novel_obstacle_lidar_height_m" default="0.46"/>
+  <arg name="novel_obstacle_ground_reject_min_m" default="-0.20"/>
+  <arg name="novel_obstacle_ground_reject_max_m" default="0.04"/>
   <arg name="novel_obstacle_max_range_m" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '12.0')"/>
   <arg name="novel_obstacle_input_downsample" default="2"/>
   <arg name="novel_obstacle_map_downsample" default="1"/>
@@ -618,6 +624,12 @@
       <arg name="novel_obstacle_cloud_map_topic" value="$(arg novel_obstacle_cloud_map_topic)"/>
       <arg name="novel_obstacle_min_z" value="$(arg novel_obstacle_min_z)"/>
       <arg name="novel_obstacle_max_z" value="$(arg novel_obstacle_max_z)"/>
+      <arg name="novel_obstacle_enable_slope_compensation" value="$(arg novel_obstacle_enable_slope_compensation)"/>
+      <arg name="novel_obstacle_slope_compensation_max_abs_deg" value="$(arg novel_obstacle_slope_compensation_max_abs_deg)"/>
+      <arg name="novel_obstacle_enable_ground_band_rejection" value="$(arg novel_obstacle_enable_ground_band_rejection)"/>
+      <arg name="novel_obstacle_lidar_height_m" value="$(arg novel_obstacle_lidar_height_m)"/>
+      <arg name="novel_obstacle_ground_reject_min_m" value="$(arg novel_obstacle_ground_reject_min_m)"/>
+      <arg name="novel_obstacle_ground_reject_max_m" value="$(arg novel_obstacle_ground_reject_max_m)"/>
       <arg name="novel_obstacle_max_range_m" value="$(arg novel_obstacle_max_range_m)"/>
       <arg name="novel_obstacle_input_downsample" value="$(arg novel_obstacle_input_downsample)"/>
       <arg name="novel_obstacle_map_downsample" value="$(arg novel_obstacle_map_downsample)"/>
