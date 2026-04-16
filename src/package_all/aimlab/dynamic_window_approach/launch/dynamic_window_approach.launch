@@ -99,6 +99,8 @@
     <arg name="lookahead_distance" default="1.00"/>
     <arg name="snap_lat_err" default="0.20"/>
     <arg name="snap_target_ahead_m" default="0.60"/>
+    <arg name="tracking_projection_back_window_m" default="0.35"/>
+    <arg name="tracking_projection_forward_window_m" default="1.20"/>
     <arg name="tracking_path_smoothing_passes" default="3"/>
     <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
     <arg name="path_tracking_in_place_yaw_rate_max_deg" default="45.0"/>
@@ -546,6 +548,8 @@
         <param name="lookahead_distance" value="$(arg lookahead_distance)"/>
         <param name="snap_lat_err" value="$(arg snap_lat_err)"/>
         <param name="snap_target_ahead_m" value="$(arg snap_target_ahead_m)"/>
+        <param name="tracking_projection_back_window_m" value="$(arg tracking_projection_back_window_m)"/>
+        <param name="tracking_projection_forward_window_m" value="$(arg tracking_projection_forward_window_m)"/>
         <param name="tracking_path_smoothing_passes" value="$(arg tracking_path_smoothing_passes)"/>
         <param name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
         <param name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>

@@ -180,10 +180,12 @@
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.35' if arg('real_mode') == 'true' else '0.25')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
-  <arg name="lookahead_distance" default="$(eval '0.70' if arg('real_mode') == 'true' else '1.00')"/>
+  <arg name="lookahead_distance" default="$(eval '0.55' if arg('real_mode') == 'true' else '1.00')"/>
   <arg name="snap_lat_err" default="0.20"/>
   <arg name="snap_target_ahead_m" default="0.60"/>
-  <arg name="tracking_path_smoothing_passes" default="3"/>
+  <arg name="tracking_projection_back_window_m" default="0.35"/>
+  <arg name="tracking_projection_forward_window_m" default="$(eval '1.10' if arg('real_mode') == 'true' else '1.50')"/>
+  <arg name="tracking_path_smoothing_passes" default="$(eval '0' if arg('real_mode') == 'true' else '3')"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '40.0' if arg('real_mode') == 'true' else '55.0')"/>
   <arg name="path_tracking_in_place_yaw_rate_max_deg" default="$(eval '28.0' if arg('real_mode') == 'true' else '45.0')"/>
   <arg name="path_tracking_yaw_accel_max_deg" default="180.0"/>
@@ -587,6 +589,8 @@
       <arg name="lookahead_distance" value="$(arg lookahead_distance)"/>
       <arg name="snap_lat_err" value="$(arg snap_lat_err)"/>
       <arg name="snap_target_ahead_m" value="$(arg snap_target_ahead_m)"/>
+      <arg name="tracking_projection_back_window_m" value="$(arg tracking_projection_back_window_m)"/>
+      <arg name="tracking_projection_forward_window_m" value="$(arg tracking_projection_forward_window_m)"/>
       <arg name="tracking_path_smoothing_passes" value="$(arg tracking_path_smoothing_passes)"/>
       <arg name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
       <arg name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>

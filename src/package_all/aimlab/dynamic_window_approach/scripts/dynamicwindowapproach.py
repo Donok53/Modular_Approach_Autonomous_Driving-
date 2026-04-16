@@ -231,6 +231,13 @@ class DWAControl:
         self.snap_target_ahead_m = max(
             0.0, float(rospy.get_param("~snap_target_ahead_m", 0.40))
         )
+        self.tracking_projection_back_window_m = max(
+            0.0, float(rospy.get_param("~tracking_projection_back_window_m", 0.35))
+        )
+        self.tracking_projection_forward_window_m = max(
+            self.lookahead_distance,
+            float(rospy.get_param("~tracking_projection_forward_window_m", 1.20))
+        )
         self.tracking_path_smoothing_passes = max(
             0, int(rospy.get_param("~tracking_path_smoothing_passes", 2))
         )
@@ -704,7 +711,14 @@ class DWAControl:
         try:
             px = float(self.current_pose.pose.pose.position.x)
             py = float(self.current_pose.pose.pose.position.y)
-            s_proj, _lat_err, _idx, _t = self._project_to_path(px, py)
+            s_min = max(0.0, self.s_cur - self.tracking_projection_back_window_m)
+            s_max = min(self.s_total, self.s_cur + self.tracking_projection_forward_window_m)
+            s_proj, _lat_err, _idx, _t = self._project_to_path(
+                px,
+                py,
+                s_min=s_min,
+                s_max=s_max,
+            )
             start_s = max(0.0, min(self.s_total, max(self.s_cur, s_proj)))
         except Exception:
             start_s = max(0.0, min(self.s_total, self.s_cur))
@@ -851,27 +865,43 @@ class DWAControl:
                               self.max_speed, math.degrees(self.max_yaw_rate))
 
     # ------------------------------- pure pursuit --------------------------------
-    def _project_to_path(self, x, y):
+    def _project_to_path(self, x, y, s_min=None, s_max=None):
         """Return (s_proj, lateral_err, seg_idx, t) where s is arc-length along path."""
         if len(self.path_pts) < 2:
             return 0.0, 0.0, 0, 0.0
-        best_s = 0.0
         best_d2 = 1e18
         best_i = 0
         best_t = 0.0
         best_px = self.path_pts[0][0]
         best_py = self.path_pts[0][1]
         for i in range(len(self.path_pts) - 1):
+            seg_s0 = self.cum_len[i]
+            seg_s1 = self.cum_len[i + 1]
+            seg_len = self.seg_lens[i]
+            if s_min is not None and seg_s1 < s_min:
+                continue
+            if s_max is not None and seg_s0 > s_max:
+                continue
             x0, y0 = self.path_pts[i]
             x1, y1 = self.path_pts[i + 1]
             vx, vy = x1 - x0, y1 - y0
             denom = vx * vx + vy * vy
             if denom < 1e-12:
-                t = 0.0
+                t_lo = 0.0
+                t_hi = 0.0
                 px, py = x0, y0
             else:
+                t_lo = 0.0
+                t_hi = 1.0
+                if seg_len > 1e-9:
+                    if s_min is not None:
+                        t_lo = max(t_lo, (s_min - seg_s0) / seg_len)
+                    if s_max is not None:
+                        t_hi = min(t_hi, (s_max - seg_s0) / seg_len)
+                if t_lo > t_hi:
+                    continue
                 t = ((x - x0) * vx + (y - y0) * vy) / denom
-                t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+                t = max(t_lo, min(t_hi, t))
                 px, py = x0 + t * vx, y0 + t * vy
             d2 = (x - px) ** 2 + (y - py) ** 2
             if d2 < best_d2:
@@ -880,6 +910,8 @@ class DWAControl:
                 best_t = t
                 best_px = px
                 best_py = py
+        if best_d2 >= 1e17 and (s_min is not None or s_max is not None):
+            return self._project_to_path(x, y)
         # arc-length at projection
         s_at_i = self.cum_len[best_i]
         s_proj = s_at_i + best_t * self.seg_lens[best_i]
@@ -929,7 +961,14 @@ class DWAControl:
         if not self.path_pts:
             return None, None, None, None, False, None, None
 
-        s_proj, lat_err, idx, t = self._project_to_path(pose_x, pose_y)
+        s_min = max(0.0, self.s_cur - self.tracking_projection_back_window_m)
+        s_max = min(self.s_total, self.s_cur + self.tracking_projection_forward_window_m)
+        s_proj, lat_err, idx, t = self._project_to_path(
+            pose_x,
+            pose_y,
+            s_min=s_min,
+            s_max=s_max,
+        )
 
         # enforce monotonic progress with tiny back jitter allowed
         if s_proj + self.back_jitter_m >= self.s_cur:
