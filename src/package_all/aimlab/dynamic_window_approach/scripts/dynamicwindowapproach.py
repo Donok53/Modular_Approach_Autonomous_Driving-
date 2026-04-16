@@ -196,6 +196,9 @@ class DWAControl:
                 "/planning/global_obstacle_overlay_boxes",
             )
         ).strip()
+        self.global_obstacle_overlay_stop_locked_only = bool(
+            rospy.get_param("~global_obstacle_overlay_stop_locked_only", True)
+        )
         self.global_obstacle_overlay_box_timeout_s = max(
             0.0,
             float(rospy.get_param("~global_obstacle_overlay_box_timeout_s", 1.5)),
@@ -519,6 +522,8 @@ class DWAControl:
         blocked = False
 
         for box in self.global_obstacle_overlay_boxes:
+            if self.global_obstacle_overlay_stop_locked_only and (not box.get("locked", False)):
+                continue
             local_min_x, local_max_x, local_min_y, local_max_y = self._world_box_to_local_bounds(
                 box,
                 pose.x,
@@ -1685,7 +1690,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s overlay_topic=%s footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s active_mux=%s behavior=%s drivable=%s risk=%s obstacle_avoid=on emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -1698,6 +1703,7 @@ class DWAControl:
             self.emergency_stop_distance,
             self.avoidance_hard_stop_distance,
             "on" if self.use_global_obstacle_overlay_boxes_for_stop else "off",
+            "on" if self.global_obstacle_overlay_stop_locked_only else "off",
             self.global_obstacle_overlay_boxes_topic if self.global_obstacle_overlay_boxes_topic else "-",
             self.robot_length_m,
             self.robot_width_m,

@@ -191,6 +191,7 @@
     <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
     <arg name="global_obstacle_overlay_boxes_topic" default="/planning/global_obstacle_overlay_boxes"/>
     <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
+    <arg name="global_obstacle_overlay_stop_locked_only" default="true"/>
     <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
     <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
     <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
@@ -548,6 +549,7 @@
         <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
         <param name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
         <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
+        <param name="global_obstacle_overlay_stop_locked_only" value="$(arg global_obstacle_overlay_stop_locked_only)"/>
         <param name="global_obstacle_overlay_box_timeout_s" value="$(arg global_obstacle_overlay_box_timeout_s)"/>
         <param name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
         <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
