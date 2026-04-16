@@ -108,6 +108,8 @@
     <arg name="path_tracking_cte_soft_mps" default="0.25"/>
     <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
     <arg name="path_tracking_heading_filter_gain" default="0.18"/>
+    <arg name="path_tracking_goal_bearing_gain" default="0.45"/>
+    <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
     <arg name="path_tracking_crawl_speed" default="0.10"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
     <arg name="path_tracking_stop_distance_m" default="0.80"/>
@@ -552,6 +554,8 @@
         <param name="path_tracking_cte_soft_mps" value="$(arg path_tracking_cte_soft_mps)"/>
         <param name="path_tracking_cte_yaw_cap_deg" value="$(arg path_tracking_cte_yaw_cap_deg)"/>
         <param name="path_tracking_heading_filter_gain" value="$(arg path_tracking_heading_filter_gain)"/>
+        <param name="path_tracking_goal_bearing_gain" value="$(arg path_tracking_goal_bearing_gain)"/>
+        <param name="path_tracking_goal_bearing_cap_deg" value="$(arg path_tracking_goal_bearing_cap_deg)"/>
         <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
         <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
         <param name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>

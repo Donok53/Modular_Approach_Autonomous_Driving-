@@ -267,6 +267,13 @@ class DWAControl:
             1.0,
             max(0.05, float(rospy.get_param("~path_tracking_heading_filter_gain", 0.18))),
         )
+        self.path_tracking_goal_bearing_gain = min(
+            1.0,
+            max(0.0, float(rospy.get_param("~path_tracking_goal_bearing_gain", 0.45))),
+        )
+        self.path_tracking_goal_bearing_cap = math.radians(
+            rospy.get_param("~path_tracking_goal_bearing_cap_deg", 35.0)
+        )
         self.path_tracking_crawl_speed = max(
             0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.10))
         )
@@ -884,6 +891,20 @@ class DWAControl:
 
     def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap, remaining_dist):
         path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
+        target_dx = float(goal_xy[0]) - float(x[0])
+        target_dy = float(goal_xy[1]) - float(x[1])
+        target_dist = math.hypot(target_dx, target_dy)
+        target_point_yaw = path_yaw_raw if target_dist <= 1e-6 else math.atan2(target_dy, target_dx)
+        goal_bearing_err = angdiff(target_point_yaw, path_yaw_raw)
+        goal_bearing_err = max(
+            -self.path_tracking_goal_bearing_cap,
+            min(self.path_tracking_goal_bearing_cap, goal_bearing_err),
+        )
+        goal_heading_weight = self.path_tracking_goal_bearing_gain
+        if abs(lat_err) > self.snap_lat_err:
+            goal_heading_weight = max(goal_heading_weight, 0.75)
+        if remaining_dist <= max(self.lookahead_distance * 1.5, 1.0):
+            goal_heading_weight = min(1.0, goal_heading_weight + 0.20)
         cte_correction = math.atan2(
             self.path_tracking_cte_gain * lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
@@ -892,10 +913,9 @@ class DWAControl:
             -self.path_tracking_cte_yaw_cap,
             min(self.path_tracking_cte_yaw_cap, cte_correction),
         )
-        # Track the preview tangent directly. The target point is already sampled
-        # ahead on the path, so adding another target-heading curvature term tends
-        # to double-count the correction and creates zig-zag on straight segments.
-        desired_yaw_raw = path_yaw_raw - cte_correction
+        # Blend the preview tangent with the actual lookahead-point bearing so the
+        # robot follows the shown path geometry instead of only the path direction.
+        desired_yaw_raw = path_yaw_raw + goal_heading_weight * goal_bearing_err - cte_correction
         if self._path_tracking_prev_desired_yaw is None:
             desired_yaw = desired_yaw_raw
         else:
