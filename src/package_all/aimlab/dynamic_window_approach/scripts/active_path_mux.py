@@ -192,7 +192,7 @@ class ActivePathMux:
         )
 
     def _select_visualization_path(self, source, msg):
-        if source in ("avoidance", "local") and self._is_valid_path(msg):
+        if source in ("global", "avoidance", "local") and self._is_valid_path(msg):
             return source, msg
         return "none", self._empty_visualization_path()
 

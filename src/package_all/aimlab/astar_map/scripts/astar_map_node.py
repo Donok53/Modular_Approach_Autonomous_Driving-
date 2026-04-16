@@ -1122,17 +1122,11 @@ class AStarPlanner:
             marker.action = Marker.ADD
             marker.pose.orientation.w = 1.0
             is_selected = idx == selected_index
-            marker.scale.x = 0.06 if is_selected else 0.04
-            if is_selected:
-                marker.color.r = 0.0
-                marker.color.g = 1.0
-                marker.color.b = 0.0
-                marker.color.a = 0.95
-            else:
-                marker.color.r = 0.0
-                marker.color.g = 0.0
-                marker.color.b = 0.0
-                marker.color.a = 0.85
+            marker.scale.x = 0.05 if is_selected else 0.04
+            marker.color.r = 0.0
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            marker.color.a = 0.95 if is_selected else 0.70
             for x, y in self._prepare_visualization_path(world_points, simplify=False):
                 marker.points.append(Point(float(x), float(y), 0.03))
             msg.markers.append(marker)
