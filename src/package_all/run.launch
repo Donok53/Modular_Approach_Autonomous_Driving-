@@ -348,11 +348,13 @@
   <arg name="emergency_stop_distance" default="0.35"/>
   <arg name="emergency_bin_size_m" default="0.10"/>
   <arg name="emergency_min_close_points" default="4"/>
+  <arg name="emergency_immediate_contact_min_points" default="3"/>
   <arg name="emergency_passable_width_m" default="0.62"/>
   <arg name="block_on_count" default="4"/>
   <arg name="block_off_count" default="4"/>
   <arg name="obstacle_consider_side_m" default="0.80"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
+  <arg name="self_filter_margin_m" default="0.08"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
   <arg name="use_auto_osm" default="true"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
@@ -739,9 +741,11 @@
       <arg name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
       <arg name="emergency_bin_size_m" value="$(arg emergency_bin_size_m)"/>
       <arg name="emergency_min_close_points" value="$(arg emergency_min_close_points)"/>
+      <arg name="emergency_immediate_contact_min_points" value="$(arg emergency_immediate_contact_min_points)"/>
       <arg name="emergency_passable_width_m" value="$(arg emergency_passable_width_m)"/>
       <arg name="block_on_count" value="$(arg block_on_count)"/>
       <arg name="block_off_count" value="$(arg block_off_count)"/>
+      <arg name="self_filter_margin_m" value="$(arg self_filter_margin_m)"/>
       <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
       <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
       <arg name="direct_goal_timeout_s" value="$(eval arg('crossing_portal_direct_goal_timeout_s') if arg('enable_crossing_portal_manager') == 'true' else '0.0')"/>

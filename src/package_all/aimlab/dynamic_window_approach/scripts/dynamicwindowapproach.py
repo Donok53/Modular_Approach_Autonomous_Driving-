@@ -136,11 +136,26 @@ class DWAControl:
         self.stop_width = rospy.get_param("~stop_width", self.robot_width_m)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 1.5)
+        self.self_filter_margin_m = max(
+            0.0, float(rospy.get_param("~self_filter_margin_m", 0.08))
+        )
         self.self_filter_radius_x = max(
-            0.0, float(rospy.get_param("~self_filter_radius_x", self.robot_half_length_m))
+            0.0,
+            float(
+                rospy.get_param(
+                    "~self_filter_radius_x",
+                    self.robot_half_length_m + self.footprint_padding_m + self.self_filter_margin_m,
+                )
+            ),
         )
         self.self_filter_radius_y = max(
-            0.0, float(rospy.get_param("~self_filter_radius_y", self.robot_half_width_m))
+            0.0,
+            float(
+                rospy.get_param(
+                    "~self_filter_radius_y",
+                    self.robot_half_width_m + self.footprint_padding_m + self.self_filter_margin_m,
+                )
+            ),
         )
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
         self.traj_check_step = max(1, int(rospy.get_param("~traj_check_step", 2)))
@@ -150,6 +165,10 @@ class DWAControl:
         )
         self.emergency_min_close_points = max(
             1, int(rospy.get_param("~emergency_min_close_points", 4))
+        )
+        self.emergency_immediate_contact_min_points = max(
+            1,
+            int(rospy.get_param("~emergency_immediate_contact_min_points", 3)),
         )
         self.emergency_passable_width_m = max(
             0.10,
@@ -166,6 +185,8 @@ class DWAControl:
         self._blk_on = 0
         self._blk_off = 0
         self.front_obstacle_clearance = float("inf")
+        self._last_emergency_close_points = 0
+        self._last_emergency_intrusion_points = 0
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
 
@@ -478,7 +499,7 @@ class DWAControl:
         try:
             obs = []
             close_points = []
-            immediate_contact = False
+            intrusion_points = []
             min_front_clearance = float("inf")
             influence_sq = self.obstacle_influence_distance * self.obstacle_influence_distance
             stop_half_w = 0.5 * max(self.stop_width, self.robot_width_m) + self.footprint_padding_m
@@ -504,7 +525,7 @@ class DWAControl:
                 if abs(y) > self.obstacle_consider_side_m:
                     continue
                 if abs(y) <= stop_half_w and front_clearance < 0.0:
-                    immediate_contact = True
+                    intrusion_points.append((x, y))
                     close_points.append((x, y))
                     continue
                 if front_clearance < 0.0:
@@ -512,10 +533,13 @@ class DWAControl:
                 if front_clearance <= self.emergency_stop_distance:
                     close_points.append((x, y))
 
+            immediate_contact = len(intrusion_points) >= self.emergency_immediate_contact_min_points
             near = immediate_contact or self._emergency_band_is_blocked(
                 close_points,
                 self.obstacle_consider_side_m,
             )
+            self._last_emergency_close_points = len(close_points)
+            self._last_emergency_intrusion_points = len(intrusion_points)
 
             if obs:
                 step = max(1, len(obs) // self.max_obstacle_points)
@@ -532,7 +556,13 @@ class DWAControl:
                 self._blk_on = 0
             if not self.emergency_blocked and self._blk_on >= self.block_on_count:
                 self.emergency_blocked = True
-                rospy.logwarn("Emergency STOP: obstacle <= %.2fm", self.emergency_stop_distance)
+                rospy.logwarn(
+                    "Emergency STOP: obstacle <= %.2fm | clearance=%.2f close=%d intrusion=%d",
+                    self.emergency_stop_distance,
+                    min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
+                    len(close_points),
+                    len(intrusion_points),
+                )
             elif self.emergency_blocked and self._blk_off >= self.block_off_count:
                 self.emergency_blocked = False
                 rospy.loginfo("Emergency STOP cleared")
@@ -1490,7 +1520,15 @@ class DWAControl:
                 and self.front_obstacle_clearance > self.avoidance_hard_stop_distance
             )
             if self.emergency_blocked and not self._rot_mode and not avoidance_can_continue:
-                self._log_nav_reason("stop_emergency", "front obstacle stop active", warn=True)
+                self._log_nav_reason(
+                    "stop_emergency",
+                    "front obstacle stop active clr=%.2f close=%d intrusion=%d" % (
+                        self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                        self._last_emergency_close_points,
+                        self._last_emergency_intrusion_points,
+                    ),
+                    warn=True,
+                )
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
