@@ -291,6 +291,15 @@ class DWAControl:
                 )
             ),
         )
+        self.path_tracking_recovery_ignore_start_distance_m = max(
+            self.path_tracking_drivable_ignore_start_distance_m,
+            float(
+                rospy.get_param(
+                    "~path_tracking_recovery_ignore_start_distance_m",
+                    1.80,
+                )
+            ),
+        )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
 
@@ -944,8 +953,34 @@ class DWAControl:
             traj,
             ignore_start_distance_m=self.path_tracking_drivable_ignore_start_distance_m,
         ):
-            v_cmd = 0.0
-            traj = self.predict_trajectory(x, v_cmd, w_cmd)
+            recovery_v = min(
+                v_limit,
+                max(
+                    self.path_tracking_crawl_speed,
+                    self.path_tracking_large_yaw_crawl_speed,
+                ),
+            )
+            recovery_traj = self.predict_trajectory(x, recovery_v, w_cmd)
+            if (
+                far_from_goal
+                and recovery_v > 1e-4
+                and self._trajectory_in_drivable_area(
+                    recovery_traj,
+                    ignore_start_distance_m=self.path_tracking_recovery_ignore_start_distance_m,
+                )
+            ):
+                v_cmd = recovery_v
+                traj = recovery_traj
+            elif (
+                far_from_goal
+                and recovery_v > 1e-4
+                and self._trajectory_is_risk_only_safe(recovery_traj)
+            ):
+                v_cmd = recovery_v
+                traj = recovery_traj
+            else:
+                v_cmd = 0.0
+                traj = self.predict_trajectory(x, v_cmd, w_cmd)
         return [v_cmd, w_cmd], traj
 
     def moving(self, x, u):
@@ -1026,6 +1061,27 @@ class DWAControl:
 
     def _is_xy_drivable(self, x, y):
         return self._is_xy_drivable_grid_ok(x, y) and self._is_xy_risk_ok(x, y)
+
+    def _trajectory_is_risk_only_safe(self, traj):
+        if not self.use_dynamic_risk_grid:
+            return True
+        res_candidates = []
+        if self.risk_grid_resolution is not None and self.risk_grid_resolution > 0.0:
+            res_candidates.append(float(self.risk_grid_resolution))
+        if self.grid_resolution is not None and self.grid_resolution > 0.0:
+            res_candidates.append(float(self.grid_resolution))
+        sample_step = min(res_candidates) if res_candidates else 0.1
+        offsets = self._footprint_sample_offsets(sample_step)
+        for row in traj[1::self.traj_check_step]:
+            yaw = float(row[2])
+            c = math.cos(yaw)
+            s = math.sin(yaw)
+            for ox, oy in offsets:
+                wx = float(row[0]) + c * float(ox) - s * float(oy)
+                wy = float(row[1]) + s * float(ox) + c * float(oy)
+                if not self._is_xy_risk_ok(wx, wy):
+                    return False
+        return True
 
     def _trajectory_in_drivable_area(self, traj, ignore_start_distance_m=0.0):
         if not self.use_drivable_grid and not self.use_dynamic_risk_grid:
