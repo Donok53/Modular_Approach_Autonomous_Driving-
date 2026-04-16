@@ -909,9 +909,10 @@ class DWAControl:
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
         far_from_goal = remaining_dist > self.path_tracking_stop_distance_m
+        need_progress = remaining_dist > self.goal_thresh_m
         if abs_err >= self.path_tracking_stop_yaw:
             w_target = self.path_tracking_kp * yaw_err
-            if far_from_goal and self.path_tracking_large_yaw_crawl_speed > 0.0:
+            if need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0:
                 v_cmd = min(v_limit, self.path_tracking_large_yaw_crawl_speed)
                 w_limit = self.path_tracking_yaw_rate_max
             else:
@@ -923,7 +924,7 @@ class DWAControl:
             else:
                 slow_ratio = 1.0
             v_cmd = min(v_limit, max(0.0, v_limit * slow_ratio))
-            if far_from_goal and v_cmd > 0.0 and self.path_tracking_crawl_speed > 0.0:
+            if need_progress and v_cmd > 0.0 and self.path_tracking_crawl_speed > 0.0:
                 v_cmd = max(v_cmd, min(v_limit, self.path_tracking_crawl_speed))
             w_target = self.path_tracking_kp * yaw_err
             w_limit = self.path_tracking_yaw_rate_max
@@ -962,7 +963,7 @@ class DWAControl:
             )
             recovery_traj = self.predict_trajectory(x, recovery_v, w_cmd)
             if (
-                far_from_goal
+                need_progress
                 and recovery_v > 1e-4
                 and self._trajectory_in_drivable_area(
                     recovery_traj,
@@ -972,7 +973,7 @@ class DWAControl:
                 v_cmd = recovery_v
                 traj = recovery_traj
             elif (
-                far_from_goal
+                need_progress
                 and recovery_v > 1e-4
                 and self._trajectory_is_risk_only_safe(recovery_traj)
             ):

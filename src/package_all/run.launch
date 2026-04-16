@@ -194,8 +194,12 @@
   <arg name="path_tracking_heading_filter_gain" default="$(eval '0.10' if arg('real_mode') == 'true' else '0.18')"/>
   <arg name="path_tracking_crawl_speed" default="$(eval '0.12' if arg('real_mode') == 'true' else '0.10')"/>
   <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.10' if arg('real_mode') == 'true' else '0.07')"/>
+  <arg name="path_tracking_stop_distance_m" default="$(eval '0.35' if arg('real_mode') == 'true' else '0.80')"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="$(eval '0.90' if arg('real_mode') == 'true' else '0.45')"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="$(eval '1.80' if arg('real_mode') == 'true' else '0.90')"/>
+  <arg name="forward_motion_deadband" default="0.01"/>
+  <arg name="min_forward_cmd" default="0.12"/>
+  <arg name="min_forward_cmd_distance" default="$(eval '0.25' if arg('real_mode') == 'true' else '0.60')"/>
   <arg name="rotate_only_deg" default="$(eval '150.0' if arg('real_mode') == 'true' else '110.0')"/>
   <arg name="rotate_exit_deg" default="40.0"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
@@ -591,12 +595,16 @@
       <arg name="path_tracking_heading_filter_gain" value="$(arg path_tracking_heading_filter_gain)"/>
       <arg name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
       <arg name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
+      <arg name="path_tracking_stop_distance_m" value="$(arg path_tracking_stop_distance_m)"/>
       <arg name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
       <arg name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
       <arg name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
       <arg name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
       <arg name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>
       <arg name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
+      <arg name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>
+      <arg name="min_forward_cmd" value="$(arg min_forward_cmd)"/>
+      <arg name="min_forward_cmd_distance" value="$(arg min_forward_cmd_distance)"/>
       <arg name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
       <arg name="use_pointcloud_static_blocking" value="$(arg use_pointcloud_static_blocking)"/>
       <arg name="pointcloud_static_block_margin_m" value="$(arg pointcloud_static_block_margin_m)"/>
