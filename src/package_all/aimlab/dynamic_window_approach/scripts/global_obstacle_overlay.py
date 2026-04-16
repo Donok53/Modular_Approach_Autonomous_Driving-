@@ -903,8 +903,6 @@ class GlobalObstacleOverlayPublisher:
             seen_sec = float(entry["last_seen"])
             hits = int(entry["hits"])
             locked = bool(entry.get("locked", False))
-            if self._box_overlaps_known_map_obstacle(entry):
-                continue
             effective_ttl_s = self.global_pointcloud_overlay_ttl_s
             if self._in_global_overlay_blind_zone(wx, wy):
                 effective_ttl_s = max(
@@ -930,6 +928,8 @@ class GlobalObstacleOverlayPublisher:
                     entry, path_slice, corridor_half_width_m
                 )
             ):
+                continue
+            if (not path_slice) and self._box_overlaps_known_map_obstacle(entry):
                 continue
             kept.append(entry)
 
