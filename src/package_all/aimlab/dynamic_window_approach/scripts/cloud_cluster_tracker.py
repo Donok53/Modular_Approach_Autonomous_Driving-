@@ -16,6 +16,9 @@ from dynamic_window_approach.msg import TrackedObject, TrackedObjectArray
 class CloudClusterTracker:
     def __init__(self):
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
+        self.obstacle_pointcloud_topic = str(
+            rospy.get_param("~obstacle_pointcloud_topic", "")
+        ).strip()
         self.odom_topic = rospy.get_param("~odom_topic", "/lio_localizer/odometry/optimization")
         self.output_topic = rospy.get_param("~output_topic", "/perception/tracked_objects")
         self.drivable_grid_topic = rospy.get_param(
@@ -134,11 +137,20 @@ class CloudClusterTracker:
         self.sub_drivable = rospy.Subscriber(
             self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3
         )
-        self.sub_cloud = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        cloud_input_topic = (
+            self.obstacle_pointcloud_topic
+            if self.obstacle_pointcloud_topic
+            else self.pointcloud_topic
+        )
+        self.sub_cloud = rospy.Subscriber(
+            cloud_input_topic, PointCloud2, self.cloud_callback, queue_size=1
+        )
 
         rospy.loginfo(
-            "cloud_cluster_tracker started | cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm free_support=%.2fm/%dcells far_support=%dcells",
+            "cloud_cluster_tracker started | cloud=%s obstacle_cloud=%s active_cloud=%s odom=%s grid=%s out=%s z=[%.1f, %.1f] range=%.1fm downsample=%d cell=%.2fm support=%dpts/%dcells dyn_age=%d ped_age=%d jitter=%.2fm disp=%.2fm ped_disp=%.2fm recent_hold=%.2fs assoc_bonus=%.2fm decay=%.2f static=%s static_person=%s static_large=%s map_subtract=%s radius=%.2fm grid_relax=%s@%.1fm free_support=%.2fm/%dcells far_support=%dcells",
             self.pointcloud_topic,
+            self.obstacle_pointcloud_topic if self.obstacle_pointcloud_topic else "-",
+            cloud_input_topic,
             self.odom_topic,
             self.drivable_grid_topic,
             self.output_topic,
