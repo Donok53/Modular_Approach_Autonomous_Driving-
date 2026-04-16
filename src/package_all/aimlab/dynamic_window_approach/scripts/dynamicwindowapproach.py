@@ -342,6 +342,15 @@ class DWAControl:
         self.path_tracking_target_step_m = max(
             0.05, float(rospy.get_param("~path_tracking_target_step_m", 0.18))
         )
+        self.path_tracking_tangent_window_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_tracking_tangent_window_m",
+                    max(0.25, min(0.60, self.lookahead_distance)),
+                )
+            ),
+        )
         self.path_tracking_crawl_speed = max(
             0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.10))
         )
@@ -356,6 +365,34 @@ class DWAControl:
         )
         self.path_tracking_stop_distance_m = max(
             0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.80))
+        )
+        self.path_tracking_goal_align_window_m = max(
+            self.goal_thresh_m,
+            float(
+                rospy.get_param(
+                    "~path_tracking_goal_align_window_m",
+                    max(self.path_tracking_stop_distance_m, self.final_approach_window_m),
+                )
+            ),
+        )
+        self.path_tracking_goal_cte_scale_min = min(
+            1.0,
+            max(
+                0.0,
+                float(rospy.get_param("~path_tracking_goal_cte_scale_min", 0.35)),
+            ),
+        )
+        self.path_tracking_goal_yaw_rate_max = min(
+            self.path_tracking_yaw_rate_max,
+            max(
+                math.radians(5.0),
+                math.radians(
+                    rospy.get_param(
+                        "~path_tracking_goal_yaw_rate_max_deg",
+                        min(25.0, math.degrees(self.path_tracking_yaw_rate_max)),
+                    )
+                ),
+            ),
         )
         self.path_tracking_drivable_ignore_start_distance_m = max(
             0.0,
@@ -1179,6 +1216,29 @@ class DWAControl:
         L = math.hypot(dx, dy) + 1e-9
         return x, y, (dx / L, dy / L)
 
+    def _interp_xy_smoothed_tangent_at_s(self, s):
+        x, y, t_hat = self._interp_xy_tangent_at_s(s)
+        if len(self.path_pts) < 3 or self.path_tracking_tangent_window_m <= 1e-3:
+            return x, y, t_hat
+
+        window = self.path_tracking_tangent_window_m
+        s_back = max(0.0, min(self.s_total, s - 0.35 * window))
+        s_fwd = max(0.0, min(self.s_total, s + 0.65 * window))
+        if (s_fwd - s_back) < 1e-3:
+            s_back = max(0.0, min(self.s_total, s - window))
+            s_fwd = max(0.0, min(self.s_total, s))
+        if (s_fwd - s_back) < 1e-3:
+            return x, y, t_hat
+
+        x0, y0, _ = self._interp_xy_tangent_at_s(s_back)
+        x1, y1, _ = self._interp_xy_tangent_at_s(s_fwd)
+        dx = x1 - x0
+        dy = y1 - y0
+        L = math.hypot(dx, dy)
+        if L < 1e-6:
+            return x, y, t_hat
+        return x, y, (dx / L, dy / L)
+
     def _update_progress_and_target(self, pose_x, pose_y, yaw):
         if not self.path_pts:
             return None, None, None, None, False, None, None
@@ -1197,29 +1257,36 @@ class DWAControl:
             self.s_cur = max(self.s_cur, s_proj)
 
         base_s = max(self.s_cur, s_proj)
-
-        # Follow the currently selected active-path segment directly.
-        # Keep the target only a short distance ahead on the same segment so
-        # the robot does not cut diagonally across corners or skip ahead to a
-        # visually different shortcut.
-        target_seg_idx = idx
-        if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
-            target_seg_idx += 1
-        segment_end_s = self.cum_len[target_seg_idx + 1]
-        segment_target_step = min(
-            max(0.05, self.path_tracking_target_step_m),
-            max(0.05, 0.8 * self.seg_lens[target_seg_idx]),
-        )
-        s_target = min(
-            self.s_total,
-            min(segment_end_s, max(base_s, s_proj + segment_target_step)),
-        )
-
-        tx, ty, t_hat = self._interp_xy_tangent_at_s(s_target)
-
-        # goal metrics
         gx, gy = self.path_pts[-1]
         dist_to_goal = math.hypot(gx - pose_x, gy - pose_y)
+        goal_align_active = (
+            min(max(0.0, self.s_total - base_s), dist_to_goal)
+            <= self.path_tracking_goal_align_window_m
+        )
+
+        if goal_align_active:
+            s_target = self.s_total
+        else:
+            # Follow the currently selected active-path segment directly.
+            # Keep the target only a short distance ahead on the same segment so
+            # the robot does not cut diagonally across corners or skip ahead to a
+            # visually different shortcut.
+            target_seg_idx = idx
+            if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
+                target_seg_idx += 1
+            segment_end_s = self.cum_len[target_seg_idx + 1]
+            segment_target_step = min(
+                max(0.05, self.path_tracking_target_step_m),
+                max(0.05, 0.8 * self.seg_lens[target_seg_idx]),
+            )
+            s_target = min(
+                self.s_total,
+                min(segment_end_s, max(base_s, s_proj + segment_target_step)),
+            )
+
+        tx, ty, t_hat = self._interp_xy_smoothed_tangent_at_s(s_target)
+
+        # goal metrics
         arc_rem = max(0.0, self.s_total - self.s_cur)
         at_goal = (min(arc_rem, dist_to_goal) <= self.goal_thresh_m) and (abs(lat_err) <= self.lat_goal_slop)
 
@@ -1253,9 +1320,23 @@ class DWAControl:
             -self.path_tracking_goal_bearing_cap,
             min(self.path_tracking_goal_bearing_cap, goal_bearing_err),
         )
+        goal_align_ratio = 0.0
+        if self.path_tracking_goal_align_window_m <= self.goal_thresh_m + 1e-6:
+            if remaining_dist <= self.path_tracking_goal_align_window_m:
+                goal_align_ratio = 1.0
+        else:
+            goal_align_ratio = 1.0 - (
+                (remaining_dist - self.goal_thresh_m)
+                / max(
+                    1e-6,
+                    self.path_tracking_goal_align_window_m - self.goal_thresh_m,
+                )
+            )
+            goal_align_ratio = max(0.0, min(1.0, goal_align_ratio))
         goal_heading_weight = 0.0
         if remaining_dist <= max(self.lookahead_distance, 0.8):
             goal_heading_weight = min(0.20, self.path_tracking_goal_bearing_gain)
+        goal_heading_weight = max(goal_heading_weight, goal_align_ratio)
         cte_correction = math.atan2(
             self.path_tracking_cte_gain * self._path_tracking_filtered_lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
@@ -1264,6 +1345,11 @@ class DWAControl:
             -self.path_tracking_cte_yaw_cap,
             min(self.path_tracking_cte_yaw_cap, cte_correction),
         )
+        if goal_align_ratio > 0.0:
+            cte_correction *= (
+                1.0
+                - (1.0 - self.path_tracking_goal_cte_scale_min) * goal_align_ratio
+            )
         # Keep the robot aligned to the chosen active-path segment.
         # Only add a very small point-bearing bias near the final goal so the
         # robot does not peel away from the selected route during normal travel.
@@ -1280,7 +1366,6 @@ class DWAControl:
         yaw_err = angdiff(desired_yaw, x[2])
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
-        far_from_goal = remaining_dist > self.path_tracking_stop_distance_m
         need_progress = remaining_dist > self.goal_thresh_m
         if abs_err >= self.path_tracking_stop_yaw:
             w_target = self.path_tracking_kp * yaw_err
@@ -1301,6 +1386,13 @@ class DWAControl:
             w_target = self.path_tracking_kp * yaw_err
             w_limit = self.path_tracking_yaw_rate_max
 
+        if goal_align_ratio > 0.0:
+            w_limit = min(
+                w_limit,
+                self.path_tracking_goal_yaw_rate_max
+                + (1.0 - goal_align_ratio)
+                * max(0.0, w_limit - self.path_tracking_goal_yaw_rate_max),
+            )
         w_target = max(
             -w_limit,
             min(w_limit, w_target),
