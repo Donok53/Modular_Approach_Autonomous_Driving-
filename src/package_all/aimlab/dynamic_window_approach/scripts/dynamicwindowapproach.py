@@ -18,7 +18,7 @@ import numpy as np
 import rospy
 import tf.transformations as transformations
 
-from geometry_msgs.msg import Twist, Point
+from geometry_msgs.msg import Twist, Point, PoseStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker
 from std_msgs.msg import Float32MultiArray
@@ -91,6 +91,10 @@ class DWAControl:
         self.use_dynamic_risk_grid = bool(rospy.get_param("~use_dynamic_risk_grid", True))
         self.risk_unknown_is_occupied = bool(rospy.get_param("~risk_unknown_is_occupied", False))
         self.risk_occupied_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
+        self.tracking_reference_topic = rospy.get_param(
+            "~tracking_reference_topic",
+            "/planning/tracking_reference_path",
+        )
         self.debug_stop_logging = bool(rospy.get_param("~debug_stop_logging", True))
         self.debug_dwa_stats = bool(rospy.get_param("~debug_dwa_stats", True))
         self.stop_log_period_s = max(0.2, float(rospy.get_param("~stop_log_period_s", 1.0)))
@@ -385,6 +389,9 @@ class DWAControl:
         self.target_pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
         self.current_pub = rospy.Publisher('visualization_marker_2', Marker, queue_size=10)
         self.trajectory_pub = rospy.Publisher('predicted_trajectory', Marker, queue_size=10)
+        self.tracking_reference_pub = rospy.Publisher(
+            self.tracking_reference_topic, Path, queue_size=2, latch=True
+        )
         self.traj_info_pub = rospy.Publisher('/traj_info', Float32MultiArray, queue_size=10)
         self.cmd_timer = rospy.Timer(rospy.Duration(1.0 / self.cmd_publish_hz), self._cmd_timer_callback)
 
@@ -676,6 +683,68 @@ class DWAControl:
         s_proj, _lat_err, _idx, _t = self._project_to_path(px, py)
         self.s_cur = max(0.0, min(self.s_total, s_proj))
 
+    def _empty_tracking_reference_path(self):
+        msg = Path()
+        if self.path_msg is not None:
+            msg.header = self.path_msg.header
+        else:
+            msg.header.stamp = rospy.Time.now()
+            msg.header.frame_id = "map"
+        msg.header.stamp = rospy.Time.now()
+        return msg
+
+    def _build_tracking_reference_path_msg(self):
+        if len(self.path_pts) < 2:
+            return self._empty_tracking_reference_path()
+
+        msg = Path()
+        msg.header = self.path_msg.header if self.path_msg is not None else self._empty_tracking_reference_path().header
+        msg.header.stamp = rospy.Time.now()
+
+        try:
+            px = float(self.current_pose.pose.pose.position.x)
+            py = float(self.current_pose.pose.pose.position.y)
+            s_proj, _lat_err, _idx, _t = self._project_to_path(px, py)
+            start_s = max(0.0, min(self.s_total, max(self.s_cur, s_proj)))
+        except Exception:
+            start_s = max(0.0, min(self.s_total, self.s_cur))
+
+        start_x, start_y, _ = self._interp_xy_tangent_at_s(start_s)
+        ref_points = [(float(start_x), float(start_y))]
+        for idx, pt in enumerate(self.path_pts[1:], start=1):
+            if self.cum_len[idx] > start_s + 1e-3:
+                ref_points.append((float(pt[0]), float(pt[1])))
+        if len(ref_points) == 1:
+            ref_points.append((float(self.path_pts[-1][0]), float(self.path_pts[-1][1])))
+
+        deduped = []
+        prev = None
+        for pt in ref_points:
+            if prev is None or math.hypot(pt[0] - prev[0], pt[1] - prev[1]) > 1e-4:
+                deduped.append(pt)
+                prev = pt
+
+        for x, y in deduped:
+            ps = PoseStamped()
+            ps.header = msg.header
+            ps.pose.position.x = float(x)
+            ps.pose.position.y = float(y)
+            ps.pose.position.z = 0.0
+            ps.pose.orientation.w = 1.0
+            msg.poses.append(ps)
+        return msg
+
+    def _publish_tracking_reference_path(self):
+        if rospy.is_shutdown():
+            return
+        try:
+            if len(self.path_pts) < 2:
+                self.tracking_reference_pub.publish(self._empty_tracking_reference_path())
+            else:
+                self.tracking_reference_pub.publish(self._build_tracking_reference_path_msg())
+        except rospy.ROSException:
+            pass
+
     def _activate_path(self, path_msg, sig, source):
         reset_tracking = (
             source != self.active_path_source
@@ -696,9 +765,11 @@ class DWAControl:
             self.cum_len = [0.0]
             self.s_total = 0.0
             self.s_cur = 0.0
+            self._publish_tracking_reference_path()
             return
         self._rebuild_path_geometry()
         self._sync_progress_to_current_pose()
+        self._publish_tracking_reference_path()
 
     def path_callback_global(self, path_msg):
         self.global_path_msg = path_msg
@@ -1419,6 +1490,7 @@ class DWAControl:
                 rate.sleep()
                 continue
 
+            self._publish_tracking_reference_path()
             self.visualize_current_point(s_proj)
             self.visualize_target_point(target_xy)
             self.publish_traj_info()
