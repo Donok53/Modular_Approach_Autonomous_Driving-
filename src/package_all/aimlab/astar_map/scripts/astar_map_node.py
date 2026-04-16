@@ -271,6 +271,9 @@ class AStarPlanner:
         self.candidate_route_switch_min_hold_s = max(
             0.0, float(rospy.get_param("~candidate_route_switch_min_hold_s", 0.8))
         )
+        self.candidate_route_switch_confirm_count = max(
+            1, int(rospy.get_param("~candidate_route_switch_confirm_count", 2))
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -326,6 +329,8 @@ class AStarPlanner:
         self._last_plan_stamp_s = 0.0
         self._last_plan_success = False
         self._last_candidate_switch_s = 0.0
+        self._pending_candidate_switch_index = -1
+        self._pending_candidate_switch_count = 0
         self.dynamic_risk_grid = None
         self.global_obstacle_overlay = None
         self._dynamic_risk_grid_change_seq = 0
@@ -1346,6 +1351,8 @@ class AStarPlanner:
         ]
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
         if best_index == active_index:
+            self._pending_candidate_switch_index = -1
+            self._pending_candidate_switch_count = 0
             return active_index, scores
 
         current_score = scores[active_index]
@@ -1360,8 +1367,24 @@ class AStarPlanner:
             current_blocked
             and (best_score + self.candidate_route_switch_score_margin) < current_score
         )
-        if should_switch and can_switch:
+        if should_switch:
+            if best_index == self._pending_candidate_switch_index:
+                self._pending_candidate_switch_count += 1
+            else:
+                self._pending_candidate_switch_index = int(best_index)
+                self._pending_candidate_switch_count = 1
+        else:
+            self._pending_candidate_switch_index = -1
+            self._pending_candidate_switch_count = 0
+
+        if (
+            should_switch
+            and can_switch
+            and self._pending_candidate_switch_count >= self.candidate_route_switch_confirm_count
+        ):
             self._last_candidate_switch_s = now
+            self._pending_candidate_switch_index = -1
+            self._pending_candidate_switch_count = 0
             if self.debug_log_enable:
                 rospy.loginfo(
                     "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s",
@@ -1374,11 +1397,13 @@ class AStarPlanner:
         if self.debug_log_enable and current_blocked:
             rospy.loginfo_throttle(
                 1.0,
-                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f)",
+                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f pending=%d/%d)",
                 active_index,
                 current_score,
                 best_index,
                 best_score,
+                self._pending_candidate_switch_count,
+                self.candidate_route_switch_confirm_count,
             )
         return active_index, scores
 

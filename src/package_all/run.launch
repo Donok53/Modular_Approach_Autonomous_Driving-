@@ -179,9 +179,10 @@
   <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
-  <arg name="candidate_route_switch_blocked_score_threshold" default="3.0"/>
-  <arg name="candidate_route_switch_score_margin" default="1.0"/>
-  <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
+  <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '3.0')"/>
+  <arg name="candidate_route_switch_score_margin" default="$(eval '2.5' if str(arg('real_mode')).lower() == 'true' else '1.0')"/>
+  <arg name="candidate_route_switch_min_hold_s" default="$(eval '1.5' if str(arg('real_mode')).lower() == 'true' else '0.8')"/>
+  <arg name="candidate_route_switch_confirm_count" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '2')"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.45' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.35"/>
@@ -491,6 +492,7 @@
         <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
+        <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -534,6 +536,7 @@
         <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
+        <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
       </include>
     </group>
   </group>
