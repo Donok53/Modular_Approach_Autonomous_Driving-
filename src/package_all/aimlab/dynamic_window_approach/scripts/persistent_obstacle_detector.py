@@ -196,19 +196,10 @@ class PersistentObstacleDetector:
         self.marker_lifetime_s = max(
             0.0, float(rospy.get_param("~marker_lifetime_s", 0.6))
         )
-        self.publish_confirmed_only = bool(
-            rospy.get_param("~publish_confirmed_only", True)
-        )
-        self.grid_confirmed_only = bool(
-            rospy.get_param("~grid_confirmed_only", True)
-        )
         self.show_labels = bool(rospy.get_param("~show_labels", True))
         self.show_velocity = bool(rospy.get_param("~show_velocity", True))
         self.show_provisional_cells = bool(
-            rospy.get_param("~show_provisional_cells", False)
-        )
-        self.show_provisional_clusters = bool(
-            rospy.get_param("~show_provisional_clusters", False)
+            rospy.get_param("~show_provisional_cells", True)
         )
         self.z_offset_m = float(rospy.get_param("~z_offset_m", 0.25))
         self.text_height_m = max(
@@ -265,7 +256,7 @@ class PersistentObstacleDetector:
             )
 
         rospy.loginfo(
-            "persistent_obstacle_detector started | cloud=%s obstacle_cloud=%s odom=%s grid=%s out=%s persist_grid=%s markers=%s range=%.1fm cell=%.2fm min_pts=%d far_pts=%d min_cells=%d far_cells=%d confirm=%.1f decay=%.1f/s confirmed_only=%s grid_confirmed_only=%s show_provisional_cells=%s show_provisional_clusters=%s",
+            "persistent_obstacle_detector started | cloud=%s obstacle_cloud=%s odom=%s grid=%s out=%s persist_grid=%s markers=%s range=%.1fm cell=%.2fm min_pts=%d far_pts=%d min_cells=%d far_cells=%d confirm=%.1f decay=%.1f/s",
             self.pointcloud_topic,
             self.obstacle_pointcloud_topic if self.obstacle_pointcloud_topic else "-",
             self.odom_topic,
@@ -281,10 +272,6 @@ class PersistentObstacleDetector:
             self.far_field_min_cluster_cells,
             self.persistence_confirm_threshold,
             self.persistence_decay_per_s,
-            str(self.publish_confirmed_only).lower(),
-            str(self.grid_confirmed_only).lower(),
-            str(self.show_provisional_cells).lower(),
-            str(self.show_provisional_clusters).lower(),
         )
 
     def odom_callback(self, msg):
@@ -747,8 +734,6 @@ class PersistentObstacleDetector:
         stamp_sec = out.header.stamp.to_sec()
 
         for tid, t in self.tracks.items():
-            if self.publish_confirmed_only and (not bool(t.get("confirmed", False))):
-                continue
             speed = math.hypot(float(t["vx"]), float(t["vy"]))
             raw_label = self._label_track(t["size_x"], t["size_y"], speed)
             is_person_like = self._is_person_like_label(raw_label)
@@ -851,15 +836,10 @@ class PersistentObstacleDetector:
         grid.info = self.drivable_grid.info
         total = int(grid.info.width) * int(grid.info.height)
         grid.data = [0] * total
-        threshold = (
-            self.persistence_confirm_threshold
-            if self.grid_confirmed_only
-            else self.persistence_publish_threshold
-        )
 
         for (ix, iy), cell in self.persistent_cells.items():
             score = float(cell.get("score", 0.0))
-            if score < threshold:
+            if score < self.persistence_publish_threshold:
                 continue
             cx, cy = self._cell_center(ix, iy)
             gx, gy = self._world_to_grid(grid, cx, cy)
@@ -948,10 +928,6 @@ class PersistentObstacleDetector:
             marker_array.markers.append(confirmed)
 
         for cluster in self.last_clusters:
-            if (not cluster.get("confirmed", False)) and (
-                not self.show_provisional_clusters
-            ):
-                continue
             box = Marker()
             box.header.stamp = stamp
             box.header.frame_id = frame_id

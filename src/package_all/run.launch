@@ -376,10 +376,6 @@
   <arg name="cloud_tracker_persistence_confirm_threshold" default="$(eval '42.0' if str(arg('real_mode')).lower() == 'true' else '40.0')"/>
   <arg name="cloud_tracker_persistence_publish_threshold" default="12.0"/>
   <arg name="cloud_tracker_persistence_delete_threshold" default="3.0"/>
-  <arg name="cloud_tracker_publish_confirmed_only" default="true"/>
-  <arg name="cloud_tracker_persistence_grid_confirmed_only" default="true"/>
-  <arg name="cloud_tracker_show_provisional_cells" default="false"/>
-  <arg name="cloud_tracker_show_provisional_clusters" default="false"/>
   <arg name="include_static_objects_in_behavior" default="true"/>
   <arg name="include_static_objects_in_risk_grid" default="false"/>
   <arg name="include_large_static_objects_in_risk_grid" default="true"/>
@@ -819,10 +815,6 @@
       <arg name="cloud_tracker_persistence_confirm_threshold" value="$(arg cloud_tracker_persistence_confirm_threshold)"/>
       <arg name="cloud_tracker_persistence_publish_threshold" value="$(arg cloud_tracker_persistence_publish_threshold)"/>
       <arg name="cloud_tracker_persistence_delete_threshold" value="$(arg cloud_tracker_persistence_delete_threshold)"/>
-      <arg name="cloud_tracker_publish_confirmed_only" value="$(arg cloud_tracker_publish_confirmed_only)"/>
-      <arg name="cloud_tracker_persistence_grid_confirmed_only" value="$(arg cloud_tracker_persistence_grid_confirmed_only)"/>
-      <arg name="cloud_tracker_show_provisional_cells" value="$(arg cloud_tracker_show_provisional_cells)"/>
-      <arg name="cloud_tracker_show_provisional_clusters" value="$(arg cloud_tracker_show_provisional_clusters)"/>
       <arg name="include_static_objects_in_behavior" value="$(arg include_static_objects_in_behavior)"/>
       <arg name="include_static_objects_in_risk_grid" value="$(arg include_static_objects_in_risk_grid)"/>
       <arg name="include_large_static_objects_in_risk_grid" value="$(arg include_large_static_objects_in_risk_grid)"/>
