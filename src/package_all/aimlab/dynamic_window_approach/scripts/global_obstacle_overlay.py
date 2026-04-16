@@ -35,6 +35,12 @@ class GlobalObstacleOverlayPublisher:
         self.suppress_dynamic_tracked_boxes = bool(
             rospy.get_param("~suppress_dynamic_tracked_boxes", True)
         )
+        self.promote_dynamic_tracked_boxes_to_global_overlay = bool(
+            rospy.get_param("~promote_dynamic_tracked_boxes_to_global_overlay", False)
+        )
+        self.dynamic_tracked_overlay_confirm_immediately = bool(
+            rospy.get_param("~dynamic_tracked_overlay_confirm_immediately", True)
+        )
         self.dynamic_tracked_box_timeout_s = max(
             0.0, float(rospy.get_param("~dynamic_tracked_box_timeout_s", 1.0))
         )
@@ -203,7 +209,10 @@ class GlobalObstacleOverlayPublisher:
             queue_size=1,
         )
         self.sub_tracked_objects = None
-        if self.suppress_dynamic_tracked_boxes and self.tracked_objects_topic:
+        if (
+            (self.suppress_dynamic_tracked_boxes or self.promote_dynamic_tracked_boxes_to_global_overlay)
+            and self.tracked_objects_topic
+        ):
             self.sub_tracked_objects = rospy.Subscriber(
                 self.tracked_objects_topic,
                 TrackedObjectArray,
@@ -212,7 +221,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -231,6 +240,7 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_static_lock_keep_range_m,
             self.global_pointcloud_overlay_static_box_margin_m,
             "on" if self.suppress_dynamic_tracked_boxes else "off",
+            "on" if self.promote_dynamic_tracked_boxes_to_global_overlay else "off",
             self.dynamic_tracked_box_timeout_s,
             self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
             self.global_pointcloud_overlay_blind_zone_radius_m,
@@ -275,6 +285,7 @@ class GlobalObstacleOverlayPublisher:
                 "hits": int(max(1, hits)),
                 "locked": bool(locked),
                 "lock_time": float(lock_time),
+                "dynamic": bool(box.get("dynamic", False)),
             }
         )
         return entry
@@ -393,6 +404,7 @@ class GlobalObstacleOverlayPublisher:
             "hits": int(item["hits"]),
             "locked": bool(item.get("locked", False)),
             "lock_time": float(item.get("lock_time", 0.0)),
+            "dynamic": bool(item.get("dynamic", False)),
         }
 
     @staticmethod
@@ -872,11 +884,39 @@ class GlobalObstacleOverlayPublisher:
                 box, path_slice, corridor_half_width_m
             ):
                 selected.append(box)
+        promoted_dynamic = 0
+        if self.promote_dynamic_tracked_boxes_to_global_overlay and dynamic_boxes:
+            for dynamic_box in dynamic_boxes:
+                candidate = self._expand_box(
+                    dynamic_box, self.global_pointcloud_overlay_static_box_margin_m
+                )
+                candidate["dynamic"] = True
+                if not self._box_is_valid_overlay_candidate(
+                    candidate, path_slice, corridor_half_width_m
+                ):
+                    continue
+                if any(
+                    self._boxes_match(
+                        existing,
+                        candidate,
+                        self.global_pointcloud_overlay_merge_radius_m,
+                    )
+                    for existing in selected
+                ):
+                    continue
+                selected.append(candidate)
+                promoted_dynamic += 1
         if suppressed_dynamic > 0:
             rospy.loginfo_throttle(
                 1.0,
                 "global_obstacle_overlay: suppressed %d box candidates that overlapped dynamic tracked objects",
                 suppressed_dynamic,
+            )
+        if promoted_dynamic > 0:
+            rospy.loginfo_throttle(
+                1.0,
+                "global_obstacle_overlay: promoted %d tracked dynamic boxes into global overlay candidates",
+                promoted_dynamic,
             )
         return selected
 
@@ -922,7 +962,11 @@ class GlobalObstacleOverlayPublisher:
             if (dx * dx + dy * dy) > keep_range_sq:
                 continue
             if dynamic_boxes and self._box_overlaps_dynamic_object(entry, dynamic_boxes):
-                continue
+                if not (
+                    self.promote_dynamic_tracked_boxes_to_global_overlay
+                    and bool(entry.get("dynamic", False))
+                ):
+                    continue
             if path_slice and (
                 not self._box_is_valid_overlay_candidate(
                     entry, path_slice, corridor_half_width_m
@@ -971,7 +1015,12 @@ class GlobalObstacleOverlayPublisher:
                     best_d2 = d2
                     best_idx = idx
             if best_idx is None:
-                memory.append(self._make_memory_entry(box, now_sec, hits=1))
+                initial_hits = 1
+                if bool(box.get("dynamic", False)) and self.dynamic_tracked_overlay_confirm_immediately:
+                    initial_hits = max(
+                        initial_hits, self.global_pointcloud_overlay_persistence_frames
+                    )
+                memory.append(self._make_memory_entry(box, now_sec, hits=initial_hits))
             else:
                 entry = dict(memory[best_idx])
                 prev_hits = max(1, int(entry["hits"]))
@@ -996,6 +1045,7 @@ class GlobalObstacleOverlayPublisher:
                 entry["hits"] = hits
                 entry["last_seen"] = float(now_sec)
                 entry["locked"] = locked
+                entry["dynamic"] = bool(entry.get("dynamic", False) or box.get("dynamic", False))
                 memory[best_idx] = entry
 
         self.global_obstacle_overlay_memory = memory

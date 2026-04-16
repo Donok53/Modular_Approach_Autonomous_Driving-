@@ -197,6 +197,9 @@
     <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
     <arg name="global_obstacle_overlay_stop_locked_only" default="true"/>
     <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
+    <arg name="suppress_dynamic_tracked_boxes" default="true"/>
+    <arg name="promote_dynamic_tracked_boxes_to_global_overlay" default="false"/>
+    <arg name="dynamic_tracked_overlay_confirm_immediately" default="true"/>
     <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
     <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
     <arg name="global_pointcloud_overlay_ttl_s" default="2.0"/>
@@ -407,6 +410,10 @@
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
             <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
             <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
+            <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+            <param name="suppress_dynamic_tracked_boxes" value="$(arg suppress_dynamic_tracked_boxes)"/>
+            <param name="promote_dynamic_tracked_boxes_to_global_overlay" value="$(arg promote_dynamic_tracked_boxes_to_global_overlay)"/>
+            <param name="dynamic_tracked_overlay_confirm_immediately" value="$(arg dynamic_tracked_overlay_confirm_immediately)"/>
             <param name="enable_travel_history" value="$(eval 'true' if arg('enable_local_replanner') == 'false' else 'false')"/>
             <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>

@@ -288,6 +288,9 @@
   <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
   <arg name="global_obstacle_overlay_stop_locked_only" default="true"/>
   <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
+  <arg name="suppress_dynamic_tracked_boxes" default="true"/>
+  <arg name="promote_dynamic_tracked_boxes_to_global_overlay" default="true"/>
+  <arg name="dynamic_tracked_overlay_confirm_immediately" default="true"/>
   <arg name="global_obstacle_overlay_threshold" default="50"/>
   <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
   <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
@@ -602,6 +605,9 @@
       <arg name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
       <arg name="global_obstacle_overlay_stop_locked_only" value="$(arg global_obstacle_overlay_stop_locked_only)"/>
       <arg name="global_obstacle_overlay_box_timeout_s" value="$(arg global_obstacle_overlay_box_timeout_s)"/>
+      <arg name="suppress_dynamic_tracked_boxes" value="$(arg suppress_dynamic_tracked_boxes)"/>
+      <arg name="promote_dynamic_tracked_boxes_to_global_overlay" value="$(arg promote_dynamic_tracked_boxes_to_global_overlay)"/>
+      <arg name="dynamic_tracked_overlay_confirm_immediately" value="$(arg dynamic_tracked_overlay_confirm_immediately)"/>
       <arg name="global_pointcloud_overlay_persistence_frames" value="$(arg global_pointcloud_overlay_persistence_frames)"/>
       <arg name="global_pointcloud_overlay_static_lock_frames" value="$(arg global_pointcloud_overlay_static_lock_frames)"/>
       <arg name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
