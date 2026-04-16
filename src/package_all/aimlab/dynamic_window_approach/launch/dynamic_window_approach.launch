@@ -317,7 +317,7 @@
         <node pkg="dynamic_window_approach" type="cloud_cluster_tracker.py" name="cloud_cluster_tracker" output="screen" respawn="false">
             <param name="pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
-            <param name="odom_topic" value="$(arg planning_pose_topic)"/>
+            <param name="odom_topic" value="$(arg pose_topic)"/>
             <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
             <param name="output_topic" value="$(arg tracked_objects_topic)"/>
             <param name="max_range_m" value="$(arg cloud_tracker_max_range_m)"/>
