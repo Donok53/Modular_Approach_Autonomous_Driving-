@@ -1,0 +1,71 @@
+<launch>
+  <arg name="pointcloud_topic" default="/lio_localizer/localization/cloud_deskewed"/>
+  <arg name="imu_topic" default="/imu_correct"/>
+  <arg name="odom_topic" default="/lio_localizer/odometry/optimization"/>
+  <arg name="enable_rviz" default="true"/>
+
+  <arg name="ground_cloud_topic" default="/experimental/lidar_obstacle_perception/ground_cloud"/>
+  <arg name="non_ground_cloud_topic" default="/experimental/lidar_obstacle_perception/non_ground_cloud"/>
+  <arg name="static_cloud_topic" default="/experimental/lidar_obstacle_perception/static_cloud"/>
+  <arg name="dynamic_cloud_topic" default="/experimental/lidar_obstacle_perception/dynamic_cloud"/>
+  <arg name="dynamic_markers_topic" default="/experimental/lidar_obstacle_perception/dynamic_markers"/>
+  <arg name="local_obstacle_grid_topic" default="/experimental/lidar_obstacle_perception/local_obstacle_grid"/>
+
+  <node pkg="lidar_obstacle_perception_experimental"
+        type="lidar_obstacle_perception_experimental.py"
+        name="lidar_obstacle_perception_experimental"
+        output="screen"
+        respawn="false">
+    <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+
+    <param name="ground_cloud_topic" value="$(arg ground_cloud_topic)"/>
+    <param name="non_ground_cloud_topic" value="$(arg non_ground_cloud_topic)"/>
+    <param name="static_cloud_topic" value="$(arg static_cloud_topic)"/>
+    <param name="dynamic_cloud_topic" value="$(arg dynamic_cloud_topic)"/>
+    <param name="dynamic_markers_topic" value="$(arg dynamic_markers_topic)"/>
+    <param name="local_obstacle_grid_topic" value="$(arg local_obstacle_grid_topic)"/>
+
+    <param name="max_range_m" value="25.0"/>
+    <param name="downsample" value="2"/>
+    <param name="min_z" value="-1.5"/>
+    <param name="max_z" value="3.0"/>
+
+    <param name="use_imu_leveling" value="true"/>
+    <param name="ground_cell_size_m" value="0.25"/>
+    <param name="ground_neighbor_radius_cells" value="1"/>
+    <param name="ground_clearance_m" value="0.16"/>
+
+    <param name="cluster_cell_size_m" value="0.30"/>
+    <param name="cluster_min_points_per_cell" value="2"/>
+    <param name="cluster_min_cells" value="2"/>
+    <param name="cluster_min_points" value="12"/>
+
+    <param name="track_assoc_dist_m" value="1.8"/>
+    <param name="track_timeout_s" value="1.2"/>
+    <param name="track_velocity_alpha" value="0.45"/>
+    <param name="dynamic_min_age" value="3"/>
+    <param name="dynamic_speed_thresh_mps" value="0.35"/>
+    <param name="dynamic_min_displacement_m" value="0.35"/>
+
+    <param name="static_voxel_size_m" value="0.20"/>
+    <param name="static_confirm_hits" value="3"/>
+    <param name="static_ttl_s" value="30.0"/>
+    <param name="dynamic_exclusion_radius_m" value="1.2"/>
+
+    <param name="local_grid_resolution_m" value="0.20"/>
+    <param name="local_grid_width_m" value="20.0"/>
+    <param name="local_grid_height_m" value="20.0"/>
+
+    <param name="marker_lifetime_s" value="0.6"/>
+    <param name="show_labels" value="true"/>
+    <param name="show_velocity" value="true"/>
+  </node>
+
+  <node if="$(arg enable_rviz)"
+        pkg="rviz"
+        type="rviz"
+        name="lidar_obstacle_perception_experimental_rviz"
+        args="-d $(find lidar_obstacle_perception_experimental)/rviz/lidar_obstacle_perception_experimental.rviz"/>
+</launch>
