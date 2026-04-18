@@ -36,6 +36,8 @@
     <param name="ground_cell_size_m" value="0.25"/>
     <param name="ground_neighbor_radius_cells" value="1"/>
     <param name="ground_clearance_m" value="0.16"/>
+    <param name="ground_range_clearance_per_m" value="0.015"/>
+    <param name="ground_pitch_clearance_gain_m" value="0.20"/>
 
     <param name="cluster_cell_size_m" value="0.30"/>
     <param name="cluster_min_points_per_cell" value="2"/>
@@ -62,6 +64,8 @@
     <param name="dynamic_static_support_min_hits" value="2"/>
     <param name="dynamic_static_support_ratio" value="0.08"/>
     <param name="dynamic_static_support_neighbor_cells" value="2"/>
+    <param name="motion_suppress_yaw_rate_radps" value="0.18"/>
+    <param name="motion_suppress_speed_mps" value="0.60"/>
 
     <param name="local_grid_resolution_m" value="0.20"/>
     <param name="local_grid_width_m" value="20.0"/>

@@ -32,6 +32,36 @@
 roslaunch lidar_obstacle_perception_experimental lidar_obstacle_perception_experimental.launch
 ```
 
+## Ground Removal Debug
+
+정적/동적 분리를 잠시 무시하고 raw LiDAR 기준으로 ground removal만 확인하려면 아래 launch를 쓰면 됩니다.
+
+```bash
+roslaunch lidar_obstacle_perception_experimental lidar_ground_removal_debug.launch
+```
+
+`monitoring_full.bag` 기준 예시는 아래처럼 쓰면 됩니다.
+
+```bash
+roslaunch lidar_obstacle_perception_experimental lidar_ground_removal_debug.launch \
+  pointcloud_topic:=/ouster/points \
+  imu_topic:=/imu/data
+```
+
+이 모드에서는 RViz에 아래 3개만 보입니다.
+
+- `Raw LiDAR`
+- `Ground Cloud`
+- `Non Ground Cloud`
+
+튜닝할 때 주로 보는 파라미터:
+
+- `ground_cell_size_m`
+- `ground_clearance_m`
+- `ground_range_clearance_per_m`
+- `ground_pitch_clearance_gain_m`
+- `max_range_m`
+
 ## 시각화 권장 해석
 
 - `ground_cloud`

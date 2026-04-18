@@ -1,0 +1,84 @@
+<launch>
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="imu_topic" default="/imu/data"/>
+  <arg name="odom_topic" default="/experimental/no_odom"/>
+  <arg name="raw_frame" default="os_sensor"/>
+  <arg name="enable_rviz" default="true"/>
+
+  <arg name="ground_cloud_topic" default="/experimental/lidar_obstacle_perception/ground_cloud"/>
+  <arg name="non_ground_cloud_topic" default="/experimental/lidar_obstacle_perception/non_ground_cloud"/>
+
+  <arg name="max_range_m" default="25.0"/>
+  <arg name="downsample" default="2"/>
+  <arg name="min_z" default="-1.5"/>
+  <arg name="max_z" default="3.0"/>
+
+  <arg name="ground_cell_size_m" default="0.25"/>
+  <arg name="ground_neighbor_radius_cells" default="1"/>
+  <arg name="ground_clearance_m" default="0.16"/>
+  <arg name="ground_range_clearance_per_m" default="0.015"/>
+  <arg name="ground_pitch_clearance_gain_m" default="0.20"/>
+
+  <node pkg="lidar_obstacle_perception_experimental"
+        type="lidar_obstacle_perception_experimental.py"
+        name="lidar_ground_removal_debug"
+        output="screen"
+        respawn="false">
+    <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="require_odom_for_processing" value="false"/>
+    <param name="local_fallback_frame" value="$(arg raw_frame)"/>
+
+    <param name="ground_cloud_topic" value="$(arg ground_cloud_topic)"/>
+    <param name="non_ground_cloud_topic" value="$(arg non_ground_cloud_topic)"/>
+    <param name="static_cloud_topic" value="/experimental/lidar_obstacle_perception/debug_static_cloud"/>
+    <param name="dynamic_cloud_topic" value="/experimental/lidar_obstacle_perception/debug_dynamic_cloud"/>
+    <param name="dynamic_markers_topic" value="/experimental/lidar_obstacle_perception/debug_dynamic_markers"/>
+    <param name="local_obstacle_grid_topic" value="/experimental/lidar_obstacle_perception/debug_local_grid"/>
+
+    <param name="max_range_m" value="$(arg max_range_m)"/>
+    <param name="downsample" value="$(arg downsample)"/>
+    <param name="min_z" value="$(arg min_z)"/>
+    <param name="max_z" value="$(arg max_z)"/>
+
+    <param name="use_imu_leveling" value="true"/>
+    <param name="ground_cell_size_m" value="$(arg ground_cell_size_m)"/>
+    <param name="ground_neighbor_radius_cells" value="$(arg ground_neighbor_radius_cells)"/>
+    <param name="ground_clearance_m" value="$(arg ground_clearance_m)"/>
+    <param name="ground_range_clearance_per_m" value="$(arg ground_range_clearance_per_m)"/>
+    <param name="ground_pitch_clearance_gain_m" value="$(arg ground_pitch_clearance_gain_m)"/>
+
+    <param name="cluster_cell_size_m" value="0.30"/>
+    <param name="cluster_min_points_per_cell" value="2"/>
+    <param name="cluster_min_cells" value="2"/>
+    <param name="cluster_min_points" value="12"/>
+
+    <param name="track_assoc_dist_m" value="1.8"/>
+    <param name="track_timeout_s" value="1.0"/>
+    <param name="track_velocity_alpha" value="0.45"/>
+    <param name="dynamic_min_age" value="999"/>
+    <param name="dynamic_min_motion_hits" value="999"/>
+    <param name="dynamic_speed_thresh_mps" value="99.0"/>
+    <param name="dynamic_min_displacement_m" value="99.0"/>
+
+    <param name="static_voxel_size_m" value="0.20"/>
+    <param name="static_confirm_hits" value="999"/>
+    <param name="static_ttl_s" value="1.0"/>
+    <param name="dynamic_exclusion_radius_m" value="1.2"/>
+
+    <param name="local_grid_resolution_m" value="0.20"/>
+    <param name="local_grid_width_m" value="20.0"/>
+    <param name="local_grid_height_m" value="20.0"/>
+
+    <param name="marker_lifetime_s" value="0.2"/>
+    <param name="show_labels" value="false"/>
+    <param name="show_velocity" value="false"/>
+  </node>
+
+  <node if="$(arg enable_rviz)"
+        pkg="rviz"
+        type="rviz"
+        name="lidar_ground_removal_debug_rviz"
+        args="-d $(find lidar_obstacle_perception_experimental)/rviz/lidar_ground_removal_debug.rviz"/>
+</launch>

@@ -72,6 +72,12 @@ class LidarObstaclePerceptionExperimental:
         self.ground_clearance_m = max(
             0.02, float(rospy.get_param("~ground_clearance_m", 0.16))
         )
+        self.ground_range_clearance_per_m = max(
+            0.0, float(rospy.get_param("~ground_range_clearance_per_m", 0.015))
+        )
+        self.ground_pitch_clearance_gain_m = max(
+            0.0, float(rospy.get_param("~ground_pitch_clearance_gain_m", 0.20))
+        )
 
         self.cluster_cell_size_m = max(
             0.05, float(rospy.get_param("~cluster_cell_size_m", 0.30))
@@ -148,6 +154,12 @@ class LidarObstaclePerceptionExperimental:
         self.dynamic_static_support_neighbor_cells = max(
             0, int(rospy.get_param("~dynamic_static_support_neighbor_cells", 2))
         )
+        self.motion_suppress_yaw_rate_radps = max(
+            0.0, float(rospy.get_param("~motion_suppress_yaw_rate_radps", 0.18))
+        )
+        self.motion_suppress_speed_mps = max(
+            0.0, float(rospy.get_param("~motion_suppress_speed_mps", 0.60))
+        )
 
         self.local_grid_resolution_m = max(
             0.05, float(rospy.get_param("~local_grid_resolution_m", 0.20))
@@ -173,6 +185,7 @@ class LidarObstaclePerceptionExperimental:
         self.have_imu = False
         self.imu_roll = 0.0
         self.imu_pitch = 0.0
+        self.imu_yaw_rate = 0.0
 
         self.have_odom = False
         self.odom_pos = np.zeros(3, dtype=np.float32)
@@ -180,6 +193,8 @@ class LidarObstaclePerceptionExperimental:
         self.odom_roll = 0.0
         self.odom_pitch = 0.0
         self.odom_yaw = 0.0
+        self.odom_speed = 0.0
+        self.odom_yaw_rate = 0.0
 
         self.next_track_id = 1
         self.tracks = {}
@@ -241,6 +256,7 @@ class LidarObstaclePerceptionExperimental:
         self.imu_roll, self.imu_pitch, _ = transformations.euler_from_quaternion(
             [q.x, q.y, q.z, q.w]
         )
+        self.imu_yaw_rate = float(msg.angular_velocity.z)
         self.have_imu = True
 
     def odom_callback(self, msg):
@@ -251,6 +267,9 @@ class LidarObstaclePerceptionExperimental:
         self.odom_roll, self.odom_pitch, self.odom_yaw = (
             transformations.euler_from_quaternion(self.odom_quat)
         )
+        twist = msg.twist.twist
+        self.odom_speed = math.hypot(float(twist.linear.x), float(twist.linear.y))
+        self.odom_yaw_rate = float(twist.angular.z)
         self.have_odom = True
 
     def _current_roll_pitch(self):
@@ -321,6 +340,9 @@ class LidarObstaclePerceptionExperimental:
         if n == 0:
             return np.zeros((0,), dtype=bool)
 
+        _, pitch = self._current_roll_pitch()
+        pitch_clearance = abs(float(pitch)) * self.ground_pitch_clearance_gain_m
+
         min_z_cells = {}
         cell_keys = []
         inv = 1.0 / self.ground_cell_size_m
@@ -344,9 +366,11 @@ class LidarObstaclePerceptionExperimental:
             ground_ref[key] = best
 
         mask = np.zeros((n,), dtype=bool)
-        for idx, (_, _, z) in enumerate(leveled_points):
+        for idx, (x, y, z) in enumerate(leveled_points):
             ref_z = ground_ref.get(cell_keys[idx], float(z))
-            if z <= (ref_z + self.ground_clearance_m):
+            range_clearance = math.hypot(float(x), float(y)) * self.ground_range_clearance_per_m
+            clearance = self.ground_clearance_m + pitch_clearance + range_clearance
+            if z <= (ref_z + clearance):
                 mask[idx] = True
         return mask
 
@@ -576,6 +600,14 @@ class LidarObstaclePerceptionExperimental:
         if checked <= 0:
             return False
         return (float(supported) / float(checked)) >= self.dynamic_static_support_ratio
+
+    def _ego_motion_is_aggressive(self):
+        yaw_rate = abs(self.imu_yaw_rate) if self.have_imu else abs(self.odom_yaw_rate)
+        speed = abs(self.odom_speed) if self.have_odom else 0.0
+        return (
+            yaw_rate >= self.motion_suppress_yaw_rate_radps
+            or speed >= self.motion_suppress_speed_mps
+        )
 
     @staticmethod
     def _dynamic_label(track):
@@ -821,14 +853,17 @@ class LidarObstaclePerceptionExperimental:
 
         dynamic_entries = []
         dynamic_point_indices = []
+        aggressive_ego_motion = self._ego_motion_is_aggressive()
         for ci, tid in cluster_to_track.items():
             track = self.tracks.get(tid)
             if track is None:
                 continue
             cluster = clusters[ci]
             cluster_points = non_ground_points[cluster["indices"]]
-            if self._cluster_is_plausibly_dynamic(cluster) and not self._cluster_has_static_support(
-                cluster_points
+            if (
+                not aggressive_ego_motion
+                and self._cluster_is_plausibly_dynamic(cluster)
+                and not self._cluster_has_static_support(cluster_points)
             ):
                 track["motion_hits"] = min(
                     int(track.get("motion_hits", 0)) + 1,
@@ -884,8 +919,10 @@ class LidarObstaclePerceptionExperimental:
             else:
                 static_points_current = self._empty_points()
 
-        if self.have_odom:
+        if self.have_odom and not aggressive_ego_motion:
             self._update_static_voxels(static_points_current, now_sec)
+            static_points = self._confirmed_static_points()
+        elif self.have_odom:
             static_points = self._confirmed_static_points()
         else:
             static_points = static_points_current
