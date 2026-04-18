@@ -28,6 +28,12 @@ class LidarObstaclePerceptionExperimental:
             "~odom_topic", "/lio_localizer/odometry/optimization"
         )
         self.map_frame = str(rospy.get_param("~map_frame", "map")).strip() or "map"
+        self.require_odom_for_processing = bool(
+            rospy.get_param("~require_odom_for_processing", False)
+        )
+        self.local_fallback_frame = str(
+            rospy.get_param("~local_fallback_frame", "")
+        ).strip()
 
         self.ground_cloud_topic = rospy.get_param(
             "~ground_cloud_topic", "/experimental/lidar_obstacle_perception/ground_cloud"
@@ -90,13 +96,31 @@ class LidarObstaclePerceptionExperimental:
             float(rospy.get_param("~track_velocity_alpha", 0.45)), 0.05, 1.0
         )
         self.dynamic_min_age = max(
-            1, int(rospy.get_param("~dynamic_min_age", 3))
+            1, int(rospy.get_param("~dynamic_min_age", 6))
+        )
+        self.dynamic_min_motion_hits = max(
+            1, int(rospy.get_param("~dynamic_min_motion_hits", 4))
         )
         self.dynamic_speed_thresh_mps = max(
             0.05, float(rospy.get_param("~dynamic_speed_thresh_mps", 0.35))
         )
         self.dynamic_min_displacement_m = max(
             0.05, float(rospy.get_param("~dynamic_min_displacement_m", 0.35))
+        )
+        self.dynamic_candidate_max_span_m = max(
+            0.5, float(rospy.get_param("~dynamic_candidate_max_span_m", 4.5))
+        )
+        self.dynamic_candidate_max_area_m2 = max(
+            0.5, float(rospy.get_param("~dynamic_candidate_max_area_m2", 8.0))
+        )
+        self.dynamic_candidate_max_points = max(
+            10, int(rospy.get_param("~dynamic_candidate_max_points", 220))
+        )
+        self.dynamic_candidate_max_height_m = max(
+            0.5, float(rospy.get_param("~dynamic_candidate_max_height_m", 2.4))
+        )
+        self.dynamic_candidate_max_aspect_ratio = max(
+            1.0, float(rospy.get_param("~dynamic_candidate_max_aspect_ratio", 3.5))
         )
 
         self.static_voxel_size_m = max(
@@ -108,6 +132,21 @@ class LidarObstaclePerceptionExperimental:
         self.static_ttl_s = max(0.5, float(rospy.get_param("~static_ttl_s", 30.0)))
         self.dynamic_exclusion_radius_m = max(
             0.1, float(rospy.get_param("~dynamic_exclusion_radius_m", 1.2))
+        )
+        self.dynamic_static_support_min_hits = max(
+            1,
+            int(
+                rospy.get_param(
+                    "~dynamic_static_support_min_hits",
+                    max(2, self.static_confirm_hits - 1),
+                )
+            ),
+        )
+        self.dynamic_static_support_ratio = clamp(
+            float(rospy.get_param("~dynamic_static_support_ratio", 0.08)), 0.0, 1.0
+        )
+        self.dynamic_static_support_neighbor_cells = max(
+            0, int(rospy.get_param("~dynamic_static_support_neighbor_cells", 2))
         )
 
         self.local_grid_resolution_m = max(
@@ -193,6 +232,10 @@ class LidarObstaclePerceptionExperimental:
             self.local_grid_resolution_m,
         )
 
+    @staticmethod
+    def _empty_points():
+        return np.empty((0, 3), dtype=np.float32)
+
     def imu_callback(self, msg):
         q = msg.orientation
         self.imu_roll, self.imu_pitch, _ = transformations.euler_from_quaternion(
@@ -253,6 +296,14 @@ class LidarObstaclePerceptionExperimental:
             return points_local.copy()
         rot = transformations.quaternion_matrix(self.odom_quat)[:3, :3]
         return points_local.dot(rot.T) + self.odom_pos
+
+    def _processing_frame_id(self, msg):
+        if self.have_odom:
+            return self.map_frame
+        if self.local_fallback_frame:
+            return self.local_fallback_frame
+        frame_id = str(msg.header.frame_id).strip()
+        return frame_id or "base_link"
 
     @staticmethod
     def _points_to_cloud(points_xyz, stamp, frame_id):
@@ -443,6 +494,7 @@ class LidarObstaclePerceptionExperimental:
                 "num_points": int(cluster["num_points"]),
                 "last_t": now_sec,
                 "age": 1,
+                "motion_hits": 0,
             }
             cluster_to_track[ci] = tid
 
@@ -464,9 +516,66 @@ class LidarObstaclePerceptionExperimental:
         )
         return (
             int(track["age"]) >= self.dynamic_min_age
+            and int(track.get("motion_hits", 0)) >= self.dynamic_min_motion_hits
             and speed >= self.dynamic_speed_thresh_mps
             and disp >= self.dynamic_min_displacement_m
         )
+
+    def _cluster_is_plausibly_dynamic(self, cluster):
+        span = max(float(cluster["size_x"]), float(cluster["size_y"]))
+        short_span = max(0.10, min(float(cluster["size_x"]), float(cluster["size_y"])))
+        area = float(cluster["size_x"]) * float(cluster["size_y"])
+        num_points = int(cluster["num_points"])
+        height = float(cluster["size_z"])
+        aspect = span / short_span
+        return (
+            span <= self.dynamic_candidate_max_span_m
+            and area <= self.dynamic_candidate_max_area_m2
+            and num_points <= self.dynamic_candidate_max_points
+            and height <= self.dynamic_candidate_max_height_m
+            and aspect <= self.dynamic_candidate_max_aspect_ratio
+        )
+
+    def _cluster_has_static_support(self, cluster_points):
+        if cluster_points is None or len(cluster_points) == 0 or not self.static_voxels:
+            return False
+
+        support_keys = {
+            key
+            for key, voxel in self.static_voxels.items()
+            if int(voxel["hits"]) >= self.dynamic_static_support_min_hits
+        }
+        if not support_keys:
+            return False
+
+        inv = 1.0 / self.static_voxel_size_m
+        radius = self.dynamic_static_support_neighbor_cells
+        checked = 0
+        supported = 0
+        sample_step = max(1, int(len(cluster_points) / 80))
+        for point in cluster_points[::sample_step]:
+            x, y, z = point
+            key = (
+                int(math.floor(float(x) * inv)),
+                int(math.floor(float(y) * inv)),
+                int(math.floor(float(z) * inv)),
+            )
+            checked += 1
+            found = False
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    for dz in range(-radius, radius + 1):
+                        if (key[0] + dx, key[1] + dy, key[2] + dz) in support_keys:
+                            supported += 1
+                            found = True
+                            break
+                    if found:
+                        break
+                if found:
+                    break
+        if checked <= 0:
+            return False
+        return (float(supported) / float(checked)) >= self.dynamic_static_support_ratio
 
     @staticmethod
     def _dynamic_label(track):
@@ -520,15 +629,15 @@ class LidarObstaclePerceptionExperimental:
             return np.empty((0, 3), dtype=np.float32)
         return np.asarray(points, dtype=np.float32)
 
-    def _build_local_grid(self, static_points, dynamic_points, stamp):
+    def _build_local_grid(self, static_points, dynamic_points, stamp, frame_id, center_xy):
         width_cells = max(
             1, int(math.ceil(self.local_grid_width_m / self.local_grid_resolution_m))
         )
         height_cells = max(
             1, int(math.ceil(self.local_grid_height_m / self.local_grid_resolution_m))
         )
-        origin_x = float(self.odom_pos[0]) - 0.5 * self.local_grid_width_m
-        origin_y = float(self.odom_pos[1]) - 0.5 * self.local_grid_height_m
+        origin_x = float(center_xy[0]) - 0.5 * self.local_grid_width_m
+        origin_y = float(center_xy[1]) - 0.5 * self.local_grid_height_m
         data = np.zeros((height_cells, width_cells), dtype=np.int8)
 
         def mark_points(points):
@@ -543,7 +652,7 @@ class LidarObstaclePerceptionExperimental:
 
         grid = OccupancyGrid()
         grid.header.stamp = stamp
-        grid.header.frame_id = self.map_frame
+        grid.header.frame_id = frame_id
         grid.info = MapMetaData()
         grid.info.map_load_time = stamp
         grid.info.resolution = self.local_grid_resolution_m
@@ -557,10 +666,13 @@ class LidarObstaclePerceptionExperimental:
         return grid
 
     def _build_dynamic_markers(self, dynamic_entries, stamp):
+        return self._build_dynamic_markers_for_frame(dynamic_entries, stamp, self.map_frame)
+
+    def _build_dynamic_markers_for_frame(self, dynamic_entries, stamp, frame_id):
         marker_array = MarkerArray()
         delete_all = Marker()
         delete_all.header.stamp = stamp
-        delete_all.header.frame_id = self.map_frame
+        delete_all.header.frame_id = frame_id
         delete_all.action = Marker.DELETEALL
         marker_array.markers.append(delete_all)
 
@@ -575,7 +687,7 @@ class LidarObstaclePerceptionExperimental:
 
             box = Marker()
             box.header.stamp = stamp
-            box.header.frame_id = self.map_frame
+            box.header.frame_id = frame_id
             box.ns = "dynamic_boxes"
             box.id = marker_id
             marker_id += 1
@@ -601,7 +713,7 @@ class LidarObstaclePerceptionExperimental:
             if self.show_velocity and speed > 0.05:
                 arrow = Marker()
                 arrow.header.stamp = stamp
-                arrow.header.frame_id = self.map_frame
+                arrow.header.frame_id = frame_id
                 arrow.ns = "dynamic_velocity"
                 arrow.id = marker_id
                 marker_id += 1
@@ -629,7 +741,7 @@ class LidarObstaclePerceptionExperimental:
             if self.show_labels:
                 text = Marker()
                 text.header.stamp = stamp
-                text.header.frame_id = self.map_frame
+                text.header.frame_id = frame_id
                 text.ns = "dynamic_labels"
                 text.id = marker_id
                 marker_id += 1
@@ -651,28 +763,41 @@ class LidarObstaclePerceptionExperimental:
         return marker_array
 
     def cloud_callback(self, msg):
-        if not self.have_odom:
+        stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
+        now_sec = stamp.to_sec() if stamp.to_sec() > 0.0 else rospy.Time.now().to_sec()
+        frame_id = self._processing_frame_id(msg)
+
+        if not self.have_odom and self.require_odom_for_processing:
             rospy.logwarn_throttle(
                 2.0,
                 "lidar_obstacle_perception_experimental: waiting for odom on %s",
                 self.odom_topic,
             )
             return
-
-        stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
-        now_sec = stamp.to_sec() if stamp.to_sec() > 0.0 else rospy.Time.now().to_sec()
+        if not self.have_odom:
+            rospy.logwarn_throttle(
+                5.0,
+                "lidar_obstacle_perception_experimental: odom missing on %s, falling back to local frame %s",
+                self.odom_topic,
+                frame_id,
+            )
 
         local_points = self._extract_points(msg)
         if local_points.shape[0] == 0:
-            self.pub_ground.publish(self._points_to_cloud([], stamp, self.map_frame))
-            self.pub_non_ground.publish(self._points_to_cloud([], stamp, self.map_frame))
-            self.pub_dynamic.publish(self._points_to_cloud([], stamp, self.map_frame))
+            empty = self._empty_points()
+            static_points = self._confirmed_static_points() if self.have_odom else empty
+            center_xy = self.odom_pos[:2] if self.have_odom else (0.0, 0.0)
+            self.pub_ground.publish(self._points_to_cloud([], stamp, frame_id))
+            self.pub_non_ground.publish(self._points_to_cloud([], stamp, frame_id))
+            self.pub_dynamic.publish(self._points_to_cloud([], stamp, frame_id))
             self.pub_static.publish(
-                self._points_to_cloud(self._confirmed_static_points(), stamp, self.map_frame)
+                self._points_to_cloud(static_points, stamp, frame_id)
             )
-            self.pub_dynamic_markers.publish(self._build_dynamic_markers([], stamp))
+            self.pub_dynamic_markers.publish(
+                self._build_dynamic_markers_for_frame([], stamp, frame_id)
+            )
             self.pub_local_grid.publish(
-                self._build_local_grid(self._confirmed_static_points(), np.empty((0, 3), dtype=np.float32), stamp)
+                self._build_local_grid(static_points, empty, stamp, frame_id, center_xy)
             )
             return
 
@@ -682,20 +807,38 @@ class LidarObstaclePerceptionExperimental:
 
         ground_local = local_points[ground_mask]
         non_ground_local = local_points[non_ground_mask]
-        ground_map = self._transform_points_to_map(ground_local)
-        non_ground_map = self._transform_points_to_map(non_ground_local)
+        if self.have_odom:
+            ground_points = self._transform_points_to_map(ground_local)
+            non_ground_points = self._transform_points_to_map(non_ground_local)
+            center_xy = self.odom_pos[:2]
+        else:
+            ground_points = ground_local.copy()
+            non_ground_points = non_ground_local.copy()
+            center_xy = (0.0, 0.0)
 
-        clusters = self._cluster_points(non_ground_map)
+        clusters = self._cluster_points(non_ground_points)
         cluster_to_track = self._associate_tracks(clusters, now_sec)
 
-        dynamic_cluster_ids = set()
         dynamic_entries = []
         dynamic_point_indices = []
         for ci, tid in cluster_to_track.items():
             track = self.tracks.get(tid)
-            if track is None or not self._track_is_dynamic(track):
+            if track is None:
                 continue
-            dynamic_cluster_ids.add(ci)
+            cluster = clusters[ci]
+            cluster_points = non_ground_points[cluster["indices"]]
+            if self._cluster_is_plausibly_dynamic(cluster) and not self._cluster_has_static_support(
+                cluster_points
+            ):
+                track["motion_hits"] = min(
+                    int(track.get("motion_hits", 0)) + 1,
+                    self.dynamic_min_motion_hits + 5,
+                )
+            else:
+                track["motion_hits"] = max(int(track.get("motion_hits", 0)) - 1, 0)
+
+            if not self._track_is_dynamic(track):
+                continue
             dynamic_entries.append(
                 {
                     "track_id": tid,
@@ -707,17 +850,17 @@ class LidarObstaclePerceptionExperimental:
 
         dynamic_point_indices = np.asarray(dynamic_point_indices, dtype=np.int32)
         dynamic_points = (
-            non_ground_map[dynamic_point_indices]
+            non_ground_points[dynamic_point_indices]
             if dynamic_point_indices.size > 0
-            else np.empty((0, 3), dtype=np.float32)
+            else self._empty_points()
         )
 
         if dynamic_point_indices.size > 0:
-            static_mask = np.ones((non_ground_map.shape[0],), dtype=bool)
+            static_mask = np.ones((non_ground_points.shape[0],), dtype=bool)
             static_mask[dynamic_point_indices] = False
-            static_points_current = non_ground_map[static_mask]
+            static_points_current = non_ground_points[static_mask]
         else:
-            static_points_current = non_ground_map
+            static_points_current = non_ground_points
 
         if dynamic_entries:
             filtered_static_points = []
@@ -739,22 +882,27 @@ class LidarObstaclePerceptionExperimental:
             if filtered_static_points:
                 static_points_current = np.asarray(filtered_static_points, dtype=np.float32)
             else:
-                static_points_current = np.empty((0, 3), dtype=np.float32)
+                static_points_current = self._empty_points()
 
-        self._update_static_voxels(static_points_current, now_sec)
-        static_points_map = self._confirmed_static_points()
-        local_grid = self._build_local_grid(static_points_map, dynamic_points, stamp)
-        markers = self._build_dynamic_markers(dynamic_entries, stamp)
+        if self.have_odom:
+            self._update_static_voxels(static_points_current, now_sec)
+            static_points = self._confirmed_static_points()
+        else:
+            static_points = static_points_current
+        local_grid = self._build_local_grid(
+            static_points, dynamic_points, stamp, frame_id, center_xy
+        )
+        markers = self._build_dynamic_markers_for_frame(dynamic_entries, stamp, frame_id)
 
-        self.pub_ground.publish(self._points_to_cloud(ground_map, stamp, self.map_frame))
+        self.pub_ground.publish(self._points_to_cloud(ground_points, stamp, frame_id))
         self.pub_non_ground.publish(
-            self._points_to_cloud(non_ground_map, stamp, self.map_frame)
+            self._points_to_cloud(non_ground_points, stamp, frame_id)
         )
         self.pub_static.publish(
-            self._points_to_cloud(static_points_map, stamp, self.map_frame)
+            self._points_to_cloud(static_points, stamp, frame_id)
         )
         self.pub_dynamic.publish(
-            self._points_to_cloud(dynamic_points, stamp, self.map_frame)
+            self._points_to_cloud(dynamic_points, stamp, frame_id)
         )
         self.pub_dynamic_markers.publish(markers)
         self.pub_local_grid.publish(local_grid)

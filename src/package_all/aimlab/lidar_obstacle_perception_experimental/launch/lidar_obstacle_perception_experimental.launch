@@ -45,14 +45,23 @@
     <param name="track_assoc_dist_m" value="1.8"/>
     <param name="track_timeout_s" value="1.2"/>
     <param name="track_velocity_alpha" value="0.45"/>
-    <param name="dynamic_min_age" value="3"/>
+    <param name="dynamic_min_age" value="6"/>
+    <param name="dynamic_min_motion_hits" value="4"/>
     <param name="dynamic_speed_thresh_mps" value="0.35"/>
     <param name="dynamic_min_displacement_m" value="0.35"/>
+    <param name="dynamic_candidate_max_span_m" value="4.5"/>
+    <param name="dynamic_candidate_max_area_m2" value="8.0"/>
+    <param name="dynamic_candidate_max_points" value="220"/>
+    <param name="dynamic_candidate_max_height_m" value="2.4"/>
+    <param name="dynamic_candidate_max_aspect_ratio" value="3.5"/>
 
     <param name="static_voxel_size_m" value="0.20"/>
     <param name="static_confirm_hits" value="3"/>
     <param name="static_ttl_s" value="30.0"/>
     <param name="dynamic_exclusion_radius_m" value="1.2"/>
+    <param name="dynamic_static_support_min_hits" value="2"/>
+    <param name="dynamic_static_support_ratio" value="0.08"/>
+    <param name="dynamic_static_support_neighbor_cells" value="2"/>
 
     <param name="local_grid_resolution_m" value="0.20"/>
     <param name="local_grid_width_m" value="20.0"/>
