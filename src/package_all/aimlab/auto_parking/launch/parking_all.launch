@@ -3,7 +3,7 @@
   <arg name="use_map"      default="true"/>     <!-- 항상 map 프레임 사용 -->
   <arg name="use_tape"     default="true"/>     <!-- 테이프 필터 사용 여부 -->
   <arg name="edge_source"  default="density"/>  <!-- 라인 에지 소스: density | intensity -->
-  <arg name="sensor_height" default="0.50"/>    <!-- os_sensor가 바닥보다 위로 올라간 높이 (m) -->
+  <arg name="sensor_height" default="0.525"/>    <!-- os_sensor가 바닥보다 위로 올라간 높이 (m) -->
   <arg name="use_fake_tf"   default="true"/>    <!-- 로컬라이저 없을 때만 true -->
 
   <!-- 공통: cmd_vel MUX -->

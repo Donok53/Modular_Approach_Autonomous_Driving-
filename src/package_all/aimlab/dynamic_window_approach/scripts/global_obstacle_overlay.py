@@ -142,6 +142,52 @@ class GlobalObstacleOverlayPublisher:
         self.global_pointcloud_overlay_corridor_margin_m = max(
             0.0, float(rospy.get_param("~global_pointcloud_overlay_corridor_margin_m", 1.0))
         )
+        self.global_pointcloud_overlay_forward_min_x_m = float(
+            rospy.get_param("~global_pointcloud_overlay_forward_min_x_m", -0.50)
+        )
+        self.global_pointcloud_overlay_lateral_max_m = max(
+            0.0, float(rospy.get_param("~global_pointcloud_overlay_lateral_max_m", 8.0))
+        )
+        self.global_pointcloud_overlay_near_range_m = max(
+            0.5, float(rospy.get_param("~global_pointcloud_overlay_near_range_m", 8.0))
+        )
+        self.global_pointcloud_overlay_mid_range_m = max(
+            self.global_pointcloud_overlay_near_range_m,
+            float(rospy.get_param("~global_pointcloud_overlay_mid_range_m", 16.0)),
+        )
+        self.global_pointcloud_overlay_near_min_points = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_near_min_points", 4))
+        )
+        self.global_pointcloud_overlay_mid_min_points = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_mid_min_points", 6))
+        )
+        self.global_pointcloud_overlay_far_min_points = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_far_min_points", 8))
+        )
+        self.global_pointcloud_overlay_near_min_cells = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_near_min_cells", 1))
+        )
+        self.global_pointcloud_overlay_mid_min_cells = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_mid_min_cells", 2))
+        )
+        self.global_pointcloud_overlay_far_min_cells = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_far_min_cells", 2))
+        )
+        self.global_pointcloud_overlay_near_confirm_frames = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_near_confirm_frames", 1))
+        )
+        self.global_pointcloud_overlay_mid_confirm_frames = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_mid_confirm_frames", 2))
+        )
+        self.global_pointcloud_overlay_far_confirm_frames = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_far_confirm_frames", 3))
+        )
+        self.global_pointcloud_overlay_evidence_ttl_s = max(
+            0.1, float(rospy.get_param("~global_pointcloud_overlay_evidence_ttl_s", 0.9))
+        )
+        self.global_pointcloud_overlay_evidence_resolution_m = max(
+            0.1, float(rospy.get_param("~global_pointcloud_overlay_evidence_resolution_m", 0.6))
+        )
         self.global_pointcloud_overlay_max_points = max(
             0, int(rospy.get_param("~global_pointcloud_overlay_max_points", 200))
         )
@@ -177,6 +223,7 @@ class GlobalObstacleOverlayPublisher:
         self.global_path = None
         self.drivable_grid = None
         self.global_obstacle_overlay_cells_map = set()
+        self.global_obstacle_overlay_evidence = {}
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_boxes_map = []
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
@@ -226,7 +273,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -252,6 +299,18 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_max_range_m,
             self.global_pointcloud_overlay_lookahead_m,
             self.global_pointcloud_overlay_corridor_margin_m,
+            self.global_pointcloud_overlay_forward_min_x_m,
+            self.global_pointcloud_overlay_lateral_max_m,
+            self.global_pointcloud_overlay_near_min_points,
+            self.global_pointcloud_overlay_mid_min_points,
+            self.global_pointcloud_overlay_far_min_points,
+            self.global_pointcloud_overlay_near_min_cells,
+            self.global_pointcloud_overlay_mid_min_cells,
+            self.global_pointcloud_overlay_far_min_cells,
+            self.global_pointcloud_overlay_near_confirm_frames,
+            self.global_pointcloud_overlay_mid_confirm_frames,
+            self.global_pointcloud_overlay_far_confirm_frames,
+            self.global_pointcloud_overlay_evidence_ttl_s,
             "on" if self.global_pointcloud_overlay_far_field_candidate_blocking_enabled else "off",
             self.global_pointcloud_overlay_far_field_candidate_min_distance_m,
             "on" if self.known_map_subtraction_enabled else "off",
@@ -512,6 +571,13 @@ class GlobalObstacleOverlayPublisher:
                     continue
                 if x * x + y * y > rr:
                     continue
+                if x < self.global_pointcloud_overlay_forward_min_x_m:
+                    continue
+                if (
+                    self.global_pointcloud_overlay_lateral_max_m > 0.0
+                    and abs(y) > self.global_pointcloud_overlay_lateral_max_m
+                ):
+                    continue
                 if abs(x) <= self.self_filter_radius_x and abs(y) <= self.self_filter_radius_y:
                     continue
 
@@ -528,7 +594,7 @@ class GlobalObstacleOverlayPublisher:
                     accepted_cells.add((cx, cy))
 
             self.global_obstacle_overlay_cells_map = self._select_global_overlay_candidate_cells(
-                accepted_cells
+                accepted_cells, cluster_counts, stamp_sec
             )
             self.global_obstacle_overlay_boxes_map = []
             self._publish_global_obstacle_overlay(msg.header.stamp)
@@ -875,12 +941,111 @@ class GlobalObstacleOverlayPublisher:
             self.drivable_grid, best_proj[0], best_proj[1]
         )
 
-    def _select_global_overlay_candidate_cells(self, accepted_cells):
+    def _cell_support_count(self, cell, cluster_counts):
+        cx, cy = cell
+        support = 0
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                support += cluster_counts.get((cx + dx, cy + dy), 0)
+        return support
+
+    def _connected_pointcloud_components(self, accepted_cells, cluster_counts):
+        pending = set(accepted_cells)
+        components = []
+        while pending:
+            seed = pending.pop()
+            stack = [seed]
+            cells = []
+            point_count = 0
+            support_count = 0
+            weighted_x = 0.0
+            weighted_y = 0.0
+            min_range = float("inf")
+
+            while stack:
+                cell = stack.pop()
+                cells.append(cell)
+                local_x, local_y = self._local_cluster_cell_center(cell)
+                count = max(1, int(cluster_counts.get(cell, 0)))
+                point_count += count
+                support_count += self._cell_support_count(cell, cluster_counts)
+                weighted_x += local_x * count
+                weighted_y += local_y * count
+                min_range = min(min_range, math.hypot(local_x, local_y))
+
+                cx, cy = cell
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        nb = (cx + dx, cy + dy)
+                        if nb in pending:
+                            pending.remove(nb)
+                            stack.append(nb)
+
+            denom = max(1, point_count)
+            components.append(
+                {
+                    "cells": cells,
+                    "point_count": point_count,
+                    "support_count": support_count,
+                    "center_local": (weighted_x / denom, weighted_y / denom),
+                    "min_range": min_range,
+                }
+            )
+        return components
+
+    def _overlay_evidence_requirements(self, range_m):
+        if range_m <= self.global_pointcloud_overlay_near_range_m:
+            return (
+                self.global_pointcloud_overlay_near_min_points,
+                self.global_pointcloud_overlay_near_min_cells,
+                self.global_pointcloud_overlay_near_confirm_frames,
+            )
+        if range_m <= self.global_pointcloud_overlay_mid_range_m:
+            return (
+                self.global_pointcloud_overlay_mid_min_points,
+                self.global_pointcloud_overlay_mid_min_cells,
+                self.global_pointcloud_overlay_mid_confirm_frames,
+            )
+        return (
+            self.global_pointcloud_overlay_far_min_points,
+            self.global_pointcloud_overlay_far_min_cells,
+            self.global_pointcloud_overlay_far_confirm_frames,
+        )
+
+    def _overlay_evidence_key(self, wx, wy):
+        res = max(0.1, self.global_pointcloud_overlay_evidence_resolution_m)
+        return (int(math.floor(wx / res)), int(math.floor(wy / res)))
+
+    def _prune_overlay_evidence(self, now_sec):
+        ttl = self.global_pointcloud_overlay_evidence_ttl_s
+        self.global_obstacle_overlay_evidence = {
+            key: value
+            for key, value in self.global_obstacle_overlay_evidence.items()
+            if (now_sec - float(value.get("last_seen", 0.0))) <= ttl
+        }
+
+    def _overlay_component_is_confirmed(self, key, now_sec, confirm_frames):
+        entry = self.global_obstacle_overlay_evidence.get(key)
+        if entry is None or (now_sec - float(entry.get("last_seen", 0.0))) > self.global_pointcloud_overlay_evidence_ttl_s:
+            hits = 1
+        else:
+            hits = int(entry.get("hits", 0)) + 1
+        self.global_obstacle_overlay_evidence[key] = {
+            "hits": min(1000, hits),
+            "last_seen": now_sec,
+        }
+        return hits >= confirm_frames
+
+    def _select_global_overlay_candidate_cells(self, accepted_cells, cluster_counts, now_sec):
         if not accepted_cells or self.drivable_grid is None:
+            self._prune_overlay_evidence(now_sec)
             return set()
 
         path_slice = self._global_overlay_path_slice()
         if len(path_slice) < 2:
+            self._prune_overlay_evidence(now_sec)
             return set()
 
         corridor_half_width_m = self._pointcloud_corridor_half_width_m(
@@ -888,17 +1053,55 @@ class GlobalObstacleOverlayPublisher:
         )
         grid = self.drivable_grid
         selected = set()
-        for cell in accepted_cells:
-            local_x, local_y = self._local_cluster_cell_center(cell)
-            wx, wy = self._local_to_map(local_x, local_y)
-            if not self._point_is_valid_overlay_candidate(
-                wx, wy, path_slice, corridor_half_width_m
-            ):
+        self._prune_overlay_evidence(now_sec)
+
+        for component in self._connected_pointcloud_components(accepted_cells, cluster_counts):
+            candidate_map_cells = []
+            candidate_weight = 0
+            candidate_wx = 0.0
+            candidate_wy = 0.0
+            candidate_min_range = float("inf")
+
+            for cell in component["cells"]:
+                local_x, local_y = self._local_cluster_cell_center(cell)
+                wx, wy = self._local_to_map(local_x, local_y)
+                if not self._point_is_valid_overlay_candidate(
+                    wx, wy, path_slice, corridor_half_width_m
+                ):
+                    continue
+                gx, gy = self._world_to_grid_cell(grid, wx, wy)
+                if gx < 0 or gy < 0 or gx >= int(grid.info.width) or gy >= int(grid.info.height):
+                    continue
+                count = max(1, int(cluster_counts.get(cell, 0)))
+                candidate_map_cells.append((gx, gy))
+                candidate_weight += count
+                candidate_wx += wx * count
+                candidate_wy += wy * count
+                candidate_min_range = min(candidate_min_range, math.hypot(local_x, local_y))
+
+            if not candidate_map_cells:
                 continue
-            gx, gy = self._world_to_grid_cell(grid, wx, wy)
-            if gx < 0 or gy < 0 or gx >= int(grid.info.width) or gy >= int(grid.info.height):
+
+            range_m = (
+                candidate_min_range
+                if math.isfinite(candidate_min_range)
+                else float(component.get("min_range", 0.0))
+            )
+            min_points, min_cells, confirm_frames = self._overlay_evidence_requirements(range_m)
+            if int(component["point_count"]) < min_points or len(component["cells"]) < min_cells:
                 continue
-            selected.add((gx, gy))
+
+            denom = max(1, candidate_weight)
+            center_wx = candidate_wx / denom
+            center_wy = candidate_wy / denom
+            evidence_key = self._overlay_evidence_key(center_wx, center_wy)
+            if not self._overlay_component_is_confirmed(evidence_key, now_sec, confirm_frames):
+                continue
+
+            selected.update(candidate_map_cells)
+
+        if self.global_pointcloud_overlay_max_points > 0 and len(selected) > self.global_pointcloud_overlay_max_points:
+            selected = set(sorted(selected)[: self.global_pointcloud_overlay_max_points])
         return selected
 
     def _select_global_overlay_candidate_boxes(self, current_boxes_map):

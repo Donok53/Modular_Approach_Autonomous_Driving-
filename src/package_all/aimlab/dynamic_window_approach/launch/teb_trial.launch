@@ -145,7 +145,7 @@
   <arg name="pointcloud_slope_compensation_enabled" default="true"/>
   <arg name="pointcloud_slope_compensation_max_abs_deg" default="25.0"/>
   <arg name="pointcloud_ground_band_rejection_enabled" default="true"/>
-  <arg name="pointcloud_lidar_height_m" default="0.46"/>
+  <arg name="pointcloud_lidar_height_m" default="0.525"/>
   <arg name="pointcloud_ground_reject_min_m" default="-0.20"/>
   <arg name="pointcloud_ground_reject_max_m" default="0.04"/>
   <arg name="teb_filter_min_range" default="0.10"/>

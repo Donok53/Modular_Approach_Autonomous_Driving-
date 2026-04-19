@@ -111,7 +111,7 @@ class BackInParking:
         self.robot_length = float(rospy.get_param("~robot_length", 0.65))           # 65cm
         self.robot_width = float(rospy.get_param("~robot_width", 0.60))             # 60cm
         self.robot_height_to_lidar = float(rospy.get_param("~robot_height_to_lidar", 0.58))  # 58cm
-        self.lidar_height = float(rospy.get_param("~lidar_height", 0.50))           # 50cm above ground
+        self.lidar_height = float(rospy.get_param("~lidar_height", 0.525))          # 52.5cm above ground
         
         # Collision detection parameters (rear)
         # stop_distance: rear buffer for reversing (default: 0.4m)

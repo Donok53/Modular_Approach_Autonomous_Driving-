@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   std_msgs
   geometry_msgs
+  visualization_msgs
   message_generation
 )
 
@@ -116,7 +117,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES dynamic_window_approach
 #  CATKIN_DEPENDS nav_msgs roscpp rospy sensor_msgs std_msgs
-  CATKIN_DEPENDS geometry_msgs rospy std_msgs message_runtime
+  CATKIN_DEPENDS geometry_msgs rospy std_msgs visualization_msgs message_runtime
 #  DEPENDS system_lib
 )
 
@@ -224,6 +225,7 @@ catkin_install_python(PROGRAMS
   scripts/dynamic_risk_manager.py
   scripts/dynamicwindowapproach.py
   scripts/global_obstacle_overlay.py
+  scripts/planning_slowdown_manager.py
   scripts/planning_odom_filter.py
   scripts/teb_cmd_vel_relay.py
   scripts/test2.py

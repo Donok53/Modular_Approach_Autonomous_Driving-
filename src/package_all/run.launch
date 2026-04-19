@@ -190,11 +190,11 @@
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
-  <arg name="global_path_candidate_count" default="$(eval '7' if str(arg('real_mode')).lower() == 'true' else '5')"/>
+  <arg name="global_path_candidate_count" default="7"/>
   <arg name="global_path_candidate_fanout_enabled" default="true"/>
   <arg name="global_path_candidate_fanout_anchor_count" default="2"/>
-  <arg name="global_path_candidate_fanout_levels" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '1')"/>
-  <arg name="global_path_candidate_fanout_lateral_step_m" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.75')"/>
+  <arg name="global_path_candidate_fanout_levels" default="2"/>
+  <arg name="global_path_candidate_fanout_lateral_step_m" default="0.90"/>
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="$(eval '0.00' if str(arg('real_mode')).lower() == 'true' else '0.02')"/>
@@ -205,24 +205,24 @@
   <arg name="global_path_enable_graph_fallback" default="false"/>
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
-  <arg name="global_path_continuous_replan" default="false"/>
+  <arg name="global_path_continuous_replan" default="true"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.15"/>
   <arg name="global_path_replan_min_interval_s" default="0.25"/>
-  <arg name="global_path_replan_validation_lookahead_m" default="8.0"/>
+  <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
   <arg name="global_path_planner_loop_hz" default="8.0"/>
   <arg name="global_path_republish_period_s" default="0.20"/>
   <arg name="grid_snap_search_radius_cells" default="$(eval '60' if str(arg('real_mode')).lower() == 'true' else '30')"/>
   <arg name="candidate_route_switching_enabled" default="true"/>
-  <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
+  <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '3.0')"/>
   <arg name="candidate_route_switch_score_margin" default="$(eval '2.5' if str(arg('real_mode')).lower() == 'true' else '1.0')"/>
   <arg name="candidate_route_switch_min_hold_s" default="$(eval '1.5' if str(arg('real_mode')).lower() == 'true' else '0.8')"/>
   <arg name="candidate_route_switch_confirm_count" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '2')"/>
-  <arg name="candidate_route_switch_require_centerline_blocked" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
+  <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
@@ -338,14 +338,36 @@
   <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
   <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="6.0"/>
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
-  <arg name="global_pointcloud_overlay_max_range_m" default="$(eval '25.0' if str(arg('real_mode')).lower() == 'true' else '15.0')"/>
+  <arg name="global_pointcloud_overlay_max_range_m" default="25.0"/>
   <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
   <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.06"/>
-  <arg name="global_pointcloud_overlay_lookahead_m" default="$(eval '25.0' if str(arg('real_mode')).lower() == 'true' else '15.0')"/>
+  <arg name="global_pointcloud_overlay_lookahead_m" default="25.0"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
+  <arg name="global_pointcloud_overlay_forward_min_x_m" default="-0.50"/>
+  <arg name="global_pointcloud_overlay_lateral_max_m" default="8.0"/>
+  <arg name="global_pointcloud_overlay_near_range_m" default="8.0"/>
+  <arg name="global_pointcloud_overlay_mid_range_m" default="16.0"/>
+  <arg name="global_pointcloud_overlay_near_min_points" default="4"/>
+  <arg name="global_pointcloud_overlay_mid_min_points" default="6"/>
+  <arg name="global_pointcloud_overlay_far_min_points" default="8"/>
+  <arg name="global_pointcloud_overlay_near_min_cells" default="1"/>
+  <arg name="global_pointcloud_overlay_mid_min_cells" default="2"/>
+  <arg name="global_pointcloud_overlay_far_min_cells" default="2"/>
+  <arg name="global_pointcloud_overlay_near_confirm_frames" default="1"/>
+  <arg name="global_pointcloud_overlay_mid_confirm_frames" default="2"/>
+  <arg name="global_pointcloud_overlay_far_confirm_frames" default="3"/>
+  <arg name="global_pointcloud_overlay_evidence_ttl_s" default="0.9"/>
+  <arg name="global_pointcloud_overlay_evidence_resolution_m" default="0.6"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
   <arg name="global_pointcloud_overlay_max_update_hz" default="5.0"/>
-  <arg name="global_obstacle_overlay_obstacle_max_range_m" default="$(eval '25.0' if str(arg('real_mode')).lower() == 'true' else '15.0')"/>
+  <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
+  <arg name="enable_planning_slowdown_manager" default="true"/>
+  <arg name="planning_slowdown_speed_limit_mps" default="0.12"/>
+  <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
+  <arg name="planning_slowdown_hold_s" default="2.0"/>
+  <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
+  <arg name="planning_slowdown_publish_hz" default="5.0"/>
+  <arg name="planning_slowdown_marker_topic" default="/planning/planning_speed_limit_marker"/>
   <arg name="dynamic_speed_thresh_mps" default="0.08"/>
   <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
   <arg name="prediction_horizon_s" default="2.2"/>
@@ -731,8 +753,30 @@
       <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
+      <arg name="global_pointcloud_overlay_forward_min_x_m" value="$(arg global_pointcloud_overlay_forward_min_x_m)"/>
+      <arg name="global_pointcloud_overlay_lateral_max_m" value="$(arg global_pointcloud_overlay_lateral_max_m)"/>
+      <arg name="global_pointcloud_overlay_near_range_m" value="$(arg global_pointcloud_overlay_near_range_m)"/>
+      <arg name="global_pointcloud_overlay_mid_range_m" value="$(arg global_pointcloud_overlay_mid_range_m)"/>
+      <arg name="global_pointcloud_overlay_near_min_points" value="$(arg global_pointcloud_overlay_near_min_points)"/>
+      <arg name="global_pointcloud_overlay_mid_min_points" value="$(arg global_pointcloud_overlay_mid_min_points)"/>
+      <arg name="global_pointcloud_overlay_far_min_points" value="$(arg global_pointcloud_overlay_far_min_points)"/>
+      <arg name="global_pointcloud_overlay_near_min_cells" value="$(arg global_pointcloud_overlay_near_min_cells)"/>
+      <arg name="global_pointcloud_overlay_mid_min_cells" value="$(arg global_pointcloud_overlay_mid_min_cells)"/>
+      <arg name="global_pointcloud_overlay_far_min_cells" value="$(arg global_pointcloud_overlay_far_min_cells)"/>
+      <arg name="global_pointcloud_overlay_near_confirm_frames" value="$(arg global_pointcloud_overlay_near_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_mid_confirm_frames" value="$(arg global_pointcloud_overlay_mid_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_far_confirm_frames" value="$(arg global_pointcloud_overlay_far_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_evidence_ttl_s" value="$(arg global_pointcloud_overlay_evidence_ttl_s)"/>
+      <arg name="global_pointcloud_overlay_evidence_resolution_m" value="$(arg global_pointcloud_overlay_evidence_resolution_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
+      <arg name="enable_planning_slowdown_manager" value="$(arg enable_planning_slowdown_manager)"/>
+      <arg name="planning_slowdown_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
+      <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
+      <arg name="planning_slowdown_hold_s" value="$(arg planning_slowdown_hold_s)"/>
+      <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
+      <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
+      <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
@@ -1059,8 +1103,30 @@
       <arg name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
+      <arg name="global_pointcloud_overlay_forward_min_x_m" value="$(arg global_pointcloud_overlay_forward_min_x_m)"/>
+      <arg name="global_pointcloud_overlay_lateral_max_m" value="$(arg global_pointcloud_overlay_lateral_max_m)"/>
+      <arg name="global_pointcloud_overlay_near_range_m" value="$(arg global_pointcloud_overlay_near_range_m)"/>
+      <arg name="global_pointcloud_overlay_mid_range_m" value="$(arg global_pointcloud_overlay_mid_range_m)"/>
+      <arg name="global_pointcloud_overlay_near_min_points" value="$(arg global_pointcloud_overlay_near_min_points)"/>
+      <arg name="global_pointcloud_overlay_mid_min_points" value="$(arg global_pointcloud_overlay_mid_min_points)"/>
+      <arg name="global_pointcloud_overlay_far_min_points" value="$(arg global_pointcloud_overlay_far_min_points)"/>
+      <arg name="global_pointcloud_overlay_near_min_cells" value="$(arg global_pointcloud_overlay_near_min_cells)"/>
+      <arg name="global_pointcloud_overlay_mid_min_cells" value="$(arg global_pointcloud_overlay_mid_min_cells)"/>
+      <arg name="global_pointcloud_overlay_far_min_cells" value="$(arg global_pointcloud_overlay_far_min_cells)"/>
+      <arg name="global_pointcloud_overlay_near_confirm_frames" value="$(arg global_pointcloud_overlay_near_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_mid_confirm_frames" value="$(arg global_pointcloud_overlay_mid_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_far_confirm_frames" value="$(arg global_pointcloud_overlay_far_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_evidence_ttl_s" value="$(arg global_pointcloud_overlay_evidence_ttl_s)"/>
+      <arg name="global_pointcloud_overlay_evidence_resolution_m" value="$(arg global_pointcloud_overlay_evidence_resolution_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
+      <arg name="enable_planning_slowdown_manager" value="$(arg enable_planning_slowdown_manager)"/>
+      <arg name="planning_slowdown_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
+      <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
+      <arg name="planning_slowdown_hold_s" value="$(arg planning_slowdown_hold_s)"/>
+      <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
+      <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
+      <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>

@@ -39,7 +39,7 @@ Topics:
   sub  /server_to_robot_topic                      (astar_map/server_to_robot)
 """
 
-import rospy, math, sys, time, csv, colorsys, struct, heapq, xml.etree.ElementTree as ET
+import rospy, math, sys, time, csv, colorsys, struct, heapq, traceback, xml.etree.ElementTree as ET
 from geometry_msgs.msg import Point, PoseStamped, Quaternion, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
@@ -1601,6 +1601,15 @@ class AStarPlanner:
             if self.debug_log_enable:
                 rospy.loginfo("[astar] drivable-grid path republished (fallback cleared)")
 
+    def republish_world_path_keep_state(self, world_points, stamp=None):
+        if not world_points:
+            return
+        if stamp is None:
+            stamp = rospy.Time.now()
+        self._capture_published_path_context()
+        self._last_path_pub_t = time.monotonic()
+        self._publish_world_path_messages(world_points, stamp=stamp, simplify=False)
+
     def clear_published_path(self, stamp=None):
         if self._last_path_nodes is None and self._last_world_path_signature is None:
             self._clear_published_path_context()
@@ -2609,6 +2618,7 @@ class AStarPlanner:
             goal_cell,
             planning_goal_tail_blocked,
         )
+        clicked_goal_xy = (float(goal_xy[0]), float(goal_xy[1]))
         self._last_snapped_goal_xy = snapped_goal_xy
         if extend_to_clicked_goal and goal_cell != goal_raw and self.debug_log_enable:
             rospy.loginfo_throttle(
@@ -3181,6 +3191,9 @@ if __name__ == "__main__":
                         path_nodes = prev_path_nodes
                         a._publish_path_fallback_state(True)
                         if world_path:
+                            a.republish_world_path_keep_state(
+                                world_path, stamp=rospy.Time.now()
+                            )
                             a.publish_candidate_world_paths_if_changed(
                                 candidate_world_paths,
                                 stamp=rospy.Time.now(),
@@ -3202,8 +3215,14 @@ if __name__ == "__main__":
                             keep_reason,
                         )
 
-            if (not a._path_is_fallback) and world_path and a.path_repub_period > 0.0:
-                if candidate_world_paths:
+            if world_path and a.path_repub_period > 0.0:
+                if a._path_is_fallback:
+                    tnow = time.monotonic()
+                    if (tnow - a._last_path_pub_t) >= a.path_repub_period:
+                        a.republish_world_path_keep_state(
+                            world_path, stamp=rospy.Time.now()
+                        )
+                elif candidate_world_paths:
                     new_active_candidate_index, _ = a.select_best_candidate_world_path(
                         candidate_world_paths, active_index=active_candidate_index
                     )
@@ -3230,3 +3249,6 @@ if __name__ == "__main__":
 
     except rospy.ROSInterruptException:
         pass
+    except Exception:
+        rospy.logerr("[astar] fatal exception:\n%s", traceback.format_exc())
+        raise

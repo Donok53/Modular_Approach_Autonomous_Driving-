@@ -489,14 +489,12 @@ class DWAControl:
             )
         self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
-        self.sub_behavior = None
-        if not self.follow_global_path_only:
-            self.sub_behavior = rospy.Subscriber(
-                self.behavior_cmd_topic,
-                BehaviorCommand,
-                self.behavior_cmd_callback,
-                queue_size=10,
-            )
+        self.sub_behavior = rospy.Subscriber(
+            self.behavior_cmd_topic,
+            BehaviorCommand,
+            self.behavior_cmd_callback,
+            queue_size=10,
+        )
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
         self.sub_global_obstacle_overlay_boxes = None
         if (
@@ -1817,7 +1815,7 @@ class DWAControl:
             self.active_path_topic,
             "on" if self.follow_global_path_only else "off",
             "on" if self.use_muxed_active_path else "off",
-            self.behavior_cmd_topic if not self.follow_global_path_only else "-",
+            self.behavior_cmd_topic,
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
             "off" if self.follow_global_path_only else "on",
@@ -1869,7 +1867,7 @@ class DWAControl:
                 continue
 
             # behavior-layer hard stop
-            if (not self.follow_global_path_only) and self.behavior_stop and not self._rot_mode:
+            if self.behavior_stop and not self._rot_mode:
                 self._log_nav_reason(
                     "stop_behavior",
                     "reason=%s speed_limit=%.2f" % (self.behavior_reason, self.behavior_speed_limit),
@@ -1984,8 +1982,7 @@ class DWAControl:
                             min(self.max_speed, self.final_speed_k * max(dist_to_goal, 0.0)))
             else:
                 v_cap = self.max_speed
-            if not self.follow_global_path_only:
-                v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
+            v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
 
             if self.path_tracking_only:
                 u, predicted = self.path_tracking_control(

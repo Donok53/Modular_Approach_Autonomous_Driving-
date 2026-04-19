@@ -213,11 +213,35 @@
     <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.08"/>
     <arg name="global_pointcloud_overlay_lookahead_m" default="25.0"/>
     <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
+    <arg name="global_pointcloud_overlay_forward_min_x_m" default="-0.50"/>
+    <arg name="global_pointcloud_overlay_lateral_max_m" default="8.0"/>
+    <arg name="global_pointcloud_overlay_near_range_m" default="8.0"/>
+    <arg name="global_pointcloud_overlay_mid_range_m" default="16.0"/>
+    <arg name="global_pointcloud_overlay_near_min_points" default="4"/>
+    <arg name="global_pointcloud_overlay_mid_min_points" default="6"/>
+    <arg name="global_pointcloud_overlay_far_min_points" default="8"/>
+    <arg name="global_pointcloud_overlay_near_min_cells" default="1"/>
+    <arg name="global_pointcloud_overlay_mid_min_cells" default="2"/>
+    <arg name="global_pointcloud_overlay_far_min_cells" default="2"/>
+    <arg name="global_pointcloud_overlay_near_confirm_frames" default="1"/>
+    <arg name="global_pointcloud_overlay_mid_confirm_frames" default="2"/>
+    <arg name="global_pointcloud_overlay_far_confirm_frames" default="3"/>
+    <arg name="global_pointcloud_overlay_evidence_ttl_s" default="0.9"/>
+    <arg name="global_pointcloud_overlay_evidence_resolution_m" default="0.6"/>
     <arg name="global_pointcloud_overlay_max_points" default="200"/>
     <arg name="global_pointcloud_overlay_max_update_hz" default="5.0"/>
     <arg name="global_pointcloud_overlay_far_field_candidate_blocking_enabled" default="true"/>
     <arg name="global_pointcloud_overlay_far_field_candidate_min_distance_m" default="2.5"/>
     <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
+    <arg name="enable_planning_slowdown_manager" default="false"/>
+    <arg name="planning_slowdown_speed_limit_mps" default="0.12"/>
+    <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
+    <arg name="planning_slowdown_hold_s" default="2.0"/>
+    <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
+    <arg name="planning_slowdown_publish_hz" default="5.0"/>
+    <arg name="planning_slowdown_marker_topic" default="/planning/planning_speed_limit_marker"/>
+    <arg name="planning_slowdown_goal_topic" default="/move_base_simple/goal"/>
+    <arg name="planning_slowdown_path_is_fallback_topic" default="/astar/path_is_fallback"/>
     <arg name="dynamic_speed_thresh_mps" default="0.08"/>
     <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
     <arg name="prediction_horizon_s" default="2.2"/>
@@ -475,10 +499,40 @@
       <param name="global_pointcloud_overlay_static_box_margin_m" value="$(arg global_pointcloud_overlay_static_box_margin_m)"/>
       <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <param name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
+            <param name="global_pointcloud_overlay_forward_min_x_m" value="$(arg global_pointcloud_overlay_forward_min_x_m)"/>
+            <param name="global_pointcloud_overlay_lateral_max_m" value="$(arg global_pointcloud_overlay_lateral_max_m)"/>
+            <param name="global_pointcloud_overlay_near_range_m" value="$(arg global_pointcloud_overlay_near_range_m)"/>
+            <param name="global_pointcloud_overlay_mid_range_m" value="$(arg global_pointcloud_overlay_mid_range_m)"/>
+            <param name="global_pointcloud_overlay_near_min_points" value="$(arg global_pointcloud_overlay_near_min_points)"/>
+            <param name="global_pointcloud_overlay_mid_min_points" value="$(arg global_pointcloud_overlay_mid_min_points)"/>
+            <param name="global_pointcloud_overlay_far_min_points" value="$(arg global_pointcloud_overlay_far_min_points)"/>
+            <param name="global_pointcloud_overlay_near_min_cells" value="$(arg global_pointcloud_overlay_near_min_cells)"/>
+            <param name="global_pointcloud_overlay_mid_min_cells" value="$(arg global_pointcloud_overlay_mid_min_cells)"/>
+            <param name="global_pointcloud_overlay_far_min_cells" value="$(arg global_pointcloud_overlay_far_min_cells)"/>
+            <param name="global_pointcloud_overlay_near_confirm_frames" value="$(arg global_pointcloud_overlay_near_confirm_frames)"/>
+            <param name="global_pointcloud_overlay_mid_confirm_frames" value="$(arg global_pointcloud_overlay_mid_confirm_frames)"/>
+            <param name="global_pointcloud_overlay_far_confirm_frames" value="$(arg global_pointcloud_overlay_far_confirm_frames)"/>
+            <param name="global_pointcloud_overlay_evidence_ttl_s" value="$(arg global_pointcloud_overlay_evidence_ttl_s)"/>
+            <param name="global_pointcloud_overlay_evidence_resolution_m" value="$(arg global_pointcloud_overlay_evidence_resolution_m)"/>
             <param name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
             <param name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
             <param name="global_pointcloud_overlay_far_field_candidate_blocking_enabled" value="$(arg global_pointcloud_overlay_far_field_candidate_blocking_enabled)"/>
             <param name="global_pointcloud_overlay_far_field_candidate_min_distance_m" value="$(arg global_pointcloud_overlay_far_field_candidate_min_distance_m)"/>
+        </node>
+    </group>
+
+    <group if="$(arg enable_planning_slowdown_manager)">
+        <node pkg="dynamic_window_approach" type="planning_slowdown_manager.py" name="planning_slowdown_manager" output="screen" respawn="false">
+            <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+            <param name="global_path_topic" value="$(arg global_path_topic)"/>
+            <param name="path_is_fallback_topic" value="$(arg planning_slowdown_path_is_fallback_topic)"/>
+            <param name="goal_topic" value="$(arg planning_slowdown_goal_topic)"/>
+            <param name="marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
+            <param name="slow_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
+            <param name="clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
+            <param name="hold_s" value="$(arg planning_slowdown_hold_s)"/>
+            <param name="no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
+            <param name="publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
         </node>
     </group>
 

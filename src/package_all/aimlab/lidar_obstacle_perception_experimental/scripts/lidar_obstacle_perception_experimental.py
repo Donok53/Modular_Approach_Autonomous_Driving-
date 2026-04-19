@@ -31,6 +31,13 @@ class LidarObstaclePerceptionExperimental:
         self.require_odom_for_processing = bool(
             rospy.get_param("~require_odom_for_processing", False)
         )
+        self.ground_only_mode = bool(rospy.get_param("~ground_only_mode", False))
+        self.input_cloud_is_non_ground = bool(
+            rospy.get_param("~input_cloud_is_non_ground", False)
+        )
+        self.publish_static_current_frame_only = bool(
+            rospy.get_param("~publish_static_current_frame_only", False)
+        )
         self.local_fallback_frame = str(
             rospy.get_param("~local_fallback_frame", "")
         ).strip()
@@ -160,7 +167,6 @@ class LidarObstaclePerceptionExperimental:
         self.motion_suppress_speed_mps = max(
             0.0, float(rospy.get_param("~motion_suppress_speed_mps", 0.60))
         )
-
         self.local_grid_resolution_m = max(
             0.05, float(rospy.get_param("~local_grid_resolution_m", 0.20))
         )
@@ -230,7 +236,7 @@ class LidarObstaclePerceptionExperimental:
         )
 
         rospy.loginfo(
-            "lidar_obstacle_perception_experimental started | cloud=%s imu=%s odom=%s range=%.1fm downsample=%d ground_cell=%.2fm clearance=%.2fm cluster_cell=%.2fm track_assoc=%.2fm static_voxel=%.2fm ttl=%.1fs grid=%.1fx%.1fm@%.2fm",
+            "lidar_obstacle_perception_experimental started | cloud=%s imu=%s odom=%s range=%.1fm downsample=%d ground_cell=%.2fm clearance=%.2fm cluster_cell=%.2fm track_assoc=%.2fm static_voxel=%.2fm ttl=%.1fs grid=%.1fx%.1fm@%.2fm ground_only=%s input_non_ground=%s current_frame_static=%s",
             self.pointcloud_topic,
             self.imu_topic,
             self.odom_topic,
@@ -245,6 +251,9 @@ class LidarObstaclePerceptionExperimental:
             self.local_grid_width_m,
             self.local_grid_height_m,
             self.local_grid_resolution_m,
+            str(self.ground_only_mode).lower(),
+            str(self.input_cloud_is_non_ground).lower(),
+            str(self.publish_static_current_frame_only).lower(),
         )
 
     @staticmethod
@@ -833,12 +842,15 @@ class LidarObstaclePerceptionExperimental:
             )
             return
 
-        leveled_points = self._level_points(local_points)
-        ground_mask = self._segment_ground(leveled_points)
-        non_ground_mask = np.logical_not(ground_mask)
-
-        ground_local = local_points[ground_mask]
-        non_ground_local = local_points[non_ground_mask]
+        if self.input_cloud_is_non_ground:
+            ground_local = self._empty_points()
+            non_ground_local = local_points
+        else:
+            leveled_points = self._level_points(local_points)
+            ground_mask = self._segment_ground(leveled_points)
+            non_ground_mask = np.logical_not(ground_mask)
+            ground_local = local_points[ground_mask]
+            non_ground_local = local_points[non_ground_mask]
         if self.have_odom:
             ground_points = self._transform_points_to_map(ground_local)
             non_ground_points = self._transform_points_to_map(non_ground_local)
@@ -847,6 +859,13 @@ class LidarObstaclePerceptionExperimental:
             ground_points = ground_local.copy()
             non_ground_points = non_ground_local.copy()
             center_xy = (0.0, 0.0)
+
+        if self.ground_only_mode:
+            self.pub_ground.publish(self._points_to_cloud(ground_points, stamp, frame_id))
+            self.pub_non_ground.publish(
+                self._points_to_cloud(non_ground_points, stamp, frame_id)
+            )
+            return
 
         clusters = self._cluster_points(non_ground_points)
         cluster_to_track = self._associate_tracks(clusters, now_sec)
@@ -921,11 +940,16 @@ class LidarObstaclePerceptionExperimental:
 
         if self.have_odom and not aggressive_ego_motion:
             self._update_static_voxels(static_points_current, now_sec)
-            static_points = self._confirmed_static_points()
+            static_points_accumulated = self._confirmed_static_points()
         elif self.have_odom:
-            static_points = self._confirmed_static_points()
+            static_points_accumulated = self._confirmed_static_points()
         else:
-            static_points = static_points_current
+            static_points_accumulated = static_points_current
+        static_points = (
+            static_points_current
+            if self.publish_static_current_frame_only
+            else static_points_accumulated
+        )
         local_grid = self._build_local_grid(
             static_points, dynamic_points, stamp, frame_id, center_xy
         )

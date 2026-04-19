@@ -553,6 +553,14 @@ Visualization Manager:
       Namespaces: {}
       Queue Size: 20
       Value: false
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /planning/planning_speed_limit_marker
+      Name: planning_speed_limit
+      Namespaces:
+        planning_speed_limit: true
+      Queue Size: 5
+      Value: true
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path

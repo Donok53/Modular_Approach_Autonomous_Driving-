@@ -2,7 +2,7 @@
   <!-- 기본 인자 -->
   <arg name="use_map" default="true"/>
   <arg name="use_fake_tf" default="true"/>
-  <arg name="sensor_height" default="0.50"/>
+  <arg name="sensor_height" default="0.525"/>
 
   <!-- 카메라 토픽을 외부에서 제공해 주세요 -->
   <arg name="image_topic" default="/camera/color/image_raw"/>

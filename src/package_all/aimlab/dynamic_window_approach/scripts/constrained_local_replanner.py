@@ -187,7 +187,7 @@ class ConstrainedLocalReplanner:
             rospy.get_param("~enable_ground_band_rejection", True)
         )
         self.lidar_height_m = max(
-            0.0, float(rospy.get_param("~lidar_height_m", 0.46))
+            0.0, float(rospy.get_param("~lidar_height_m", 0.525))
         )
         self.ground_reject_min_m = float(
             rospy.get_param("~ground_reject_min_m", -0.20)

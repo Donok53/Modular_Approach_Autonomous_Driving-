@@ -28,6 +28,7 @@
     <param name="imu_topic" value="$(arg imu_topic)"/>
     <param name="odom_topic" value="$(arg odom_topic)"/>
     <param name="require_odom_for_processing" value="false"/>
+    <param name="ground_only_mode" value="true"/>
     <param name="local_fallback_frame" value="$(arg raw_frame)"/>
 
     <param name="ground_cloud_topic" value="$(arg ground_cloud_topic)"/>
