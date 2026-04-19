@@ -234,8 +234,8 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: false
-      Keep: 60
+      Enabled: true
+      Keep: 1
       Name: Planning Odometry
       Position Tolerance: 0.10000000149011612
       Queue Size: 10
@@ -251,7 +251,7 @@ Visualization Manager:
         Value: Arrow
       Topic: /lio_localizer/odometry/planning
       Unreliable: false
-      Value: false
+      Value: true
     - Class: rviz/TF
       Enabled: false
       Filter (blacklist): ""
@@ -480,7 +480,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /astar/path_display
+      Topic: /astar/path
       Unreliable: false
       Value: false
     - Alpha: 1
@@ -654,7 +654,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.10000000149011612
       Shaft Length: 0.10000000149011612
-      Topic: /astar/path_display
+      Topic: /astar/path
       Unreliable: false
       Value: true
     - Class: rviz/MarkerArray
