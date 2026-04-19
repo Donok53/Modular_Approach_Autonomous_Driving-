@@ -86,7 +86,7 @@ class GlobalObstacleOverlayPublisher:
             rospy.get_param("~enable_ground_band_rejection", True)
         )
         self.lidar_height_m = max(
-            0.0, float(rospy.get_param("~lidar_height_m", 0.46))
+            0.0, float(rospy.get_param("~lidar_height_m", 0.525))
         )
         self.ground_reject_min_m = float(
             rospy.get_param("~ground_reject_min_m", -0.20)
@@ -145,6 +145,9 @@ class GlobalObstacleOverlayPublisher:
         self.global_pointcloud_overlay_max_points = max(
             0, int(rospy.get_param("~global_pointcloud_overlay_max_points", 200))
         )
+        self.global_pointcloud_overlay_max_update_hz = max(
+            0.0, float(rospy.get_param("~global_pointcloud_overlay_max_update_hz", 5.0))
+        )
         self.global_pointcloud_overlay_far_field_candidate_blocking_enabled = bool(
             rospy.get_param("~global_pointcloud_overlay_far_field_candidate_blocking_enabled", True)
         )
@@ -173,11 +176,13 @@ class GlobalObstacleOverlayPublisher:
         self.odom_pitch = 0.0
         self.global_path = None
         self.drivable_grid = None
+        self.global_obstacle_overlay_cells_map = set()
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_boxes_map = []
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
         self.tracked_objects = []
         self.tracked_objects_stamp_sec = 0.0
+        self.last_cloud_process_stamp_sec = 0.0
 
         self.pub_global_obstacle_overlay = rospy.Publisher(
             self.global_obstacle_overlay_topic, OccupancyGrid, queue_size=1
@@ -221,7 +226,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -470,11 +475,23 @@ class GlobalObstacleOverlayPublisher:
         self.drivable_grid = msg
 
     def cloud_callback(self, msg):
-        if not self.have_odom:
+        if not self.have_odom or self.drivable_grid is None or self.global_path is None:
             return
 
+        stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp else 0.0
+        if stamp_sec <= 0.0:
+            stamp_sec = rospy.get_time()
+        if self.global_pointcloud_overlay_max_update_hz > 0.0:
+            min_dt = 1.0 / self.global_pointcloud_overlay_max_update_hz
+            if (
+                self.last_cloud_process_stamp_sec > 0.0
+                and stamp_sec >= self.last_cloud_process_stamp_sec
+                and (stamp_sec - self.last_cloud_process_stamp_sec) < min_dt
+            ):
+                return
+            self.last_cloud_process_stamp_sec = stamp_sec
+
         cluster_counts = {}
-        cluster_bounds = {}
         rr = self.obstacle_max_range_m * self.obstacle_max_range_m
         i = 0
         try:
@@ -500,13 +517,6 @@ class GlobalObstacleOverlayPublisher:
 
                 cell = self._pointcloud_cluster_cell(x, y)
                 cluster_counts[cell] = cluster_counts.get(cell, 0) + 1
-                min_x, max_x, min_y, max_y = cluster_bounds.get(cell, (x, x, y, y))
-                cluster_bounds[cell] = (
-                    min(min_x, x),
-                    max(max_x, x),
-                    min(min_y, y),
-                    max(max_y, y),
-                )
 
             accepted_cells = set()
             for (cx, cy), count in cluster_counts.items():
@@ -517,54 +527,10 @@ class GlobalObstacleOverlayPublisher:
                 if support >= self.pointcloud_min_cluster_points:
                     accepted_cells.add((cx, cy))
 
-            current_boxes_map = []
-            visited = set()
-            for start_cell in accepted_cells:
-                if start_cell in visited:
-                    continue
-                stack = [start_cell]
-                visited.add(start_cell)
-                local_min_x = float("inf")
-                local_max_x = float("-inf")
-                local_min_y = float("inf")
-                local_max_y = float("-inf")
-                component_points = 0
-                while stack:
-                    cx, cy = stack.pop()
-                    count = int(cluster_counts.get((cx, cy), 0))
-                    if count <= 0:
-                        continue
-                    component_points += count
-                    cell_min_x, cell_max_x, cell_min_y, cell_max_y = cluster_bounds[(cx, cy)]
-                    local_min_x = min(local_min_x, cell_min_x)
-                    local_max_x = max(local_max_x, cell_max_x)
-                    local_min_y = min(local_min_y, cell_min_y)
-                    local_max_y = max(local_max_y, cell_max_y)
-                    for dx in (-1, 0, 1):
-                        for dy in (-1, 0, 1):
-                            nbr = (cx + dx, cy + dy)
-                            if nbr in accepted_cells and nbr not in visited:
-                                visited.add(nbr)
-                                stack.append(nbr)
-                if component_points <= 0 or not math.isfinite(local_min_x):
-                    continue
-                box = self._local_box_to_map_box(
-                    local_min_x,
-                    local_max_x,
-                    local_min_y,
-                    local_max_y,
-                    self._local_to_map,
-                )
-                current_boxes_map.append(
-                    self._expand_box(box, self.global_pointcloud_overlay_static_box_margin_m)
-                )
-
-            stamp_sec = msg.header.stamp.to_sec()
-            if stamp_sec <= 0.0:
-                stamp_sec = rospy.Time.now().to_sec()
-
-            candidates = self._select_global_overlay_candidate_boxes(current_boxes_map)
-            self._update_global_obstacle_overlay_memory(candidates, stamp_sec)
+            self.global_obstacle_overlay_cells_map = self._select_global_overlay_candidate_cells(
+                accepted_cells
+            )
+            self.global_obstacle_overlay_boxes_map = []
             self._publish_global_obstacle_overlay(msg.header.stamp)
         except Exception as exc:
             rospy.logwarn_throttle(1.0, "global_obstacle_overlay cloud error: %s", str(exc))
@@ -579,6 +545,11 @@ class GlobalObstacleOverlayPublisher:
     def _pointcloud_cluster_cell(self, x, y):
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
         return (int(math.floor(x / res)), int(math.floor(y / res)))
+
+    def _local_cluster_cell_center(self, cell):
+        res = max(1e-3, self.pointcloud_cluster_resolution_m)
+        cx, cy = cell
+        return ((float(cx) + 0.5) * res, (float(cy) + 0.5) * res)
 
     @staticmethod
     def _tracked_object_speed_mps(obj):
@@ -861,6 +832,75 @@ class GlobalObstacleOverlayPublisher:
         )
         return (dx * dx + dy * dy) <= radius_sq
 
+    def _point_is_valid_overlay_candidate(self, wx, wy, path_slice, corridor_half_width_m):
+        if not path_slice:
+            return False
+
+        dx = wx - self.odom_x
+        dy = wy - self.odom_y
+        if (dx * dx + dy * dy) > (self.global_pointcloud_overlay_max_range_m ** 2):
+            return False
+
+        best_proj = None
+        best_dist_sq = float("inf")
+        corridor_limit_sq = corridor_half_width_m * corridor_half_width_m
+        for idx in range(len(path_slice) - 1):
+            x0, y0 = path_slice[idx]
+            x1, y1 = path_slice[idx + 1]
+            proj_x, proj_y, _, dist_sq = self._project_point_to_segment(
+                wx, wy, x0, y0, x1, y1
+            )
+            if dist_sq <= corridor_limit_sq and dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_proj = (proj_x, proj_y)
+
+        if best_proj is None:
+            return False
+        if self.drivable_grid is None:
+            return True
+
+        far_field_relaxed = (
+            self.global_pointcloud_overlay_far_field_candidate_blocking_enabled
+            and math.hypot(dx, dy)
+            >= self.global_pointcloud_overlay_far_field_candidate_min_distance_m
+        )
+        center_is_drivable_free = self._world_cell_is_drivable_free(self.drivable_grid, wx, wy)
+        if center_is_drivable_free and self._has_drivable_grid_line_of_sight(
+            self.drivable_grid, best_proj[0], best_proj[1], wx, wy
+        ):
+            return True
+        if not far_field_relaxed:
+            return False
+        return self._world_cell_is_drivable_free(
+            self.drivable_grid, best_proj[0], best_proj[1]
+        )
+
+    def _select_global_overlay_candidate_cells(self, accepted_cells):
+        if not accepted_cells or self.drivable_grid is None:
+            return set()
+
+        path_slice = self._global_overlay_path_slice()
+        if len(path_slice) < 2:
+            return set()
+
+        corridor_half_width_m = self._pointcloud_corridor_half_width_m(
+            self.global_pointcloud_overlay_corridor_margin_m
+        )
+        grid = self.drivable_grid
+        selected = set()
+        for cell in accepted_cells:
+            local_x, local_y = self._local_cluster_cell_center(cell)
+            wx, wy = self._local_to_map(local_x, local_y)
+            if not self._point_is_valid_overlay_candidate(
+                wx, wy, path_slice, corridor_half_width_m
+            ):
+                continue
+            gx, gy = self._world_to_grid_cell(grid, wx, wy)
+            if gx < 0 or gy < 0 or gx >= int(grid.info.width) or gy >= int(grid.info.height):
+                continue
+            selected.add((gx, gy))
+        return selected
+
     def _select_global_overlay_candidate_boxes(self, current_boxes_map):
         if not current_boxes_map:
             return []
@@ -1067,18 +1107,10 @@ class GlobalObstacleOverlayPublisher:
         w = int(base.info.width)
         h = int(base.info.height)
         data = [0] * (w * h)
-        for box in self.global_obstacle_overlay_boxes_map:
-            gx0, gx1, gy0, gy1 = self._grid_bounds_for_box(base, box)
-            gx0 = max(0, gx0)
-            gy0 = max(0, gy0)
-            gx1 = min(w - 1, gx1)
-            gy1 = min(h - 1, gy1)
-            if gx0 > gx1 or gy0 > gy1:
+        for gx, gy in self.global_obstacle_overlay_cells_map:
+            if gx < 0 or gy < 0 or gx >= w or gy >= h:
                 continue
-            for gy in range(gy0, gy1 + 1):
-                row_offset = gy * w
-                for gx in range(gx0, gx1 + 1):
-                    data[row_offset + gx] = 100
+            data[(gy * w) + gx] = 100
         out.data = data
         self.pub_global_obstacle_overlay.publish(out)
         self._publish_global_obstacle_overlay_boxes_marker(

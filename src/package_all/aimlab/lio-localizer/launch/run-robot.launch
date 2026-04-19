@@ -13,7 +13,10 @@
     <arg name="global_map_2d_background_pcd" default="$(find lio_localizer)/map/$(arg map_profile_name)/GlobalMap2D.pcd"/>
     <arg name="global_map_2d_background_topic" default="/lio_localizer/localization/global_map_2d"/>
     <arg name="global_map_2d_background_z_offset_m" default="0.0"/>
+    <arg name="global_map_2d_reload_period_s" default="2.0"/>
+    <arg name="enable_global_map_2d_edit_plane" default="true"/>
     <arg name="rviz_config_file" default="$(find lio_localizer)/launch/include/config/rviz.rviz"/>
+    <arg name="enable_rviz" default="true"/>
     <arg name="use_internal_initial_pose" default="false"/>
     <arg name="initial_pose_x_m" default="0.0"/>
     <arg name="initial_pose_y_m" default="0.0"/>
@@ -62,8 +65,8 @@
       <param name="topic" value="$(arg global_map_2d_background_topic)"/>
       <param name="frame_id" value="map"/>
       <param name="z_offset" value="$(arg global_map_2d_background_z_offset_m)"/>
-      <param name="reload_period_s" value="2.0"/>
-      <param name="publish_edit_plane" value="true"/>
+      <param name="reload_period_s" value="$(arg global_map_2d_reload_period_s)"/>
+      <param name="publish_edit_plane" value="$(arg enable_global_map_2d_edit_plane)"/>
       <param name="edit_plane_topic" value="/lio_localizer/localization/global_map_2d_edit_plane"/>
       <param name="edit_plane_resolution" value="0.20"/>
       <param name="edit_plane_z_offset" value="0.12"/>
@@ -73,8 +76,10 @@
     <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
     
     <!--- Run Rviz-->
-    <include file="$(find lio_localizer)/launch/include/module_rviz.launch">
-      <arg name="config_file" value="$(arg rviz_config_file)"/>
-    </include>
+    <group if="$(arg enable_rviz)">
+      <include file="$(find lio_localizer)/launch/include/module_rviz.launch">
+        <arg name="config_file" value="$(arg rviz_config_file)"/>
+      </include>
+    </group>
 
 </launch>

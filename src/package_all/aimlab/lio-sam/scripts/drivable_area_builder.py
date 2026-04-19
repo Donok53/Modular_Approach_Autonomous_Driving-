@@ -241,6 +241,10 @@ class DrivableAreaBuilder:
 
         if self.auto_load_state:
             self.load_state_from_file(log_prefix="startup")
+            # When /use_sim_time is true and no bag clock is playing yet, rospy.Timer
+            # callbacks do not run. Publish once immediately so the saved drivable area
+            # is visible in RViz before sensor playback starts.
+            self.publish_all(force=True)
 
         rospy.loginfo(
             "drivable_area_builder started | odom=%s, mode=%s, auto_seed=%s, ground_filter=%s, adaptive_ref=%s, grid=%.2fm, state=%s",
@@ -1480,6 +1484,12 @@ class DrivableAreaBuilder:
                 self._dirty = False
         if not dirty:
             return
+        self.publish_all(force=False)
+
+    def publish_all(self, force=False):
+        if force:
+            with self._lock:
+                self._dirty = False
         self.publish_marker()
         self.publish_risk_marker()
         self.publish_grid()

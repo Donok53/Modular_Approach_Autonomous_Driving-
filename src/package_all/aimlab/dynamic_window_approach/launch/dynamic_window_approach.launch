@@ -214,6 +214,7 @@
     <arg name="global_pointcloud_overlay_lookahead_m" default="25.0"/>
     <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
     <arg name="global_pointcloud_overlay_max_points" default="200"/>
+    <arg name="global_pointcloud_overlay_max_update_hz" default="5.0"/>
     <arg name="global_pointcloud_overlay_far_field_candidate_blocking_enabled" default="true"/>
     <arg name="global_pointcloud_overlay_far_field_candidate_min_distance_m" default="2.5"/>
     <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
@@ -475,6 +476,7 @@
       <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <param name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
             <param name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
+            <param name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
             <param name="global_pointcloud_overlay_far_field_candidate_blocking_enabled" value="$(arg global_pointcloud_overlay_far_field_candidate_blocking_enabled)"/>
             <param name="global_pointcloud_overlay_far_field_candidate_min_distance_m" value="$(arg global_pointcloud_overlay_far_field_candidate_min_distance_m)"/>
         </node>

@@ -1,0 +1,88 @@
+<launch>
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="imu_topic" default="/imu/data"/>
+  <arg name="raw_frame" default="os_sensor"/>
+  <arg name="gravity_frame" default="os_sensor_gravity"/>
+  <arg name="self_filter_frame" default="$(arg raw_frame)"/>
+  <arg name="enable_rviz" default="true"/>
+
+  <arg name="ground_cloud_topic" default="/experimental/linefit_self_filter/ground_cloud"/>
+  <arg name="raw_non_ground_cloud_topic" default="/experimental/linefit_self_filter/non_ground_cloud_raw"/>
+  <arg name="filtered_non_ground_cloud_topic" default="/experimental/linefit_self_filter/non_ground_cloud"/>
+  <arg name="mode_topic" default="/experimental/linefit_self_filter/mode"/>
+
+  <arg name="robot_length_m" default="0.612"/>
+  <arg name="robot_width_m" default="0.58"/>
+  <arg name="self_filter_padding_m" default="0.06"/>
+  <arg name="self_filter_center_x_m" default="0.0"/>
+  <arg name="self_filter_center_y_m" default="0.0"/>
+  <arg name="self_filter_min_z_m" default="-10.0"/>
+  <arg name="self_filter_max_z_m" default="10.0"/>
+  <arg name="enable_pitch_footprint_adjustment" default="true"/>
+  <arg name="pitch_uphill_sign" default="-1.0"/>
+  <arg name="pitch_adjust_deadband_deg" default="2.0"/>
+  <arg name="pitch_adjust_primary_gain_m_per_deg" default="0.02"/>
+  <arg name="pitch_adjust_opposite_gain_m_per_deg" default="0.0"/>
+  <arg name="pitch_adjust_max_extension_m" default="0.25"/>
+  <arg name="enable_slope_residual_filter" default="true"/>
+  <arg name="use_imu_slope_gate" default="true"/>
+  <arg name="slope_enter_pitch_deg" default="4.5"/>
+  <arg name="slope_exit_pitch_deg" default="3.0"/>
+  <arg name="slope_filter_max_range_m" default="3.0"/>
+  <arg name="slope_filter_cell_size_m" default="0.18"/>
+  <arg name="slope_filter_min_z_span_m" default="0.14"/>
+  <arg name="slope_filter_min_points_per_cell" default="2"/>
+  <arg name="slope_filter_remove_sparse_cells" default="true"/>
+  <arg name="slope_filter_keep_front_close_m" default="0.35"/>
+
+  <include file="$(find lidar_obstacle_perception_experimental)/launch/linefit_ground_removal_debug.launch">
+    <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <arg name="imu_topic" value="$(arg imu_topic)"/>
+    <arg name="raw_frame" value="$(arg raw_frame)"/>
+    <arg name="gravity_frame" value="$(arg gravity_frame)"/>
+    <arg name="enable_rviz" value="false"/>
+    <arg name="ground_cloud_topic" value="$(arg ground_cloud_topic)"/>
+    <arg name="non_ground_cloud_topic" value="$(arg raw_non_ground_cloud_topic)"/>
+    <arg name="mode_topic" value="$(arg mode_topic)"/>
+  </include>
+
+  <node pkg="lidar_obstacle_perception_experimental"
+        type="self_footprint_cloud_filter.py"
+        name="linefit_self_footprint_cloud_filter"
+        output="screen"
+        respawn="false">
+    <param name="input_topic" value="$(arg raw_non_ground_cloud_topic)"/>
+    <param name="output_topic" value="$(arg filtered_non_ground_cloud_topic)"/>
+    <param name="base_frame" value="$(arg self_filter_frame)"/>
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="robot_length_m" value="$(arg robot_length_m)"/>
+    <param name="robot_width_m" value="$(arg robot_width_m)"/>
+    <param name="padding_m" value="$(arg self_filter_padding_m)"/>
+    <param name="center_x_m" value="$(arg self_filter_center_x_m)"/>
+    <param name="center_y_m" value="$(arg self_filter_center_y_m)"/>
+    <param name="min_z_m" value="$(arg self_filter_min_z_m)"/>
+    <param name="max_z_m" value="$(arg self_filter_max_z_m)"/>
+    <param name="enable_pitch_footprint_adjustment" value="$(arg enable_pitch_footprint_adjustment)"/>
+    <param name="pitch_uphill_sign" value="$(arg pitch_uphill_sign)"/>
+    <param name="pitch_adjust_deadband_deg" value="$(arg pitch_adjust_deadband_deg)"/>
+    <param name="pitch_adjust_primary_gain_m_per_deg" value="$(arg pitch_adjust_primary_gain_m_per_deg)"/>
+    <param name="pitch_adjust_opposite_gain_m_per_deg" value="$(arg pitch_adjust_opposite_gain_m_per_deg)"/>
+    <param name="pitch_adjust_max_extension_m" value="$(arg pitch_adjust_max_extension_m)"/>
+    <param name="enable_slope_residual_filter" value="$(arg enable_slope_residual_filter)"/>
+    <param name="use_imu_slope_gate" value="$(arg use_imu_slope_gate)"/>
+    <param name="slope_enter_pitch_deg" value="$(arg slope_enter_pitch_deg)"/>
+    <param name="slope_exit_pitch_deg" value="$(arg slope_exit_pitch_deg)"/>
+    <param name="slope_filter_max_range_m" value="$(arg slope_filter_max_range_m)"/>
+    <param name="slope_filter_cell_size_m" value="$(arg slope_filter_cell_size_m)"/>
+    <param name="slope_filter_min_z_span_m" value="$(arg slope_filter_min_z_span_m)"/>
+    <param name="slope_filter_min_points_per_cell" value="$(arg slope_filter_min_points_per_cell)"/>
+    <param name="slope_filter_remove_sparse_cells" value="$(arg slope_filter_remove_sparse_cells)"/>
+    <param name="slope_filter_keep_front_close_m" value="$(arg slope_filter_keep_front_close_m)"/>
+  </node>
+
+  <node if="$(arg enable_rviz)"
+        pkg="rviz"
+        type="rviz"
+        name="linefit_self_filter_debug_rviz"
+        args="-d $(find lidar_obstacle_perception_experimental)/rviz/linefit_self_filter_debug.rviz"/>
+</launch>

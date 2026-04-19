@@ -1,0 +1,99 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+    Tree Height: 520
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Enabled: true
+      Name: Grid
+      Reference Frame: <Fixed Frame>
+      Plane: XY
+      Cell Size: 1
+      Plane Cell Count: 20
+      Color: 160; 160; 164
+      Alpha: 0.35
+      Value: true
+    - Class: rviz/PointCloud2
+      Name: Raw LiDAR
+      Enabled: true
+      Topic: /ouster/points
+      Queue Size: 5
+      Style: Flat Squares
+      Size (m): 0.04
+      Color Transformer: FlatColor
+      Color: 210; 210; 210
+      Alpha: 0.10
+      Use Fixed Frame: true
+      Selectable: true
+      Value: true
+    - Class: rviz/PointCloud2
+      Name: Ground Cloud
+      Enabled: false
+      Topic: /experimental/linefit_self_filter/ground_cloud
+      Queue Size: 5
+      Style: Flat Squares
+      Size (m): 0.05
+      Color Transformer: FlatColor
+      Color: 60; 180; 75
+      Alpha: 0.45
+      Use Fixed Frame: true
+      Selectable: true
+      Value: false
+    - Class: rviz/PointCloud2
+      Name: Non Ground Raw
+      Enabled: true
+      Topic: /experimental/linefit_self_filter/non_ground_cloud_raw
+      Queue Size: 5
+      Style: Flat Squares
+      Size (m): 0.055
+      Color Transformer: FlatColor
+      Color: 255; 60; 60
+      Alpha: 0.75
+      Use Fixed Frame: true
+      Selectable: true
+      Value: true
+    - Class: rviz/PointCloud2
+      Name: Non Ground Self-Filtered
+      Enabled: true
+      Topic: /experimental/linefit_self_filter/non_ground_cloud
+      Queue Size: 5
+      Style: Flat Squares
+      Size (m): 0.075
+      Color Transformer: FlatColor
+      Color: 255; 220; 40
+      Alpha: 1.0
+      Use Fixed Frame: true
+      Selectable: true
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 32; 32; 32
+    Fixed Frame: os_sensor
+    Frame Rate: 20
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Views:
+    Current:
+      Class: rviz/TopDownOrtho
+      Name: Current View
+      Angle: 0
+      Scale: 22
+      X: 0
+      Y: 0
+Window Geometry:
+  Height: 1080
+  Width: 1600
+  X: 100
+  Y: 40

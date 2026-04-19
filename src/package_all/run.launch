@@ -9,9 +9,13 @@
   <arg name="localizer_map_bundle_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
   <arg name="runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
   <arg name="localization_environment" default="indoor"/>
+  <arg name="enable_rviz" default="true"/>
   <arg name="enable_localizer_drivable_area" default="true"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
   <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
+  <arg name="enable_localizer_global_map_2d_background" default="true"/>
+  <arg name="enable_localizer_global_map_2d_edit_plane" default="true"/>
+  <arg name="localizer_global_map_2d_reload_period_s" default="2.0"/>
   <arg name="localizer_use_internal_initial_pose" default="false"/>
   <arg name="localizer_initial_pose_x_m" default="0.0"/>
   <arg name="localizer_initial_pose_y_m" default="0.0"/>
@@ -25,16 +29,18 @@
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="imu_topic" default="/imu/data"/>
   <arg name="cloud_tracker_pointcloud_topic" default="$(eval '/lio_sam/deskew/cloud_deskewed' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/cloud_deskewed')"/>
   <arg name="use_drivable_grid" default="true"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
-  <arg name="enable_cloud_tracker" default="true"/>
-  <arg name="enable_dynamic_risk_manager" default="true"/>
+  <arg name="enable_cloud_tracker" default="false"/>
+  <arg name="enable_dynamic_risk_manager" default="false"/>
   <arg name="enable_local_replanner" default="false"/>
   <arg name="follow_global_path_only" default="true"/>
-  <arg name="use_dynamic_risk_grid" default="true"/>
+  <arg name="use_dynamic_risk_grid" default="false"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
+  <arg name="enable_tracked_objects_marker_viz" default="false"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
@@ -68,13 +74,45 @@
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
   <arg name="enable_avoidance_path" default="false"/>
   <arg name="enable_graph_planner" default="true"/>
-  <arg name="enable_robot_send" default="true"/>
-  <arg name="enable_wave_cmd_bridge" default="true"/>
+  <arg name="enable_robot_send" default="false"/>
+  <arg name="enable_wave_cmd_bridge" default="false"/>
   <arg name="wave_port_name" default=""/>
   <arg name="wave_baud_rate" default="19200"/>
   <arg name="wave_linear_scale" default="1.0"/>
   <arg name="wave_angular_scale" default="1.0"/>
   <arg name="local_planner_mode" default="custom"/>
+  <arg name="enable_linefit_ground_filter_for_planning" default="true"/>
+  <arg name="enable_linefit_self_filter" default="true"/>
+  <arg name="linefit_pointcloud_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
+  <arg name="linefit_raw_frame" default="base_link"/>
+  <arg name="linefit_gravity_frame" default="base_link_gravity"/>
+  <arg name="linefit_ground_cloud_topic" default="/planning/linefit_ground/ground_cloud"/>
+  <arg name="linefit_raw_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud_raw"/>
+  <arg name="linefit_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud"/>
+  <arg name="linefit_selector_non_ground_cloud_topic" default="$(eval arg('linefit_raw_non_ground_cloud_topic') if str(arg('enable_linefit_self_filter')).lower() == 'true' else arg('linefit_non_ground_cloud_topic'))"/>
+  <arg name="linefit_mode_topic" default="/planning/linefit_ground/mode"/>
+  <arg name="linefit_self_filter_padding_m" default="0.06"/>
+  <arg name="linefit_self_filter_center_x_m" default="0.0"/>
+  <arg name="linefit_self_filter_center_y_m" default="0.0"/>
+  <arg name="linefit_self_filter_min_z_m" default="-10.0"/>
+  <arg name="linefit_self_filter_max_z_m" default="10.0"/>
+  <arg name="linefit_enable_pitch_footprint_adjustment" default="true"/>
+  <arg name="linefit_pitch_uphill_sign" default="-1.0"/>
+  <arg name="linefit_pitch_adjust_deadband_deg" default="2.0"/>
+  <arg name="linefit_pitch_adjust_primary_gain_m_per_deg" default="0.02"/>
+  <arg name="linefit_pitch_adjust_opposite_gain_m_per_deg" default="0.0"/>
+  <arg name="linefit_pitch_adjust_max_extension_m" default="0.25"/>
+  <arg name="linefit_enable_slope_residual_filter" default="true"/>
+  <arg name="linefit_slope_residual_use_imu_gate" default="true"/>
+  <arg name="linefit_slope_residual_enter_pitch_deg" default="4.5"/>
+  <arg name="linefit_slope_residual_exit_pitch_deg" default="3.0"/>
+  <arg name="linefit_slope_residual_max_range_m" default="3.0"/>
+  <arg name="linefit_slope_residual_cell_size_m" default="0.18"/>
+  <arg name="linefit_slope_residual_min_z_span_m" default="0.14"/>
+  <arg name="linefit_slope_residual_min_points_per_cell" default="2"/>
+  <arg name="linefit_slope_residual_remove_sparse_cells" default="true"/>
+  <arg name="linefit_slope_residual_keep_front_close_m" default="0.35"/>
+  <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('linefit_non_ground_cloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() == 'true' else arg('pointcloud_topic'))"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
@@ -264,7 +302,7 @@
   <arg name="static_obstacle_memory_locked_keep_range_m" default="4.5"/>
   <arg name="static_obstacle_memory_blind_zone_radius_m" default="1.40"/>
   <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="5.0"/>
-  <arg name="known_map_subtraction_enabled" default="true"/>
+  <arg name="known_map_subtraction_enabled" default="false"/>
   <arg name="known_map_subtraction_radius_m" default="0.30"/>
   <arg name="local_blind_zone_guard_enabled" default="true"/>
   <arg name="local_blind_zone_guard_radius_m" default="1.20"/>
@@ -306,6 +344,7 @@
   <arg name="global_pointcloud_overlay_lookahead_m" default="$(eval '25.0' if str(arg('real_mode')).lower() == 'true' else '15.0')"/>
   <arg name="global_pointcloud_overlay_corridor_margin_m" default="1.3"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
+  <arg name="global_pointcloud_overlay_max_update_hz" default="5.0"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="$(eval '25.0' if str(arg('real_mode')).lower() == 'true' else '15.0')"/>
   <arg name="dynamic_speed_thresh_mps" default="0.08"/>
   <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
@@ -422,6 +461,10 @@
       <arg name="environment" value="$(arg localization_environment)"/>
       <arg name="enable_drivable_area" value="$(arg enable_localizer_drivable_area)"/>
       <arg name="enable_drivable_area_2d_editor" value="$(arg enable_localizer_drivable_area_2d_editor)"/>
+      <arg name="enable_global_map_2d_background" value="$(arg enable_localizer_global_map_2d_background)"/>
+      <arg name="enable_global_map_2d_edit_plane" value="$(arg enable_localizer_global_map_2d_edit_plane)"/>
+      <arg name="global_map_2d_reload_period_s" value="$(arg localizer_global_map_2d_reload_period_s)"/>
+      <arg name="enable_rviz" value="$(arg enable_rviz)"/>
       <arg name="rviz_config_file" value="$(find lio_localizer)/launch/include/config/rviz_with_local_planner.rviz"/>
       <arg name="use_internal_initial_pose" value="$(arg localizer_use_internal_initial_pose)"/>
       <arg name="initial_pose_x_m" value="$(arg localizer_initial_pose_x_m)"/>
@@ -473,6 +516,54 @@
     <param name="linear_scale" value="$(arg wave_linear_scale)"/>
     <param name="angular_scale" value="$(arg wave_angular_scale)"/>
   </node>
+
+  <group if="$(arg enable_linefit_ground_filter_for_planning)">
+    <include file="$(find lidar_obstacle_perception_experimental)/launch/linefit_ground_removal_debug.launch">
+      <arg name="pointcloud_topic" value="$(arg linefit_pointcloud_topic)"/>
+      <arg name="imu_topic" value="$(arg imu_topic)"/>
+      <arg name="raw_frame" value="$(arg linefit_raw_frame)"/>
+      <arg name="gravity_frame" value="$(arg linefit_gravity_frame)"/>
+      <arg name="enable_rviz" value="false"/>
+      <arg name="ground_cloud_topic" value="$(arg linefit_ground_cloud_topic)"/>
+      <arg name="non_ground_cloud_topic" value="$(arg linefit_selector_non_ground_cloud_topic)"/>
+      <arg name="mode_topic" value="$(arg linefit_mode_topic)"/>
+    </include>
+
+    <node if="$(arg enable_linefit_self_filter)"
+          pkg="lidar_obstacle_perception_experimental"
+          type="self_footprint_cloud_filter.py"
+          name="linefit_self_footprint_cloud_filter"
+          output="screen"
+          respawn="false">
+      <param name="input_topic" value="$(arg linefit_raw_non_ground_cloud_topic)"/>
+      <param name="output_topic" value="$(arg linefit_non_ground_cloud_topic)"/>
+      <param name="base_frame" value="$(arg robot_base_frame)"/>
+      <param name="imu_topic" value="$(arg imu_topic)"/>
+      <param name="robot_length_m" value="$(arg robot_length_m)"/>
+      <param name="robot_width_m" value="$(arg robot_width_m)"/>
+      <param name="padding_m" value="$(arg linefit_self_filter_padding_m)"/>
+      <param name="center_x_m" value="$(arg linefit_self_filter_center_x_m)"/>
+      <param name="center_y_m" value="$(arg linefit_self_filter_center_y_m)"/>
+      <param name="min_z_m" value="$(arg linefit_self_filter_min_z_m)"/>
+      <param name="max_z_m" value="$(arg linefit_self_filter_max_z_m)"/>
+      <param name="enable_pitch_footprint_adjustment" value="$(arg linefit_enable_pitch_footprint_adjustment)"/>
+      <param name="pitch_uphill_sign" value="$(arg linefit_pitch_uphill_sign)"/>
+      <param name="pitch_adjust_deadband_deg" value="$(arg linefit_pitch_adjust_deadband_deg)"/>
+      <param name="pitch_adjust_primary_gain_m_per_deg" value="$(arg linefit_pitch_adjust_primary_gain_m_per_deg)"/>
+      <param name="pitch_adjust_opposite_gain_m_per_deg" value="$(arg linefit_pitch_adjust_opposite_gain_m_per_deg)"/>
+      <param name="pitch_adjust_max_extension_m" value="$(arg linefit_pitch_adjust_max_extension_m)"/>
+      <param name="enable_slope_residual_filter" value="$(arg linefit_enable_slope_residual_filter)"/>
+      <param name="use_imu_slope_gate" value="$(arg linefit_slope_residual_use_imu_gate)"/>
+      <param name="slope_enter_pitch_deg" value="$(arg linefit_slope_residual_enter_pitch_deg)"/>
+      <param name="slope_exit_pitch_deg" value="$(arg linefit_slope_residual_exit_pitch_deg)"/>
+      <param name="slope_filter_max_range_m" value="$(arg linefit_slope_residual_max_range_m)"/>
+      <param name="slope_filter_cell_size_m" value="$(arg linefit_slope_residual_cell_size_m)"/>
+      <param name="slope_filter_min_z_span_m" value="$(arg linefit_slope_residual_min_z_span_m)"/>
+      <param name="slope_filter_min_points_per_cell" value="$(arg linefit_slope_residual_min_points_per_cell)"/>
+      <param name="slope_filter_remove_sparse_cells" value="$(arg linefit_slope_residual_remove_sparse_cells)"/>
+      <param name="slope_filter_keep_front_close_m" value="$(arg linefit_slope_residual_keep_front_close_m)"/>
+    </node>
+  </group>
 
   <group if="$(arg enable_graph_planner)">
     <group if="$(arg use_auto_osm)">
@@ -598,12 +689,13 @@
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
-      <arg name="obstacle_pointcloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="obstacle_pointcloud_topic" value="$(arg planning_obstacle_pointcloud_topic)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
       <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
+      <arg name="enable_tracked_objects_marker_viz" value="$(arg enable_tracked_objects_marker_viz)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
       <arg name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
       <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
@@ -640,6 +732,7 @@
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
+      <arg name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
@@ -881,6 +974,7 @@
       <arg name="travel_history_topic" value="$(arg travel_history_topic)"/>
       <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
+      <arg name="enable_tracked_objects_marker_viz" value="$(arg enable_tracked_objects_marker_viz)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
       <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
@@ -966,6 +1060,7 @@
       <arg name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
       <arg name="global_pointcloud_overlay_corridor_margin_m" value="$(arg global_pointcloud_overlay_corridor_margin_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
+      <arg name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>

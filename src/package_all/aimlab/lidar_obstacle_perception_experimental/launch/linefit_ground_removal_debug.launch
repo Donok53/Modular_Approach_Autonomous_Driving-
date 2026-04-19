@@ -1,0 +1,110 @@
+<launch>
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="imu_topic" default="/imu/data"/>
+  <arg name="raw_frame" default="os_sensor"/>
+  <arg name="gravity_frame" default="os_sensor_gravity"/>
+  <arg name="enable_rviz" default="true"/>
+
+  <arg name="ground_cloud_topic" default="/experimental/linefit_ground/ground_cloud"/>
+  <arg name="non_ground_cloud_topic" default="/experimental/linefit_ground/non_ground_cloud"/>
+  <arg name="mode_topic" default="/experimental/linefit_ground/mode"/>
+
+  <arg name="flat_ground_cloud_topic" default="/experimental/linefit_ground/flat_ground_cloud"/>
+  <arg name="flat_non_ground_cloud_topic" default="/experimental/linefit_ground/flat_non_ground_cloud"/>
+  <arg name="slope_ground_cloud_topic" default="/experimental/linefit_ground/slope_ground_cloud"/>
+  <arg name="slope_non_ground_cloud_topic" default="/experimental/linefit_ground/slope_non_ground_cloud"/>
+
+  <arg name="sensor_height_m" default="0.525"/>
+  <arg name="r_max_m" default="25.0"/>
+  <arg name="max_dist_to_line" default="0.08"/>
+  <arg name="max_fit_error" default="0.08"/>
+  <arg name="long_threshold" default="1.5"/>
+  <arg name="line_search_angle" default="0.20"/>
+
+  <arg name="flat_max_slope" default="0.45"/>
+  <arg name="flat_max_start_height" default="0.32"/>
+  <arg name="flat_max_long_height" default="0.18"/>
+
+  <arg name="slope_max_slope" default="0.58"/>
+  <arg name="slope_max_start_height" default="0.40"/>
+  <arg name="slope_max_long_height" default="0.24"/>
+
+  <arg name="enter_slope_pitch_deg" default="4.5"/>
+  <arg name="exit_slope_pitch_deg" default="3.0"/>
+
+  <node pkg="lidar_obstacle_perception_experimental"
+        type="imu_gravity_frame_broadcaster.py"
+        name="linefit_imu_gravity_frame_broadcaster"
+        output="screen"
+        respawn="false">
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="raw_frame" value="$(arg raw_frame)"/>
+    <param name="gravity_frame" value="$(arg gravity_frame)"/>
+    <param name="zero_yaw" value="true"/>
+  </node>
+
+  <node pkg="linefit_ground_segmentation_ros"
+        type="ground_segmentation_node"
+        name="linefit_ground_segmentation_flat"
+        output="screen"
+        respawn="false">
+    <rosparam command="load" file="$(find lidar_obstacle_perception_experimental)/config/linefit_segmentation_params.yaml"/>
+    <param name="input_topic" value="$(arg pointcloud_topic)"/>
+    <param name="ground_output_topic" value="$(arg flat_ground_cloud_topic)"/>
+    <param name="obstacle_output_topic" value="$(arg flat_non_ground_cloud_topic)"/>
+    <param name="gravity_aligned_frame" value="$(arg gravity_frame)"/>
+    <param name="sensor_height" value="$(arg sensor_height_m)"/>
+    <param name="r_max" value="$(arg r_max_m)"/>
+    <param name="max_slope" value="$(arg flat_max_slope)"/>
+    <param name="max_dist_to_line" value="$(arg max_dist_to_line)"/>
+    <param name="max_fit_error" value="$(arg max_fit_error)"/>
+    <param name="long_threshold" value="$(arg long_threshold)"/>
+    <param name="max_long_height" value="$(arg flat_max_long_height)"/>
+    <param name="max_start_height" value="$(arg flat_max_start_height)"/>
+    <param name="line_search_angle" value="$(arg line_search_angle)"/>
+  </node>
+
+  <node pkg="linefit_ground_segmentation_ros"
+        type="ground_segmentation_node"
+        name="linefit_ground_segmentation_slope"
+        output="screen"
+        respawn="false">
+    <rosparam command="load" file="$(find lidar_obstacle_perception_experimental)/config/linefit_segmentation_params.yaml"/>
+    <param name="input_topic" value="$(arg pointcloud_topic)"/>
+    <param name="ground_output_topic" value="$(arg slope_ground_cloud_topic)"/>
+    <param name="obstacle_output_topic" value="$(arg slope_non_ground_cloud_topic)"/>
+    <param name="gravity_aligned_frame" value="$(arg gravity_frame)"/>
+    <param name="sensor_height" value="$(arg sensor_height_m)"/>
+    <param name="r_max" value="$(arg r_max_m)"/>
+    <param name="max_slope" value="$(arg slope_max_slope)"/>
+    <param name="max_dist_to_line" value="$(arg max_dist_to_line)"/>
+    <param name="max_fit_error" value="$(arg max_fit_error)"/>
+    <param name="long_threshold" value="$(arg long_threshold)"/>
+    <param name="max_long_height" value="$(arg slope_max_long_height)"/>
+    <param name="max_start_height" value="$(arg slope_max_start_height)"/>
+    <param name="line_search_angle" value="$(arg line_search_angle)"/>
+  </node>
+
+  <node pkg="lidar_obstacle_perception_experimental"
+        type="linefit_pitch_mode_selector.py"
+        name="linefit_pitch_mode_selector"
+        output="screen"
+        respawn="false">
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <param name="flat_ground_topic" value="$(arg flat_ground_cloud_topic)"/>
+    <param name="flat_non_ground_topic" value="$(arg flat_non_ground_cloud_topic)"/>
+    <param name="slope_ground_topic" value="$(arg slope_ground_cloud_topic)"/>
+    <param name="slope_non_ground_topic" value="$(arg slope_non_ground_cloud_topic)"/>
+    <param name="output_ground_topic" value="$(arg ground_cloud_topic)"/>
+    <param name="output_non_ground_topic" value="$(arg non_ground_cloud_topic)"/>
+    <param name="mode_topic" value="$(arg mode_topic)"/>
+    <param name="enter_slope_pitch_deg" value="$(arg enter_slope_pitch_deg)"/>
+    <param name="exit_slope_pitch_deg" value="$(arg exit_slope_pitch_deg)"/>
+  </node>
+
+  <node if="$(arg enable_rviz)"
+        pkg="rviz"
+        type="rviz"
+        name="linefit_ground_removal_debug_rviz"
+        args="-d $(find lidar_obstacle_perception_experimental)/rviz/linefit_ground_removal_debug.rviz"/>
+</launch>
