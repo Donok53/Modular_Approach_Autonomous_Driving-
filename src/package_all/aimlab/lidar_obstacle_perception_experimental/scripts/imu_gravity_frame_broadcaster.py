@@ -17,6 +17,7 @@ class ImuGravityFrameBroadcaster:
             or (self.raw_frame + "_gravity")
         )
         self.zero_yaw = bool(rospy.get_param("~zero_yaw", True))
+        self.last_tf_stamp = rospy.Time(0)
 
         self.br = tf.TransformBroadcaster()
         self.sub = rospy.Subscriber(self.imu_topic, Imu, self.imu_callback, queue_size=50)
@@ -41,6 +42,9 @@ class ImuGravityFrameBroadcaster:
         target_yaw = 0.0 if self.zero_yaw else -yaw
         quat = tf.transformations.quaternion_from_euler(-roll, -pitch, target_yaw)
         stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
+        if stamp <= self.last_tf_stamp:
+            return
+        self.last_tf_stamp = stamp
         self.br.sendTransform(
             (0.0, 0.0, 0.0),
             quat,
