@@ -23,7 +23,7 @@ import tf.transformations as transformations
 from geometry_msgs.msg import Twist, Point, PoseStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import Float32MultiArray, Header
+from std_msgs.msg import Bool, Float32MultiArray, Header
 
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
@@ -547,6 +547,7 @@ class DWAControl:
         self.behavior_speed_limit = self.max_speed
         self.behavior_reason = "clear"
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
+        self.emergency_stop_topic = rospy.get_param("~emergency_stop_topic", "/planning/emergency_stop")
         self.cmd_publish_hz = max(5.0, float(rospy.get_param("~cmd_publish_hz", 20.0)))
         self.last_cmd = Twist()
 
@@ -634,6 +635,7 @@ class DWAControl:
             self.sub_risk_grid = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=5)
 
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=10)
+        self.emergency_stop_pub = rospy.Publisher(self.emergency_stop_topic, Bool, queue_size=2)
         self.target_pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
         self.current_pub = rospy.Publisher('visualization_marker_2', Marker, queue_size=10)
         self.trajectory_pub = rospy.Publisher('predicted_trajectory', Marker, queue_size=10)
@@ -646,10 +648,20 @@ class DWAControl:
             self._publish_near_field_raw_stop_debug(self._near_field_status_header(), [])
 
     def _cmd_timer_callback(self, _event):
-        if self.emergency_blocked or self.behavior_stop:
+        if self._publish_emergency_stop_state():
             self.last_cmd = Twist()
         self.cmd_vel_pub.publish(self.last_cmd)
         self._refresh_near_field_raw_stop_marker_if_waiting()
+
+    def _hard_stop_active(self):
+        return bool(self.emergency_blocked or self.behavior_stop)
+
+    def _publish_emergency_stop_state(self):
+        hard_stop_active = self._hard_stop_active()
+        pub = getattr(self, "emergency_stop_pub", None)
+        if pub is not None:
+            pub.publish(Bool(data=hard_stop_active))
+        return hard_stop_active
 
     @staticmethod
     def _transform_world_to_local(wx, wy, pose_x, pose_y, yaw):
@@ -778,8 +790,10 @@ class DWAControl:
         else:
             self._blk_off += 1
             self._blk_on = 0
+        state_changed = False
         if not self.emergency_blocked and self._blk_on >= self.block_on_count:
             self.emergency_blocked = True
+            state_changed = True
             rospy.logwarn(
                 "Emergency STOP: obstacle <= %.2fm | clearance=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s",
                 self.emergency_stop_distance,
@@ -793,7 +807,10 @@ class DWAControl:
             )
         elif self.emergency_blocked and self._blk_off >= self.block_off_count:
             self.emergency_blocked = False
+            state_changed = True
             rospy.loginfo("Emergency STOP cleared")
+        if state_changed:
+            self._publish_emergency_stop_state()
 
     @staticmethod
     def _same_frame(frame_a, frame_b):
@@ -1059,10 +1076,10 @@ class DWAControl:
             ):
                 self._near_field_raw_stop_blocked = False
 
-            if msg.header.stamp.to_sec() > 0.0:
-                self._near_field_raw_stop_last_stamp = msg.header.stamp
-            else:
-                self._near_field_raw_stop_last_stamp = rospy.Time.now()
+            # Use receive time for control freshness. Some Ouster bags/live streams
+            # can carry sensor/header stamps that drift from ROS time; RViz would
+            # still show the STOP marker while the controller considered it stale.
+            self._near_field_raw_stop_last_stamp = rospy.Time.now()
             self._near_field_raw_stop_last_count = hit_count
             self._near_field_raw_stop_last_cells = cell_count
             self._near_field_raw_stop_last_min_x = min_x
@@ -1245,9 +1262,10 @@ class DWAControl:
                 if marker.header.stamp.to_sec() > latest_stamp.to_sec():
                     latest_stamp = marker.header.stamp
             self.global_obstacle_overlay_boxes = boxes
-            self.global_obstacle_overlay_boxes_stamp = (
-                latest_stamp if latest_stamp.to_sec() > 0.0 else rospy.Time.now()
-            )
+            # Freshness is about when this node received the overlay, not the
+            # marker's source timestamp. This keeps visual STOP and control STOP
+            # on the same clock.
+            self.global_obstacle_overlay_boxes_stamp = rospy.Time.now()
             self._update_emergency_stop_state()
         except Exception as e:
             rospy.logwarn("global_obstacle_overlay_boxes_callback error: %s", str(e))
@@ -1278,6 +1296,7 @@ class DWAControl:
         self.behavior_stop = bool(msg.stop)
         self.behavior_speed_limit = max(0.0, float(msg.speed_limit))
         self.behavior_reason = str(msg.reason)
+        self._publish_emergency_stop_state()
 
     def _log_nav_reason(self, reason, msg, warn=False):
         if not self.debug_stop_logging:
@@ -2241,14 +2260,18 @@ class DWAControl:
     # ----------------------------------- main ------------------------------------
     def publish_drive(self, u):
         cmd = Twist()
-        cmd.linear.x = u[0]
-        cmd.angular.z = u[1]
+        if self._publish_emergency_stop_state():
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
+        else:
+            cmd.linear.x = u[0]
+            cmd.angular.z = u[1]
         self.last_cmd = cmd
         self.cmd_vel_pub.publish(cmd)
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2258,6 +2281,7 @@ class DWAControl:
             "on" if self.use_muxed_active_path else "off",
             self.behavior_cmd_topic,
             self.cmd_vel_topic,
+            self.emergency_stop_topic,
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
             "off" if self.follow_global_path_only else "on",

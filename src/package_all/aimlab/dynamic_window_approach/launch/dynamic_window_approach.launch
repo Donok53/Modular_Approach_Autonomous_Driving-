@@ -59,6 +59,7 @@
     <arg name="travel_history_topic" default="/planning/travel_history"/>
     <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
     <arg name="cmd_vel_topic" default="/cmd_vel"/>
+    <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
     <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
     <arg name="enable_tracked_objects_marker_viz" default="true"/>
     <arg name="tracked_objects_marker_topic" default="/perception/tracked_objects_markers"/>
@@ -682,6 +683,7 @@
         <param name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
         <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
         <param name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+        <param name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>
         <param name="pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
         <param name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
         <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
