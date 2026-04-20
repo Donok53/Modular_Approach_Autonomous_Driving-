@@ -300,6 +300,7 @@ class DWAControl:
         self._near_field_raw_stop_tf_warn_sec = 0.0
         self._near_field_raw_stop_last_frame = ""
         self._near_field_raw_stop_tf_status = "not_started"
+        self._near_field_raw_stop_last_marker_refresh = rospy.Time(0)
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -581,12 +582,18 @@ class DWAControl:
         self.near_field_raw_stop_marker_pub = None
         if self.near_field_raw_stop_marker_topic:
             self.near_field_raw_stop_marker_pub = rospy.Publisher(
-                self.near_field_raw_stop_marker_topic, MarkerArray, queue_size=2
+                self.near_field_raw_stop_marker_topic,
+                MarkerArray,
+                queue_size=2,
+                latch=True,
             )
         self.near_field_raw_stop_hit_cloud_pub = None
         if self.near_field_raw_stop_hit_cloud_topic:
             self.near_field_raw_stop_hit_cloud_pub = rospy.Publisher(
-                self.near_field_raw_stop_hit_cloud_topic, PointCloud2, queue_size=2
+                self.near_field_raw_stop_hit_cloud_topic,
+                PointCloud2,
+                queue_size=2,
+                latch=True,
             )
         self.near_field_raw_stop_tf_buffer = None
         self.near_field_raw_stop_tf_listener = None
@@ -634,9 +641,12 @@ class DWAControl:
         )
         self.traj_info_pub = rospy.Publisher('/traj_info', Float32MultiArray, queue_size=10)
         self.cmd_timer = rospy.Timer(rospy.Duration(1.0 / self.cmd_publish_hz), self._cmd_timer_callback)
+        if self.near_field_raw_stop_enabled:
+            self._publish_near_field_raw_stop_debug(self._near_field_status_header(), [])
 
     def _cmd_timer_callback(self, _event):
         self.cmd_vel_pub.publish(self.last_cmd)
+        self._refresh_near_field_raw_stop_marker_if_waiting()
 
     @staticmethod
     def _transform_world_to_local(wx, wy, pose_x, pose_y, yaw):
@@ -837,7 +847,7 @@ class DWAControl:
                         source_frame,
                         str(first_error),
                     )
-                return None, True, source_frame
+                return None, True, target_frame
 
             self._near_field_raw_stop_tf_status = "tf_missing"
             now_sec = rospy.Time.now().to_sec()
@@ -874,6 +884,34 @@ class DWAControl:
         header.stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
         header.frame_id = frame_id or self.near_field_raw_stop_base_frame or msg.header.frame_id
         return header
+
+    def _near_field_status_header(self):
+        header = Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = self.near_field_raw_stop_base_frame or "base_link"
+        return header
+
+    def _refresh_near_field_raw_stop_marker_if_waiting(self):
+        if not self.near_field_raw_stop_enabled:
+            return
+        if self.near_field_raw_stop_marker_pub is None:
+            return
+        now = rospy.Time.now()
+        if (now - self._near_field_raw_stop_last_marker_refresh).to_sec() < 0.5:
+            return
+        self._near_field_raw_stop_last_marker_refresh = now
+        fresh = (
+            self._near_field_raw_stop_last_stamp.to_sec() > 0.0
+            and (now - self._near_field_raw_stop_last_stamp).to_sec()
+            <= self.near_field_raw_stop_timeout_s
+        )
+        if not fresh:
+            self._near_field_raw_stop_tf_status = (
+                self._near_field_raw_stop_tf_status
+                if self._near_field_raw_stop_tf_status != "not_started"
+                else "waiting_cloud"
+            )
+            self._publish_near_field_raw_stop_debug(self._near_field_status_header(), [])
 
     def _publish_near_field_raw_stop_debug(self, header, hit_points):
         if self.near_field_raw_stop_hit_cloud_pub is not None:
