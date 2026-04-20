@@ -15,6 +15,7 @@
   <arg name="slope_non_ground_cloud_topic" default="/experimental/linefit_ground/slope_non_ground_cloud"/>
 
   <arg name="sensor_height_m" default="0.525"/>
+  <arg name="r_min_m" default="0.3"/>
   <arg name="r_max_m" default="25.0"/>
   <arg name="max_dist_to_line" default="0.08"/>
   <arg name="max_fit_error" default="0.08"/>
@@ -54,6 +55,7 @@
     <param name="obstacle_output_topic" value="$(arg flat_non_ground_cloud_topic)"/>
     <param name="gravity_aligned_frame" value="$(arg gravity_frame)"/>
     <param name="sensor_height" value="$(arg sensor_height_m)"/>
+    <param name="r_min" value="$(arg r_min_m)"/>
     <param name="r_max" value="$(arg r_max_m)"/>
     <param name="max_slope" value="$(arg flat_max_slope)"/>
     <param name="max_dist_to_line" value="$(arg max_dist_to_line)"/>
@@ -75,6 +77,7 @@
     <param name="obstacle_output_topic" value="$(arg slope_non_ground_cloud_topic)"/>
     <param name="gravity_aligned_frame" value="$(arg gravity_frame)"/>
     <param name="sensor_height" value="$(arg sensor_height_m)"/>
+    <param name="r_min" value="$(arg r_min_m)"/>
     <param name="r_max" value="$(arg r_max_m)"/>
     <param name="max_slope" value="$(arg slope_max_slope)"/>
     <param name="max_dist_to_line" value="$(arg max_dist_to_line)"/>

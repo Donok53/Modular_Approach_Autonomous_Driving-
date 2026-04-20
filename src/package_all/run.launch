@@ -91,6 +91,21 @@
   <arg name="linefit_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud"/>
   <arg name="linefit_selector_non_ground_cloud_topic" default="$(eval arg('linefit_raw_non_ground_cloud_topic') if str(arg('enable_linefit_self_filter')).lower() == 'true' else arg('linefit_non_ground_cloud_topic'))"/>
   <arg name="linefit_mode_topic" default="/planning/linefit_ground/mode"/>
+  <arg name="linefit_sensor_height_m" default="0.525"/>
+  <arg name="linefit_r_min_m" default="0.30"/>
+  <arg name="linefit_r_max_m" default="25.0"/>
+  <arg name="linefit_max_dist_to_line" default="0.08"/>
+  <arg name="linefit_max_fit_error" default="0.08"/>
+  <arg name="linefit_long_threshold" default="1.5"/>
+  <arg name="linefit_line_search_angle" default="0.20"/>
+  <arg name="linefit_flat_max_slope" default="0.45"/>
+  <arg name="linefit_flat_max_start_height" default="0.32"/>
+  <arg name="linefit_flat_max_long_height" default="0.18"/>
+  <arg name="linefit_slope_max_slope" default="0.58"/>
+  <arg name="linefit_slope_max_start_height" default="0.40"/>
+  <arg name="linefit_slope_max_long_height" default="0.24"/>
+  <arg name="linefit_enter_slope_pitch_deg" default="4.5"/>
+  <arg name="linefit_exit_slope_pitch_deg" default="3.0"/>
   <arg name="linefit_self_filter_padding_m" default="0.06"/>
   <arg name="linefit_self_filter_center_x_m" default="0.0"/>
   <arg name="linefit_self_filter_center_y_m" default="0.0"/>
@@ -549,6 +564,21 @@
       <arg name="ground_cloud_topic" value="$(arg linefit_ground_cloud_topic)"/>
       <arg name="non_ground_cloud_topic" value="$(arg linefit_selector_non_ground_cloud_topic)"/>
       <arg name="mode_topic" value="$(arg linefit_mode_topic)"/>
+      <arg name="sensor_height_m" value="$(arg linefit_sensor_height_m)"/>
+      <arg name="r_min_m" value="$(arg linefit_r_min_m)"/>
+      <arg name="r_max_m" value="$(arg linefit_r_max_m)"/>
+      <arg name="max_dist_to_line" value="$(arg linefit_max_dist_to_line)"/>
+      <arg name="max_fit_error" value="$(arg linefit_max_fit_error)"/>
+      <arg name="long_threshold" value="$(arg linefit_long_threshold)"/>
+      <arg name="line_search_angle" value="$(arg linefit_line_search_angle)"/>
+      <arg name="flat_max_slope" value="$(arg linefit_flat_max_slope)"/>
+      <arg name="flat_max_start_height" value="$(arg linefit_flat_max_start_height)"/>
+      <arg name="flat_max_long_height" value="$(arg linefit_flat_max_long_height)"/>
+      <arg name="slope_max_slope" value="$(arg linefit_slope_max_slope)"/>
+      <arg name="slope_max_start_height" value="$(arg linefit_slope_max_start_height)"/>
+      <arg name="slope_max_long_height" value="$(arg linefit_slope_max_long_height)"/>
+      <arg name="enter_slope_pitch_deg" value="$(arg linefit_enter_slope_pitch_deg)"/>
+      <arg name="exit_slope_pitch_deg" value="$(arg linefit_exit_slope_pitch_deg)"/>
     </include>
 
     <node if="$(arg enable_linefit_self_filter)"
