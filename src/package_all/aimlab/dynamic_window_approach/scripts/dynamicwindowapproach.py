@@ -986,13 +986,17 @@ class DWAControl:
         text.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.1
         text.color.g = 0.1 if self._near_field_raw_stop_blocked else 1.0
         text.color.b = 0.1
-        text.text = "NEAR STOP: {}\npts={} cells={} min_x={:.2f}m\nframe={} tf={}".format(
+        front_clearance = (
+            self._near_field_raw_stop_last_min_x
+            - (self.robot_half_length_m + self.footprint_padding_m)
+            if math.isfinite(self._near_field_raw_stop_last_min_x)
+            else float("inf")
+        )
+        text.text = "NEAR STOP: {}\npts={} cells={} clr={:.2f}m\nframe={} tf={}".format(
             "STOP" if self._near_field_raw_stop_blocked else "clear",
             self._near_field_raw_stop_last_count,
             self._near_field_raw_stop_last_cells,
-            self._near_field_raw_stop_last_min_x
-            if math.isfinite(self._near_field_raw_stop_last_min_x)
-            else -1.0,
+            front_clearance if math.isfinite(front_clearance) else -1.0,
             self._near_field_raw_stop_last_frame or "-",
             self._near_field_raw_stop_tf_status,
         )
@@ -1058,7 +1062,14 @@ class DWAControl:
                 hit_count >= self.near_field_raw_stop_min_points
                 and cell_count >= self.near_field_raw_stop_min_cells
             )
-            if detected:
+            footprint_front = self.robot_half_length_m + self.footprint_padding_m
+            min_front_clearance = (
+                min_x - footprint_front if math.isfinite(min_x) else float("inf")
+            )
+            stop_detected = (
+                detected and min_front_clearance <= self.emergency_stop_distance
+            )
+            if stop_detected:
                 self._near_field_raw_stop_on += 1
                 self._near_field_raw_stop_off = 0
             else:
@@ -1093,11 +1104,13 @@ class DWAControl:
                 ).to_sec() >= self.near_field_raw_stop_log_period_s:
                     self._near_field_raw_stop_last_log = now
                     rospy.loginfo(
-                        "near_field_raw_stop: %s pts=%d cells=%d min_x=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
+                        "near_field_raw_stop: %s pts=%d cells=%d min_x=%.2f clearance=%.2f stop_dist=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
                         "STOP" if self._near_field_raw_stop_blocked else "clear",
                         hit_count,
                         cell_count,
                         min_x if math.isfinite(min_x) else float("inf"),
+                        min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
+                        self.emergency_stop_distance,
                         self.near_field_raw_stop_min_x_m,
                         self.near_field_raw_stop_max_x_m,
                         self.near_field_raw_stop_half_width_m,

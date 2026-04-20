@@ -224,7 +224,7 @@
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
   <arg name="global_path_continuous_replan" default="true"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
-  <arg name="global_path_replan_min_interval_s" default="0.10"/>
+  <arg name="global_path_replan_min_interval_s" default="0.35"/>
   <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
@@ -236,10 +236,10 @@
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
-  <arg name="candidate_route_switch_score_margin" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '3.0')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="0.0"/>
-  <arg name="candidate_route_switch_confirm_count" default="1"/>
-  <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
+  <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
+  <arg name="candidate_route_switch_min_hold_s" default="$(eval '3.0' if str(arg('real_mode')).lower() == 'true' else '1.0')"/>
+  <arg name="candidate_route_switch_confirm_count" default="$(eval '3' if str(arg('real_mode')).lower() == 'true' else '2')"/>
+  <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
@@ -485,7 +485,7 @@
   <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
   <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
-  <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
+  <arg name="near_field_raw_stop_max_x_m" default="1.05"/>
   <arg name="near_field_raw_stop_half_width_m" default="0.40"/>
   <arg name="near_field_raw_stop_min_z_m" default="-0.20"/>
   <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
