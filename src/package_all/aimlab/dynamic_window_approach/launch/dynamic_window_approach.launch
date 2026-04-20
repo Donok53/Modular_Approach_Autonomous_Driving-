@@ -210,9 +210,6 @@
     <arg name="global_pointcloud_overlay_static_lock_ttl_s" default="30.0"/>
     <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
     <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="6.0"/>
-    <arg name="global_pointcloud_overlay_cell_memory_enabled" default="true"/>
-    <arg name="global_pointcloud_overlay_cell_memory_ttl_s" default="1.4"/>
-    <arg name="global_pointcloud_overlay_cell_memory_max_cells" default="300"/>
     <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
     <arg name="global_pointcloud_overlay_max_range_m" default="25.0"/>
     <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
@@ -522,9 +519,6 @@
       <param name="global_pointcloud_overlay_static_lock_ttl_s" value="$(arg global_pointcloud_overlay_static_lock_ttl_s)"/>
       <param name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
       <param name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
-      <param name="global_pointcloud_overlay_cell_memory_enabled" value="$(arg global_pointcloud_overlay_cell_memory_enabled)"/>
-      <param name="global_pointcloud_overlay_cell_memory_ttl_s" value="$(arg global_pointcloud_overlay_cell_memory_ttl_s)"/>
-      <param name="global_pointcloud_overlay_cell_memory_max_cells" value="$(arg global_pointcloud_overlay_cell_memory_max_cells)"/>
       <param name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <param name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <param name="global_pointcloud_overlay_static_lock_keep_range_m" value="$(arg global_pointcloud_overlay_static_lock_keep_range_m)"/>
@@ -640,9 +634,6 @@
             <param name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
             <param name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
             <param name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
-            <param name="global_pointcloud_overlay_cell_memory_enabled" value="$(arg global_pointcloud_overlay_cell_memory_enabled)"/>
-            <param name="global_pointcloud_overlay_cell_memory_ttl_s" value="$(arg global_pointcloud_overlay_cell_memory_ttl_s)"/>
-            <param name="global_pointcloud_overlay_cell_memory_max_cells" value="$(arg global_pointcloud_overlay_cell_memory_max_cells)"/>
             <param name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
             <param name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
             <param name="global_pointcloud_overlay_lookahead_m" value="$(arg global_pointcloud_overlay_lookahead_m)"/>
