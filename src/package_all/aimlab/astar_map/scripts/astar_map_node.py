@@ -561,10 +561,6 @@ class AStarPlanner:
             return False
 
         now = rospy.get_time()
-        if (now - self._last_plan_stamp_s) < self.replan_min_interval_s:
-            return False
-        if not self._last_plan_success:
-            return True
         grid_state_changed = False
         if (
             self.use_dynamic_risk_grid_global
@@ -588,6 +584,10 @@ class AStarPlanner:
                     1.0,
                     "[astar] overlay/risk changed but keeping current global path: upcoming path remains valid",
                 )
+        if (now - self._last_plan_stamp_s) < self.replan_min_interval_s:
+            return False
+        if not self._last_plan_success:
+            return True
         if (not self.use_drivable_grid_global) and self.start_id != self._last_planned_start_id:
             return True
         if self.goal_id != self._last_planned_goal_id:
