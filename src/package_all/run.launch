@@ -243,6 +243,7 @@
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
+  <arg name="candidate_route_replan_match_distance_m" default="0.60"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.25"/>
@@ -356,6 +357,9 @@
   <arg name="global_pointcloud_overlay_static_lock_ttl_s" default="30.0"/>
   <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
   <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="6.0"/>
+  <arg name="global_pointcloud_overlay_cell_memory_enabled" default="true"/>
+  <arg name="global_pointcloud_overlay_cell_memory_ttl_s" default="1.4"/>
+  <arg name="global_pointcloud_overlay_cell_memory_max_cells" default="300"/>
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
   <arg name="global_pointcloud_overlay_max_range_m" default="25.0"/>
   <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
@@ -699,6 +703,7 @@
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
         <arg name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
         <arg name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
+        <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -748,6 +753,7 @@
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
         <arg name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
         <arg name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
+        <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
       </include>
     </group>
   </group>
@@ -813,6 +819,9 @@
       <arg name="global_pointcloud_overlay_static_lock_ttl_s" value="$(arg global_pointcloud_overlay_static_lock_ttl_s)"/>
       <arg name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
       <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
+      <arg name="global_pointcloud_overlay_cell_memory_enabled" value="$(arg global_pointcloud_overlay_cell_memory_enabled)"/>
+      <arg name="global_pointcloud_overlay_cell_memory_ttl_s" value="$(arg global_pointcloud_overlay_cell_memory_ttl_s)"/>
+      <arg name="global_pointcloud_overlay_cell_memory_max_cells" value="$(arg global_pointcloud_overlay_cell_memory_max_cells)"/>
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_obstacle_overlay_obstacle_max_range_m" value="$(arg global_obstacle_overlay_obstacle_max_range_m)"/>
@@ -1187,6 +1196,9 @@
       <arg name="global_pointcloud_overlay_ttl_s" value="$(arg global_pointcloud_overlay_ttl_s)"/>
       <arg name="global_pointcloud_overlay_blind_zone_radius_m" value="$(arg global_pointcloud_overlay_blind_zone_radius_m)"/>
       <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" value="$(arg global_pointcloud_overlay_blind_zone_hold_ttl_s)"/>
+      <arg name="global_pointcloud_overlay_cell_memory_enabled" value="$(arg global_pointcloud_overlay_cell_memory_enabled)"/>
+      <arg name="global_pointcloud_overlay_cell_memory_ttl_s" value="$(arg global_pointcloud_overlay_cell_memory_ttl_s)"/>
+      <arg name="global_pointcloud_overlay_cell_memory_max_cells" value="$(arg global_pointcloud_overlay_cell_memory_max_cells)"/>
       <arg name="global_pointcloud_overlay_merge_radius_m" value="$(arg global_pointcloud_overlay_merge_radius_m)"/>
       <arg name="global_pointcloud_overlay_max_range_m" value="$(arg global_pointcloud_overlay_max_range_m)"/>
       <arg name="global_obstacle_overlay_obstacle_max_range_m" value="$(arg global_obstacle_overlay_obstacle_max_range_m)"/>

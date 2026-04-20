@@ -213,6 +213,27 @@ class GlobalObstacleOverlayPublisher:
             self.global_pointcloud_overlay_ttl_s,
             float(rospy.get_param("~global_pointcloud_overlay_blind_zone_hold_ttl_s", 6.0)),
         )
+        self.global_pointcloud_overlay_cell_memory_enabled = bool(
+            rospy.get_param("~global_pointcloud_overlay_cell_memory_enabled", True)
+        )
+        self.global_pointcloud_overlay_cell_memory_ttl_s = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~global_pointcloud_overlay_cell_memory_ttl_s",
+                    max(1.0, self.global_pointcloud_overlay_ttl_s),
+                )
+            ),
+        )
+        self.global_pointcloud_overlay_cell_memory_max_cells = max(
+            0,
+            int(
+                rospy.get_param(
+                    "~global_pointcloud_overlay_cell_memory_max_cells",
+                    max(250, self.global_pointcloud_overlay_max_points),
+                )
+            ),
+        )
 
         self.have_odom = False
         self.odom_x = 0.0
@@ -223,6 +244,7 @@ class GlobalObstacleOverlayPublisher:
         self.global_path = None
         self.drivable_grid = None
         self.global_obstacle_overlay_cells_map = set()
+        self.global_obstacle_overlay_cell_memory = {}
         self.global_obstacle_overlay_evidence = {}
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_boxes_map = []
@@ -273,7 +295,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm cell_memory=%s cell_ttl=%.1fs cell_max=%d range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -296,6 +318,9 @@ class GlobalObstacleOverlayPublisher:
             self.dynamic_tracked_box_timeout_s,
             self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
             self.global_pointcloud_overlay_blind_zone_radius_m,
+            "on" if self.global_pointcloud_overlay_cell_memory_enabled else "off",
+            self.global_pointcloud_overlay_cell_memory_ttl_s,
+            self.global_pointcloud_overlay_cell_memory_max_cells,
             self.global_pointcloud_overlay_max_range_m,
             self.global_pointcloud_overlay_lookahead_m,
             self.global_pointcloud_overlay_corridor_margin_m,
@@ -593,8 +618,11 @@ class GlobalObstacleOverlayPublisher:
                 if support >= self.pointcloud_min_cluster_points:
                     accepted_cells.add((cx, cy))
 
-            self.global_obstacle_overlay_cells_map = self._select_global_overlay_candidate_cells(
+            selected_cells = self._select_global_overlay_candidate_cells(
                 accepted_cells, cluster_counts, stamp_sec
+            )
+            self.global_obstacle_overlay_cells_map = self._update_global_overlay_cell_memory(
+                selected_cells, stamp_sec
             )
             self.global_obstacle_overlay_boxes_map = []
             self._publish_global_obstacle_overlay(msg.header.stamp)
@@ -616,6 +644,14 @@ class GlobalObstacleOverlayPublisher:
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
         cx, cy = cell
         return ((float(cx) + 0.5) * res, (float(cy) + 0.5) * res)
+
+    @staticmethod
+    def _grid_cell_world_center(grid, gx, gy):
+        res = max(1e-9, float(grid.info.resolution))
+        return (
+            float(grid.info.origin.position.x) + (float(gx) + 0.5) * res,
+            float(grid.info.origin.position.y) + (float(gy) + 0.5) * res,
+        )
 
     @staticmethod
     def _tracked_object_speed_mps(obj):
@@ -1293,6 +1329,75 @@ class GlobalObstacleOverlayPublisher:
 
         self.global_obstacle_overlay_memory = memory
         return self._prune_global_obstacle_overlay_memory(now_sec)
+
+    def _update_global_overlay_cell_memory(self, current_cells, now_sec):
+        current_cells = set(current_cells or [])
+        if (
+            (not self.global_pointcloud_overlay_cell_memory_enabled)
+            or self.global_pointcloud_overlay_cell_memory_ttl_s <= 0.0
+            or self.global_pointcloud_overlay_cell_memory_max_cells <= 0
+            or self.drivable_grid is None
+        ):
+            self.global_obstacle_overlay_cell_memory = {}
+            return current_cells
+
+        grid = self.drivable_grid
+        w = int(grid.info.width)
+        h = int(grid.info.height)
+        max_range_sq = self.global_pointcloud_overlay_max_range_m * self.global_pointcloud_overlay_max_range_m
+        kept = {}
+
+        for key, entry in self.global_obstacle_overlay_cell_memory.items():
+            gx, gy = key
+            if gx < 0 or gy < 0 or gx >= w or gy >= h:
+                continue
+            wx = float(entry.get("wx", 0.0))
+            wy = float(entry.get("wy", 0.0))
+            dx = wx - self.odom_x
+            dy = wy - self.odom_y
+            if (dx * dx + dy * dy) > max_range_sq:
+                continue
+
+            effective_ttl_s = self.global_pointcloud_overlay_cell_memory_ttl_s
+            if self._in_global_overlay_blind_zone(wx, wy):
+                effective_ttl_s = max(
+                    effective_ttl_s,
+                    self.global_pointcloud_overlay_blind_zone_hold_ttl_s,
+                )
+            if (now_sec - float(entry.get("last_seen", 0.0))) <= effective_ttl_s:
+                kept[key] = dict(entry)
+
+        for key in current_cells:
+            gx, gy = key
+            if gx < 0 or gy < 0 or gx >= w or gy >= h:
+                continue
+            wx, wy = self._grid_cell_world_center(grid, gx, gy)
+            prev = kept.get(key, self.global_obstacle_overlay_cell_memory.get(key, {}))
+            kept[key] = {
+                "wx": wx,
+                "wy": wy,
+                "last_seen": float(now_sec),
+                "hits": min(1000, int(prev.get("hits", 0)) + 1),
+            }
+
+        if len(kept) > self.global_pointcloud_overlay_cell_memory_max_cells:
+            sorted_items = sorted(
+                kept.items(),
+                key=lambda item: (
+                    1 if self._in_global_overlay_blind_zone(
+                        float(item[1].get("wx", 0.0)),
+                        float(item[1].get("wy", 0.0)),
+                    )
+                    else 0,
+                    int(item[1].get("hits", 0)),
+                    float(item[1].get("last_seen", 0.0)),
+                ),
+                reverse=True,
+            )
+            kept = dict(sorted_items[: self.global_pointcloud_overlay_cell_memory_max_cells])
+
+        self.global_obstacle_overlay_cell_memory = kept
+        return set(kept.keys())
 
     def _publish_global_obstacle_overlay(self, stamp):
         if self.drivable_grid is None:

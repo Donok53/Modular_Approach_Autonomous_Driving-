@@ -296,6 +296,10 @@ class AStarPlanner:
                 )
             ),
         )
+        self.candidate_route_replan_match_distance_m = max(
+            0.0,
+            float(rospy.get_param("~candidate_route_replan_match_distance_m", 0.75)),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -1417,6 +1421,59 @@ class AStarPlanner:
             (not self.candidate_route_switch_require_best_clear)
             or best_score < self.candidate_route_switch_best_clear_score_threshold
         )
+
+    def _world_path_similarity_cost(self, reference_path, candidate_path):
+        reference = self._sampled_world_points_within_lookahead(
+            reference_path,
+            self.candidate_route_switch_lookahead_m,
+            self.candidate_route_switch_start_ignore_m,
+            0.50,
+        )
+        if not reference:
+            reference = self._dedupe_world_points(reference_path)
+        candidate = self._dedupe_world_points(candidate_path)
+        if not reference or len(candidate) < 2:
+            return float("inf")
+
+        max_samples = 30
+        if len(reference) > max_samples:
+            step = float(len(reference) - 1) / float(max_samples - 1)
+            reference = [reference[int(round(step * idx))] for idx in range(max_samples)]
+
+        total = 0.0
+        for pt in reference:
+            total += self._distance_point_to_polyline(pt, candidate)
+        return total / float(max(1, len(reference)))
+
+    def select_replan_continuity_candidate_world_path(
+        self, world_paths, previous_world_path, fallback_index=0
+    ):
+        if not world_paths:
+            return 0
+        fallback_index = int(max(0, min(fallback_index, len(world_paths) - 1)))
+        if (
+            self.candidate_route_replan_match_distance_m <= 0.0
+            or not previous_world_path
+            or len(world_paths) <= 1
+        ):
+            return fallback_index
+
+        costs = [
+            self._world_path_similarity_cost(previous_world_path, candidate_path)
+            for candidate_path in world_paths
+        ]
+        best_index = min(range(len(costs)), key=lambda idx: costs[idx])
+        best_cost = costs[best_index]
+        if best_cost <= self.candidate_route_replan_match_distance_m:
+            if self.debug_log_enable and best_index != fallback_index:
+                rospy.loginfo(
+                    "[astar] preserving route continuity on replan: candidate %d -> %d cost=%.2fm",
+                    fallback_index,
+                    best_index,
+                    best_cost,
+                )
+            return best_index
+        return fallback_index
 
     def select_initial_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
@@ -3217,6 +3274,7 @@ if __name__ == "__main__":
             a.show_server_dst_nodes()
 
             if a._should_replan_active_goal():
+                is_new_goal_replan = bool(a.new_goal_flag)
                 prev_world_path = (
                     list(world_path)
                     if world_path
@@ -3267,8 +3325,13 @@ if __name__ == "__main__":
                 a._mark_plan_context(replan_success)
                 if new_world_path:
                     candidate_world_paths = list(new_candidate_world_paths)
+                    continuity_index = a.select_replan_continuity_candidate_world_path(
+                        candidate_world_paths,
+                        None if is_new_goal_replan else prev_world_path,
+                        fallback_index=active_candidate_index,
+                    )
                     active_candidate_index, _ = a.select_initial_candidate_world_path(
-                        candidate_world_paths, active_index=0
+                        candidate_world_paths, active_index=continuity_index
                     )
                     if candidate_world_paths:
                         world_path = list(candidate_world_paths[active_candidate_index])
