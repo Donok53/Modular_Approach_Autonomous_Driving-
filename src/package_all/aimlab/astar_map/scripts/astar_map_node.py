@@ -119,6 +119,9 @@ class AStarPlanner:
         self.global_obstacle_overlay_threshold = max(
             1, min(100, int(rospy.get_param("~global_obstacle_overlay_threshold", 50)))
         )
+        self.path_blocked_topic = rospy.get_param(
+            "~path_blocked_topic", "/astar/path_blocked"
+        )
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
@@ -341,6 +344,7 @@ class AStarPlanner:
         self._last_published_start_reset_seq = 0
         self._manual_start_reset_seq = 0
         self._path_is_fallback = False
+        self._path_blocked = False
         self._last_planned_start_xy = None
         self._last_planned_goal_xy = None
         self._last_planned_start_id = None
@@ -365,6 +369,7 @@ class AStarPlanner:
         self.pub_path_wgs84 = rospy.Publisher('/astar/path_wgs84', Path, queue_size=10, latch=True)
         self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10, latch=True)
         self.pub_path_is_fallback = rospy.Publisher('/astar/path_is_fallback', Bool, queue_size=10, latch=True)
+        self.pub_path_blocked = rospy.Publisher(self.path_blocked_topic, Bool, queue_size=10, latch=True)
         self.pub_candidate_paths = rospy.Publisher('/astar/candidate_paths', MarkerArray, queue_size=5, latch=True)
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
 
@@ -1224,6 +1229,13 @@ class AStarPlanner:
         self._path_is_fallback = is_fallback
         self.pub_path_is_fallback.publish(Bool(data=is_fallback))
 
+    def _publish_path_blocked_state(self, is_blocked, force=False):
+        is_blocked = bool(is_blocked)
+        if (not force) and self._path_blocked == is_blocked:
+            return
+        self._path_blocked = is_blocked
+        self.pub_path_blocked.publish(Bool(data=is_blocked))
+
     def _capture_published_path_context(self):
         self._last_published_start_xy = (
             tuple(self._display_start_xy) if self._display_start_xy is not None else None
@@ -1408,6 +1420,7 @@ class AStarPlanner:
 
     def select_initial_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
+            self._publish_path_blocked_state(False)
             return 0, []
         active_index = int(max(0, min(active_index, len(world_paths) - 1)))
         if (
@@ -1416,14 +1429,18 @@ class AStarPlanner:
             or (not self.use_global_obstacle_overlay)
             or self.global_obstacle_overlay is None
         ):
+            self._publish_path_blocked_state(False)
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        active_score = scores[active_index]
         if best_index == active_index:
+            self._publish_path_blocked_state(
+                active_score >= self.candidate_route_switch_blocked_score_threshold
+            )
             return active_index, scores
 
-        active_score = scores[active_index]
         best_score = scores[best_index]
         should_select = (
             active_score >= self.candidate_route_switch_blocked_score_threshold
@@ -1434,6 +1451,7 @@ class AStarPlanner:
             self._last_candidate_switch_s = rospy.get_time()
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
+            self._publish_path_blocked_state(False)
             if self.debug_log_enable:
                 rospy.loginfo(
                     "[astar] selecting initial active candidate %d -> %d from pointcloud overlay scores=%s",
@@ -1453,10 +1471,14 @@ class AStarPlanner:
                 best_score,
                 "yes" if self._candidate_best_is_clear_enough(best_score) else "no",
             )
+        self._publish_path_blocked_state(
+            active_score >= self.candidate_route_switch_blocked_score_threshold
+        )
         return active_index, scores
 
     def select_best_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
+            self._publish_path_blocked_state(False)
             return 0, []
         active_index = int(max(0, min(active_index, len(world_paths) - 1)))
         if (
@@ -1465,16 +1487,20 @@ class AStarPlanner:
             or (not self.use_global_obstacle_overlay)
             or self.global_obstacle_overlay is None
         ):
+            self._publish_path_blocked_state(False)
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        current_score = scores[active_index]
         if best_index == active_index:
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
+            self._publish_path_blocked_state(
+                current_score >= self.candidate_route_switch_blocked_score_threshold
+            )
             return active_index, scores
 
-        current_score = scores[active_index]
         best_score = scores[best_index]
         current_blocked = current_score >= self.candidate_route_switch_blocked_score_threshold
         current_centerline_blocked = True
@@ -1514,6 +1540,7 @@ class AStarPlanner:
             self._last_candidate_switch_s = now
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
+            self._publish_path_blocked_state(False)
             if self.debug_log_enable:
                 rospy.loginfo(
                     "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s centerline=blocked",
@@ -1536,6 +1563,7 @@ class AStarPlanner:
                 "blocked" if current_centerline_blocked else "clear",
                 "yes" if self._candidate_best_is_clear_enough(best_score) else "no",
             )
+        self._publish_path_blocked_state(current_blocked)
         return active_index, scores
 
     def _world_path_conflicts_with_blocked_grid(self, g, blocked, world_points):
@@ -1692,6 +1720,7 @@ class AStarPlanner:
             self._clear_published_path_context()
             self.clear_candidate_world_paths(stamp=stamp, force=True)
             self._publish_path_fallback_state(False, force=True)
+            self._publish_path_blocked_state(False, force=True)
             return
         if stamp is None:
             stamp = rospy.Time.now()
@@ -1710,6 +1739,7 @@ class AStarPlanner:
         self._clear_published_path_context()
         self.clear_candidate_world_paths(stamp=stamp, force=True)
         self._publish_path_fallback_state(False, force=True)
+        self._publish_path_blocked_state(False, force=True)
         if self.debug_log_enable:
             rospy.loginfo("[astar] cleared published path")
 
@@ -3132,6 +3162,7 @@ class AStarPlanner:
             self._last_path_pub_t = time.monotonic()
             self._capture_published_path_context()
             self._publish_path_fallback_state(False, force=True)
+            self._publish_path_blocked_state(False, force=True)
             msg = Int32MultiArray(); msg.data = path_nodes
             self.pub_path_node_id_list.publish(msg)
             self.show_path(path_nodes, stamp=now)

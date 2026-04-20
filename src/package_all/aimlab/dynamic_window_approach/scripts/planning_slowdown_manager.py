@@ -16,6 +16,7 @@ class PlanningSlowdownManager:
         self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.path_is_fallback_topic = rospy.get_param("~path_is_fallback_topic", "/astar/path_is_fallback")
+        self.path_blocked_topic = rospy.get_param("~path_blocked_topic", "/astar/path_blocked")
         self.goal_topic = rospy.get_param("~goal_topic", "/move_base_simple/goal")
         self.marker_topic = rospy.get_param("~marker_topic", "/planning/planning_speed_limit_marker")
         self.marker_frame = rospy.get_param("~marker_frame", "map")
@@ -32,6 +33,7 @@ class PlanningSlowdownManager:
         self.publish_hz = max(1.0, float(rospy.get_param("~publish_hz", 5.0)))
 
         self.fallback_active = False
+        self.path_blocked_active = False
         self.path_has_poses = False
         self.active_goal = False
         self.last_goal_sec = 0.0
@@ -47,6 +49,9 @@ class PlanningSlowdownManager:
         self.sub_fallback = rospy.Subscriber(
             self.path_is_fallback_topic, Bool, self.fallback_callback, queue_size=5
         )
+        self.sub_path_blocked = rospy.Subscriber(
+            self.path_blocked_topic, Bool, self.path_blocked_callback, queue_size=5
+        )
         self.sub_path = rospy.Subscriber(
             self.global_path_topic, Path, self.path_callback, queue_size=5
         )
@@ -56,9 +61,10 @@ class PlanningSlowdownManager:
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "planning_slowdown_manager started | path=%s fallback=%s goal=%s behavior=%s marker=%s slow=%.2fm/s hold=%.1fs no_path_grace=%.1fs",
+            "planning_slowdown_manager started | path=%s fallback=%s blocked=%s goal=%s behavior=%s marker=%s slow=%.2fm/s hold=%.1fs no_path_grace=%.1fs",
             self.global_path_topic,
             self.path_is_fallback_topic,
+            self.path_blocked_topic,
             self.goal_topic,
             self.behavior_cmd_topic,
             self.marker_topic,
@@ -69,6 +75,9 @@ class PlanningSlowdownManager:
 
     def fallback_callback(self, msg):
         self.fallback_active = bool(msg.data)
+
+    def path_blocked_callback(self, msg):
+        self.path_blocked_active = bool(msg.data)
 
     def goal_callback(self, msg):
         self.active_goal = True
@@ -89,6 +98,8 @@ class PlanningSlowdownManager:
     def _slowdown_reason(self, now_sec):
         if self.fallback_active:
             return "observe: replanning fallback"
+        if self.path_blocked_active:
+            return "observe: global path blocked"
 
         new_goal_without_path = (
             self.active_goal

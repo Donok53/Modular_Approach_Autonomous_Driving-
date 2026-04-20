@@ -42,6 +42,7 @@
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="enable_tracked_objects_marker_viz" default="false"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
+  <arg name="path_blocked_topic" default="/astar/path_blocked"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="active_path_topic" default="/planning/active_path"/>
@@ -386,6 +387,7 @@
   <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
   <arg name="planning_slowdown_publish_hz" default="5.0"/>
   <arg name="planning_slowdown_marker_topic" default="/planning/planning_speed_limit_marker"/>
+  <arg name="planning_slowdown_path_blocked_topic" default="$(arg path_blocked_topic)"/>
   <arg name="dynamic_speed_thresh_mps" default="0.08"/>
   <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
   <arg name="prediction_horizon_s" default="2.2"/>
@@ -475,7 +477,7 @@
   <arg name="obstacle_consider_side_m" default="0.80"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="self_filter_margin_m" default="0.08"/>
-  <arg name="near_field_raw_stop_enabled" default="false"/>
+  <arg name="near_field_raw_stop_enabled" default="true"/>
   <arg name="near_field_raw_stop_topic" default="$(arg pointcloud_topic)"/>
   <arg name="near_field_raw_stop_base_frame" default="$(arg robot_base_frame)"/>
   <arg name="near_field_raw_stop_tf_timeout_s" default="0.02"/>
@@ -653,6 +655,7 @@
         <arg name="use_global_obstacle_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
         <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
         <arg name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
+        <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -706,6 +709,7 @@
         <arg name="use_global_obstacle_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
         <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
         <arg name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
+        <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -836,6 +840,7 @@
       <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
       <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
       <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
+      <arg name="planning_slowdown_path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
@@ -1208,6 +1213,7 @@
       <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
       <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
       <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
+      <arg name="planning_slowdown_path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>

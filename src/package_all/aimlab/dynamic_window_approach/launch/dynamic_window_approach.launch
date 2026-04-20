@@ -243,6 +243,7 @@
     <arg name="planning_slowdown_marker_topic" default="/planning/planning_speed_limit_marker"/>
     <arg name="planning_slowdown_goal_topic" default="/move_base_simple/goal"/>
     <arg name="planning_slowdown_path_is_fallback_topic" default="/astar/path_is_fallback"/>
+    <arg name="planning_slowdown_path_blocked_topic" default="/astar/path_blocked"/>
     <arg name="dynamic_speed_thresh_mps" default="0.08"/>
     <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
     <arg name="prediction_horizon_s" default="2.2"/>
@@ -549,6 +550,7 @@
             <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
             <param name="global_path_topic" value="$(arg global_path_topic)"/>
             <param name="path_is_fallback_topic" value="$(arg planning_slowdown_path_is_fallback_topic)"/>
+            <param name="path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
             <param name="goal_topic" value="$(arg planning_slowdown_goal_topic)"/>
             <param name="marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
             <param name="slow_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
