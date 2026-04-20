@@ -331,6 +331,23 @@
     <arg name="obstacle_consider_side_m" default="0.80"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
     <arg name="self_filter_margin_m" default="0.08"/>
+    <arg name="near_field_raw_stop_enabled" default="false"/>
+    <arg name="near_field_raw_stop_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
+    <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
+    <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
+    <arg name="near_field_raw_stop_half_width_m" default="0.45"/>
+    <arg name="near_field_raw_stop_min_z_m" default="-0.20"/>
+    <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
+    <arg name="near_field_raw_stop_min_points" default="3"/>
+    <arg name="near_field_raw_stop_cell_size_m" default="0.12"/>
+    <arg name="near_field_raw_stop_min_cells" default="1"/>
+    <arg name="near_field_raw_stop_downsample" default="1"/>
+    <arg name="near_field_raw_stop_on_count" default="1"/>
+    <arg name="near_field_raw_stop_off_count" default="3"/>
+    <arg name="near_field_raw_stop_timeout_s" default="0.35"/>
+    <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
+    <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
+    <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
     <arg name="debug_stop_logging" default="true"/>
     <arg name="debug_dwa_stats" default="true"/>
@@ -655,7 +672,7 @@
         <param name="use_muxed_active_path" value="false"/>
         <param name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
         <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
-        <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+        <param name="pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
         <param name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
         <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
         <param name="global_obstacle_overlay_stop_locked_only" value="$(arg global_obstacle_overlay_stop_locked_only)"/>
@@ -723,6 +740,23 @@
         <param name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
         <param name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>
         <param name="self_filter_margin_m" value="$(arg self_filter_margin_m)"/>
+        <param name="near_field_raw_stop_enabled" value="$(arg near_field_raw_stop_enabled)"/>
+        <param name="near_field_raw_stop_topic" value="$(arg near_field_raw_stop_topic)"/>
+        <param name="near_field_raw_stop_min_x_m" value="$(arg near_field_raw_stop_min_x_m)"/>
+        <param name="near_field_raw_stop_max_x_m" value="$(arg near_field_raw_stop_max_x_m)"/>
+        <param name="near_field_raw_stop_half_width_m" value="$(arg near_field_raw_stop_half_width_m)"/>
+        <param name="near_field_raw_stop_min_z_m" value="$(arg near_field_raw_stop_min_z_m)"/>
+        <param name="near_field_raw_stop_max_z_m" value="$(arg near_field_raw_stop_max_z_m)"/>
+        <param name="near_field_raw_stop_min_points" value="$(arg near_field_raw_stop_min_points)"/>
+        <param name="near_field_raw_stop_cell_size_m" value="$(arg near_field_raw_stop_cell_size_m)"/>
+        <param name="near_field_raw_stop_min_cells" value="$(arg near_field_raw_stop_min_cells)"/>
+        <param name="near_field_raw_stop_downsample" value="$(arg near_field_raw_stop_downsample)"/>
+        <param name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
+        <param name="near_field_raw_stop_off_count" value="$(arg near_field_raw_stop_off_count)"/>
+        <param name="near_field_raw_stop_timeout_s" value="$(arg near_field_raw_stop_timeout_s)"/>
+        <param name="near_field_raw_stop_marker_topic" value="$(arg near_field_raw_stop_marker_topic)"/>
+        <param name="near_field_raw_stop_hit_cloud_topic" value="$(arg near_field_raw_stop_hit_cloud_topic)"/>
+        <param name="near_field_raw_stop_log_period_s" value="$(arg near_field_raw_stop_log_period_s)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>
         <param name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
         <param name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>

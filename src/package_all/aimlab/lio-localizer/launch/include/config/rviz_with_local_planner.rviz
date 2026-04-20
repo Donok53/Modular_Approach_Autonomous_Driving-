@@ -368,6 +368,34 @@ Visualization Manager:
       Axis: Z
       Channel Name: intensity
       Class: rviz/PointCloud2
+      Color: 255; 0; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: Near Field Stop Hits
+      Position Transformer: XYZ
+      Queue Size: 2
+      Selectable: true
+      Size (Pixels): 5
+      Size (m): 0.12000000476837158
+      Style: Flat Squares
+      Topic: /planning/near_field_stop_hits
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
@@ -559,6 +587,14 @@ Visualization Manager:
       Name: planning_speed_limit
       Namespaces:
         planning_speed_limit: true
+      Queue Size: 5
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /planning/near_field_stop_marker
+      Name: near_field_stop
+      Namespaces:
+        near_field_raw_stop: true
       Queue Size: 5
       Value: true
     - Alpha: 1

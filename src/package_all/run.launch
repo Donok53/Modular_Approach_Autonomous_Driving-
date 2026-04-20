@@ -472,6 +472,23 @@
   <arg name="obstacle_consider_side_m" default="0.80"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
   <arg name="self_filter_margin_m" default="0.08"/>
+  <arg name="near_field_raw_stop_enabled" default="false"/>
+  <arg name="near_field_raw_stop_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
+  <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
+  <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
+  <arg name="near_field_raw_stop_half_width_m" default="0.45"/>
+  <arg name="near_field_raw_stop_min_z_m" default="-0.20"/>
+  <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
+  <arg name="near_field_raw_stop_min_points" default="3"/>
+  <arg name="near_field_raw_stop_cell_size_m" default="0.12"/>
+  <arg name="near_field_raw_stop_min_cells" default="1"/>
+  <arg name="near_field_raw_stop_downsample" default="1"/>
+  <arg name="near_field_raw_stop_on_count" default="1"/>
+  <arg name="near_field_raw_stop_off_count" default="3"/>
+  <arg name="near_field_raw_stop_timeout_s" default="0.35"/>
+  <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
+  <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
+  <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
   <arg name="use_auto_osm" default="true"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
@@ -998,6 +1015,23 @@
       <arg name="block_on_count" value="$(arg block_on_count)"/>
       <arg name="block_off_count" value="$(arg block_off_count)"/>
       <arg name="self_filter_margin_m" value="$(arg self_filter_margin_m)"/>
+      <arg name="near_field_raw_stop_enabled" value="$(arg near_field_raw_stop_enabled)"/>
+      <arg name="near_field_raw_stop_topic" value="$(arg near_field_raw_stop_topic)"/>
+      <arg name="near_field_raw_stop_min_x_m" value="$(arg near_field_raw_stop_min_x_m)"/>
+      <arg name="near_field_raw_stop_max_x_m" value="$(arg near_field_raw_stop_max_x_m)"/>
+      <arg name="near_field_raw_stop_half_width_m" value="$(arg near_field_raw_stop_half_width_m)"/>
+      <arg name="near_field_raw_stop_min_z_m" value="$(arg near_field_raw_stop_min_z_m)"/>
+      <arg name="near_field_raw_stop_max_z_m" value="$(arg near_field_raw_stop_max_z_m)"/>
+      <arg name="near_field_raw_stop_min_points" value="$(arg near_field_raw_stop_min_points)"/>
+      <arg name="near_field_raw_stop_cell_size_m" value="$(arg near_field_raw_stop_cell_size_m)"/>
+      <arg name="near_field_raw_stop_min_cells" value="$(arg near_field_raw_stop_min_cells)"/>
+      <arg name="near_field_raw_stop_downsample" value="$(arg near_field_raw_stop_downsample)"/>
+      <arg name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
+      <arg name="near_field_raw_stop_off_count" value="$(arg near_field_raw_stop_off_count)"/>
+      <arg name="near_field_raw_stop_timeout_s" value="$(arg near_field_raw_stop_timeout_s)"/>
+      <arg name="near_field_raw_stop_marker_topic" value="$(arg near_field_raw_stop_marker_topic)"/>
+      <arg name="near_field_raw_stop_hit_cloud_topic" value="$(arg near_field_raw_stop_hit_cloud_topic)"/>
+      <arg name="near_field_raw_stop_log_period_s" value="$(arg near_field_raw_stop_log_period_s)"/>
       <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
       <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
       <arg name="direct_goal_timeout_s" value="$(eval arg('crossing_portal_direct_goal_timeout_s') if arg('enable_crossing_portal_manager') == 'true' else '0.0')"/>

@@ -1,0 +1,57 @@
+<launch>
+  <!-- Near-field raw cloud stop test preset.
+       This uses raw/deskewed points directly, independent of linefit non-ground. -->
+  <arg name="use_sim_time" default="false"/>
+  <arg name="real_mode" default="false"/>
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_robot_send" default="false"/>
+  <arg name="enable_wave_cmd_bridge" default="false"/>
+  <arg name="local_planner_mode" default="custom"/>
+
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="imu_topic" default="/imu/data"/>
+  <arg name="near_field_raw_stop_topic" default="/lio_localizer/localization/cloud_deskewed"/>
+
+  <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
+  <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
+  <arg name="near_field_raw_stop_half_width_m" default="0.45"/>
+  <arg name="near_field_raw_stop_min_z_m" default="-0.20"/>
+  <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
+  <arg name="near_field_raw_stop_min_points" default="3"/>
+  <arg name="near_field_raw_stop_min_cells" default="1"/>
+  <arg name="near_field_raw_stop_cell_size_m" default="0.12"/>
+  <arg name="near_field_raw_stop_on_count" default="1"/>
+  <arg name="near_field_raw_stop_off_count" default="3"/>
+  <arg name="near_field_raw_stop_timeout_s" default="0.35"/>
+  <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
+  <arg name="block_on_count" default="1"/>
+  <arg name="block_off_count" default="3"/>
+
+  <include file="$(dirname)/run.launch">
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="real_mode" value="$(arg real_mode)"/>
+    <arg name="enable_rviz" value="$(arg enable_rviz)"/>
+    <arg name="enable_robot_send" value="$(arg enable_robot_send)"/>
+    <arg name="enable_wave_cmd_bridge" value="$(arg enable_wave_cmd_bridge)"/>
+    <arg name="local_planner_mode" value="$(arg local_planner_mode)"/>
+    <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <arg name="imu_topic" value="$(arg imu_topic)"/>
+
+    <arg name="near_field_raw_stop_enabled" value="true"/>
+    <arg name="near_field_raw_stop_topic" value="$(arg near_field_raw_stop_topic)"/>
+    <arg name="near_field_raw_stop_min_x_m" value="$(arg near_field_raw_stop_min_x_m)"/>
+    <arg name="near_field_raw_stop_max_x_m" value="$(arg near_field_raw_stop_max_x_m)"/>
+    <arg name="near_field_raw_stop_half_width_m" value="$(arg near_field_raw_stop_half_width_m)"/>
+    <arg name="near_field_raw_stop_min_z_m" value="$(arg near_field_raw_stop_min_z_m)"/>
+    <arg name="near_field_raw_stop_max_z_m" value="$(arg near_field_raw_stop_max_z_m)"/>
+    <arg name="near_field_raw_stop_min_points" value="$(arg near_field_raw_stop_min_points)"/>
+    <arg name="near_field_raw_stop_min_cells" value="$(arg near_field_raw_stop_min_cells)"/>
+    <arg name="near_field_raw_stop_cell_size_m" value="$(arg near_field_raw_stop_cell_size_m)"/>
+    <arg name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
+    <arg name="near_field_raw_stop_off_count" value="$(arg near_field_raw_stop_off_count)"/>
+    <arg name="near_field_raw_stop_timeout_s" value="$(arg near_field_raw_stop_timeout_s)"/>
+    <arg name="near_field_raw_stop_log_period_s" value="$(arg near_field_raw_stop_log_period_s)"/>
+    <arg name="block_on_count" value="$(arg block_on_count)"/>
+    <arg name="block_off_count" value="$(arg block_off_count)"/>
+  </include>
+</launch>

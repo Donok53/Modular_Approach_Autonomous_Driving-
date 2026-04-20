@@ -217,6 +217,73 @@ class DWAControl:
         self._raw_front_obstacle_clearance = float("inf")
         self._raw_emergency_band_blocked = False
         self._raw_immediate_contact_blocked = False
+        self.near_field_raw_stop_enabled = bool(
+            rospy.get_param("~near_field_raw_stop_enabled", False)
+        )
+        self.near_field_raw_stop_topic = str(
+            rospy.get_param("~near_field_raw_stop_topic", "")
+        ).strip()
+        self.near_field_raw_stop_min_x_m = float(
+            rospy.get_param("~near_field_raw_stop_min_x_m", 0.30)
+        )
+        self.near_field_raw_stop_max_x_m = max(
+            self.near_field_raw_stop_min_x_m + 0.05,
+            float(rospy.get_param("~near_field_raw_stop_max_x_m", 1.20)),
+        )
+        self.near_field_raw_stop_half_width_m = max(
+            0.05, float(rospy.get_param("~near_field_raw_stop_half_width_m", 0.45))
+        )
+        self.near_field_raw_stop_min_z_m = float(
+            rospy.get_param("~near_field_raw_stop_min_z_m", -0.20)
+        )
+        self.near_field_raw_stop_max_z_m = max(
+            self.near_field_raw_stop_min_z_m + 0.05,
+            float(rospy.get_param("~near_field_raw_stop_max_z_m", 1.20)),
+        )
+        self.near_field_raw_stop_min_points = max(
+            1, int(rospy.get_param("~near_field_raw_stop_min_points", 3))
+        )
+        self.near_field_raw_stop_cell_size_m = max(
+            0.03, float(rospy.get_param("~near_field_raw_stop_cell_size_m", 0.12))
+        )
+        self.near_field_raw_stop_min_cells = max(
+            1, int(rospy.get_param("~near_field_raw_stop_min_cells", 1))
+        )
+        self.near_field_raw_stop_downsample = max(
+            1, int(rospy.get_param("~near_field_raw_stop_downsample", 1))
+        )
+        self.near_field_raw_stop_on_count = max(
+            1, int(rospy.get_param("~near_field_raw_stop_on_count", 1))
+        )
+        self.near_field_raw_stop_off_count = max(
+            1, int(rospy.get_param("~near_field_raw_stop_off_count", 3))
+        )
+        self.near_field_raw_stop_timeout_s = max(
+            0.05, float(rospy.get_param("~near_field_raw_stop_timeout_s", 0.35))
+        )
+        self.near_field_raw_stop_marker_topic = str(
+            rospy.get_param(
+                "~near_field_raw_stop_marker_topic",
+                "/planning/near_field_stop_marker",
+            )
+        ).strip()
+        self.near_field_raw_stop_hit_cloud_topic = str(
+            rospy.get_param(
+                "~near_field_raw_stop_hit_cloud_topic",
+                "/planning/near_field_stop_hits",
+            )
+        ).strip()
+        self.near_field_raw_stop_log_period_s = max(
+            0.0, float(rospy.get_param("~near_field_raw_stop_log_period_s", 0.5))
+        )
+        self._near_field_raw_stop_blocked = False
+        self._near_field_raw_stop_on = 0
+        self._near_field_raw_stop_off = 0
+        self._near_field_raw_stop_last_stamp = rospy.Time(0)
+        self._near_field_raw_stop_last_count = 0
+        self._near_field_raw_stop_last_cells = 0
+        self._near_field_raw_stop_last_min_x = float("inf")
+        self._near_field_raw_stop_last_log = rospy.Time(0)
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -495,7 +562,26 @@ class DWAControl:
             self.behavior_cmd_callback,
             queue_size=10,
         )
+        self.near_field_raw_stop_marker_pub = None
+        if self.near_field_raw_stop_marker_topic:
+            self.near_field_raw_stop_marker_pub = rospy.Publisher(
+                self.near_field_raw_stop_marker_topic, MarkerArray, queue_size=2
+            )
+        self.near_field_raw_stop_hit_cloud_pub = None
+        if self.near_field_raw_stop_hit_cloud_topic:
+            self.near_field_raw_stop_hit_cloud_pub = rospy.Publisher(
+                self.near_field_raw_stop_hit_cloud_topic, PointCloud2, queue_size=2
+            )
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        self.sub_near_field_raw_stop = None
+        if self.near_field_raw_stop_enabled and self.near_field_raw_stop_topic:
+            self.sub_near_field_raw_stop = rospy.Subscriber(
+                self.near_field_raw_stop_topic,
+                PointCloud2,
+                self.near_field_raw_stop_callback,
+                queue_size=1,
+                buff_size=2**24,
+            )
         self.sub_global_obstacle_overlay_boxes = None
         if (
             self.use_global_obstacle_overlay_boxes_for_stop
@@ -601,23 +687,38 @@ class DWAControl:
         self.overlay_box_blocked = bool(overlay_blocked)
         self.overlay_box_front_clearance = overlay_clearance
         self._overlay_box_match_count = int(overlay_match_count)
+        near_raw_fresh = (
+            self._near_field_raw_stop_last_stamp.to_sec() > 0.0
+            and (
+                rospy.Time.now() - self._near_field_raw_stop_last_stamp
+            ).to_sec() <= self.near_field_raw_stop_timeout_s
+        )
+        near_raw_blocked = self._near_field_raw_stop_blocked and near_raw_fresh
 
         raw_fallback_blocked = self._raw_immediate_contact_blocked or (
             self._raw_emergency_band_blocked
             and self._raw_front_obstacle_clearance <= self.avoidance_hard_stop_distance
         )
         if self.use_global_obstacle_overlay_boxes_for_stop:
-            near = self.overlay_box_blocked or raw_fallback_blocked
+            near = self.overlay_box_blocked or raw_fallback_blocked or near_raw_blocked
             source_parts = []
             if self.overlay_box_blocked:
                 source_parts.append("overlay_boxes")
+            if near_raw_blocked:
+                source_parts.append("near_raw")
             if self._raw_immediate_contact_blocked:
                 source_parts.append("raw_intrusion")
             elif raw_fallback_blocked:
                 source_parts.append("raw_near_fallback")
         else:
-            near = self._raw_immediate_contact_blocked or self._raw_emergency_band_blocked
+            near = (
+                self._raw_immediate_contact_blocked
+                or self._raw_emergency_band_blocked
+                or near_raw_blocked
+            )
             source_parts = []
+            if near_raw_blocked:
+                source_parts.append("near_raw")
             if self._raw_immediate_contact_blocked:
                 source_parts.append("raw_intrusion")
             elif self._raw_emergency_band_blocked:
@@ -626,6 +727,10 @@ class DWAControl:
         self.front_obstacle_clearance = min(
             self._raw_front_obstacle_clearance,
             self.overlay_box_front_clearance,
+            self._near_field_raw_stop_last_min_x
+            - (self.robot_half_length_m + self.footprint_padding_m)
+            if near_raw_fresh
+            else float("inf"),
         )
         self._last_emergency_source = ",".join(source_parts) if source_parts else "clear"
 
@@ -651,6 +756,170 @@ class DWAControl:
         elif self.emergency_blocked and self._blk_off >= self.block_off_count:
             self.emergency_blocked = False
             rospy.loginfo("Emergency STOP cleared")
+
+    def _publish_near_field_raw_stop_debug(self, msg, hit_points):
+        if self.near_field_raw_stop_hit_cloud_pub is not None:
+            self.near_field_raw_stop_hit_cloud_pub.publish(
+                point_cloud2.create_cloud_xyz32(msg.header, hit_points)
+            )
+
+        if self.near_field_raw_stop_marker_pub is None:
+            return
+
+        markers = MarkerArray()
+        delete_all = Marker()
+        delete_all.action = Marker.DELETEALL
+        markers.markers.append(delete_all)
+
+        box = Marker()
+        box.header = msg.header
+        box.ns = "near_field_raw_stop"
+        box.id = 0
+        box.type = Marker.CUBE
+        box.action = Marker.ADD
+        box.pose.position.x = 0.5 * (
+            self.near_field_raw_stop_min_x_m + self.near_field_raw_stop_max_x_m
+        )
+        box.pose.position.y = 0.0
+        box.pose.position.z = 0.5 * (
+            self.near_field_raw_stop_min_z_m + self.near_field_raw_stop_max_z_m
+        )
+        box.pose.orientation.w = 1.0
+        box.scale.x = self.near_field_raw_stop_max_x_m - self.near_field_raw_stop_min_x_m
+        box.scale.y = 2.0 * self.near_field_raw_stop_half_width_m
+        box.scale.z = self.near_field_raw_stop_max_z_m - self.near_field_raw_stop_min_z_m
+        box.color.a = 0.22 if self._near_field_raw_stop_blocked else 0.12
+        box.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.1
+        box.color.g = 0.05 if self._near_field_raw_stop_blocked else 0.9
+        box.color.b = 0.05
+        box.lifetime = rospy.Duration(max(0.2, self.near_field_raw_stop_timeout_s * 2.0))
+        markers.markers.append(box)
+
+        text = Marker()
+        text.header = msg.header
+        text.ns = "near_field_raw_stop"
+        text.id = 1
+        text.type = Marker.TEXT_VIEW_FACING
+        text.action = Marker.ADD
+        text.pose.position.x = self.near_field_raw_stop_max_x_m
+        text.pose.position.y = 0.0
+        text.pose.position.z = self.near_field_raw_stop_max_z_m + 0.25
+        text.pose.orientation.w = 1.0
+        text.scale.z = 0.22
+        text.color.a = 1.0
+        text.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.1
+        text.color.g = 0.1 if self._near_field_raw_stop_blocked else 1.0
+        text.color.b = 0.1
+        text.text = "NEAR STOP: {}\npts={} cells={} min_x={:.2f}m".format(
+            "STOP" if self._near_field_raw_stop_blocked else "clear",
+            self._near_field_raw_stop_last_count,
+            self._near_field_raw_stop_last_cells,
+            self._near_field_raw_stop_last_min_x
+            if math.isfinite(self._near_field_raw_stop_last_min_x)
+            else -1.0,
+        )
+        text.lifetime = box.lifetime
+        markers.markers.append(text)
+
+        self.near_field_raw_stop_marker_pub.publish(markers)
+
+    def near_field_raw_stop_callback(self, msg):
+        try:
+            hit_points = []
+            occupied_cells = set()
+            min_x = float("inf")
+            i = 0
+            for x, y, z in point_cloud2.read_points(
+                msg, field_names=("x", "y", "z"), skip_nans=True
+            ):
+                i += 1
+                if (
+                    self.near_field_raw_stop_downsample > 1
+                    and (i % self.near_field_raw_stop_downsample != 0)
+                ):
+                    continue
+                x = float(x)
+                y = float(y)
+                z = float(z)
+                if not (
+                    self.near_field_raw_stop_min_x_m
+                    <= x
+                    <= self.near_field_raw_stop_max_x_m
+                ):
+                    continue
+                if abs(y) > self.near_field_raw_stop_half_width_m:
+                    continue
+                if not (
+                    self.near_field_raw_stop_min_z_m
+                    <= z
+                    <= self.near_field_raw_stop_max_z_m
+                ):
+                    continue
+                hit_points.append((x, y, z))
+                occupied_cells.add(
+                    (
+                        int(math.floor(x / self.near_field_raw_stop_cell_size_m)),
+                        int(math.floor(y / self.near_field_raw_stop_cell_size_m)),
+                    )
+                )
+                if x < min_x:
+                    min_x = x
+
+            hit_count = len(hit_points)
+            cell_count = len(occupied_cells)
+            detected = (
+                hit_count >= self.near_field_raw_stop_min_points
+                and cell_count >= self.near_field_raw_stop_min_cells
+            )
+            if detected:
+                self._near_field_raw_stop_on += 1
+                self._near_field_raw_stop_off = 0
+            else:
+                self._near_field_raw_stop_off += 1
+                self._near_field_raw_stop_on = 0
+
+            if (
+                not self._near_field_raw_stop_blocked
+                and self._near_field_raw_stop_on >= self.near_field_raw_stop_on_count
+            ):
+                self._near_field_raw_stop_blocked = True
+            elif (
+                self._near_field_raw_stop_blocked
+                and self._near_field_raw_stop_off >= self.near_field_raw_stop_off_count
+            ):
+                self._near_field_raw_stop_blocked = False
+
+            if msg.header.stamp.to_sec() > 0.0:
+                self._near_field_raw_stop_last_stamp = msg.header.stamp
+            else:
+                self._near_field_raw_stop_last_stamp = rospy.Time.now()
+            self._near_field_raw_stop_last_count = hit_count
+            self._near_field_raw_stop_last_cells = cell_count
+            self._near_field_raw_stop_last_min_x = min_x
+            self._publish_near_field_raw_stop_debug(msg, hit_points)
+            self._update_emergency_stop_state()
+
+            if self.near_field_raw_stop_log_period_s > 0.0:
+                now = rospy.Time.now()
+                if (
+                    now - self._near_field_raw_stop_last_log
+                ).to_sec() >= self.near_field_raw_stop_log_period_s:
+                    self._near_field_raw_stop_last_log = now
+                    rospy.loginfo(
+                        "near_field_raw_stop: %s pts=%d cells=%d min_x=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s",
+                        "STOP" if self._near_field_raw_stop_blocked else "clear",
+                        hit_count,
+                        cell_count,
+                        min_x if math.isfinite(min_x) else float("inf"),
+                        self.near_field_raw_stop_min_x_m,
+                        self.near_field_raw_stop_max_x_m,
+                        self.near_field_raw_stop_half_width_m,
+                        self.near_field_raw_stop_min_z_m,
+                        self.near_field_raw_stop_max_z_m,
+                        self.near_field_raw_stop_topic,
+                    )
+        except Exception as e:
+            rospy.logwarn("near_field_raw_stop_callback error: %s", str(e))
 
     def _point_in_local_rect(self, x, y, half_length, half_width):
         return abs(x) <= half_length and abs(y) <= half_width
@@ -1807,7 +2076,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -1824,6 +2093,14 @@ class DWAControl:
             "on" if self.use_global_obstacle_overlay_boxes_for_stop else "off",
             "on" if self.global_obstacle_overlay_stop_locked_only else "off",
             self.global_obstacle_overlay_boxes_topic if self.global_obstacle_overlay_boxes_topic else "-",
+            "on" if self.near_field_raw_stop_enabled else "off",
+            self.near_field_raw_stop_topic if self.near_field_raw_stop_topic else "-",
+            self.near_field_raw_stop_min_x_m,
+            self.near_field_raw_stop_max_x_m,
+            self.near_field_raw_stop_half_width_m,
+            self.near_field_raw_stop_min_z_m,
+            self.near_field_raw_stop_max_z_m,
+            self.near_field_raw_stop_min_points,
             self.robot_length_m,
             self.robot_width_m,
             self.cmd_publish_hz,
