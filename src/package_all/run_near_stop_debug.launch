@@ -10,7 +10,9 @@
 
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="imu_topic" default="/imu/data"/>
-  <arg name="near_field_raw_stop_topic" default="/lio_localizer/localization/cloud_deskewed"/>
+  <arg name="near_field_raw_stop_topic" default="/ouster/points"/>
+  <arg name="near_field_raw_stop_base_frame" default="base_link"/>
+  <arg name="near_field_raw_stop_tf_timeout_s" default="0.02"/>
 
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
   <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
@@ -39,6 +41,8 @@
 
     <arg name="near_field_raw_stop_enabled" value="true"/>
     <arg name="near_field_raw_stop_topic" value="$(arg near_field_raw_stop_topic)"/>
+    <arg name="near_field_raw_stop_base_frame" value="$(arg near_field_raw_stop_base_frame)"/>
+    <arg name="near_field_raw_stop_tf_timeout_s" value="$(arg near_field_raw_stop_tf_timeout_s)"/>
     <arg name="near_field_raw_stop_min_x_m" value="$(arg near_field_raw_stop_min_x_m)"/>
     <arg name="near_field_raw_stop_max_x_m" value="$(arg near_field_raw_stop_max_x_m)"/>
     <arg name="near_field_raw_stop_half_width_m" value="$(arg near_field_raw_stop_half_width_m)"/>

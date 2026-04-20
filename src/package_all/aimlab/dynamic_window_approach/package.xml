@@ -72,6 +72,7 @@
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
   <exec_depend>costmap_2d</exec_depend>
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>move_base</exec_depend>

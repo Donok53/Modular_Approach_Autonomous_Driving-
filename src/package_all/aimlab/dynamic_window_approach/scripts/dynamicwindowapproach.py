@@ -17,12 +17,13 @@ Fixes vs. original:
 import math
 import numpy as np
 import rospy
+import tf2_ros
 import tf.transformations as transformations
 
 from geometry_msgs.msg import Twist, Point, PoseStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, Header
 
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
@@ -223,6 +224,12 @@ class DWAControl:
         self.near_field_raw_stop_topic = str(
             rospy.get_param("~near_field_raw_stop_topic", "")
         ).strip()
+        self.near_field_raw_stop_base_frame = str(
+            rospy.get_param("~near_field_raw_stop_base_frame", "base_link")
+        ).strip()
+        self.near_field_raw_stop_tf_timeout_s = max(
+            0.0, float(rospy.get_param("~near_field_raw_stop_tf_timeout_s", 0.02))
+        )
         self.near_field_raw_stop_min_x_m = float(
             rospy.get_param("~near_field_raw_stop_min_x_m", 0.30)
         )
@@ -284,6 +291,7 @@ class DWAControl:
         self._near_field_raw_stop_last_cells = 0
         self._near_field_raw_stop_last_min_x = float("inf")
         self._near_field_raw_stop_last_log = rospy.Time(0)
+        self._near_field_raw_stop_tf_warn_sec = 0.0
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -572,6 +580,15 @@ class DWAControl:
             self.near_field_raw_stop_hit_cloud_pub = rospy.Publisher(
                 self.near_field_raw_stop_hit_cloud_topic, PointCloud2, queue_size=2
             )
+        self.near_field_raw_stop_tf_buffer = None
+        self.near_field_raw_stop_tf_listener = None
+        if self.near_field_raw_stop_enabled and self.near_field_raw_stop_base_frame:
+            self.near_field_raw_stop_tf_buffer = tf2_ros.Buffer(
+                cache_time=rospy.Duration(5.0)
+            )
+            self.near_field_raw_stop_tf_listener = tf2_ros.TransformListener(
+                self.near_field_raw_stop_tf_buffer
+            )
         self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
         self.sub_near_field_raw_stop = None
         if self.near_field_raw_stop_enabled and self.near_field_raw_stop_topic:
@@ -757,10 +774,68 @@ class DWAControl:
             self.emergency_blocked = False
             rospy.loginfo("Emergency STOP cleared")
 
-    def _publish_near_field_raw_stop_debug(self, msg, hit_points):
+    @staticmethod
+    def _same_frame(frame_a, frame_b):
+        return str(frame_a).strip().lstrip("/") == str(frame_b).strip().lstrip("/")
+
+    def _near_field_raw_stop_transform_matrix(self, msg):
+        source_frame = str(msg.header.frame_id).strip()
+        target_frame = self.near_field_raw_stop_base_frame
+        if (not target_frame) or self._same_frame(source_frame, target_frame):
+            return None, True
+        if self.near_field_raw_stop_tf_buffer is None:
+            return None, False
+
+        stamp = msg.header.stamp
+        if stamp.to_sec() <= 0.0:
+            stamp = rospy.Time(0)
+        try:
+            tf_msg = self.near_field_raw_stop_tf_buffer.lookup_transform(
+                target_frame,
+                source_frame,
+                stamp,
+                rospy.Duration(self.near_field_raw_stop_tf_timeout_s),
+            )
+        except Exception as exc:
+            now_sec = rospy.Time.now().to_sec()
+            if now_sec - self._near_field_raw_stop_tf_warn_sec > 1.0:
+                self._near_field_raw_stop_tf_warn_sec = now_sec
+                rospy.logwarn(
+                    "near_field_raw_stop: missing TF %s <- %s: %s",
+                    target_frame,
+                    source_frame,
+                    str(exc),
+                )
+            return None, False
+
+        t = tf_msg.transform.translation
+        q = tf_msg.transform.rotation
+        mat = transformations.quaternion_matrix([q.x, q.y, q.z, q.w])
+        mat[0, 3] = t.x
+        mat[1, 3] = t.y
+        mat[2, 3] = t.z
+        return mat, True
+
+    @staticmethod
+    def _transform_point_xyz(mat, x, y, z):
+        if mat is None:
+            return float(x), float(y), float(z)
+        return (
+            float(mat[0, 0] * x + mat[0, 1] * y + mat[0, 2] * z + mat[0, 3]),
+            float(mat[1, 0] * x + mat[1, 1] * y + mat[1, 2] * z + mat[1, 3]),
+            float(mat[2, 0] * x + mat[2, 1] * y + mat[2, 2] * z + mat[2, 3]),
+        )
+
+    def _near_field_header(self, msg):
+        header = Header()
+        header.stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
+        header.frame_id = self.near_field_raw_stop_base_frame or msg.header.frame_id
+        return header
+
+    def _publish_near_field_raw_stop_debug(self, header, hit_points):
         if self.near_field_raw_stop_hit_cloud_pub is not None:
             self.near_field_raw_stop_hit_cloud_pub.publish(
-                point_cloud2.create_cloud_xyz32(msg.header, hit_points)
+                point_cloud2.create_cloud_xyz32(header, hit_points)
             )
 
         if self.near_field_raw_stop_marker_pub is None:
@@ -772,7 +847,7 @@ class DWAControl:
         markers.markers.append(delete_all)
 
         box = Marker()
-        box.header = msg.header
+        box.header = header
         box.ns = "near_field_raw_stop"
         box.id = 0
         box.type = Marker.CUBE
@@ -796,7 +871,7 @@ class DWAControl:
         markers.markers.append(box)
 
         text = Marker()
-        text.header = msg.header
+        text.header = header
         text.ns = "near_field_raw_stop"
         text.id = 1
         text.type = Marker.TEXT_VIEW_FACING
@@ -825,6 +900,17 @@ class DWAControl:
 
     def near_field_raw_stop_callback(self, msg):
         try:
+            transform_mat, transform_ok = self._near_field_raw_stop_transform_matrix(msg)
+            header = self._near_field_header(msg)
+            if not transform_ok:
+                self._near_field_raw_stop_last_stamp = rospy.Time.now()
+                self._near_field_raw_stop_last_count = 0
+                self._near_field_raw_stop_last_cells = 0
+                self._near_field_raw_stop_last_min_x = float("inf")
+                self._publish_near_field_raw_stop_debug(header, [])
+                self._update_emergency_stop_state()
+                return
+
             hit_points = []
             occupied_cells = set()
             min_x = float("inf")
@@ -838,9 +924,7 @@ class DWAControl:
                     and (i % self.near_field_raw_stop_downsample != 0)
                 ):
                     continue
-                x = float(x)
-                y = float(y)
-                z = float(z)
+                x, y, z = self._transform_point_xyz(transform_mat, float(x), float(y), float(z))
                 if not (
                     self.near_field_raw_stop_min_x_m
                     <= x
@@ -896,7 +980,7 @@ class DWAControl:
             self._near_field_raw_stop_last_count = hit_count
             self._near_field_raw_stop_last_cells = cell_count
             self._near_field_raw_stop_last_min_x = min_x
-            self._publish_near_field_raw_stop_debug(msg, hit_points)
+            self._publish_near_field_raw_stop_debug(header, hit_points)
             self._update_emergency_stop_state()
 
             if self.near_field_raw_stop_log_period_s > 0.0:
@@ -2076,7 +2160,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2095,6 +2179,7 @@ class DWAControl:
             self.global_obstacle_overlay_boxes_topic if self.global_obstacle_overlay_boxes_topic else "-",
             "on" if self.near_field_raw_stop_enabled else "off",
             self.near_field_raw_stop_topic if self.near_field_raw_stop_topic else "-",
+            self.near_field_raw_stop_base_frame if self.near_field_raw_stop_base_frame else "-",
             self.near_field_raw_stop_min_x_m,
             self.near_field_raw_stop_max_x_m,
             self.near_field_raw_stop_half_width_m,
