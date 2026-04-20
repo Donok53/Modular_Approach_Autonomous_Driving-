@@ -327,8 +327,8 @@
   <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
   <arg name="global_obstacle_overlay_stop_locked_only" default="true"/>
   <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
-  <arg name="suppress_dynamic_tracked_boxes" default="true"/>
-  <arg name="promote_dynamic_tracked_boxes_to_global_overlay" default="true"/>
+  <arg name="suppress_dynamic_tracked_boxes" default="false"/>
+  <arg name="promote_dynamic_tracked_boxes_to_global_overlay" default="false"/>
   <arg name="dynamic_tracked_overlay_confirm_immediately" default="true"/>
   <arg name="global_obstacle_overlay_threshold" default="50"/>
   <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>

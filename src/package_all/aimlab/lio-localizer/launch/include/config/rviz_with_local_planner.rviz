@@ -522,7 +522,7 @@ Visualization Manager:
       Queue Size: 20
       Value: true
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /perception/tracked_objects_markers
       Name: tracked_objects
       Namespaces:
@@ -530,7 +530,7 @@ Visualization Manager:
         labels: true
         velocity: true
       Queue Size: 20
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /planning/blocking_obstacles
