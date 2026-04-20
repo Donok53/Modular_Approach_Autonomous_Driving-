@@ -546,6 +546,7 @@ class DWAControl:
         self.behavior_stop = False
         self.behavior_speed_limit = self.max_speed
         self.behavior_reason = "clear"
+        self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
         self.cmd_publish_hz = max(5.0, float(rospy.get_param("~cmd_publish_hz", 20.0)))
         self.last_cmd = Twist()
 
@@ -632,7 +633,7 @@ class DWAControl:
         if self.use_dynamic_risk_grid:
             self.sub_risk_grid = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=5)
 
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=10)
         self.target_pub = rospy.Publisher('visualization_marker', Marker, queue_size=10)
         self.current_pub = rospy.Publisher('visualization_marker_2', Marker, queue_size=10)
         self.trajectory_pub = rospy.Publisher('predicted_trajectory', Marker, queue_size=10)
@@ -645,6 +646,8 @@ class DWAControl:
             self._publish_near_field_raw_stop_debug(self._near_field_status_header(), [])
 
     def _cmd_timer_callback(self, _event):
+        if self.emergency_blocked or self.behavior_stop:
+            self.last_cmd = Twist()
         self.cmd_vel_pub.publish(self.last_cmd)
         self._refresh_near_field_raw_stop_marker_if_waiting()
 
@@ -2245,7 +2248,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2254,6 +2257,7 @@ class DWAControl:
             "on" if self.follow_global_path_only else "off",
             "on" if self.use_muxed_active_path else "off",
             self.behavior_cmd_topic,
+            self.cmd_vel_topic,
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
             "off" if self.follow_global_path_only else "on",
@@ -2295,7 +2299,8 @@ class DWAControl:
                 and self.active_path_source == "avoidance"
                 and self.front_obstacle_clearance > self.avoidance_hard_stop_distance
             )
-            if self.emergency_blocked and not self._rot_mode and not avoidance_can_continue:
+            if self.emergency_blocked and not avoidance_can_continue:
+                self._rot_mode = False
                 self._log_nav_reason(
                     "stop_emergency",
                     "front obstacle stop active clr=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s" % (
@@ -2314,7 +2319,8 @@ class DWAControl:
                 continue
 
             # behavior-layer hard stop
-            if self.behavior_stop and not self._rot_mode:
+            if self.behavior_stop:
+                self._rot_mode = False
                 self._log_nav_reason(
                     "stop_behavior",
                     "reason=%s speed_limit=%.2f" % (self.behavior_reason, self.behavior_speed_limit),

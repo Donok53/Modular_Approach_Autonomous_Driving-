@@ -472,7 +472,7 @@
   <arg name="emergency_min_close_points" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
   <arg name="emergency_immediate_contact_min_points" default="$(eval '1' if str(arg('real_mode')).lower() == 'true' else '3')"/>
   <arg name="emergency_passable_width_m" default="0.62"/>
-  <arg name="block_on_count" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
+  <arg name="block_on_count" default="1"/>
   <arg name="block_off_count" default="4"/>
   <arg name="obstacle_consider_side_m" default="0.80"/>
   <arg name="obstacle_consider_back_m" default="-0.15"/>
@@ -482,7 +482,7 @@
   <arg name="near_field_raw_stop_base_frame" default="$(arg robot_base_frame)"/>
   <arg name="near_field_raw_stop_tf_timeout_s" default="0.02"/>
   <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
-  <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="false"/>
+  <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
   <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
   <arg name="near_field_raw_stop_half_width_m" default="0.40"/>
@@ -791,6 +791,7 @@
       <arg name="active_path_viz_topic" value="$(arg active_path_viz_topic)"/>
       <arg name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
       <arg name="use_local_path_fallback" value="$(arg use_local_path_fallback)"/>
+      <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="path_history_topic" value="$(arg path_history_topic)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>

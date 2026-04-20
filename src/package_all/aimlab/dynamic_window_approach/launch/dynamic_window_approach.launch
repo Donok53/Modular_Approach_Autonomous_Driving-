@@ -58,6 +58,7 @@
     <arg name="path_history_topic" default="/planning/path_history"/>
     <arg name="travel_history_topic" default="/planning/travel_history"/>
     <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
+    <arg name="cmd_vel_topic" default="/cmd_vel"/>
     <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
     <arg name="enable_tracked_objects_marker_viz" default="true"/>
     <arg name="tracked_objects_marker_topic" default="/perception/tracked_objects_markers"/>
@@ -328,7 +329,7 @@
     <arg name="emergency_min_close_points" default="2"/>
     <arg name="emergency_immediate_contact_min_points" default="1"/>
     <arg name="emergency_passable_width_m" default="0.62"/>
-    <arg name="block_on_count" default="2"/>
+    <arg name="block_on_count" default="1"/>
     <arg name="block_off_count" default="4"/>
     <arg name="obstacle_consider_side_m" default="0.80"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
@@ -338,7 +339,7 @@
     <arg name="near_field_raw_stop_base_frame" default="base_link"/>
     <arg name="near_field_raw_stop_tf_timeout_s" default="0.02"/>
     <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
-    <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="false"/>
+    <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
     <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
     <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
     <arg name="near_field_raw_stop_half_width_m" default="0.40"/>
@@ -680,6 +681,7 @@
         <param name="use_muxed_active_path" value="false"/>
         <param name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
         <param name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+        <param name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
         <param name="pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
         <param name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
         <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
