@@ -281,6 +281,18 @@ class AStarPlanner:
             0.0,
             float(rospy.get_param("~candidate_route_switch_centerline_clearance_m", 0.0)),
         )
+        self.candidate_route_switch_require_best_clear = bool(
+            rospy.get_param("~candidate_route_switch_require_best_clear", True)
+        )
+        self.candidate_route_switch_best_clear_score_threshold = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~candidate_route_switch_best_clear_score_threshold",
+                    self.candidate_route_switch_blocked_score_threshold,
+                )
+            ),
+        )
 
         # Jump-guard & debug
         self.jump_guard_enable = rospy.get_param("~jump_guard_enable", False)
@@ -1373,6 +1385,76 @@ class AStarPlanner:
                         return True
         return False
 
+    def _candidate_overlay_scores(self, world_paths):
+        if (
+            (not self.use_global_obstacle_overlay)
+            or self.global_obstacle_overlay is None
+        ):
+            return [0.0 for _ in world_paths]
+        return [
+            self._overlay_world_path_obstacle_score(
+                self.global_obstacle_overlay,
+                path,
+                self.global_obstacle_overlay_threshold,
+            )
+            for path in world_paths
+        ]
+
+    def _candidate_best_is_clear_enough(self, best_score):
+        return (
+            (not self.candidate_route_switch_require_best_clear)
+            or best_score < self.candidate_route_switch_best_clear_score_threshold
+        )
+
+    def select_initial_candidate_world_path(self, world_paths, active_index=0):
+        if not world_paths:
+            return 0, []
+        active_index = int(max(0, min(active_index, len(world_paths) - 1)))
+        if (
+            (not self.candidate_route_switching_enabled)
+            or len(world_paths) <= 1
+            or (not self.use_global_obstacle_overlay)
+            or self.global_obstacle_overlay is None
+        ):
+            return active_index, [0.0 for _ in world_paths]
+
+        scores = self._candidate_overlay_scores(world_paths)
+        best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        if best_index == active_index:
+            return active_index, scores
+
+        active_score = scores[active_index]
+        best_score = scores[best_index]
+        should_select = (
+            active_score >= self.candidate_route_switch_blocked_score_threshold
+            and (best_score + self.candidate_route_switch_score_margin) < active_score
+            and self._candidate_best_is_clear_enough(best_score)
+        )
+        if should_select:
+            self._last_candidate_switch_s = rospy.get_time()
+            self._pending_candidate_switch_index = -1
+            self._pending_candidate_switch_count = 0
+            if self.debug_log_enable:
+                rospy.loginfo(
+                    "[astar] selecting initial active candidate %d -> %d from pointcloud overlay scores=%s",
+                    active_index,
+                    best_index,
+                    ",".join("%.1f" % s for s in scores),
+                )
+            return best_index, scores
+
+        if self.debug_log_enable and active_score >= self.candidate_route_switch_blocked_score_threshold:
+            rospy.loginfo_throttle(
+                1.0,
+                "[astar] initial candidate held (active=%d score=%.1f best=%d score=%.1f best_clear=%s)",
+                active_index,
+                active_score,
+                best_index,
+                best_score,
+                "yes" if self._candidate_best_is_clear_enough(best_score) else "no",
+            )
+        return active_index, scores
+
     def select_best_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
             return 0, []
@@ -1385,14 +1467,7 @@ class AStarPlanner:
         ):
             return active_index, [0.0 for _ in world_paths]
 
-        scores = [
-            self._overlay_world_path_obstacle_score(
-                self.global_obstacle_overlay,
-                path,
-                self.global_obstacle_overlay_threshold,
-            )
-            for path in world_paths
-        ]
+        scores = self._candidate_overlay_scores(world_paths)
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
         if best_index == active_index:
             self._pending_candidate_switch_index = -1
@@ -1419,6 +1494,7 @@ class AStarPlanner:
             current_blocked
             and current_centerline_blocked
             and (best_score + self.candidate_route_switch_score_margin) < current_score
+            and self._candidate_best_is_clear_enough(best_score)
         )
         if should_switch:
             if best_index == self._pending_candidate_switch_index:
@@ -1450,7 +1526,7 @@ class AStarPlanner:
         if self.debug_log_enable and current_blocked:
             rospy.loginfo_throttle(
                 1.0,
-                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f pending=%d/%d centerline=%s)",
+                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f pending=%d/%d centerline=%s best_clear=%s)",
                 active_index,
                 current_score,
                 best_index,
@@ -1458,6 +1534,7 @@ class AStarPlanner:
                 self._pending_candidate_switch_count,
                 self.candidate_route_switch_confirm_count,
                 "blocked" if current_centerline_blocked else "clear",
+                "yes" if self._candidate_best_is_clear_enough(best_score) else "no",
             )
         return active_index, scores
 
@@ -3159,7 +3236,7 @@ if __name__ == "__main__":
                 a._mark_plan_context(replan_success)
                 if new_world_path:
                     candidate_world_paths = list(new_candidate_world_paths)
-                    active_candidate_index, _ = a.select_best_candidate_world_path(
+                    active_candidate_index, _ = a.select_initial_candidate_world_path(
                         candidate_world_paths, active_index=0
                     )
                     if candidate_world_paths:

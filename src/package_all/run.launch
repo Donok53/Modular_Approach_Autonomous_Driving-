@@ -92,7 +92,7 @@
   <arg name="linefit_selector_non_ground_cloud_topic" default="$(eval arg('linefit_raw_non_ground_cloud_topic') if str(arg('enable_linefit_self_filter')).lower() == 'true' else arg('linefit_non_ground_cloud_topic'))"/>
   <arg name="linefit_mode_topic" default="/planning/linefit_ground/mode"/>
   <arg name="linefit_sensor_height_m" default="0.525"/>
-  <arg name="linefit_r_min_m" default="0.30"/>
+  <arg name="linefit_r_min_m" default="0.10"/>
   <arg name="linefit_r_max_m" default="25.0"/>
   <arg name="linefit_max_dist_to_line" default="0.08"/>
   <arg name="linefit_max_fit_error" default="0.08"/>
@@ -221,24 +221,26 @@
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
   <arg name="global_path_continuous_replan" default="true"/>
-  <arg name="global_path_replan_min_start_shift_m" default="0.15"/>
-  <arg name="global_path_replan_min_interval_s" default="0.25"/>
+  <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
+  <arg name="global_path_replan_min_interval_s" default="1.00"/>
   <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
   <arg name="global_path_planner_loop_hz" default="8.0"/>
-  <arg name="global_path_republish_period_s" default="0.20"/>
+  <arg name="global_path_republish_period_s" default="0.50"/>
   <arg name="grid_snap_search_radius_cells" default="$(eval '60' if str(arg('real_mode')).lower() == 'true' else '30')"/>
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
-  <arg name="candidate_route_switch_score_margin" default="$(eval '2.5' if str(arg('real_mode')).lower() == 'true' else '1.8')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="$(eval '1.5' if str(arg('real_mode')).lower() == 'true' else '1.2')"/>
-  <arg name="candidate_route_switch_confirm_count" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '3')"/>
+  <arg name="candidate_route_switch_score_margin" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '3.0')"/>
+  <arg name="candidate_route_switch_min_hold_s" default="$(eval '3.0' if str(arg('real_mode')).lower() == 'true' else '2.5')"/>
+  <arg name="candidate_route_switch_confirm_count" default="$(eval '6' if str(arg('real_mode')).lower() == 'true' else '5')"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
+  <arg name="candidate_route_switch_require_best_clear" default="true"/>
+  <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.25"/>
@@ -362,7 +364,7 @@
   <arg name="global_pointcloud_overlay_lateral_max_m" default="8.0"/>
   <arg name="global_pointcloud_overlay_near_range_m" default="8.0"/>
   <arg name="global_pointcloud_overlay_mid_range_m" default="16.0"/>
-  <arg name="global_pointcloud_overlay_near_min_points" default="4"/>
+  <arg name="global_pointcloud_overlay_near_min_points" default="2"/>
   <arg name="global_pointcloud_overlay_mid_min_points" default="6"/>
   <arg name="global_pointcloud_overlay_far_min_points" default="8"/>
   <arg name="global_pointcloud_overlay_near_min_cells" default="1"/>
@@ -375,6 +377,7 @@
   <arg name="global_pointcloud_overlay_evidence_resolution_m" default="0.6"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
   <arg name="global_pointcloud_overlay_max_update_hz" default="5.0"/>
+  <arg name="global_obstacle_overlay_downsample" default="1"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
   <arg name="enable_planning_slowdown_manager" default="true"/>
   <arg name="planning_slowdown_speed_limit_mps" default="0.12"/>
@@ -688,6 +691,8 @@
         <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
         <arg name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
+        <arg name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
+        <arg name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -734,6 +739,8 @@
         <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
         <arg name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
+        <arg name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
+        <arg name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
       </include>
     </group>
   </group>
@@ -821,6 +828,7 @@
       <arg name="global_pointcloud_overlay_evidence_resolution_m" value="$(arg global_pointcloud_overlay_evidence_resolution_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
+      <arg name="global_obstacle_overlay_downsample" value="$(arg global_obstacle_overlay_downsample)"/>
       <arg name="enable_planning_slowdown_manager" value="$(arg enable_planning_slowdown_manager)"/>
       <arg name="planning_slowdown_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
       <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
@@ -1192,6 +1200,7 @@
       <arg name="global_pointcloud_overlay_evidence_resolution_m" value="$(arg global_pointcloud_overlay_evidence_resolution_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
       <arg name="global_pointcloud_overlay_max_update_hz" value="$(arg global_pointcloud_overlay_max_update_hz)"/>
+      <arg name="global_obstacle_overlay_downsample" value="$(arg global_obstacle_overlay_downsample)"/>
       <arg name="enable_planning_slowdown_manager" value="$(arg enable_planning_slowdown_manager)"/>
       <arg name="planning_slowdown_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
       <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
