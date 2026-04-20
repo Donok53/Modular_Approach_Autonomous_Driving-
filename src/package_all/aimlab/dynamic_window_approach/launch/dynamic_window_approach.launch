@@ -335,6 +335,8 @@
     <arg name="near_field_raw_stop_topic" default="$(arg pointcloud_topic)"/>
     <arg name="near_field_raw_stop_base_frame" default="base_link"/>
     <arg name="near_field_raw_stop_tf_timeout_s" default="0.02"/>
+    <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
+    <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="false"/>
     <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
     <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
     <arg name="near_field_raw_stop_half_width_m" default="0.45"/>
@@ -746,6 +748,8 @@
         <param name="near_field_raw_stop_topic" value="$(arg near_field_raw_stop_topic)"/>
         <param name="near_field_raw_stop_base_frame" value="$(arg near_field_raw_stop_base_frame)"/>
         <param name="near_field_raw_stop_tf_timeout_s" value="$(arg near_field_raw_stop_tf_timeout_s)"/>
+        <param name="near_field_raw_stop_tf_fallback_latest" value="$(arg near_field_raw_stop_tf_fallback_latest)"/>
+        <param name="near_field_raw_stop_allow_raw_frame_on_tf_failure" value="$(arg near_field_raw_stop_allow_raw_frame_on_tf_failure)"/>
         <param name="near_field_raw_stop_min_x_m" value="$(arg near_field_raw_stop_min_x_m)"/>
         <param name="near_field_raw_stop_max_x_m" value="$(arg near_field_raw_stop_max_x_m)"/>
         <param name="near_field_raw_stop_half_width_m" value="$(arg near_field_raw_stop_half_width_m)"/>

@@ -230,6 +230,12 @@ class DWAControl:
         self.near_field_raw_stop_tf_timeout_s = max(
             0.0, float(rospy.get_param("~near_field_raw_stop_tf_timeout_s", 0.02))
         )
+        self.near_field_raw_stop_tf_fallback_latest = bool(
+            rospy.get_param("~near_field_raw_stop_tf_fallback_latest", True)
+        )
+        self.near_field_raw_stop_allow_raw_frame_on_tf_failure = bool(
+            rospy.get_param("~near_field_raw_stop_allow_raw_frame_on_tf_failure", False)
+        )
         self.near_field_raw_stop_min_x_m = float(
             rospy.get_param("~near_field_raw_stop_min_x_m", 0.30)
         )
@@ -292,6 +298,8 @@ class DWAControl:
         self._near_field_raw_stop_last_min_x = float("inf")
         self._near_field_raw_stop_last_log = rospy.Time(0)
         self._near_field_raw_stop_tf_warn_sec = 0.0
+        self._near_field_raw_stop_last_frame = ""
+        self._near_field_raw_stop_tf_status = "not_started"
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -780,15 +788,19 @@ class DWAControl:
 
     def _near_field_raw_stop_transform_matrix(self, msg):
         source_frame = str(msg.header.frame_id).strip()
-        target_frame = self.near_field_raw_stop_base_frame
+        target_frame = str(self.near_field_raw_stop_base_frame).strip()
+        self._near_field_raw_stop_last_frame = source_frame
         if (not target_frame) or self._same_frame(source_frame, target_frame):
-            return None, True
+            self._near_field_raw_stop_tf_status = "raw_frame"
+            return None, True, source_frame
         if self.near_field_raw_stop_tf_buffer is None:
-            return None, False
+            self._near_field_raw_stop_tf_status = "tf_buffer_missing"
+            return None, False, target_frame
 
         stamp = msg.header.stamp
         if stamp.to_sec() <= 0.0:
             stamp = rospy.Time(0)
+        first_error = None
         try:
             tf_msg = self.near_field_raw_stop_tf_buffer.lookup_transform(
                 target_frame,
@@ -796,7 +808,38 @@ class DWAControl:
                 stamp,
                 rospy.Duration(self.near_field_raw_stop_tf_timeout_s),
             )
+            self._near_field_raw_stop_tf_status = "tf_stamp"
         except Exception as exc:
+            first_error = exc
+            tf_msg = None
+
+        if tf_msg is None and self.near_field_raw_stop_tf_fallback_latest:
+            try:
+                tf_msg = self.near_field_raw_stop_tf_buffer.lookup_transform(
+                    target_frame,
+                    source_frame,
+                    rospy.Time(0),
+                    rospy.Duration(self.near_field_raw_stop_tf_timeout_s),
+                )
+                self._near_field_raw_stop_tf_status = "tf_latest"
+            except Exception as exc:
+                first_error = exc
+
+        if tf_msg is None:
+            if self.near_field_raw_stop_allow_raw_frame_on_tf_failure:
+                self._near_field_raw_stop_tf_status = "raw_fallback_tf_missing"
+                now_sec = rospy.Time.now().to_sec()
+                if now_sec - self._near_field_raw_stop_tf_warn_sec > 1.0:
+                    self._near_field_raw_stop_tf_warn_sec = now_sec
+                    rospy.logwarn(
+                        "near_field_raw_stop: missing TF %s <- %s; using raw cloud frame ROI for debug: %s",
+                        target_frame,
+                        source_frame,
+                        str(first_error),
+                    )
+                return None, True, source_frame
+
+            self._near_field_raw_stop_tf_status = "tf_missing"
             now_sec = rospy.Time.now().to_sec()
             if now_sec - self._near_field_raw_stop_tf_warn_sec > 1.0:
                 self._near_field_raw_stop_tf_warn_sec = now_sec
@@ -804,9 +847,9 @@ class DWAControl:
                     "near_field_raw_stop: missing TF %s <- %s: %s",
                     target_frame,
                     source_frame,
-                    str(exc),
+                    str(first_error),
                 )
-            return None, False
+            return None, False, target_frame
 
         t = tf_msg.transform.translation
         q = tf_msg.transform.rotation
@@ -814,7 +857,7 @@ class DWAControl:
         mat[0, 3] = t.x
         mat[1, 3] = t.y
         mat[2, 3] = t.z
-        return mat, True
+        return mat, True, target_frame
 
     @staticmethod
     def _transform_point_xyz(mat, x, y, z):
@@ -826,10 +869,10 @@ class DWAControl:
             float(mat[2, 0] * x + mat[2, 1] * y + mat[2, 2] * z + mat[2, 3]),
         )
 
-    def _near_field_header(self, msg):
+    def _near_field_header(self, msg, frame_id=None):
         header = Header()
         header.stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
-        header.frame_id = self.near_field_raw_stop_base_frame or msg.header.frame_id
+        header.frame_id = frame_id or self.near_field_raw_stop_base_frame or msg.header.frame_id
         return header
 
     def _publish_near_field_raw_stop_debug(self, header, hit_points):
@@ -885,13 +928,15 @@ class DWAControl:
         text.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.1
         text.color.g = 0.1 if self._near_field_raw_stop_blocked else 1.0
         text.color.b = 0.1
-        text.text = "NEAR STOP: {}\npts={} cells={} min_x={:.2f}m".format(
+        text.text = "NEAR STOP: {}\npts={} cells={} min_x={:.2f}m\nframe={} tf={}".format(
             "STOP" if self._near_field_raw_stop_blocked else "clear",
             self._near_field_raw_stop_last_count,
             self._near_field_raw_stop_last_cells,
             self._near_field_raw_stop_last_min_x
             if math.isfinite(self._near_field_raw_stop_last_min_x)
             else -1.0,
+            self._near_field_raw_stop_last_frame or "-",
+            self._near_field_raw_stop_tf_status,
         )
         text.lifetime = box.lifetime
         markers.markers.append(text)
@@ -900,8 +945,8 @@ class DWAControl:
 
     def near_field_raw_stop_callback(self, msg):
         try:
-            transform_mat, transform_ok = self._near_field_raw_stop_transform_matrix(msg)
-            header = self._near_field_header(msg)
+            transform_mat, transform_ok, debug_frame = self._near_field_raw_stop_transform_matrix(msg)
+            header = self._near_field_header(msg, debug_frame)
             if not transform_ok:
                 self._near_field_raw_stop_last_stamp = rospy.Time.now()
                 self._near_field_raw_stop_last_count = 0
@@ -990,7 +1035,7 @@ class DWAControl:
                 ).to_sec() >= self.near_field_raw_stop_log_period_s:
                     self._near_field_raw_stop_last_log = now
                     rospy.loginfo(
-                        "near_field_raw_stop: %s pts=%d cells=%d min_x=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s",
+                        "near_field_raw_stop: %s pts=%d cells=%d min_x=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
                         "STOP" if self._near_field_raw_stop_blocked else "clear",
                         hit_count,
                         cell_count,
@@ -1001,6 +1046,8 @@ class DWAControl:
                         self.near_field_raw_stop_min_z_m,
                         self.near_field_raw_stop_max_z_m,
                         self.near_field_raw_stop_topic,
+                        self._near_field_raw_stop_last_frame or "-",
+                        self._near_field_raw_stop_tf_status,
                     )
         except Exception as e:
             rospy.logwarn("near_field_raw_stop_callback error: %s", str(e))
