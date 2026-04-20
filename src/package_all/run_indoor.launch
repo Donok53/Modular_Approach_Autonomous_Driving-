@@ -1,0 +1,52 @@
+<launch>
+  <!-- Indoor preset for linefit ground removal.
+       Keeps run.launch outdoor defaults untouched while making indoor tuning repeatable. -->
+  <arg name="use_sim_time" default="false"/>
+  <arg name="real_mode" default="false"/>
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_robot_send" default="false"/>
+  <arg name="enable_wave_cmd_bridge" default="false"/>
+  <arg name="local_planner_mode" default="custom"/>
+
+  <arg name="pointcloud_topic" default="/ouster/points"/>
+  <arg name="imu_topic" default="/imu/data"/>
+
+  <arg name="linefit_r_min_m" default="0.20"/>
+  <arg name="linefit_max_dist_to_line" default="0.12"/>
+  <arg name="linefit_max_fit_error" default="0.12"/>
+  <arg name="linefit_long_threshold" default="2.0"/>
+  <arg name="linefit_line_search_angle" default="0.25"/>
+
+  <arg name="linefit_flat_max_slope" default="0.50"/>
+  <arg name="linefit_flat_max_start_height" default="0.40"/>
+  <arg name="linefit_flat_max_long_height" default="0.26"/>
+
+  <arg name="linefit_slope_max_slope" default="0.65"/>
+  <arg name="linefit_slope_max_start_height" default="0.50"/>
+  <arg name="linefit_slope_max_long_height" default="0.32"/>
+
+  <include file="$(dirname)/run.launch">
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="real_mode" value="$(arg real_mode)"/>
+    <arg name="enable_rviz" value="$(arg enable_rviz)"/>
+    <arg name="enable_robot_send" value="$(arg enable_robot_send)"/>
+    <arg name="enable_wave_cmd_bridge" value="$(arg enable_wave_cmd_bridge)"/>
+    <arg name="local_planner_mode" value="$(arg local_planner_mode)"/>
+    <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+    <arg name="imu_topic" value="$(arg imu_topic)"/>
+
+    <arg name="linefit_r_min_m" value="$(arg linefit_r_min_m)"/>
+    <arg name="linefit_max_dist_to_line" value="$(arg linefit_max_dist_to_line)"/>
+    <arg name="linefit_max_fit_error" value="$(arg linefit_max_fit_error)"/>
+    <arg name="linefit_long_threshold" value="$(arg linefit_long_threshold)"/>
+    <arg name="linefit_line_search_angle" value="$(arg linefit_line_search_angle)"/>
+
+    <arg name="linefit_flat_max_slope" value="$(arg linefit_flat_max_slope)"/>
+    <arg name="linefit_flat_max_start_height" value="$(arg linefit_flat_max_start_height)"/>
+    <arg name="linefit_flat_max_long_height" value="$(arg linefit_flat_max_long_height)"/>
+
+    <arg name="linefit_slope_max_slope" value="$(arg linefit_slope_max_slope)"/>
+    <arg name="linefit_slope_max_start_height" value="$(arg linefit_slope_max_start_height)"/>
+    <arg name="linefit_slope_max_long_height" value="$(arg linefit_slope_max_long_height)"/>
+  </include>
+</launch>
