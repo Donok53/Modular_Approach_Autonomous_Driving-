@@ -92,6 +92,7 @@
   <arg name="linefit_raw_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud_raw"/>
   <arg name="linefit_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud"/>
   <arg name="linefit_selector_non_ground_cloud_topic" default="$(eval arg('linefit_raw_non_ground_cloud_topic') if str(arg('enable_linefit_self_filter')).lower() == 'true' else arg('linefit_non_ground_cloud_topic'))"/>
+  <arg name="enable_planning_self_filter" default="true"/>
   <arg name="linefit_mode_topic" default="/planning/linefit_ground/mode"/>
   <arg name="linefit_sensor_height_m" default="0.525"/>
   <arg name="linefit_r_min_m" default="0.10"/>
@@ -129,7 +130,7 @@
   <arg name="linefit_slope_residual_min_points_per_cell" default="2"/>
   <arg name="linefit_slope_residual_remove_sparse_cells" default="true"/>
   <arg name="linefit_slope_residual_keep_front_close_m" default="0.35"/>
-  <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('linefit_raw_non_ground_cloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() == 'true' else arg('pointcloud_topic'))"/>
+  <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('linefit_selector_non_ground_cloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() == 'true' else arg('pointcloud_topic'))"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
@@ -780,6 +781,7 @@
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="$(arg planning_obstacle_pointcloud_topic)"/>
+      <arg name="enable_self_filter" value="$(arg enable_planning_self_filter)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>

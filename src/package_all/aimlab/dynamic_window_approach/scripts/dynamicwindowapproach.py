@@ -143,6 +143,7 @@ class DWAControl:
         self.stop_width = rospy.get_param("~stop_width", self.robot_width_m)   # total width (|y|<=width/2)
         self.min_z = rospy.get_param("~min_z", -0.3)
         self.max_z = rospy.get_param("~max_z", 2.2)
+        self.enable_self_filter = bool(rospy.get_param("~enable_self_filter", True))
         self.self_filter_margin_m = max(
             0.0, float(rospy.get_param("~self_filter_margin_m", 0.08))
         )
@@ -1205,7 +1206,12 @@ class DWAControl:
                 if self.cloud_downsample > 1 and (i % self.cloud_downsample != 0):
                     continue
                 x, y, z = pt
-                if self._point_in_local_rect(x, y, self.self_filter_radius_x, self.self_filter_radius_y):
+                if (
+                    self.enable_self_filter
+                    and self._point_in_local_rect(
+                        x, y, self.self_filter_radius_x, self.self_filter_radius_y
+                    )
+                ):
                     continue
                 if z < self.min_z or z > self.max_z:
                     continue
@@ -2284,7 +2290,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2312,6 +2318,9 @@ class DWAControl:
             self.near_field_raw_stop_min_z_m,
             self.near_field_raw_stop_max_z_m,
             self.near_field_raw_stop_min_points,
+            "on" if self.enable_self_filter else "off",
+            self.self_filter_radius_x,
+            self.self_filter_radius_y,
             self.robot_length_m,
             self.robot_width_m,
             self.cmd_publish_hz,

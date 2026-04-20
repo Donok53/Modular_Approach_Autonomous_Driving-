@@ -334,6 +334,7 @@
     <arg name="block_off_count" default="4"/>
     <arg name="obstacle_consider_side_m" default="0.80"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
+    <arg name="enable_self_filter" default="true"/>
     <arg name="self_filter_margin_m" default="0.08"/>
     <arg name="near_field_raw_stop_enabled" default="false"/>
     <arg name="near_field_raw_stop_topic" default="$(arg pointcloud_topic)"/>
@@ -507,6 +508,7 @@
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
             <param name="robot_length_m" value="$(arg robot_length_m)"/>
             <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+            <param name="enable_self_filter" value="$(arg enable_self_filter)"/>
             <param name="pointcloud_cluster_resolution_m" value="$(arg pointcloud_cluster_resolution_m)"/>
             <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
             <param name="obstacle_downsample" value="$(arg global_obstacle_overlay_downsample)"/>
@@ -751,6 +753,7 @@
         <param name="block_off_count" value="$(arg block_off_count)"/>
         <param name="obstacle_consider_side_m" value="$(arg obstacle_consider_side_m)"/>
         <param name="obstacle_consider_back_m" value="$(arg obstacle_consider_back_m)"/>
+        <param name="enable_self_filter" value="$(arg enable_self_filter)"/>
         <param name="self_filter_margin_m" value="$(arg self_filter_margin_m)"/>
         <param name="near_field_raw_stop_enabled" value="$(arg near_field_raw_stop_enabled)"/>
         <param name="near_field_raw_stop_topic" value="$(arg near_field_raw_stop_topic)"/>

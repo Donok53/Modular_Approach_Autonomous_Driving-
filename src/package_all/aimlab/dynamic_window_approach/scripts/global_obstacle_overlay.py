@@ -67,6 +67,7 @@ class GlobalObstacleOverlayPublisher:
         self.robot_width_m = max(0.05, float(rospy.get_param("~robot_width_m", 0.58)))
         self.robot_length_m = max(0.05, float(rospy.get_param("~robot_length_m", 0.612)))
         self.footprint_padding_m = max(0.0, float(rospy.get_param("~footprint_padding_m", 0.0)))
+        self.enable_self_filter = bool(rospy.get_param("~enable_self_filter", True))
         self.self_filter_radius_x = max(
             0.0, float(rospy.get_param("~self_filter_radius_x", 0.5 * self.robot_length_m))
         )
@@ -272,13 +273,16 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
             self.tracked_objects_topic if self.tracked_objects_topic else "-",
             self.global_obstacle_overlay_topic,
             self.global_obstacle_overlay_boxes_topic,
+            "on" if self.enable_self_filter else "off",
+            self.self_filter_radius_x,
+            self.self_filter_radius_y,
             "on" if self.enable_slope_compensation else "off",
             math.degrees(self.slope_compensation_max_abs_rad),
             "on" if self.enable_ground_band_rejection else "off",
@@ -577,7 +581,11 @@ class GlobalObstacleOverlayPublisher:
                     and abs(y) > self.global_pointcloud_overlay_lateral_max_m
                 ):
                     continue
-                if abs(x) <= self.self_filter_radius_x and abs(y) <= self.self_filter_radius_y:
+                if (
+                    self.enable_self_filter
+                    and abs(x) <= self.self_filter_radius_x
+                    and abs(y) <= self.self_filter_radius_y
+                ):
                     continue
 
                 cell = self._pointcloud_cluster_cell(x, y)
