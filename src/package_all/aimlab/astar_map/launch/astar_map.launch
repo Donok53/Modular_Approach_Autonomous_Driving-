@@ -18,6 +18,7 @@
   <arg name="use_global_obstacle_overlay" default="false"/>
   <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
   <arg name="global_obstacle_overlay_threshold" default="50"/>
+  <arg name="global_obstacle_overlay_clearance_extra_m" default="0.0"/>
   <arg name="path_blocked_topic" default="/astar/path_blocked"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="grid_snap_search_radius_cells" default="30"/>
@@ -84,6 +85,7 @@
     <param name="use_global_obstacle_overlay" value="$(arg use_global_obstacle_overlay)"/>
     <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
     <param name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
+    <param name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
     <param name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
     <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
     <param name="grid_snap_search_radius_cells" value="$(arg grid_snap_search_radius_cells)"/>
