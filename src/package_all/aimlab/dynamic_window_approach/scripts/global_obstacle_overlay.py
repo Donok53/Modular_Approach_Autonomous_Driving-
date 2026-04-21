@@ -11,7 +11,7 @@ from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Header
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -70,6 +70,12 @@ class GlobalObstacleOverlayPublisher:
         self.near_field_raw_overlay_ttl_s = max(
             0.05, float(rospy.get_param("~near_field_raw_overlay_ttl_s", 0.35))
         )
+        self.near_field_raw_overlay_hit_cloud_topic = str(
+            rospy.get_param(
+                "~near_field_raw_overlay_hit_cloud_topic",
+                "/planning/near_field_raw_overlay_hits",
+            )
+        ).strip()
         self.global_obstacle_overlay_topic = str(
             rospy.get_param("~global_obstacle_overlay_topic", "/planning/global_obstacle_overlay")
         ).strip()
@@ -319,6 +325,13 @@ class GlobalObstacleOverlayPublisher:
             self.pub_global_obstacle_caution = rospy.Publisher(
                 self.global_obstacle_caution_topic, Bool, queue_size=1, latch=True
             )
+        self.pub_near_field_raw_overlay_hits = None
+        if self.near_field_raw_overlay_hit_cloud_topic:
+            self.pub_near_field_raw_overlay_hits = rospy.Publisher(
+                self.near_field_raw_overlay_hit_cloud_topic,
+                PointCloud2,
+                queue_size=1,
+            )
         self.pub_travel_history = None
         self.pub_travel_history_path = None
         if self.enable_travel_history and self.travel_history_topic:
@@ -372,10 +385,13 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s raw_near=%s topic=%s roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] req=%dpts/%dcells ttl=%.1fs global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s raw_near=%s topic=%s hit_cloud=%s roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] req=%dpts/%dcells ttl=%.1fs global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             "on" if self.near_field_raw_overlay_enabled else "off",
             self.near_field_raw_overlay_topic if self.near_field_raw_overlay_topic else "-",
+            self.near_field_raw_overlay_hit_cloud_topic
+            if self.near_field_raw_overlay_hit_cloud_topic
+            else "-",
             self.near_field_raw_overlay_min_x_m,
             self.near_field_raw_overlay_max_x_m,
             self.near_field_raw_overlay_half_width_m,
@@ -631,9 +647,9 @@ class GlobalObstacleOverlayPublisher:
         source_frame = str(msg.header.frame_id).strip()
         target_frame = self.near_field_raw_overlay_base_frame
         if (not target_frame) or self._same_frame(source_frame, target_frame):
-            return None, True
+            return None, True, source_frame or target_frame
         if self.near_field_raw_overlay_tf_buffer is None:
-            return None, False
+            return None, False, target_frame
 
         stamp = msg.header.stamp
         if stamp.to_sec() <= 0.0:
@@ -648,6 +664,7 @@ class GlobalObstacleOverlayPublisher:
                     rospy.Duration(self.near_field_raw_overlay_tf_timeout_s),
                 ),
                 True,
+                target_frame,
             )
         except Exception as exc:
             first_error = exc
@@ -658,11 +675,12 @@ class GlobalObstacleOverlayPublisher:
                     self.near_field_raw_overlay_tf_buffer.lookup_transform(
                         target_frame,
                         source_frame,
-                        rospy.Time(0),
-                        rospy.Duration(self.near_field_raw_overlay_tf_timeout_s),
-                    ),
-                    True,
-                )
+                    rospy.Time(0),
+                    rospy.Duration(self.near_field_raw_overlay_tf_timeout_s),
+                ),
+                True,
+                target_frame,
+            )
             except Exception as exc:
                 first_error = exc
 
@@ -676,7 +694,7 @@ class GlobalObstacleOverlayPublisher:
                     source_frame,
                     str(first_error),
                 )
-            return None, True
+            return None, True, source_frame or target_frame
 
         now_sec = rospy.Time.now().to_sec()
         if now_sec - self.near_field_raw_overlay_tf_warn_sec > 1.0:
@@ -687,7 +705,24 @@ class GlobalObstacleOverlayPublisher:
                 source_frame,
                 str(first_error),
             )
-        return None, False
+        return None, False, target_frame
+
+    @staticmethod
+    def _cloud_header(stamp, frame_id):
+        header = Header()
+        header.stamp = stamp if stamp is not None and stamp.to_sec() > 0.0 else rospy.Time.now()
+        header.frame_id = frame_id or "base_link"
+        return header
+
+    def _publish_near_field_raw_overlay_hits(self, stamp, frame_id, hit_points):
+        if self.pub_near_field_raw_overlay_hits is None:
+            return
+        self.pub_near_field_raw_overlay_hits.publish(
+            point_cloud2.create_cloud_xyz32(
+                self._cloud_header(stamp, frame_id),
+                hit_points,
+            )
+        )
 
     def odom_callback(self, msg):
         p = msg.pose.pose.position
@@ -739,10 +774,13 @@ class GlobalObstacleOverlayPublisher:
             return
 
         try:
-            transform, transform_ok = self._near_field_raw_overlay_transform(msg)
+            transform, transform_ok, debug_frame = self._near_field_raw_overlay_transform(msg)
             if not transform_ok:
                 self.near_field_raw_overlay_cluster_counts = {}
                 self.near_field_raw_overlay_stamp_sec = rospy.get_time()
+                self._publish_near_field_raw_overlay_hits(
+                    msg.header.stamp, debug_frame, []
+                )
                 return
 
             stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp else 0.0
@@ -751,6 +789,7 @@ class GlobalObstacleOverlayPublisher:
 
             cell_counts = {}
             occupied_cells = set()
+            hit_points = []
             i = 0
             for p in point_cloud2.read_points(
                 msg, field_names=("x", "y", "z"), skip_nans=True
@@ -782,15 +821,20 @@ class GlobalObstacleOverlayPublisher:
                 cell = self._pointcloud_cluster_cell(x, y)
                 occupied_cells.add(cell)
                 cell_counts[cell] = cell_counts.get(cell, 0) + 1
+                hit_points.append((x, y, z))
 
             if (
                 sum(cell_counts.values()) < self.near_field_raw_overlay_min_points
                 or len(occupied_cells) < self.near_field_raw_overlay_min_cells
             ):
                 cell_counts = {}
+                hit_points = []
 
             self.near_field_raw_overlay_cluster_counts = cell_counts
             self.near_field_raw_overlay_stamp_sec = stamp_sec
+            self._publish_near_field_raw_overlay_hits(
+                msg.header.stamp, debug_frame, hit_points
+            )
         except Exception as exc:
             rospy.logwarn_throttle(
                 1.0, "global_obstacle_overlay raw-near cloud error: %s", str(exc)

@@ -59,6 +59,7 @@
     <arg name="near_field_raw_overlay_min_points" default="3"/>
     <arg name="near_field_raw_overlay_min_cells" default="1"/>
     <arg name="near_field_raw_overlay_ttl_s" default="0.35"/>
+    <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
     <arg name="use_drivable_grid" default="true"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
     <arg name="grid_unknown_is_occupied" default="true"/>
@@ -535,6 +536,7 @@
             <param name="near_field_raw_overlay_min_points" value="$(arg near_field_raw_overlay_min_points)"/>
             <param name="near_field_raw_overlay_min_cells" value="$(arg near_field_raw_overlay_min_cells)"/>
             <param name="near_field_raw_overlay_ttl_s" value="$(arg near_field_raw_overlay_ttl_s)"/>
+            <param name="near_field_raw_overlay_hit_cloud_topic" value="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
             <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
             <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
             <param name="global_obstacle_caution_topic" value="$(arg global_obstacle_caution_topic)"/>
