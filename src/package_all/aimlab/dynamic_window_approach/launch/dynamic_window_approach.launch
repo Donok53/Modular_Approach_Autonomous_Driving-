@@ -153,7 +153,7 @@
     <arg name="path_tracking_tangent_window_m" default="0.60"/>
     <arg name="path_tracking_crawl_speed" default="0.10"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
-    <arg name="final_approach_window_m" default="2.5"/>
+    <arg name="final_approach_window_m" default="0.0"/>
     <arg name="final_speed_k" default="0.75"/>
     <arg name="final_speed_min" default="0.22"/>
     <arg name="path_tracking_stop_distance_m" default="0.80"/>

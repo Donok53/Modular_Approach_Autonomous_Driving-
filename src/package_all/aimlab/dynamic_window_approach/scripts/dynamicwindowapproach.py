@@ -354,7 +354,7 @@ class DWAControl:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.55)
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
-        self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 2.5)
+        self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 0.0)
         self.final_speed_k = rospy.get_param("~final_speed_k", 0.75)
         self.final_speed_min = rospy.get_param("~final_speed_min", 0.22)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
