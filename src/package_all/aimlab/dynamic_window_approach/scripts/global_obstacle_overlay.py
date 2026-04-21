@@ -77,6 +77,12 @@ class GlobalObstacleOverlayPublisher:
         self.near_field_raw_overlay_min_cells = max(
             1, int(rospy.get_param("~near_field_raw_overlay_min_cells", 1))
         )
+        self.near_field_raw_overlay_min_points_per_cell = max(
+            1, int(rospy.get_param("~near_field_raw_overlay_min_points_per_cell", 2))
+        )
+        self.near_field_raw_overlay_min_z_span_m = max(
+            0.0, float(rospy.get_param("~near_field_raw_overlay_min_z_span_m", 0.12))
+        )
         self.near_field_raw_overlay_ttl_s = max(
             0.05, float(rospy.get_param("~near_field_raw_overlay_ttl_s", 0.35))
         )
@@ -440,7 +446,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s raw_near=%s topic=%s hit_cloud=%s raw_debug=%s raw_near_rate=%.1fHz sample=row%d/col%d/down%d debug_rate=%.1fHz debug_max=%d roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] req=%dpts/%dcells ttl=%.1fs global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s raw_near=%s topic=%s hit_cloud=%s raw_debug=%s raw_near_rate=%.1fHz sample=row%d/col%d/down%d debug_rate=%.1fHz debug_max=%d roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] req=%dpts/%dcells cell_req=%dpt/cell %.2fzspan ttl=%.1fs global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             "on" if self.near_field_raw_overlay_enabled else "off",
             self.near_field_raw_overlay_topic if self.near_field_raw_overlay_topic else "-",
@@ -463,6 +469,8 @@ class GlobalObstacleOverlayPublisher:
             self.near_field_raw_overlay_max_z_m,
             self.near_field_raw_overlay_min_points,
             self.near_field_raw_overlay_min_cells,
+            self.near_field_raw_overlay_min_points_per_cell,
+            self.near_field_raw_overlay_min_z_span_m,
             self.near_field_raw_overlay_ttl_s,
             self.global_path_topic,
             self.drivable_grid_topic,
@@ -921,6 +929,9 @@ class GlobalObstacleOverlayPublisher:
 
             cell_counts = {}
             occupied_cells = set()
+            cell_points = {}
+            cell_z_min = {}
+            cell_z_max = {}
             debug_points = [] if publish_debug_cloud else None
             hit_points = []
             total_points = int(msg.width) * int(msg.height)
@@ -972,11 +983,31 @@ class GlobalObstacleOverlayPublisher:
                 cell = self._pointcloud_cluster_cell(x, y)
                 occupied_cells.add(cell)
                 cell_counts[cell] = cell_counts.get(cell, 0) + 1
-                hit_points.append((x, y, z))
+                cell_points.setdefault(cell, []).append((x, y, z))
+                cell_z_min[cell] = min(z, cell_z_min.get(cell, z))
+                cell_z_max[cell] = max(z, cell_z_max.get(cell, z))
+
+            accepted_cells = set()
+            for cell in occupied_cells:
+                if cell_counts.get(cell, 0) < self.near_field_raw_overlay_min_points_per_cell:
+                    continue
+                z_span = cell_z_max.get(cell, 0.0) - cell_z_min.get(cell, 0.0)
+                if z_span < self.near_field_raw_overlay_min_z_span_m:
+                    continue
+                accepted_cells.add(cell)
+
+            if accepted_cells:
+                cell_counts = {cell: cell_counts[cell] for cell in accepted_cells}
+                hit_points = [
+                    pt for cell in accepted_cells for pt in cell_points.get(cell, [])
+                ]
+            else:
+                cell_counts = {}
+                hit_points = []
 
             if (
                 sum(cell_counts.values()) < self.near_field_raw_overlay_min_points
-                or len(occupied_cells) < self.near_field_raw_overlay_min_cells
+                or len(accepted_cells) < self.near_field_raw_overlay_min_cells
             ):
                 cell_counts = {}
                 hit_points = []

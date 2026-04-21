@@ -61,6 +61,8 @@
     <arg name="near_field_raw_overlay_uv_col_step" default="4"/>
     <arg name="near_field_raw_overlay_min_points" default="3"/>
     <arg name="near_field_raw_overlay_min_cells" default="1"/>
+    <arg name="near_field_raw_overlay_min_points_per_cell" default="2"/>
+    <arg name="near_field_raw_overlay_min_z_span_m" default="0.12"/>
     <arg name="near_field_raw_overlay_ttl_s" default="0.60"/>
     <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
     <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
@@ -551,6 +553,8 @@
             <param name="near_field_raw_overlay_uv_col_step" value="$(arg near_field_raw_overlay_uv_col_step)"/>
             <param name="near_field_raw_overlay_min_points" value="$(arg near_field_raw_overlay_min_points)"/>
             <param name="near_field_raw_overlay_min_cells" value="$(arg near_field_raw_overlay_min_cells)"/>
+            <param name="near_field_raw_overlay_min_points_per_cell" value="$(arg near_field_raw_overlay_min_points_per_cell)"/>
+            <param name="near_field_raw_overlay_min_z_span_m" value="$(arg near_field_raw_overlay_min_z_span_m)"/>
             <param name="near_field_raw_overlay_ttl_s" value="$(arg near_field_raw_overlay_ttl_s)"/>
             <param name="near_field_raw_overlay_hit_cloud_topic" value="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
             <param name="near_field_raw_debug_cloud_enabled" value="$(arg near_field_raw_debug_cloud_enabled)"/>
