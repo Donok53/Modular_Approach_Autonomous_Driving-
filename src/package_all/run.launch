@@ -723,7 +723,6 @@
         <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
         <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
         <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
-        <arg name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -779,7 +778,6 @@
         <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
         <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
         <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
-        <arg name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
