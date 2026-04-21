@@ -85,7 +85,7 @@
   <arg name="local_planner_mode" default="custom"/>
   <arg name="enable_linefit_ground_filter_for_planning" default="true"/>
   <arg name="enable_linefit_self_filter" default="true"/>
-  <arg name="linefit_pointcloud_topic" default="$(arg pointcloud_topic)"/>
+  <arg name="linefit_pointcloud_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
   <arg name="linefit_raw_frame" default="base_link"/>
   <arg name="linefit_gravity_frame" default="base_link_gravity"/>
   <arg name="linefit_ground_cloud_topic" default="/planning/linefit_ground/ground_cloud"/>
