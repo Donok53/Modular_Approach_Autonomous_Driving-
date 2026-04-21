@@ -55,10 +55,13 @@
     <arg name="near_field_raw_overlay_half_width_m" default="0.65"/>
     <arg name="near_field_raw_overlay_min_z_m" default="-0.20"/>
     <arg name="near_field_raw_overlay_max_z_m" default="1.40"/>
-    <arg name="near_field_raw_overlay_downsample" default="1"/>
+    <arg name="near_field_raw_overlay_downsample" default="2"/>
+    <arg name="near_field_raw_overlay_max_update_hz" default="4.0"/>
+    <arg name="near_field_raw_overlay_uv_row_step" default="2"/>
+    <arg name="near_field_raw_overlay_uv_col_step" default="4"/>
     <arg name="near_field_raw_overlay_min_points" default="3"/>
     <arg name="near_field_raw_overlay_min_cells" default="1"/>
-    <arg name="near_field_raw_overlay_ttl_s" default="0.35"/>
+    <arg name="near_field_raw_overlay_ttl_s" default="0.60"/>
     <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
     <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
     <arg name="near_field_raw_debug_cloud_topic" default="/planning/near_field_raw_debug_cloud"/>
@@ -67,7 +70,9 @@
     <arg name="near_field_raw_debug_half_width_m" default="1.2"/>
     <arg name="near_field_raw_debug_min_z_m" default="-0.35"/>
     <arg name="near_field_raw_debug_max_z_m" default="1.50"/>
-    <arg name="near_field_raw_overlay_log_period_s" default="0.5"/>
+    <arg name="near_field_raw_debug_publish_hz" default="1.0"/>
+    <arg name="near_field_raw_debug_max_points" default="1200"/>
+    <arg name="near_field_raw_overlay_log_period_s" default="2.0"/>
     <arg name="use_drivable_grid" default="true"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
     <arg name="grid_unknown_is_occupied" default="true"/>
@@ -541,6 +546,9 @@
             <param name="near_field_raw_overlay_min_z_m" value="$(arg near_field_raw_overlay_min_z_m)"/>
             <param name="near_field_raw_overlay_max_z_m" value="$(arg near_field_raw_overlay_max_z_m)"/>
             <param name="near_field_raw_overlay_downsample" value="$(arg near_field_raw_overlay_downsample)"/>
+            <param name="near_field_raw_overlay_max_update_hz" value="$(arg near_field_raw_overlay_max_update_hz)"/>
+            <param name="near_field_raw_overlay_uv_row_step" value="$(arg near_field_raw_overlay_uv_row_step)"/>
+            <param name="near_field_raw_overlay_uv_col_step" value="$(arg near_field_raw_overlay_uv_col_step)"/>
             <param name="near_field_raw_overlay_min_points" value="$(arg near_field_raw_overlay_min_points)"/>
             <param name="near_field_raw_overlay_min_cells" value="$(arg near_field_raw_overlay_min_cells)"/>
             <param name="near_field_raw_overlay_ttl_s" value="$(arg near_field_raw_overlay_ttl_s)"/>
@@ -552,6 +560,8 @@
             <param name="near_field_raw_debug_half_width_m" value="$(arg near_field_raw_debug_half_width_m)"/>
             <param name="near_field_raw_debug_min_z_m" value="$(arg near_field_raw_debug_min_z_m)"/>
             <param name="near_field_raw_debug_max_z_m" value="$(arg near_field_raw_debug_max_z_m)"/>
+            <param name="near_field_raw_debug_publish_hz" value="$(arg near_field_raw_debug_publish_hz)"/>
+            <param name="near_field_raw_debug_max_points" value="$(arg near_field_raw_debug_max_points)"/>
             <param name="near_field_raw_overlay_log_period_s" value="$(arg near_field_raw_overlay_log_period_s)"/>
             <param name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
             <param name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>

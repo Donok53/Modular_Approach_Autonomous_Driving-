@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import math
+import time
 from collections import deque
 
 import rospy
@@ -61,6 +62,15 @@ class GlobalObstacleOverlayPublisher:
         self.near_field_raw_overlay_downsample = max(
             1, int(rospy.get_param("~near_field_raw_overlay_downsample", 1))
         )
+        self.near_field_raw_overlay_max_update_hz = max(
+            0.0, float(rospy.get_param("~near_field_raw_overlay_max_update_hz", 4.0))
+        )
+        self.near_field_raw_overlay_uv_row_step = max(
+            1, int(rospy.get_param("~near_field_raw_overlay_uv_row_step", 2))
+        )
+        self.near_field_raw_overlay_uv_col_step = max(
+            1, int(rospy.get_param("~near_field_raw_overlay_uv_col_step", 4))
+        )
         self.near_field_raw_overlay_min_points = max(
             1, int(rospy.get_param("~near_field_raw_overlay_min_points", 3))
         )
@@ -101,6 +111,12 @@ class GlobalObstacleOverlayPublisher:
         self.near_field_raw_debug_max_z_m = max(
             self.near_field_raw_debug_min_z_m + 0.05,
             float(rospy.get_param("~near_field_raw_debug_max_z_m", 2.0)),
+        )
+        self.near_field_raw_debug_publish_hz = max(
+            0.0, float(rospy.get_param("~near_field_raw_debug_publish_hz", 1.0))
+        )
+        self.near_field_raw_debug_max_points = max(
+            0, int(rospy.get_param("~near_field_raw_debug_max_points", 1200))
         )
         self.near_field_raw_overlay_log_period_s = max(
             0.0, float(rospy.get_param("~near_field_raw_overlay_log_period_s", 0.5))
@@ -343,6 +359,8 @@ class GlobalObstacleOverlayPublisher:
         self.near_field_raw_overlay_stamp_sec = 0.0
         self.near_field_raw_overlay_tf_warn_sec = 0.0
         self.near_field_raw_overlay_last_log_sec = 0.0
+        self.near_field_raw_overlay_last_process_wall_sec = 0.0
+        self.near_field_raw_debug_last_publish_wall_sec = 0.0
 
         self.pub_global_obstacle_overlay = rospy.Publisher(
             self.global_obstacle_overlay_topic, OccupancyGrid, queue_size=1
@@ -422,7 +440,7 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s raw_near=%s topic=%s hit_cloud=%s raw_debug=%s roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] req=%dpts/%dcells ttl=%.1fs global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s raw_near=%s topic=%s hit_cloud=%s raw_debug=%s raw_near_rate=%.1fHz sample=row%d/col%d/down%d debug_rate=%.1fHz debug_max=%d roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] req=%dpts/%dcells ttl=%.1fs global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             "on" if self.near_field_raw_overlay_enabled else "off",
             self.near_field_raw_overlay_topic if self.near_field_raw_overlay_topic else "-",
@@ -432,6 +450,12 @@ class GlobalObstacleOverlayPublisher:
             self.near_field_raw_debug_cloud_topic
             if self.near_field_raw_debug_cloud_enabled and self.near_field_raw_debug_cloud_topic
             else "-",
+            self.near_field_raw_overlay_max_update_hz,
+            self.near_field_raw_overlay_uv_row_step,
+            self.near_field_raw_overlay_uv_col_step,
+            self.near_field_raw_overlay_downsample,
+            self.near_field_raw_debug_publish_hz,
+            self.near_field_raw_debug_max_points,
             self.near_field_raw_overlay_min_x_m,
             self.near_field_raw_overlay_max_x_m,
             self.near_field_raw_overlay_half_width_m,
@@ -775,6 +799,46 @@ class GlobalObstacleOverlayPublisher:
             )
         )
 
+    def _near_field_raw_debug_publish_due(self, wall_sec):
+        if self.pub_near_field_raw_debug_cloud is None:
+            return False
+        if self.near_field_raw_debug_publish_hz <= 0.0:
+            self.near_field_raw_debug_last_publish_wall_sec = wall_sec
+            return True
+        min_dt = 1.0 / self.near_field_raw_debug_publish_hz
+        if (
+            self.near_field_raw_debug_last_publish_wall_sec > 0.0
+            and (wall_sec - self.near_field_raw_debug_last_publish_wall_sec) < min_dt
+        ):
+            return False
+        self.near_field_raw_debug_last_publish_wall_sec = wall_sec
+        return True
+
+    def _near_field_raw_overlay_point_iter(self, msg):
+        width = max(0, int(msg.width))
+        height = max(1, int(msg.height))
+        row_step = self.near_field_raw_overlay_uv_row_step if height > 1 else 1
+        col_step = max(
+            self.near_field_raw_overlay_uv_col_step,
+            self.near_field_raw_overlay_downsample,
+        )
+        if width > 0 and (row_step > 1 or col_step > 1):
+            uvs = (
+                (u, v)
+                for v in range(0, height, row_step)
+                for u in range(0, width, col_step)
+            )
+            return (
+                point_cloud2.read_points(
+                    msg, field_names=("x", "y", "z"), skip_nans=True, uvs=uvs
+                ),
+                True,
+            )
+        return (
+            point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True),
+            False,
+        )
+
     def odom_callback(self, msg):
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
@@ -825,6 +889,19 @@ class GlobalObstacleOverlayPublisher:
             return
 
         try:
+            wall_sec = time.monotonic()
+            if self.near_field_raw_overlay_max_update_hz > 0.0:
+                min_dt = 1.0 / self.near_field_raw_overlay_max_update_hz
+                if (
+                    self.near_field_raw_overlay_last_process_wall_sec > 0.0
+                    and (wall_sec - self.near_field_raw_overlay_last_process_wall_sec)
+                    < min_dt
+                ):
+                    return
+            self.near_field_raw_overlay_last_process_wall_sec = wall_sec
+            process_start_wall_sec = wall_sec
+            publish_debug_cloud = self._near_field_raw_debug_publish_due(wall_sec)
+
             transform, transform_ok, debug_frame = self._near_field_raw_overlay_transform(msg)
             if not transform_ok:
                 self.near_field_raw_overlay_cluster_counts = {}
@@ -832,9 +909,10 @@ class GlobalObstacleOverlayPublisher:
                 self._publish_near_field_raw_overlay_hits(
                     msg.header.stamp, debug_frame, []
                 )
-                self._publish_near_field_raw_debug_cloud(
-                    msg.header.stamp, debug_frame, []
-                )
+                if publish_debug_cloud:
+                    self._publish_near_field_raw_debug_cloud(
+                        msg.header.stamp, debug_frame, []
+                    )
                 return
 
             stamp_sec = msg.header.stamp.to_sec() if msg.header.stamp else 0.0
@@ -843,17 +921,18 @@ class GlobalObstacleOverlayPublisher:
 
             cell_counts = {}
             occupied_cells = set()
-            debug_points = []
+            debug_points = [] if publish_debug_cloud else None
             hit_points = []
-            raw_count = 0
+            total_points = int(msg.width) * int(msg.height)
+            sampled_count = 0
             i = 0
-            for p in point_cloud2.read_points(
-                msg, field_names=("x", "y", "z"), skip_nans=True
-            ):
-                raw_count += 1
+            point_iter, sampled_by_uv = self._near_field_raw_overlay_point_iter(msg)
+            for p in point_iter:
+                sampled_count += 1
                 i += 1
                 if (
-                    self.near_field_raw_overlay_downsample > 1
+                    not sampled_by_uv
+                    and self.near_field_raw_overlay_downsample > 1
                     and (i % self.near_field_raw_overlay_downsample != 0)
                 ):
                     continue
@@ -861,7 +940,7 @@ class GlobalObstacleOverlayPublisher:
                     transform, float(p[0]), float(p[1]), float(p[2])
                 )
                 if (
-                    self.near_field_raw_debug_cloud_enabled
+                    debug_points is not None
                     and self.near_field_raw_debug_min_x_m
                     <= x
                     <= self.near_field_raw_debug_max_x_m
@@ -870,7 +949,11 @@ class GlobalObstacleOverlayPublisher:
                     <= z
                     <= self.near_field_raw_debug_max_z_m
                 ):
-                    debug_points.append((x, y, z))
+                    if (
+                        self.near_field_raw_debug_max_points <= 0
+                        or len(debug_points) < self.near_field_raw_debug_max_points
+                    ):
+                        debug_points.append((x, y, z))
                 if not (
                     self.near_field_raw_overlay_min_x_m
                     <= x
@@ -900,9 +983,10 @@ class GlobalObstacleOverlayPublisher:
 
             self.near_field_raw_overlay_cluster_counts = cell_counts
             self.near_field_raw_overlay_stamp_sec = stamp_sec
-            self._publish_near_field_raw_debug_cloud(
-                msg.header.stamp, debug_frame, debug_points
-            )
+            if debug_points is not None:
+                self._publish_near_field_raw_debug_cloud(
+                    msg.header.stamp, debug_frame, debug_points
+                )
             self._publish_near_field_raw_overlay_hits(
                 msg.header.stamp, debug_frame, hit_points
             )
@@ -912,12 +996,17 @@ class GlobalObstacleOverlayPublisher:
                     now_sec - self.near_field_raw_overlay_last_log_sec
                 ) >= self.near_field_raw_overlay_log_period_s:
                     self.near_field_raw_overlay_last_log_sec = now_sec
+                    process_ms = (time.monotonic() - process_start_wall_sec) * 1000.0
                     rospy.loginfo(
-                        "global_obstacle_overlay raw-near: raw=%d debug=%d roi_hits=%d accepted_cells=%d frame=%s",
-                        raw_count,
-                        len(debug_points),
+                        "global_obstacle_overlay raw-near: total=%d sampled=%d uv_sample=%s debug=%d%s roi_hits=%d accepted_cells=%d process=%.1fms frame=%s",
+                        total_points,
+                        sampled_count,
+                        "yes" if sampled_by_uv else "no",
+                        len(debug_points) if debug_points is not None else 0,
+                        "" if debug_points is not None else "(skip)",
                         len(hit_points),
                         len(cell_counts),
+                        process_ms,
                         debug_frame or "-",
                     )
         except Exception as exc:
