@@ -119,6 +119,10 @@ class AStarPlanner:
         self.global_obstacle_overlay_threshold = max(
             1, min(100, int(rospy.get_param("~global_obstacle_overlay_threshold", 50)))
         )
+        self.global_obstacle_overlay_clearance_extra_m = max(
+            0.0,
+            float(rospy.get_param("~global_obstacle_overlay_clearance_extra_m", 0.0)),
+        )
         self.path_blocked_topic = rospy.get_param(
             "~path_blocked_topic", "/astar/path_blocked"
         )
@@ -416,9 +420,10 @@ class AStarPlanner:
                 )
             if self.use_global_obstacle_overlay:
                 rospy.loginfo(
-                    "[astar] global pointcloud obstacle overlay: %s (threshold=%d)",
+                    "[astar] global pointcloud obstacle overlay: %s (threshold=%d, extra_clearance=%.2fm)",
                     self.global_obstacle_overlay_topic,
                     self.global_obstacle_overlay_threshold,
+                    self.global_obstacle_overlay_clearance_extra_m,
                 )
             rospy.loginfo(
                 "[astar] global grid planner: %s, candidates=%d, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s",
@@ -1918,6 +1923,7 @@ class AStarPlanner:
         h = int(g.info.height)
         blocked = [[False for _ in range(w)] for _ in range(h)]
         occupied = []
+        overlay_occupied = []
         risk_data = None
         global_obstacle_overlay_data = None
 
@@ -1963,13 +1969,14 @@ class AStarPlanner:
                         int(global_obstacle_overlay_data[row_offset + gx])
                         >= self.global_obstacle_overlay_threshold
                     )
-                is_free = (
-                    ((val == 0) or (val < 0 and (not self.grid_unknown_is_occupied)))
-                    and (not risk_occupied)
-                    and (not pointcloud_overlay_occupied)
+                base_occupied = (
+                    (val != 0 and (val >= 0 or self.grid_unknown_is_occupied))
+                    or risk_occupied
                 )
-                if not is_free:
+                if base_occupied:
                     occupied.append((gx, gy))
+                if pointcloud_overlay_occupied:
+                    overlay_occupied.append((gx, gy))
 
         # This is equivalent to shrinking the drivable region by the robot center margin.
         clearance_radius_m = (
@@ -1977,27 +1984,37 @@ class AStarPlanner:
             if clearance_radius_m is None
             else max(0.0, float(clearance_radius_m))
         )
-        inflate_radius_cells = int(
-            math.ceil(clearance_radius_m / max(1e-6, float(g.info.resolution)))
-        )
-        if inflate_radius_cells <= 0:
-            for gx, gy in occupied:
-                blocked[gy][gx] = True
-            return blocked
+        def _inflate(cells, radius_m):
+            radius_cells = int(
+                math.ceil(max(0.0, float(radius_m)) / max(1e-6, float(g.info.resolution)))
+            )
+            if radius_cells <= 0:
+                for gx, gy in cells:
+                    if self._blocked_in_bounds(blocked, gx, gy):
+                        blocked[gy][gx] = True
+                return
 
-        offsets = []
-        radius_sq = inflate_radius_cells * inflate_radius_cells
-        for dy in range(-inflate_radius_cells, inflate_radius_cells + 1):
-            for dx in range(-inflate_radius_cells, inflate_radius_cells + 1):
-                if dx * dx + dy * dy <= radius_sq:
-                    offsets.append((dx, dy))
+            offsets = []
+            radius_sq = radius_cells * radius_cells
+            for dy in range(-radius_cells, radius_cells + 1):
+                for dx in range(-radius_cells, radius_cells + 1):
+                    dist_sq = dx * dx + dy * dy
+                    if dist_sq <= radius_sq:
+                        offsets.append((dx, dy))
 
-        for ox, oy in occupied:
-            for dx, dy in offsets:
-                nx = ox + dx
-                ny = oy + dy
-                if self._blocked_in_bounds(blocked, nx, ny):
-                    blocked[ny][nx] = True
+            for ox, oy in cells:
+                for dx, dy in offsets:
+                    nx = ox + dx
+                    ny = oy + dy
+                    if self._blocked_in_bounds(blocked, nx, ny):
+                        blocked[ny][nx] = True
+
+        _inflate(occupied, clearance_radius_m)
+        if overlay_occupied:
+            _inflate(
+                overlay_occupied,
+                clearance_radius_m + self.global_obstacle_overlay_clearance_extra_m,
+            )
         return blocked
 
     def _blocked_cell_is_free(self, blocked, gx, gy):

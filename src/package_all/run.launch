@@ -251,6 +251,7 @@
   <arg name="global_path_candidate_fanout_levels" default="2"/>
   <arg name="global_path_candidate_fanout_lateral_step_m" default="0.90"/>
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
+  <arg name="global_obstacle_overlay_clearance_extra_m" default="0.18"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="$(eval '0.00' if str(arg('real_mode')).lower() == 'true' else '0.02')"/>
   <arg name="global_path_clearance_model" default="$(eval 'width' if str(arg('real_mode')).lower() == 'true' else 'circumscribed')"/>
@@ -272,16 +273,16 @@
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
-  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
+  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + float(arg('global_obstacle_overlay_clearance_extra_m')))"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="$(eval '3.0' if str(arg('real_mode')).lower() == 'true' else '1.0')"/>
+  <arg name="candidate_route_switch_min_hold_s" default="$(eval '3.0' if str(arg('real_mode')).lower() == 'true' else '2.0')"/>
   <arg name="candidate_route_switch_confirm_count" default="$(eval '3' if str(arg('real_mode')).lower() == 'true' else '2')"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
-  <arg name="candidate_route_replan_match_distance_m" default="0.60"/>
+  <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.25"/>
@@ -722,6 +723,7 @@
         <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
         <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
         <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
+        <arg name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -772,6 +774,12 @@
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
         <arg name="global_path_grid_planner" value="$(arg global_path_grid_planner)"/>
         <arg name="global_path_candidate_count" value="$(arg global_path_candidate_count)"/>
+        <arg name="global_path_candidate_fanout_enabled" value="$(arg global_path_candidate_fanout_enabled)"/>
+        <arg name="global_path_candidate_fanout_anchor_count" value="$(arg global_path_candidate_fanout_anchor_count)"/>
+        <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
+        <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
+        <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
+        <arg name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
