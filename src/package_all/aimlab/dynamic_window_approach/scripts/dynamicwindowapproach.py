@@ -509,6 +509,7 @@ class DWAControl:
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
         self._path_tracking_filtered_lat_err = 0.0
+        self._last_tracking_debug = {}
 
         # Internal path buffers
         self.global_path_msg = None
@@ -1515,10 +1516,12 @@ class DWAControl:
             pass
 
     def _activate_path(self, path_msg, sig, source):
+        path_changed = sig != self.path_sig
         reset_tracking = (
             source != self.active_path_source
             or path_msg is None
             or self.path_msg is None
+            or path_changed
         )
         self.path_sig = sig
         self.path_msg = path_msg
@@ -1527,6 +1530,7 @@ class DWAControl:
             self._path_tracking_prev_w = 0.0
             self._path_tracking_prev_desired_yaw = None
             self._path_tracking_filtered_lat_err = 0.0
+            self._last_tracking_debug = {}
             self._rot_mode = False
             self._rot_yaw_target = None
         if path_msg is None or len(path_msg.poses) < 2:
@@ -1871,6 +1875,15 @@ class DWAControl:
             )
         self._path_tracking_prev_desired_yaw = desired_yaw
         yaw_err = angdiff(desired_yaw, x[2])
+        self._last_tracking_debug = {
+            "path_yaw_deg": math.degrees(path_yaw_raw),
+            "desired_yaw_deg": math.degrees(desired_yaw),
+            "robot_yaw_deg": math.degrees(x[2]),
+            "yaw_err_deg": math.degrees(yaw_err),
+            "goal_bearing_err_deg": math.degrees(goal_bearing_err),
+            "cte_correction_deg": math.degrees(cte_correction),
+            "filtered_lat_err": self._path_tracking_filtered_lat_err,
+        }
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
@@ -2557,14 +2570,21 @@ class DWAControl:
                     )
                 u_cmd[0] = 0.0
             else:
+                dbg = self._last_tracking_debug
                 self._log_nav_reason(
                     "tracking",
-                    "cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f" % (
+                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f" % (
+                        self.active_path_source,
                         u_cmd[0],
                         u_cmd[1],
                         dist_to_goal,
                         arc_rem,
                         lat_err,
+                        dbg.get("robot_yaw_deg", 0.0),
+                        dbg.get("path_yaw_deg", 0.0),
+                        dbg.get("desired_yaw_deg", 0.0),
+                        dbg.get("yaw_err_deg", 0.0),
+                        dbg.get("cte_correction_deg", 0.0),
                     ),
                 )
 
