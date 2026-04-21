@@ -251,7 +251,7 @@
   <arg name="global_path_candidate_fanout_levels" default="2"/>
   <arg name="global_path_candidate_fanout_lateral_step_m" default="0.90"/>
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
-  <arg name="global_obstacle_overlay_clearance_extra_m" default="0.12"/>
+  <arg name="global_obstacle_overlay_clearance_extra_m" default="0.08"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="$(eval '0.00' if str(arg('real_mode')).lower() == 'true' else '0.02')"/>
   <arg name="global_path_clearance_model" default="$(eval 'width' if str(arg('real_mode')).lower() == 'true' else 'circumscribed')"/>
