@@ -85,7 +85,7 @@
   <arg name="local_planner_mode" default="custom"/>
   <arg name="enable_linefit_ground_filter_for_planning" default="true"/>
   <arg name="enable_linefit_self_filter" default="true"/>
-  <arg name="linefit_pointcloud_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
+  <arg name="linefit_pointcloud_topic" default="$(arg pointcloud_topic)"/>
   <arg name="linefit_raw_frame" default="base_link"/>
   <arg name="linefit_gravity_frame" default="base_link_gravity"/>
   <arg name="linefit_ground_cloud_topic" default="/planning/linefit_ground/ground_cloud"/>
@@ -496,7 +496,7 @@
   <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
   <arg name="near_field_raw_stop_max_x_m" default="1.05"/>
-  <arg name="near_field_raw_stop_half_width_m" default="0.40"/>
+  <arg name="near_field_raw_stop_half_width_m" default="0.37"/>
   <arg name="near_field_raw_stop_min_z_m" default="-0.20"/>
   <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
   <arg name="near_field_raw_stop_min_points" default="3"/>
