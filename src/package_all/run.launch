@@ -148,6 +148,14 @@
   <arg name="near_field_raw_overlay_min_cells" default="1"/>
   <arg name="near_field_raw_overlay_ttl_s" default="0.35"/>
   <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
+  <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
+  <arg name="near_field_raw_debug_cloud_topic" default="/planning/near_field_raw_debug_cloud"/>
+  <arg name="near_field_raw_debug_min_x_m" default="-2.0"/>
+  <arg name="near_field_raw_debug_max_x_m" default="2.0"/>
+  <arg name="near_field_raw_debug_half_width_m" default="2.0"/>
+  <arg name="near_field_raw_debug_min_z_m" default="-1.0"/>
+  <arg name="near_field_raw_debug_max_z_m" default="2.0"/>
+  <arg name="near_field_raw_overlay_log_period_s" default="0.5"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
   <arg name="teb_use_pointcloud_obstacles" default="true"/>
@@ -821,6 +829,14 @@
       <arg name="near_field_raw_overlay_min_cells" value="$(arg near_field_raw_overlay_min_cells)"/>
       <arg name="near_field_raw_overlay_ttl_s" value="$(arg near_field_raw_overlay_ttl_s)"/>
       <arg name="near_field_raw_overlay_hit_cloud_topic" value="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
+      <arg name="near_field_raw_debug_cloud_enabled" value="$(arg near_field_raw_debug_cloud_enabled)"/>
+      <arg name="near_field_raw_debug_cloud_topic" value="$(arg near_field_raw_debug_cloud_topic)"/>
+      <arg name="near_field_raw_debug_min_x_m" value="$(arg near_field_raw_debug_min_x_m)"/>
+      <arg name="near_field_raw_debug_max_x_m" value="$(arg near_field_raw_debug_max_x_m)"/>
+      <arg name="near_field_raw_debug_half_width_m" value="$(arg near_field_raw_debug_half_width_m)"/>
+      <arg name="near_field_raw_debug_min_z_m" value="$(arg near_field_raw_debug_min_z_m)"/>
+      <arg name="near_field_raw_debug_max_z_m" value="$(arg near_field_raw_debug_max_z_m)"/>
+      <arg name="near_field_raw_overlay_log_period_s" value="$(arg near_field_raw_overlay_log_period_s)"/>
       <arg name="enable_self_filter" value="$(arg enable_planning_self_filter)"/>
       <arg name="use_drivable_grid" value="$(arg use_drivable_grid)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
