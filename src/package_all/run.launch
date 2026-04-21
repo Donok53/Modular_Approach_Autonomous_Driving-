@@ -345,6 +345,7 @@
   <arg name="enable_global_pointcloud_overlay" default="true"/>
   <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
   <arg name="global_obstacle_overlay_boxes_topic" default="/planning/global_obstacle_overlay_boxes"/>
+  <arg name="global_obstacle_caution_topic" default="/planning/global_obstacle_caution"/>
   <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
   <arg name="global_obstacle_overlay_stop_locked_only" default="true"/>
   <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
@@ -370,13 +371,18 @@
   <arg name="global_pointcloud_overlay_mid_range_m" default="16.0"/>
   <arg name="global_pointcloud_overlay_near_min_points" default="2"/>
   <arg name="global_pointcloud_overlay_mid_min_points" default="6"/>
-  <arg name="global_pointcloud_overlay_far_min_points" default="8"/>
+  <arg name="global_pointcloud_overlay_far_min_points" default="12"/>
   <arg name="global_pointcloud_overlay_near_min_cells" default="1"/>
   <arg name="global_pointcloud_overlay_mid_min_cells" default="2"/>
-  <arg name="global_pointcloud_overlay_far_min_cells" default="2"/>
+  <arg name="global_pointcloud_overlay_far_min_cells" default="3"/>
   <arg name="global_pointcloud_overlay_near_confirm_frames" default="1"/>
   <arg name="global_pointcloud_overlay_mid_confirm_frames" default="2"/>
-  <arg name="global_pointcloud_overlay_far_confirm_frames" default="3"/>
+  <arg name="global_pointcloud_overlay_far_confirm_frames" default="4"/>
+  <arg name="global_pointcloud_overlay_caution_enabled" default="true"/>
+  <arg name="global_pointcloud_overlay_caution_min_range_m" default="8.0"/>
+  <arg name="global_pointcloud_overlay_caution_min_points" default="4"/>
+  <arg name="global_pointcloud_overlay_caution_min_cells" default="1"/>
+  <arg name="global_pointcloud_overlay_caution_confirm_frames" default="1"/>
   <arg name="global_pointcloud_overlay_evidence_ttl_s" default="0.9"/>
   <arg name="global_pointcloud_overlay_evidence_resolution_m" default="0.6"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
@@ -388,6 +394,7 @@
   <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
   <arg name="planning_slowdown_hold_s" default="2.0"/>
   <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
+  <arg name="planning_slowdown_caution_timeout_s" default="1.2"/>
   <arg name="planning_slowdown_publish_hz" default="5.0"/>
   <arg name="planning_slowdown_marker_topic" default="/planning/planning_speed_limit_marker"/>
   <arg name="planning_slowdown_path_blocked_topic" default="$(arg path_blocked_topic)"/>
@@ -470,6 +477,7 @@
   <arg name="static_risk_min_area_m2" default="1.2"/>
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
+  <arg name="enable_emergency_stop" default="true"/>
   <arg name="emergency_stop_distance" default="$(eval '0.50' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
   <arg name="emergency_bin_size_m" default="0.10"/>
   <arg name="emergency_min_close_points" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
@@ -806,6 +814,7 @@
       <arg name="enable_global_pointcloud_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
       <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
       <arg name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
+      <arg name="global_obstacle_caution_topic" value="$(arg global_obstacle_caution_topic)"/>
       <arg name="use_global_obstacle_overlay_boxes_for_stop" value="$(arg use_global_obstacle_overlay_boxes_for_stop)"/>
       <arg name="global_obstacle_overlay_stop_locked_only" value="$(arg global_obstacle_overlay_stop_locked_only)"/>
       <arg name="global_obstacle_overlay_box_timeout_s" value="$(arg global_obstacle_overlay_box_timeout_s)"/>
@@ -838,6 +847,11 @@
       <arg name="global_pointcloud_overlay_near_confirm_frames" value="$(arg global_pointcloud_overlay_near_confirm_frames)"/>
       <arg name="global_pointcloud_overlay_mid_confirm_frames" value="$(arg global_pointcloud_overlay_mid_confirm_frames)"/>
       <arg name="global_pointcloud_overlay_far_confirm_frames" value="$(arg global_pointcloud_overlay_far_confirm_frames)"/>
+      <arg name="global_pointcloud_overlay_caution_enabled" value="$(arg global_pointcloud_overlay_caution_enabled)"/>
+      <arg name="global_pointcloud_overlay_caution_min_range_m" value="$(arg global_pointcloud_overlay_caution_min_range_m)"/>
+      <arg name="global_pointcloud_overlay_caution_min_points" value="$(arg global_pointcloud_overlay_caution_min_points)"/>
+      <arg name="global_pointcloud_overlay_caution_min_cells" value="$(arg global_pointcloud_overlay_caution_min_cells)"/>
+      <arg name="global_pointcloud_overlay_caution_confirm_frames" value="$(arg global_pointcloud_overlay_caution_confirm_frames)"/>
       <arg name="global_pointcloud_overlay_evidence_ttl_s" value="$(arg global_pointcloud_overlay_evidence_ttl_s)"/>
       <arg name="global_pointcloud_overlay_evidence_resolution_m" value="$(arg global_pointcloud_overlay_evidence_resolution_m)"/>
       <arg name="global_pointcloud_overlay_max_points" value="$(arg global_pointcloud_overlay_max_points)"/>
@@ -848,6 +862,7 @@
       <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
       <arg name="planning_slowdown_hold_s" value="$(arg planning_slowdown_hold_s)"/>
       <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
+      <arg name="planning_slowdown_caution_timeout_s" value="$(arg planning_slowdown_caution_timeout_s)"/>
       <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
       <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
       <arg name="planning_slowdown_path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
@@ -1034,6 +1049,7 @@
       <arg name="static_risk_min_area_m2" value="$(arg static_risk_min_area_m2)"/>
       <arg name="debug_dynamic_risk_logging" value="$(arg debug_dynamic_risk_logging)"/>
       <arg name="debug_dynamic_risk_log_period_s" value="$(arg debug_dynamic_risk_log_period_s)"/>
+      <arg name="enable_emergency_stop" value="$(arg enable_emergency_stop)"/>
       <arg name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>
       <arg name="emergency_bin_size_m" value="$(arg emergency_bin_size_m)"/>
       <arg name="emergency_min_close_points" value="$(arg emergency_min_close_points)"/>

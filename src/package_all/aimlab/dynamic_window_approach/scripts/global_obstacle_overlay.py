@@ -10,6 +10,7 @@ from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
+from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -28,6 +29,9 @@ class GlobalObstacleOverlayPublisher:
             rospy.get_param(
                 "~global_obstacle_overlay_boxes_topic", "/planning/global_obstacle_overlay_boxes"
             )
+        ).strip()
+        self.global_obstacle_caution_topic = str(
+            rospy.get_param("~global_obstacle_caution_topic", "/planning/global_obstacle_caution")
         ).strip()
         self.tracked_objects_topic = str(
             rospy.get_param("~tracked_objects_topic", "/perception/tracked_objects")
@@ -183,6 +187,27 @@ class GlobalObstacleOverlayPublisher:
         self.global_pointcloud_overlay_far_confirm_frames = max(
             1, int(rospy.get_param("~global_pointcloud_overlay_far_confirm_frames", 3))
         )
+        self.global_pointcloud_overlay_caution_enabled = bool(
+            rospy.get_param("~global_pointcloud_overlay_caution_enabled", True)
+        )
+        self.global_pointcloud_overlay_caution_min_range_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~global_pointcloud_overlay_caution_min_range_m",
+                    self.global_pointcloud_overlay_near_range_m,
+                )
+            ),
+        )
+        self.global_pointcloud_overlay_caution_min_points = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_caution_min_points", 4))
+        )
+        self.global_pointcloud_overlay_caution_min_cells = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_caution_min_cells", 1))
+        )
+        self.global_pointcloud_overlay_caution_confirm_frames = max(
+            1, int(rospy.get_param("~global_pointcloud_overlay_caution_confirm_frames", 1))
+        )
         self.global_pointcloud_overlay_evidence_ttl_s = max(
             0.1, float(rospy.get_param("~global_pointcloud_overlay_evidence_ttl_s", 0.9))
         )
@@ -226,6 +251,7 @@ class GlobalObstacleOverlayPublisher:
         self.global_obstacle_overlay_evidence = {}
         self.global_obstacle_overlay_memory = []
         self.global_obstacle_overlay_boxes_map = []
+        self.global_obstacle_caution_active = False
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
         self.tracked_objects = []
         self.tracked_objects_stamp_sec = 0.0
@@ -237,6 +263,11 @@ class GlobalObstacleOverlayPublisher:
         self.pub_global_obstacle_overlay_boxes = rospy.Publisher(
             self.global_obstacle_overlay_boxes_topic, MarkerArray, queue_size=1, latch=True
         )
+        self.pub_global_obstacle_caution = None
+        if self.global_obstacle_caution_topic:
+            self.pub_global_obstacle_caution = rospy.Publisher(
+                self.global_obstacle_caution_topic, Bool, queue_size=1, latch=True
+            )
         self.pub_travel_history = None
         self.pub_travel_history_path = None
         if self.enable_travel_history and self.travel_history_topic:
@@ -273,13 +304,19 @@ class GlobalObstacleOverlayPublisher:
             )
 
         rospy.loginfo(
-            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
+            "global_obstacle_overlay started | cloud=%s global=%s grid=%s tracked=%s out=%s boxes=%s caution=%s caution_topic=%s caution_range>=%.1fm caution_req=%dpts/%dcells/%dframes self_filter=%s self_mask=%.2fx%.2fm slope_comp=%s max_tilt=%.1fdeg ground_band=%s lidar_h=%.2fm ground=[%.2f, %.2f] persist=%d static_lock=%d ttl=%.1fs keep=%.1fm box_margin=%.2fm dyn_filter=%s dyn_promote=%s dyn_timeout=%.1fs blind_ttl=%.1fs blind_radius=%.2fm range=%.1fm lookahead=%.1fm corridor_margin=%.2fm roi_x>=%.2fm roi_y<=%.1fm evidence=%d/%d/%dpts %d/%d/%dcells %d/%d/%dframes ttl=%.1fs far_field_relax=%s min_dist=%.2fm map_subtract=%s radius=%.2fm raster_mode=point_cells",
             self.obstacle_pointcloud_topic,
             self.global_path_topic,
             self.drivable_grid_topic,
             self.tracked_objects_topic if self.tracked_objects_topic else "-",
             self.global_obstacle_overlay_topic,
             self.global_obstacle_overlay_boxes_topic,
+            "on" if self.global_pointcloud_overlay_caution_enabled else "off",
+            self.global_obstacle_caution_topic if self.global_obstacle_caution_topic else "-",
+            self.global_pointcloud_overlay_caution_min_range_m,
+            self.global_pointcloud_overlay_caution_min_points,
+            self.global_pointcloud_overlay_caution_min_cells,
+            self.global_pointcloud_overlay_caution_confirm_frames,
             "on" if self.enable_self_filter else "off",
             self.self_filter_radius_x,
             self.self_filter_radius_y,
@@ -1033,7 +1070,7 @@ class GlobalObstacleOverlayPublisher:
             if (now_sec - float(value.get("last_seen", 0.0))) <= ttl
         }
 
-    def _overlay_component_is_confirmed(self, key, now_sec, confirm_frames):
+    def _update_overlay_evidence(self, key, now_sec):
         entry = self.global_obstacle_overlay_evidence.get(key)
         if entry is None or (now_sec - float(entry.get("last_seen", 0.0))) > self.global_pointcloud_overlay_evidence_ttl_s:
             hits = 1
@@ -1043,16 +1080,28 @@ class GlobalObstacleOverlayPublisher:
             "hits": min(1000, hits),
             "last_seen": now_sec,
         }
-        return hits >= confirm_frames
+        return hits
+
+    def _overlay_component_is_confirmed(self, key, now_sec, confirm_frames):
+        return self._update_overlay_evidence(key, now_sec) >= confirm_frames
+
+    def _publish_global_obstacle_caution(self, active):
+        self.global_obstacle_caution_active = bool(active)
+        if self.pub_global_obstacle_caution is not None:
+            self.pub_global_obstacle_caution.publish(
+                Bool(data=self.global_obstacle_caution_active)
+            )
 
     def _select_global_overlay_candidate_cells(self, accepted_cells, cluster_counts, now_sec):
         if not accepted_cells or self.drivable_grid is None:
             self._prune_overlay_evidence(now_sec)
+            self._publish_global_obstacle_caution(False)
             return set()
 
         path_slice = self._global_overlay_path_slice()
         if len(path_slice) < 2:
             self._prune_overlay_evidence(now_sec)
+            self._publish_global_obstacle_caution(False)
             return set()
 
         corridor_half_width_m = self._pointcloud_corridor_half_width_m(
@@ -1060,6 +1109,7 @@ class GlobalObstacleOverlayPublisher:
         )
         grid = self.drivable_grid
         selected = set()
+        caution_active = False
         self._prune_overlay_evidence(now_sec)
 
         for component in self._connected_pointcloud_components(accepted_cells, cluster_counts):
@@ -1094,21 +1144,34 @@ class GlobalObstacleOverlayPublisher:
                 if math.isfinite(candidate_min_range)
                 else float(component.get("min_range", 0.0))
             )
-            min_points, min_cells, confirm_frames = self._overlay_evidence_requirements(range_m)
-            if int(component["point_count"]) < min_points or len(component["cells"]) < min_cells:
-                continue
-
             denom = max(1, candidate_weight)
             center_wx = candidate_wx / denom
             center_wy = candidate_wy / denom
             evidence_key = self._overlay_evidence_key(center_wx, center_wy)
-            if not self._overlay_component_is_confirmed(evidence_key, now_sec, confirm_frames):
+            evidence_hits = self._update_overlay_evidence(evidence_key, now_sec)
+
+            component_points = int(component["point_count"])
+            component_cells = len(component["cells"])
+            if (
+                self.global_pointcloud_overlay_caution_enabled
+                and range_m >= self.global_pointcloud_overlay_caution_min_range_m
+                and component_points >= self.global_pointcloud_overlay_caution_min_points
+                and component_cells >= self.global_pointcloud_overlay_caution_min_cells
+                and evidence_hits >= self.global_pointcloud_overlay_caution_confirm_frames
+            ):
+                caution_active = True
+
+            min_points, min_cells, confirm_frames = self._overlay_evidence_requirements(range_m)
+            if component_points < min_points or component_cells < min_cells:
+                continue
+            if evidence_hits < confirm_frames:
                 continue
 
             selected.update(candidate_map_cells)
 
         if self.global_pointcloud_overlay_max_points > 0 and len(selected) > self.global_pointcloud_overlay_max_points:
             selected = set(sorted(selected)[: self.global_pointcloud_overlay_max_points])
+        self._publish_global_obstacle_caution(caution_active)
         return selected
 
     def _select_global_overlay_candidate_boxes(self, current_boxes_map):

@@ -187,6 +187,9 @@ class DWAControl:
                 )
             ),
         )
+        self.enable_emergency_stop = bool(
+            rospy.get_param("~enable_emergency_stop", True)
+        )
         self.block_on_count = rospy.get_param("~block_on_count", 2)
         self.block_off_count = rospy.get_param("~block_off_count", 3)
         self.emergency_blocked = False
@@ -655,7 +658,7 @@ class DWAControl:
         self._refresh_near_field_raw_stop_marker_if_waiting()
 
     def _hard_stop_active(self):
-        return bool(self.emergency_blocked or self.behavior_stop)
+        return bool((self.enable_emergency_stop and self.emergency_blocked) or self.behavior_stop)
 
     def _publish_emergency_stop_state(self):
         hard_stop_active = self._hard_stop_active()
@@ -2290,7 +2293,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2304,6 +2307,7 @@ class DWAControl:
             "on" if self.use_drivable_grid else "off",
             "on" if self.use_dynamic_risk_grid else "off",
             "off" if self.follow_global_path_only else "on",
+            "on" if self.enable_emergency_stop else "off",
             self.emergency_stop_distance,
             self.avoidance_hard_stop_distance,
             "on" if self.use_global_obstacle_overlay_boxes_for_stop else "off",
@@ -2345,7 +2349,7 @@ class DWAControl:
                 and self.active_path_source == "avoidance"
                 and self.front_obstacle_clearance > self.avoidance_hard_stop_distance
             )
-            if self.emergency_blocked and not avoidance_can_continue:
+            if self.enable_emergency_stop and self.emergency_blocked and not avoidance_can_continue:
                 self._rot_mode = False
                 self._log_nav_reason(
                     "stop_emergency",
