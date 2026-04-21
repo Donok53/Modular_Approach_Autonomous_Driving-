@@ -86,8 +86,8 @@
   <arg name="enable_linefit_ground_filter_for_planning" default="true"/>
   <arg name="enable_linefit_self_filter" default="true"/>
   <arg name="linefit_pointcloud_topic" default="$(arg cloud_tracker_pointcloud_topic)"/>
-  <arg name="linefit_raw_frame" default="base_link"/>
-  <arg name="linefit_gravity_frame" default="base_link_gravity"/>
+  <arg name="linefit_raw_frame" default="os_sensor"/>
+  <arg name="linefit_gravity_frame" default="os_sensor_gravity"/>
   <arg name="linefit_ground_cloud_topic" default="/planning/linefit_ground/ground_cloud"/>
   <arg name="linefit_raw_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud_raw"/>
   <arg name="linefit_non_ground_cloud_topic" default="/planning/linefit_ground/non_ground_cloud"/>
@@ -132,6 +132,12 @@
   <arg name="linefit_slope_residual_keep_front_close_m" default="0.35"/>
   <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('linefit_selector_non_ground_cloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() == 'true' else arg('pointcloud_topic'))"/>
   <arg name="robot_base_frame" default="base_link"/>
+  <arg name="publish_os_sensor_static_tf" default="true"/>
+  <arg name="os_sensor_frame" default="os_sensor"/>
+  <arg name="os_sensor_parent_frame" default="$(arg robot_base_frame)"/>
+  <arg name="os_sensor_x_m" default="0.0"/>
+  <arg name="os_sensor_y_m" default="0.0"/>
+  <arg name="os_sensor_z_m" default="$(arg linefit_sensor_height_m)"/>
   <arg name="near_field_raw_overlay_enabled" default="true"/>
   <arg name="near_field_raw_overlay_topic" default="$(arg pointcloud_topic)"/>
   <arg name="near_field_raw_overlay_base_frame" default="$(arg robot_base_frame)"/>
@@ -621,6 +627,12 @@
     <param name="angular_scale" value="$(arg wave_angular_scale)"/>
     <param name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>
   </node>
+
+  <node if="$(arg publish_os_sensor_static_tf)"
+        pkg="tf2_ros"
+        type="static_transform_publisher"
+        name="base_link_to_os_sensor_static_tf"
+        args="$(arg os_sensor_x_m) $(arg os_sensor_y_m) $(arg os_sensor_z_m) 0 0 0 1 $(arg os_sensor_parent_frame) $(arg os_sensor_frame)"/>
 
   <group if="$(arg enable_linefit_ground_filter_for_planning)">
     <include file="$(find lidar_obstacle_perception_experimental)/launch/linefit_ground_removal_debug.launch">

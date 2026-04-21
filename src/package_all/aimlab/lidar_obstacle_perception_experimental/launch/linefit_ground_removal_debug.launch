@@ -92,7 +92,8 @@
         type="linefit_pitch_mode_selector.py"
         name="linefit_pitch_mode_selector"
         output="screen"
-        respawn="false">
+        respawn="true"
+        respawn_delay="1.0">
     <param name="imu_topic" value="$(arg imu_topic)"/>
     <param name="flat_ground_topic" value="$(arg flat_ground_cloud_topic)"/>
     <param name="flat_non_ground_topic" value="$(arg flat_non_ground_cloud_topic)"/>
