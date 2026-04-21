@@ -18,7 +18,7 @@
 
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
   <arg name="near_field_raw_stop_max_x_m" default="1.20"/>
-  <arg name="near_field_raw_stop_half_width_m" default="0.40"/>
+  <arg name="near_field_raw_stop_half_width_m" default="0.30"/>
   <arg name="near_field_raw_stop_min_z_m" default="0.08"/>
   <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
   <arg name="near_field_raw_stop_min_points" default="3"/>
