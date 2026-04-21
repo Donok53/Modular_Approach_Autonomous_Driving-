@@ -62,11 +62,11 @@
     <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
     <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
     <arg name="near_field_raw_debug_cloud_topic" default="/planning/near_field_raw_debug_cloud"/>
-    <arg name="near_field_raw_debug_min_x_m" default="-2.0"/>
-    <arg name="near_field_raw_debug_max_x_m" default="2.0"/>
-    <arg name="near_field_raw_debug_half_width_m" default="2.0"/>
-    <arg name="near_field_raw_debug_min_z_m" default="-1.0"/>
-    <arg name="near_field_raw_debug_max_z_m" default="2.0"/>
+    <arg name="near_field_raw_debug_min_x_m" default="-1.2"/>
+    <arg name="near_field_raw_debug_max_x_m" default="1.8"/>
+    <arg name="near_field_raw_debug_half_width_m" default="1.2"/>
+    <arg name="near_field_raw_debug_min_z_m" default="-0.35"/>
+    <arg name="near_field_raw_debug_max_z_m" default="1.50"/>
     <arg name="near_field_raw_overlay_log_period_s" default="0.5"/>
     <arg name="use_drivable_grid" default="true"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
