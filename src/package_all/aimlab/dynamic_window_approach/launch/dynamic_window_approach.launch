@@ -275,7 +275,7 @@
     <arg name="global_pointcloud_overlay_far_field_candidate_min_distance_m" default="2.5"/>
     <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
     <arg name="enable_planning_slowdown_manager" default="false"/>
-    <arg name="planning_slowdown_speed_limit_mps" default="0.16"/>
+    <arg name="planning_slowdown_speed_limit_mps" default="0.22"/>
     <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
     <arg name="planning_slowdown_hold_s" default="2.0"/>
     <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
