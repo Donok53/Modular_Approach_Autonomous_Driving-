@@ -337,15 +337,6 @@ class DWAControl:
         self.rotate_reentry_target_delta_deg = max(
             0.0, float(rospy.get_param("~rotate_reentry_target_delta_deg", 12.0))
         )
-        self.rotate_only_forward_dot_threshold = float(
-            rospy.get_param("~rotate_only_forward_dot_threshold", -0.35)
-        )
-        self.rotate_only_disable_near_obstacle = bool(
-            rospy.get_param("~rotate_only_disable_near_obstacle", True)
-        )
-        self.rotate_only_near_obstacle_clearance_m = max(
-            0.0, float(rospy.get_param("~rotate_only_near_obstacle_clearance_m", 1.10))
-        )
         self._ROT_HIGH = math.radians(self.rotate_only_deg)
         self._ROT_LOW  = math.radians(self.rotate_exit_deg)
         self._ROT_WMAX = math.radians(self.rotate_w_max_deg)
@@ -669,14 +660,6 @@ class DWAControl:
 
     def _hard_stop_active(self):
         return bool((self.enable_emergency_stop and self.emergency_blocked) or self.behavior_stop)
-
-    def _rotate_only_obstacle_near(self):
-        if not self.rotate_only_disable_near_obstacle:
-            return False
-        return (
-            math.isfinite(self.front_obstacle_clearance)
-            and self.front_obstacle_clearance <= self.rotate_only_near_obstacle_clearance_m
-        )
 
     def _publish_emergency_stop_state(self):
         hard_stop_active = self._hard_stop_active()
@@ -2475,22 +2458,6 @@ class DWAControl:
             # if we're roughly aligned with path tangent (forward progress), avoid entering rotate-only
             heading_vec = np.array([math.cos(yaw), math.sin(yaw)])
             dot_forward = float(np.dot(heading_vec, np.array(t_hat)))
-            rotate_obstacle_near = self._rotate_only_obstacle_near()
-            if self._rot_mode and rotate_obstacle_near:
-                self._rot_mode = False
-                self._rot_cooldown_until = rospy.Time.now() + rospy.Duration(
-                    max(0.5, self.rotate_reentry_cooldown_s)
-                )
-                self._log_nav_reason(
-                    "rotate_suppressed_obstacle",
-                    "clr=%.2f dot=%.2f err=%.1fdeg" % (
-                        self.front_obstacle_clearance
-                        if math.isfinite(self.front_obstacle_clearance)
-                        else float("inf"),
-                        dot_forward,
-                        math.degrees(err),
-                    ),
-                )
             rotate_cooldown_active = rospy.Time.now() < self._rot_cooldown_until
             rotate_target_changed = (
                 self._rot_last_timeout_target is None or
@@ -2499,8 +2466,7 @@ class DWAControl:
             if (
                 (not self._rot_mode)
                 and (err > self._ROT_HIGH)
-                and (dot_forward < self.rotate_only_forward_dot_threshold)
-                and (not rotate_obstacle_near)
+                and (dot_forward < 0.2)
                 and (min(arc_rem, dist_to_goal) > self.near_goal_no_rotate_m)
                 and (not rotate_cooldown_active or rotate_target_changed)
             ):

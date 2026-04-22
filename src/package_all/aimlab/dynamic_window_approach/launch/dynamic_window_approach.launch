@@ -160,13 +160,10 @@
     <arg name="path_tracking_goal_yaw_rate_max_deg" default="25.0"/>
     <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.45"/>
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.90"/>
-    <arg name="rotate_only_deg" default="150.0"/>
+    <arg name="rotate_only_deg" default="110.0"/>
     <arg name="rotate_exit_deg" default="40.0"/>
     <arg name="rotate_w_max_deg" default="30.0"/>
     <arg name="rotate_reentry_cooldown_s" default="4.0"/>
-    <arg name="rotate_only_forward_dot_threshold" default="-0.35"/>
-    <arg name="rotate_only_disable_near_obstacle" default="true"/>
-    <arg name="rotate_only_near_obstacle_clearance_m" default="1.10"/>
     <arg name="near_goal_no_rotate_m" default="1.5"/>
     <arg name="forward_motion_deadband" default="0.01"/>
     <arg name="min_forward_cmd" default="0.12"/>
@@ -820,9 +817,6 @@
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
         <param name="rotate_w_max_deg" value="$(arg rotate_w_max_deg)"/>
         <param name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>
-        <param name="rotate_only_forward_dot_threshold" value="$(arg rotate_only_forward_dot_threshold)"/>
-        <param name="rotate_only_disable_near_obstacle" value="$(arg rotate_only_disable_near_obstacle)"/>
-        <param name="rotate_only_near_obstacle_clearance_m" value="$(arg rotate_only_near_obstacle_clearance_m)"/>
         <param name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
         <param name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>
         <param name="min_forward_cmd" value="$(arg min_forward_cmd)"/>
