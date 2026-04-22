@@ -283,13 +283,15 @@
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
+  <arg name="candidate_route_switch_preference_corridor_radius_m" default="$(eval float(arg('candidate_route_switch_corridor_radius_m')) + 0.10)"/>
+  <arg name="candidate_route_switch_preference_weight" default="0.35"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '5.0')"/>
   <arg name="candidate_route_switch_min_hold_s" default="3.0"/>
   <arg name="candidate_route_switch_break_hold_score_threshold" default="$(eval float(arg('candidate_route_switch_blocked_score_threshold')) + 1.0)"/>
   <arg name="candidate_route_switch_confirm_count" default="3"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
-  <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.06')"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
@@ -338,6 +340,14 @@
   <arg name="rotate_only_forward_dot_threshold" default="-0.35"/>
   <arg name="rotate_only_disable_near_obstacle" default="true"/>
   <arg name="rotate_only_near_obstacle_clearance_m" default="1.10"/>
+  <arg name="rotate_only_raw_guard_enabled" default="true"/>
+  <arg name="rotate_only_raw_guard_radius_m" default="1.10"/>
+  <arg name="rotate_only_raw_guard_min_z_m" default="0.08"/>
+  <arg name="rotate_only_raw_guard_max_z_m" default="1.40"/>
+  <arg name="rotate_only_raw_guard_cell_size_m" default="0.15"/>
+  <arg name="rotate_only_raw_guard_min_points" default="4"/>
+  <arg name="rotate_only_raw_guard_min_cells" default="2"/>
+  <arg name="rotate_only_raw_guard_timeout_s" default="0.35"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
@@ -760,6 +770,8 @@
         <arg name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
         <arg name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
         <arg name="candidate_route_switch_corridor_radius_m" value="$(arg candidate_route_switch_corridor_radius_m)"/>
+        <arg name="candidate_route_switch_preference_corridor_radius_m" value="$(arg candidate_route_switch_preference_corridor_radius_m)"/>
+        <arg name="candidate_route_switch_preference_weight" value="$(arg candidate_route_switch_preference_weight)"/>
         <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
@@ -817,6 +829,8 @@
         <arg name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
         <arg name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
         <arg name="candidate_route_switch_corridor_radius_m" value="$(arg candidate_route_switch_corridor_radius_m)"/>
+        <arg name="candidate_route_switch_preference_corridor_radius_m" value="$(arg candidate_route_switch_preference_corridor_radius_m)"/>
+        <arg name="candidate_route_switch_preference_weight" value="$(arg candidate_route_switch_preference_weight)"/>
         <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
@@ -1011,6 +1025,14 @@
       <arg name="rotate_only_forward_dot_threshold" value="$(arg rotate_only_forward_dot_threshold)"/>
       <arg name="rotate_only_disable_near_obstacle" value="$(arg rotate_only_disable_near_obstacle)"/>
       <arg name="rotate_only_near_obstacle_clearance_m" value="$(arg rotate_only_near_obstacle_clearance_m)"/>
+      <arg name="rotate_only_raw_guard_enabled" value="$(arg rotate_only_raw_guard_enabled)"/>
+      <arg name="rotate_only_raw_guard_radius_m" value="$(arg rotate_only_raw_guard_radius_m)"/>
+      <arg name="rotate_only_raw_guard_min_z_m" value="$(arg rotate_only_raw_guard_min_z_m)"/>
+      <arg name="rotate_only_raw_guard_max_z_m" value="$(arg rotate_only_raw_guard_max_z_m)"/>
+      <arg name="rotate_only_raw_guard_cell_size_m" value="$(arg rotate_only_raw_guard_cell_size_m)"/>
+      <arg name="rotate_only_raw_guard_min_points" value="$(arg rotate_only_raw_guard_min_points)"/>
+      <arg name="rotate_only_raw_guard_min_cells" value="$(arg rotate_only_raw_guard_min_cells)"/>
+      <arg name="rotate_only_raw_guard_timeout_s" value="$(arg rotate_only_raw_guard_timeout_s)"/>
       <arg name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
       <arg name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>
       <arg name="min_forward_cmd" value="$(arg min_forward_cmd)"/>

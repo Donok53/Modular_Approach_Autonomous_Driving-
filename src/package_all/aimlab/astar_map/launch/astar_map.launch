@@ -53,13 +53,15 @@
   <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
+  <arg name="candidate_route_switch_preference_corridor_radius_m" default="$(eval float(arg('candidate_route_switch_corridor_radius_m')) + 0.10)"/>
+  <arg name="candidate_route_switch_preference_weight" default="0.35"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="3.0"/>
   <arg name="candidate_route_switch_score_margin" default="1.0"/>
   <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
   <arg name="candidate_route_switch_break_hold_score_threshold" default="$(eval float(arg('candidate_route_switch_blocked_score_threshold')) + 1.0)"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
-  <arg name="candidate_route_switch_centerline_clearance_m" default="0.0"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="0.06"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.60"/>
@@ -121,6 +123,8 @@
     <param name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
     <param name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
     <param name="candidate_route_switch_corridor_radius_m" value="$(arg candidate_route_switch_corridor_radius_m)"/>
+    <param name="candidate_route_switch_preference_corridor_radius_m" value="$(arg candidate_route_switch_preference_corridor_radius_m)"/>
+    <param name="candidate_route_switch_preference_weight" value="$(arg candidate_route_switch_preference_weight)"/>
     <param name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
     <param name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
     <param name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>

@@ -268,6 +268,19 @@ class AStarPlanner:
                 )
             ),
         )
+        self.candidate_route_switch_preference_corridor_radius_m = max(
+            self.candidate_route_switch_corridor_radius_m,
+            float(
+                rospy.get_param(
+                    "~candidate_route_switch_preference_corridor_radius_m",
+                    self.candidate_route_switch_corridor_radius_m + 0.10,
+                )
+            ),
+        )
+        self.candidate_route_switch_preference_weight = max(
+            0.0,
+            float(rospy.get_param("~candidate_route_switch_preference_weight", 0.35)),
+        )
         self.candidate_route_switch_blocked_score_threshold = max(
             1.0,
             float(rospy.get_param("~candidate_route_switch_blocked_score_threshold", 3.0)),
@@ -1339,7 +1352,13 @@ class AStarPlanner:
                 )
         return self._dedupe_world_points(out)
 
-    def _overlay_world_path_obstacle_score(self, overlay_grid, world_points, occupied_threshold):
+    def _overlay_world_path_obstacle_score(
+        self,
+        overlay_grid,
+        world_points,
+        occupied_threshold,
+        corridor_radius_m=None,
+    ):
         if overlay_grid is None or len(world_points) < 2:
             return 0.0
         res = max(1e-6, float(overlay_grid.info.resolution))
@@ -1352,9 +1371,9 @@ class AStarPlanner:
         if not sampled:
             return 0.0
 
-        radius_cells = int(
-            math.ceil(self.candidate_route_switch_corridor_radius_m / res)
-        )
+        if corridor_radius_m is None:
+            corridor_radius_m = self.candidate_route_switch_corridor_radius_m
+        radius_cells = int(math.ceil(max(0.0, corridor_radius_m) / res))
         w = int(overlay_grid.info.width)
         h = int(overlay_grid.info.height)
         data = overlay_grid.data
@@ -1417,19 +1436,59 @@ class AStarPlanner:
         return False
 
     def _candidate_overlay_scores(self, world_paths):
+        hard_scores, _ = self._candidate_overlay_score_sets(world_paths)
+        return hard_scores
+
+    def _candidate_overlay_score_sets(self, world_paths):
         if (
             (not self.use_global_obstacle_overlay)
             or self.global_obstacle_overlay is None
         ):
-            return [0.0 for _ in world_paths]
-        return [
+            zeros = [0.0 for _ in world_paths]
+            return zeros, zeros
+
+        hard_scores = [
             self._overlay_world_path_obstacle_score(
                 self.global_obstacle_overlay,
                 path,
                 self.global_obstacle_overlay_threshold,
+                corridor_radius_m=self.candidate_route_switch_corridor_radius_m,
             )
             for path in world_paths
         ]
+        if (
+            self.candidate_route_switch_preference_weight <= 0.0
+            or self.candidate_route_switch_preference_corridor_radius_m
+            <= self.candidate_route_switch_corridor_radius_m + 1e-6
+        ):
+            return hard_scores, list(hard_scores)
+
+        wide_scores = [
+            self._overlay_world_path_obstacle_score(
+                self.global_obstacle_overlay,
+                path,
+                self.global_obstacle_overlay_threshold,
+                corridor_radius_m=self.candidate_route_switch_preference_corridor_radius_m,
+            )
+            for path in world_paths
+        ]
+        choice_scores = [
+            hard + self.candidate_route_switch_preference_weight * max(0.0, wide - hard)
+            for hard, wide in zip(hard_scores, wide_scores)
+        ]
+        return hard_scores, choice_scores
+
+    def _best_candidate_index_from_scores(self, hard_scores, choice_scores):
+        if not hard_scores:
+            return 0
+        indices = list(range(len(hard_scores)))
+        clear_indices = [
+            idx for idx, hard in enumerate(hard_scores)
+            if self._candidate_best_is_clear_enough(hard)
+        ]
+        if clear_indices:
+            indices = clear_indices
+        return min(indices, key=lambda idx: (choice_scores[idx], hard_scores[idx], idx))
 
     def _candidate_best_is_clear_enough(self, best_score):
         return (
@@ -1504,8 +1563,8 @@ class AStarPlanner:
             self._publish_path_blocked_state(False)
             return active_index, [0.0 for _ in world_paths]
 
-        scores = self._candidate_overlay_scores(world_paths)
-        best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        scores, choice_scores = self._candidate_overlay_score_sets(world_paths)
+        best_index = self._best_candidate_index_from_scores(scores, choice_scores)
         active_score = scores[active_index]
         if best_index == active_index:
             self._publish_path_blocked_state(
@@ -1516,7 +1575,8 @@ class AStarPlanner:
         best_score = scores[best_index]
         should_select = (
             active_score >= self.candidate_route_switch_blocked_score_threshold
-            and (best_score + self.candidate_route_switch_score_margin) < active_score
+            and (choice_scores[best_index] + self.candidate_route_switch_score_margin)
+            < choice_scores[active_index]
             and self._candidate_best_is_clear_enough(best_score)
         )
         if should_select:
@@ -1526,21 +1586,24 @@ class AStarPlanner:
             self._publish_path_blocked_state(False)
             if self.debug_log_enable:
                 rospy.loginfo(
-                    "[astar] selecting initial active candidate %d -> %d from pointcloud overlay scores=%s",
+                    "[astar] selecting initial active candidate %d -> %d from pointcloud overlay scores=%s choice=%s",
                     active_index,
                     best_index,
                     ",".join("%.1f" % s for s in scores),
+                    ",".join("%.1f" % s for s in choice_scores),
                 )
             return best_index, scores
 
         if self.debug_log_enable and active_score >= self.candidate_route_switch_blocked_score_threshold:
             rospy.loginfo_throttle(
                 1.0,
-                "[astar] initial candidate held (active=%d score=%.1f best=%d score=%.1f best_clear=%s)",
+                "[astar] initial candidate held (active=%d score=%.1f choice=%.1f best=%d score=%.1f choice=%.1f best_clear=%s)",
                 active_index,
                 active_score,
+                choice_scores[active_index],
                 best_index,
                 best_score,
+                choice_scores[best_index],
                 "yes" if self._candidate_best_is_clear_enough(best_score) else "no",
             )
         self._publish_path_blocked_state(
@@ -1562,8 +1625,8 @@ class AStarPlanner:
             self._publish_path_blocked_state(False)
             return active_index, [0.0 for _ in world_paths]
 
-        scores = self._candidate_overlay_scores(world_paths)
-        best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        scores, choice_scores = self._candidate_overlay_score_sets(world_paths)
+        best_index = self._best_candidate_index_from_scores(scores, choice_scores)
         current_score = scores[active_index]
         if best_index == active_index:
             self._pending_candidate_switch_index = -1
@@ -1595,7 +1658,8 @@ class AStarPlanner:
         should_switch = (
             current_blocked
             and current_centerline_blocked
-            and (best_score + self.candidate_route_switch_score_margin) < current_score
+            and (choice_scores[best_index] + self.candidate_route_switch_score_margin)
+            < choice_scores[active_index]
             and self._candidate_best_is_clear_enough(best_score)
         )
         if should_switch:
@@ -1619,10 +1683,11 @@ class AStarPlanner:
             self._publish_path_blocked_state(False)
             if self.debug_log_enable:
                 rospy.loginfo(
-                    "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s centerline=blocked hold_break=%s",
+                    "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s choice=%s centerline=blocked hold_break=%s",
                     active_index,
                     best_index,
                     ",".join("%.1f" % s for s in scores),
+                    ",".join("%.1f" % s for s in choice_scores),
                     "yes" if (hold_break_allowed and not can_switch) else "no",
                 )
             return best_index, scores
@@ -1630,11 +1695,13 @@ class AStarPlanner:
         if self.debug_log_enable and current_blocked:
             rospy.loginfo_throttle(
                 1.0,
-                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f best=%d score=%.1f pending=%d/%d centerline=%s best_clear=%s hold_break_ready=%s)",
+                "[astar] active candidate blocked by pointcloud overlay but holding route (active=%d score=%.1f choice=%.1f best=%d score=%.1f choice=%.1f pending=%d/%d centerline=%s best_clear=%s hold_break_ready=%s)",
                 active_index,
                 current_score,
+                choice_scores[active_index],
                 best_index,
                 best_score,
+                choice_scores[best_index],
                 self._pending_candidate_switch_count,
                 self.candidate_route_switch_confirm_count,
                 "blocked" if current_centerline_blocked else "clear",
