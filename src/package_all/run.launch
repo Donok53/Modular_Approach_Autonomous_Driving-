@@ -275,16 +275,16 @@
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
-  <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="$(eval '3.0' if str(arg('real_mode')).lower() == 'true' else '2.0')"/>
-  <arg name="candidate_route_switch_confirm_count" default="$(eval '3' if str(arg('real_mode')).lower() == 'true' else '2')"/>
+  <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '5.0')"/>
+  <arg name="candidate_route_switch_min_hold_s" default="3.0"/>
+  <arg name="candidate_route_switch_confirm_count" default="3"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
   <arg name="path_tracking_only" default="true"/>
-  <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
+  <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.25"/>
   <arg name="lookahead_distance" default="$(eval '0.85' if str(arg('real_mode')).lower() == 'true' else '1.15')"/>
   <arg name="snap_lat_err" default="0.20"/>
@@ -307,8 +307,8 @@
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_tangent_window_m" default="$(eval '0.80' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
-  <arg name="path_tracking_crawl_speed" default="$(eval '0.22' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
-  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.07')"/>
+  <arg name="path_tracking_crawl_speed" default="$(eval '0.22' if str(arg('real_mode')).lower() == 'true' else '0.13')"/>
+  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
   <arg name="final_approach_window_m" default="0.0"/>
   <arg name="final_speed_k" default="$(eval '0.95' if str(arg('real_mode')).lower() == 'true' else '0.75')"/>
   <arg name="final_speed_min" default="$(eval '0.34' if str(arg('real_mode')).lower() == 'true' else '0.22')"/>
@@ -323,6 +323,7 @@
   <arg name="cruise_distance_m" default="$(eval '1.80' if str(arg('real_mode')).lower() == 'true' else '2.50')"/>
   <arg name="rotate_only_deg" default="$(eval '150.0' if str(arg('real_mode')).lower() == 'true' else '110.0')"/>
   <arg name="rotate_exit_deg" default="40.0"/>
+  <arg name="rotate_w_max_deg" default="$(eval '28.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
@@ -428,7 +429,7 @@
   <arg name="global_obstacle_overlay_downsample" default="1"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
   <arg name="enable_planning_slowdown_manager" default="true"/>
-  <arg name="planning_slowdown_speed_limit_mps" default="0.12"/>
+  <arg name="planning_slowdown_speed_limit_mps" default="0.16"/>
   <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
   <arg name="planning_slowdown_hold_s" default="2.0"/>
   <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
@@ -990,6 +991,7 @@
       <arg name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
       <arg name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
       <arg name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
+      <arg name="rotate_w_max_deg" value="$(arg rotate_w_max_deg)"/>
       <arg name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>
       <arg name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
       <arg name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>

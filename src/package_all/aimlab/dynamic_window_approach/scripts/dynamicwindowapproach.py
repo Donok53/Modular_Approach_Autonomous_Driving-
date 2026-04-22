@@ -327,7 +327,7 @@ class DWAControl:
         self.rotate_only_deg = rospy.get_param("~rotate_only_deg", 80.0)
         self.rotate_exit_deg = rospy.get_param("~rotate_exit_deg", 30.0)
         self.rotate_kp = rospy.get_param("~rotate_kp", 2.0)
-        self.rotate_w_max_deg = rospy.get_param("~rotate_w_max_deg", 120.0)
+        self.rotate_w_max_deg = rospy.get_param("~rotate_w_max_deg", 30.0)
         self.rotate_ok_count = rospy.get_param("~rotate_ok_count", 3)
         self.rotate_max_spin_deg = rospy.get_param("~rotate_max_spin_deg", 420.0)
         self.rotate_max_time_s = rospy.get_param("~rotate_max_time_s", 6.0)

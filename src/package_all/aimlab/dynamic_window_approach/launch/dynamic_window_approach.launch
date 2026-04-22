@@ -128,7 +128,7 @@
     <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
     <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
     <arg name="path_tracking_only" default="true"/>
-    <arg name="path_tracking_speed_cap" default="0.25"/>
+    <arg name="path_tracking_speed_cap" default="0.35"/>
     <arg name="path_tracking_steer_filter_gain" default="0.35"/>
     <arg name="lookahead_distance" default="1.00"/>
     <arg name="snap_lat_err" default="0.20"/>
@@ -151,8 +151,8 @@
     <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
     <arg name="path_tracking_target_step_m" default="0.18"/>
     <arg name="path_tracking_tangent_window_m" default="0.60"/>
-    <arg name="path_tracking_crawl_speed" default="0.10"/>
-    <arg name="path_tracking_large_yaw_crawl_speed" default="0.07"/>
+    <arg name="path_tracking_crawl_speed" default="0.13"/>
+    <arg name="path_tracking_large_yaw_crawl_speed" default="0.10"/>
     <arg name="final_approach_window_m" default="0.0"/>
     <arg name="final_speed_k" default="0.75"/>
     <arg name="final_speed_min" default="0.22"/>
@@ -162,6 +162,7 @@
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.90"/>
     <arg name="rotate_only_deg" default="110.0"/>
     <arg name="rotate_exit_deg" default="40.0"/>
+    <arg name="rotate_w_max_deg" default="30.0"/>
     <arg name="rotate_reentry_cooldown_s" default="4.0"/>
     <arg name="near_goal_no_rotate_m" default="1.5"/>
     <arg name="forward_motion_deadband" default="0.01"/>
@@ -274,7 +275,7 @@
     <arg name="global_pointcloud_overlay_far_field_candidate_min_distance_m" default="2.5"/>
     <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
     <arg name="enable_planning_slowdown_manager" default="false"/>
-    <arg name="planning_slowdown_speed_limit_mps" default="0.12"/>
+    <arg name="planning_slowdown_speed_limit_mps" default="0.16"/>
     <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
     <arg name="planning_slowdown_hold_s" default="2.0"/>
     <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
@@ -814,6 +815,7 @@
         <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
         <param name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
+        <param name="rotate_w_max_deg" value="$(arg rotate_w_max_deg)"/>
         <param name="rotate_reentry_cooldown_s" value="$(arg rotate_reentry_cooldown_s)"/>
         <param name="near_goal_no_rotate_m" value="$(arg near_goal_no_rotate_m)"/>
         <param name="forward_motion_deadband" value="$(arg forward_motion_deadband)"/>
