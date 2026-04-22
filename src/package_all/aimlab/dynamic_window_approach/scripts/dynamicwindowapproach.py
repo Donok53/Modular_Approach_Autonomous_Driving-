@@ -402,6 +402,26 @@ class DWAControl:
         self.path_tracking_steer_filter_gain = min(
             1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.20)))
         )
+        self.cmd_smoothing_enabled = bool(rospy.get_param("~cmd_smoothing_enabled", True))
+        self.cmd_linear_accel_max = max(
+            0.05, float(rospy.get_param("~cmd_linear_accel_max_mps2", 0.35))
+        )
+        self.cmd_linear_decel_max = max(
+            self.cmd_linear_accel_max,
+            float(rospy.get_param("~cmd_linear_decel_max_mps2", 0.80)),
+        )
+        self.cmd_angular_accel_max = math.radians(
+            max(10.0, float(rospy.get_param("~cmd_angular_accel_max_degps2", 85.0)))
+        )
+        self.cmd_angular_decel_max = math.radians(
+            max(
+                math.degrees(self.cmd_angular_accel_max),
+                float(rospy.get_param("~cmd_angular_decel_max_degps2", 130.0)),
+            )
+        )
+        self.cmd_smoothing_zero_snap = max(
+            0.0, float(rospy.get_param("~cmd_smoothing_zero_snap", 0.015))
+        )
         self.path_tracking_slowdown_yaw = math.radians(
             rospy.get_param("~path_tracking_slowdown_yaw_deg", 35.0)
         )
@@ -555,6 +575,7 @@ class DWAControl:
         self.emergency_stop_topic = rospy.get_param("~emergency_stop_topic", "/planning/emergency_stop")
         self.cmd_publish_hz = max(5.0, float(rospy.get_param("~cmd_publish_hz", 20.0)))
         self.last_cmd = Twist()
+        self._last_cmd_smooth_stamp = rospy.Time(0)
 
         # ===== ROS I/O =====
         self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
@@ -655,6 +676,7 @@ class DWAControl:
     def _cmd_timer_callback(self, _event):
         if self._publish_emergency_stop_state():
             self.last_cmd = Twist()
+            self._last_cmd_smooth_stamp = rospy.Time.now()
         self.cmd_vel_pub.publish(self.last_cmd)
         self._refresh_near_field_raw_stop_marker_if_waiting()
 
@@ -2295,20 +2317,65 @@ class DWAControl:
         return e[2]
 
     # ----------------------------------- main ------------------------------------
+    def _slew_scalar(self, current, target, accel_limit, decel_limit, dt):
+        if dt <= 0.0:
+            return target
+        moving_toward_zero = (current * target < 0.0) or (abs(target) < abs(current))
+        limit = decel_limit if moving_toward_zero else accel_limit
+        max_step = max(0.0, limit) * dt
+        if target > current:
+            return min(target, current + max_step)
+        return max(target, current - max_step)
+
+    def _smooth_drive_command(self, target_cmd):
+        if not self.cmd_smoothing_enabled:
+            return target_cmd
+        now = rospy.Time.now()
+        if self._last_cmd_smooth_stamp == rospy.Time(0):
+            self._last_cmd_smooth_stamp = now
+            return target_cmd
+        dt = max(0.0, (now - self._last_cmd_smooth_stamp).to_sec())
+        self._last_cmd_smooth_stamp = now
+        if dt <= 1e-6 or dt > 0.5:
+            return target_cmd
+
+        smoothed = Twist()
+        smoothed.linear.x = self._slew_scalar(
+            self.last_cmd.linear.x,
+            target_cmd.linear.x,
+            self.cmd_linear_accel_max,
+            self.cmd_linear_decel_max,
+            dt,
+        )
+        smoothed.angular.z = self._slew_scalar(
+            self.last_cmd.angular.z,
+            target_cmd.angular.z,
+            self.cmd_angular_accel_max,
+            self.cmd_angular_decel_max,
+            dt,
+        )
+        if abs(target_cmd.linear.x) <= self.cmd_smoothing_zero_snap and abs(smoothed.linear.x) <= self.cmd_smoothing_zero_snap:
+            smoothed.linear.x = 0.0
+        if abs(target_cmd.angular.z) <= math.radians(0.5) and abs(smoothed.angular.z) <= math.radians(0.5):
+            smoothed.angular.z = 0.0
+        return smoothed
+
     def publish_drive(self, u):
         cmd = Twist()
         if self._publish_emergency_stop_state():
             cmd.linear.x = 0.0
             cmd.angular.z = 0.0
+            self._last_cmd_smooth_stamp = rospy.Time.now()
         else:
             cmd.linear.x = u[0]
             cmd.angular.z = u[1]
+            cmd = self._smooth_drive_command(cmd)
         self.last_cmd = cmd
         self.cmd_vel_pub.publish(cmd)
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2347,6 +2414,11 @@ class DWAControl:
             self.path_tracking_crawl_speed,
             self.path_tracking_large_yaw_crawl_speed,
             self.path_tracking_heading_filter_gain,
+            "on" if self.cmd_smoothing_enabled else "off",
+            self.cmd_linear_accel_max,
+            self.cmd_linear_decel_max,
+            math.degrees(self.cmd_angular_accel_max),
+            math.degrees(self.cmd_angular_decel_max),
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,

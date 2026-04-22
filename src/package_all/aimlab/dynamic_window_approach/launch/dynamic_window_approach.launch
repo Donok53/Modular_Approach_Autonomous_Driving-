@@ -139,6 +139,12 @@
     <arg name="path_tracking_yaw_rate_max_deg" default="55.0"/>
     <arg name="path_tracking_in_place_yaw_rate_max_deg" default="45.0"/>
     <arg name="path_tracking_yaw_accel_max_deg" default="180.0"/>
+    <arg name="cmd_smoothing_enabled" default="true"/>
+    <arg name="cmd_linear_accel_max_mps2" default="0.45"/>
+    <arg name="cmd_linear_decel_max_mps2" default="0.90"/>
+    <arg name="cmd_angular_accel_max_degps2" default="85.0"/>
+    <arg name="cmd_angular_decel_max_degps2" default="130.0"/>
+    <arg name="cmd_smoothing_zero_snap" default="0.015"/>
     <arg name="path_tracking_slowdown_yaw_deg" default="40.0"/>
     <arg name="path_tracking_stop_yaw_deg" default="85.0"/>
     <arg name="path_tracking_cte_gain" default="1.2"/>
@@ -792,6 +798,12 @@
         <param name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
         <param name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>
         <param name="path_tracking_yaw_accel_max_deg" value="$(arg path_tracking_yaw_accel_max_deg)"/>
+        <param name="cmd_smoothing_enabled" value="$(arg cmd_smoothing_enabled)"/>
+        <param name="cmd_linear_accel_max_mps2" value="$(arg cmd_linear_accel_max_mps2)"/>
+        <param name="cmd_linear_decel_max_mps2" value="$(arg cmd_linear_decel_max_mps2)"/>
+        <param name="cmd_angular_accel_max_degps2" value="$(arg cmd_angular_accel_max_degps2)"/>
+        <param name="cmd_angular_decel_max_degps2" value="$(arg cmd_angular_decel_max_degps2)"/>
+        <param name="cmd_smoothing_zero_snap" value="$(arg cmd_smoothing_zero_snap)"/>
         <param name="path_tracking_slowdown_yaw_deg" value="$(arg path_tracking_slowdown_yaw_deg)"/>
         <param name="path_tracking_stop_yaw_deg" value="$(arg path_tracking_stop_yaw_deg)"/>
         <param name="path_tracking_cte_gain" value="$(arg path_tracking_cte_gain)"/>
