@@ -151,8 +151,8 @@
     <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
     <arg name="path_tracking_target_step_m" default="0.18"/>
     <arg name="path_tracking_tangent_window_m" default="0.60"/>
-    <arg name="path_tracking_crawl_speed" default="0.18"/>
-    <arg name="path_tracking_large_yaw_crawl_speed" default="0.14"/>
+    <arg name="path_tracking_crawl_speed" default="0.13"/>
+    <arg name="path_tracking_large_yaw_crawl_speed" default="0.10"/>
     <arg name="final_approach_window_m" default="0.0"/>
     <arg name="final_speed_k" default="0.75"/>
     <arg name="final_speed_min" default="0.22"/>
