@@ -153,6 +153,25 @@
     <arg name="path_tracking_tangent_window_m" default="0.60"/>
     <arg name="path_tracking_crawl_speed" default="0.18"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.14"/>
+    <arg name="narrow_passage_mode_enabled" default="true"/>
+    <arg name="narrow_passage_x_min_m" default="-0.10"/>
+    <arg name="narrow_passage_x_max_m" default="1.80"/>
+    <arg name="narrow_passage_side_min_y_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
+    <arg name="narrow_passage_side_max_y_m" default="0.85"/>
+    <arg name="narrow_passage_enter_clearance_m" default="0.34"/>
+    <arg name="narrow_passage_exit_clearance_m" default="0.48"/>
+    <arg name="narrow_passage_min_points_per_side" default="3"/>
+    <arg name="narrow_passage_hold_s" default="0.8"/>
+    <arg name="narrow_passage_speed_cap" default="0.22"/>
+    <arg name="narrow_passage_cte_gain_scale" default="0.45"/>
+    <arg name="narrow_passage_cte_deadband_m" default="0.08"/>
+    <arg name="narrow_passage_cte_yaw_cap_deg" default="10.0"/>
+    <arg name="narrow_passage_steer_filter_gain" default="0.08"/>
+    <arg name="narrow_passage_yaw_rate_max_deg" default="24.0"/>
+    <arg name="narrow_passage_yaw_accel_max_deg" default="80.0"/>
+    <arg name="narrow_passage_target_step_m" default="0.35"/>
+    <arg name="narrow_passage_tangent_window_m" default="0.90"/>
+    <arg name="narrow_passage_log_period_s" default="0.0"/>
     <arg name="final_approach_window_m" default="0.0"/>
     <arg name="final_speed_k" default="0.75"/>
     <arg name="final_speed_min" default="0.22"/>
@@ -817,6 +836,25 @@
         <param name="path_tracking_tangent_window_m" value="$(arg path_tracking_tangent_window_m)"/>
         <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
         <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
+        <param name="narrow_passage_mode_enabled" value="$(arg narrow_passage_mode_enabled)"/>
+        <param name="narrow_passage_x_min_m" value="$(arg narrow_passage_x_min_m)"/>
+        <param name="narrow_passage_x_max_m" value="$(arg narrow_passage_x_max_m)"/>
+        <param name="narrow_passage_side_min_y_m" value="$(arg narrow_passage_side_min_y_m)"/>
+        <param name="narrow_passage_side_max_y_m" value="$(arg narrow_passage_side_max_y_m)"/>
+        <param name="narrow_passage_enter_clearance_m" value="$(arg narrow_passage_enter_clearance_m)"/>
+        <param name="narrow_passage_exit_clearance_m" value="$(arg narrow_passage_exit_clearance_m)"/>
+        <param name="narrow_passage_min_points_per_side" value="$(arg narrow_passage_min_points_per_side)"/>
+        <param name="narrow_passage_hold_s" value="$(arg narrow_passage_hold_s)"/>
+        <param name="narrow_passage_speed_cap" value="$(arg narrow_passage_speed_cap)"/>
+        <param name="narrow_passage_cte_gain_scale" value="$(arg narrow_passage_cte_gain_scale)"/>
+        <param name="narrow_passage_cte_deadband_m" value="$(arg narrow_passage_cte_deadband_m)"/>
+        <param name="narrow_passage_cte_yaw_cap_deg" value="$(arg narrow_passage_cte_yaw_cap_deg)"/>
+        <param name="narrow_passage_steer_filter_gain" value="$(arg narrow_passage_steer_filter_gain)"/>
+        <param name="narrow_passage_yaw_rate_max_deg" value="$(arg narrow_passage_yaw_rate_max_deg)"/>
+        <param name="narrow_passage_yaw_accel_max_deg" value="$(arg narrow_passage_yaw_accel_max_deg)"/>
+        <param name="narrow_passage_target_step_m" value="$(arg narrow_passage_target_step_m)"/>
+        <param name="narrow_passage_tangent_window_m" value="$(arg narrow_passage_tangent_window_m)"/>
+        <param name="narrow_passage_log_period_s" value="$(arg narrow_passage_log_period_s)"/>
         <param name="final_approach_window_m" value="$(arg final_approach_window_m)"/>
         <param name="final_speed_k" value="$(arg final_speed_k)"/>
         <param name="final_speed_min" value="$(arg final_speed_min)"/>

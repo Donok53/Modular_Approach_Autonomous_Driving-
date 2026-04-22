@@ -168,6 +168,78 @@ class DWAControl:
         self.cloud_downsample = rospy.get_param("~cloud_downsample", 4)
         self.traj_check_step = max(1, int(rospy.get_param("~traj_check_step", 2)))
         self.max_obstacle_points = max(20, int(rospy.get_param("~max_obstacle_points", 300)))
+        self.narrow_passage_mode_enabled = bool(
+            rospy.get_param("~narrow_passage_mode_enabled", True)
+        )
+        self.narrow_passage_x_min_m = float(
+            rospy.get_param("~narrow_passage_x_min_m", -0.10)
+        )
+        self.narrow_passage_x_max_m = max(
+            self.narrow_passage_x_min_m + 0.20,
+            float(rospy.get_param("~narrow_passage_x_max_m", 1.80)),
+        )
+        default_narrow_side_min = self.robot_half_width_m + self.footprint_padding_m + 0.03
+        self.narrow_passage_side_min_y_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~narrow_passage_side_min_y_m",
+                    default_narrow_side_min,
+                )
+            ),
+        )
+        self.narrow_passage_side_max_y_m = max(
+            self.narrow_passage_side_min_y_m + 0.05,
+            float(rospy.get_param("~narrow_passage_side_max_y_m", 0.85)),
+        )
+        self.narrow_passage_enter_clearance_m = max(
+            0.0, float(rospy.get_param("~narrow_passage_enter_clearance_m", 0.34))
+        )
+        self.narrow_passage_exit_clearance_m = max(
+            self.narrow_passage_enter_clearance_m + 0.03,
+            float(rospy.get_param("~narrow_passage_exit_clearance_m", 0.48)),
+        )
+        self.narrow_passage_min_points_per_side = max(
+            1, int(rospy.get_param("~narrow_passage_min_points_per_side", 3))
+        )
+        self.narrow_passage_hold_s = max(
+            0.0, float(rospy.get_param("~narrow_passage_hold_s", 0.8))
+        )
+        self.narrow_passage_speed_cap = max(
+            0.05, float(rospy.get_param("~narrow_passage_speed_cap", 0.22))
+        )
+        self.narrow_passage_cte_gain_scale = min(
+            1.0, max(0.05, float(rospy.get_param("~narrow_passage_cte_gain_scale", 0.45)))
+        )
+        self.narrow_passage_cte_deadband_m = max(
+            0.0, float(rospy.get_param("~narrow_passage_cte_deadband_m", 0.08))
+        )
+        self.narrow_passage_cte_yaw_cap = math.radians(
+            max(1.0, float(rospy.get_param("~narrow_passage_cte_yaw_cap_deg", 10.0)))
+        )
+        self.narrow_passage_steer_filter_gain = min(
+            1.0, max(0.02, float(rospy.get_param("~narrow_passage_steer_filter_gain", 0.08)))
+        )
+        self.narrow_passage_yaw_rate_max = math.radians(
+            max(5.0, float(rospy.get_param("~narrow_passage_yaw_rate_max_deg", 24.0)))
+        )
+        self.narrow_passage_yaw_accel_max = math.radians(
+            max(10.0, float(rospy.get_param("~narrow_passage_yaw_accel_max_deg", 80.0)))
+        )
+        self.narrow_passage_target_step_m = max(
+            0.05, float(rospy.get_param("~narrow_passage_target_step_m", 0.35))
+        )
+        self.narrow_passage_tangent_window_m = max(
+            0.20, float(rospy.get_param("~narrow_passage_tangent_window_m", 0.90))
+        )
+        self.narrow_passage_log_period_s = max(
+            0.0, float(rospy.get_param("~narrow_passage_log_period_s", 0.0))
+        )
+        self._narrow_passage_active = False
+        self._narrow_passage_last_detect_stamp = rospy.Time(0)
+        self._narrow_passage_last_log_stamp = rospy.Time(0)
+        self._narrow_passage_last_clearance_m = float("inf")
+        self._narrow_passage_last_counts = (0, 0)
         self.emergency_bin_size_m = max(
             0.05, float(rospy.get_param("~emergency_bin_size_m", 0.10))
         )
@@ -1361,6 +1433,88 @@ class DWAControl:
         except Exception as e:
             rospy.logwarn("cloud_callback error: %s", str(e))
 
+    def _update_narrow_passage_state(self):
+        if not self.narrow_passage_mode_enabled:
+            self._narrow_passage_active = False
+            return False
+
+        now = rospy.Time.now()
+        obs = self.obstacle_local_points
+        left_count = 0
+        right_count = 0
+        side_clearance = float("inf")
+        detected = False
+
+        if obs.shape[0] > 0:
+            xs = obs[:, 0]
+            ys = obs[:, 1]
+            in_x = (xs >= self.narrow_passage_x_min_m) & (xs <= self.narrow_passage_x_max_m)
+            left = (
+                in_x
+                & (ys >= self.narrow_passage_side_min_y_m)
+                & (ys <= self.narrow_passage_side_max_y_m)
+            )
+            right = (
+                in_x
+                & (ys <= -self.narrow_passage_side_min_y_m)
+                & (ys >= -self.narrow_passage_side_max_y_m)
+            )
+            left_count = int(np.count_nonzero(left))
+            right_count = int(np.count_nonzero(right))
+            if left_count > 0 and right_count > 0:
+                left_near_y = float(np.min(ys[left]))
+                right_near_y = float(np.max(ys[right]))
+                side_clearance = min(
+                    left_near_y - (self.robot_half_width_m + self.footprint_padding_m),
+                    abs(right_near_y) - (self.robot_half_width_m + self.footprint_padding_m),
+                )
+                detected = (
+                    left_count >= self.narrow_passage_min_points_per_side
+                    and right_count >= self.narrow_passage_min_points_per_side
+                    and side_clearance <= self.narrow_passage_enter_clearance_m
+                )
+
+        if detected:
+            self._narrow_passage_active = True
+            self._narrow_passage_last_detect_stamp = now
+        else:
+            stale = (
+                self._narrow_passage_last_detect_stamp.to_sec() <= 0.0
+                or (now - self._narrow_passage_last_detect_stamp).to_sec()
+                > self.narrow_passage_hold_s
+            )
+            clearly_open = (
+                left_count < self.narrow_passage_min_points_per_side
+                or right_count < self.narrow_passage_min_points_per_side
+                or side_clearance >= self.narrow_passage_exit_clearance_m
+            )
+            if stale and clearly_open:
+                self._narrow_passage_active = False
+
+        self._narrow_passage_last_clearance_m = side_clearance
+        self._narrow_passage_last_counts = (left_count, right_count)
+
+        if self.narrow_passage_log_period_s > 0.0:
+            last_log = self._narrow_passage_last_log_stamp
+            if (
+                last_log.to_sec() <= 0.0
+                or (now - last_log).to_sec() >= self.narrow_passage_log_period_s
+            ):
+                self._narrow_passage_last_log_stamp = now
+                rospy.loginfo(
+                    "narrow_passage: %s left=%d right=%d clearance=%.2f x=[%.2f,%.2f] y=[%.2f,%.2f]",
+                    "on" if self._narrow_passage_active else "off",
+                    left_count,
+                    right_count,
+                    side_clearance if math.isfinite(side_clearance) else float("inf"),
+                    self.narrow_passage_x_min_m,
+                    self.narrow_passage_x_max_m,
+                    self.narrow_passage_side_min_y_m,
+                    self.narrow_passage_side_max_y_m,
+                )
+
+        return self._narrow_passage_active
+
     def global_obstacle_overlay_boxes_callback(self, msg):
         try:
             boxes = []
@@ -1832,10 +1986,15 @@ class DWAControl:
 
     def _interp_xy_smoothed_tangent_at_s(self, s):
         x, y, t_hat = self._interp_xy_tangent_at_s(s)
-        if len(self.path_pts) < 3 or self.path_tracking_tangent_window_m <= 1e-3:
+        tangent_window = (
+            self.narrow_passage_tangent_window_m
+            if self._narrow_passage_active
+            else self.path_tracking_tangent_window_m
+        )
+        if len(self.path_pts) < 3 or tangent_window <= 1e-3:
             return x, y, t_hat
 
-        window = self.path_tracking_tangent_window_m
+        window = tangent_window
         s_back = max(0.0, min(self.s_total, s - 0.35 * window))
         s_fwd = max(0.0, min(self.s_total, s + 0.65 * window))
         if (s_fwd - s_back) < 1e-3:
@@ -1889,8 +2048,13 @@ class DWAControl:
             if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
                 target_seg_idx += 1
             segment_end_s = self.cum_len[target_seg_idx + 1]
+            target_step_m = (
+                self.narrow_passage_target_step_m
+                if self._narrow_passage_active
+                else self.path_tracking_target_step_m
+            )
             segment_target_step = min(
-                max(0.05, self.path_tracking_target_step_m),
+                max(0.05, target_step_m),
                 max(0.05, 0.8 * self.seg_lens[target_seg_idx]),
             )
             s_target = min(
@@ -1914,16 +2078,38 @@ class DWAControl:
 
     def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap, remaining_dist):
         path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
-        if abs(lat_err) <= self.path_tracking_cte_deadband_m:
+        narrow_active = self._narrow_passage_active
+        cte_gain = self.path_tracking_cte_gain
+        cte_deadband_m = self.path_tracking_cte_deadband_m
+        cte_yaw_cap = self.path_tracking_cte_yaw_cap
+        cte_filter_gain = self.path_tracking_cte_filter_gain
+        heading_filter_gain = self.path_tracking_heading_filter_gain
+        steer_filter_gain = self.path_tracking_steer_filter_gain
+        yaw_rate_max = self.path_tracking_yaw_rate_max
+        in_place_yaw_rate_max = self.path_tracking_in_place_yaw_rate_max
+        yaw_accel_max = self.path_tracking_yaw_accel_max
+        crawl_speed = self.path_tracking_crawl_speed
+        large_yaw_crawl_speed = self.path_tracking_large_yaw_crawl_speed
+        if narrow_active:
+            cte_gain *= self.narrow_passage_cte_gain_scale
+            cte_deadband_m = max(cte_deadband_m, self.narrow_passage_cte_deadband_m)
+            cte_yaw_cap = min(cte_yaw_cap, self.narrow_passage_cte_yaw_cap)
+            cte_filter_gain = min(cte_filter_gain, self.narrow_passage_steer_filter_gain)
+            heading_filter_gain = min(heading_filter_gain, self.narrow_passage_steer_filter_gain)
+            steer_filter_gain = min(steer_filter_gain, self.narrow_passage_steer_filter_gain)
+            yaw_rate_max = min(yaw_rate_max, self.narrow_passage_yaw_rate_max)
+            in_place_yaw_rate_max = min(in_place_yaw_rate_max, self.narrow_passage_yaw_rate_max)
+            yaw_accel_max = min(yaw_accel_max, self.narrow_passage_yaw_accel_max)
+        if abs(lat_err) <= cte_deadband_m:
             lat_err_ctrl = 0.0
         else:
             lat_err_ctrl = math.copysign(
-                abs(lat_err) - self.path_tracking_cte_deadband_m,
+                abs(lat_err) - cte_deadband_m,
                 lat_err,
             )
         self._path_tracking_filtered_lat_err = (
-            self.path_tracking_cte_filter_gain * lat_err_ctrl
-            + (1.0 - self.path_tracking_cte_filter_gain) * self._path_tracking_filtered_lat_err
+            cte_filter_gain * lat_err_ctrl
+            + (1.0 - cte_filter_gain) * self._path_tracking_filtered_lat_err
         )
         target_dx = float(goal_xy[0]) - float(x[0])
         target_dy = float(goal_xy[1]) - float(x[1])
@@ -1952,12 +2138,12 @@ class DWAControl:
             goal_heading_weight = min(0.20, self.path_tracking_goal_bearing_gain)
         goal_heading_weight = max(goal_heading_weight, goal_align_ratio)
         cte_correction = math.atan2(
-            self.path_tracking_cte_gain * self._path_tracking_filtered_lat_err,
+            cte_gain * self._path_tracking_filtered_lat_err,
             self.path_tracking_cte_soft_mps + max(0.0, abs(x[3])),
         )
         cte_correction = max(
-            -self.path_tracking_cte_yaw_cap,
-            min(self.path_tracking_cte_yaw_cap, cte_correction),
+            -cte_yaw_cap,
+            min(cte_yaw_cap, cte_correction),
         )
         if goal_align_ratio > 0.0:
             cte_correction *= (
@@ -1973,7 +2159,7 @@ class DWAControl:
         else:
             desired_yaw = wrap_angle(
                 self._path_tracking_prev_desired_yaw +
-                self.path_tracking_heading_filter_gain *
+                heading_filter_gain *
                 angdiff(desired_yaw_raw, self._path_tracking_prev_desired_yaw)
             )
         self._path_tracking_prev_desired_yaw = desired_yaw
@@ -1986,28 +2172,32 @@ class DWAControl:
             "goal_bearing_err_deg": math.degrees(goal_bearing_err),
             "cte_correction_deg": math.degrees(cte_correction),
             "filtered_lat_err": self._path_tracking_filtered_lat_err,
+            "narrow_passage": narrow_active,
+            "narrow_clearance_m": self._narrow_passage_last_clearance_m,
         }
         v_limit = min(v_cap, self.path_tracking_speed_cap)
+        if narrow_active:
+            v_limit = min(v_limit, self.narrow_passage_speed_cap)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
         if abs_err >= self.path_tracking_stop_yaw:
             w_target = self.path_tracking_kp * yaw_err
-            if need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0:
-                v_cmd = min(v_limit, self.path_tracking_large_yaw_crawl_speed)
-                w_limit = self.path_tracking_yaw_rate_max
+            if need_progress and large_yaw_crawl_speed > 0.0:
+                v_cmd = min(v_limit, large_yaw_crawl_speed)
+                w_limit = yaw_rate_max
             else:
                 v_cmd = 0.0
-                w_limit = self.path_tracking_in_place_yaw_rate_max
+                w_limit = in_place_yaw_rate_max
         else:
             if self.path_tracking_slowdown_yaw > 1e-6:
                 slow_ratio = max(0.25, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
             else:
                 slow_ratio = 1.0
             v_cmd = min(v_limit, max(0.0, v_limit * slow_ratio))
-            if need_progress and v_cmd > 0.0 and self.path_tracking_crawl_speed > 0.0:
-                v_cmd = max(v_cmd, min(v_limit, self.path_tracking_crawl_speed))
+            if need_progress and v_cmd > 0.0 and crawl_speed > 0.0:
+                v_cmd = max(v_cmd, min(v_limit, crawl_speed))
             w_target = self.path_tracking_kp * yaw_err
-            w_limit = self.path_tracking_yaw_rate_max
+            w_limit = yaw_rate_max
 
         if goal_align_ratio > 0.0:
             w_limit = min(
@@ -2021,10 +2211,10 @@ class DWAControl:
             min(w_limit, w_target),
         )
         w_filtered = (
-            self.path_tracking_steer_filter_gain * w_target +
-            (1.0 - self.path_tracking_steer_filter_gain) * self._path_tracking_prev_w
+            steer_filter_gain * w_target +
+            (1.0 - steer_filter_gain) * self._path_tracking_prev_w
         )
-        max_w_step = max(1e-3, self.path_tracking_yaw_accel_max * self.dt)
+        max_w_step = max(1e-3, yaw_accel_max * self.dt)
         w_delta = max(
             -max_w_step,
             min(max_w_step, w_filtered - self._path_tracking_prev_w),
@@ -2044,8 +2234,8 @@ class DWAControl:
             recovery_v = min(
                 v_limit,
                 max(
-                    self.path_tracking_crawl_speed,
-                    self.path_tracking_large_yaw_crawl_speed,
+                    crawl_speed,
+                    large_yaw_crawl_speed,
                 ),
             )
             recovery_traj = self.predict_trajectory(x, recovery_v, w_cmd)
@@ -2409,7 +2599,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d rotate_guard=%s r=%.2fm pts=%d/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d rotate_guard=%s r=%.2fm pts=%d/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f narrow=%s cap=%.2f cte_scale=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2452,6 +2642,9 @@ class DWAControl:
             self.path_tracking_crawl_speed,
             self.path_tracking_large_yaw_crawl_speed,
             self.path_tracking_heading_filter_gain,
+            "on" if self.narrow_passage_mode_enabled else "off",
+            self.narrow_passage_speed_cap,
+            self.narrow_passage_cte_gain_scale,
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
@@ -2530,6 +2723,8 @@ class DWAControl:
             yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
             px = self.current_pose.pose.pose.position.x
             py = self.current_pose.pose.pose.position.y
+
+            self._update_narrow_passage_state()
 
             # progress / target compute
             s_proj, lat_err, target_xy, t_hat, at_goal, dist_to_goal, arc_rem = \
@@ -2697,8 +2892,9 @@ class DWAControl:
                 dbg = self._last_tracking_debug
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f" % (
+                    "src=%s mode=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f clr=%.2f" % (
                         self.active_path_source,
+                        "narrow" if dbg.get("narrow_passage", False) else "normal",
                         u_cmd[0],
                         u_cmd[1],
                         dist_to_goal,
@@ -2709,6 +2905,7 @@ class DWAControl:
                         dbg.get("desired_yaw_deg", 0.0),
                         dbg.get("yaw_err_deg", 0.0),
                         dbg.get("cte_correction_deg", 0.0),
+                        dbg.get("narrow_clearance_m", float("inf")),
                     ),
                 )
 
