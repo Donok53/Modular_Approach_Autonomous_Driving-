@@ -321,25 +321,6 @@
   <arg name="path_tracking_tangent_window_m" default="$(eval '0.80' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
   <arg name="path_tracking_crawl_speed" default="$(eval '0.22' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.14')"/>
-  <arg name="narrow_passage_mode_enabled" default="true"/>
-  <arg name="narrow_passage_x_min_m" default="-0.10"/>
-  <arg name="narrow_passage_x_max_m" default="1.80"/>
-  <arg name="narrow_passage_side_min_y_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
-  <arg name="narrow_passage_side_max_y_m" default="0.85"/>
-  <arg name="narrow_passage_enter_clearance_m" default="0.34"/>
-  <arg name="narrow_passage_exit_clearance_m" default="0.48"/>
-  <arg name="narrow_passage_min_points_per_side" default="3"/>
-  <arg name="narrow_passage_hold_s" default="0.8"/>
-  <arg name="narrow_passage_speed_cap" default="$(eval '0.24' if str(arg('real_mode')).lower() == 'true' else '0.22')"/>
-  <arg name="narrow_passage_cte_gain_scale" default="0.45"/>
-  <arg name="narrow_passage_cte_deadband_m" default="0.08"/>
-  <arg name="narrow_passage_cte_yaw_cap_deg" default="10.0"/>
-  <arg name="narrow_passage_steer_filter_gain" default="0.08"/>
-  <arg name="narrow_passage_yaw_rate_max_deg" default="$(eval '22.0' if str(arg('real_mode')).lower() == 'true' else '24.0')"/>
-  <arg name="narrow_passage_yaw_accel_max_deg" default="80.0"/>
-  <arg name="narrow_passage_target_step_m" default="$(eval '0.40' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
-  <arg name="narrow_passage_tangent_window_m" default="$(eval '1.00' if str(arg('real_mode')).lower() == 'true' else '0.90')"/>
-  <arg name="narrow_passage_log_period_s" default="0.0"/>
   <arg name="final_approach_window_m" default="0.0"/>
   <arg name="final_speed_k" default="$(eval '0.95' if str(arg('real_mode')).lower() == 'true' else '0.75')"/>
   <arg name="final_speed_min" default="$(eval '0.34' if str(arg('real_mode')).lower() == 'true' else '0.22')"/>
@@ -1030,25 +1011,6 @@
       <arg name="path_tracking_tangent_window_m" value="$(arg path_tracking_tangent_window_m)"/>
       <arg name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
       <arg name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
-      <arg name="narrow_passage_mode_enabled" value="$(arg narrow_passage_mode_enabled)"/>
-      <arg name="narrow_passage_x_min_m" value="$(arg narrow_passage_x_min_m)"/>
-      <arg name="narrow_passage_x_max_m" value="$(arg narrow_passage_x_max_m)"/>
-      <arg name="narrow_passage_side_min_y_m" value="$(arg narrow_passage_side_min_y_m)"/>
-      <arg name="narrow_passage_side_max_y_m" value="$(arg narrow_passage_side_max_y_m)"/>
-      <arg name="narrow_passage_enter_clearance_m" value="$(arg narrow_passage_enter_clearance_m)"/>
-      <arg name="narrow_passage_exit_clearance_m" value="$(arg narrow_passage_exit_clearance_m)"/>
-      <arg name="narrow_passage_min_points_per_side" value="$(arg narrow_passage_min_points_per_side)"/>
-      <arg name="narrow_passage_hold_s" value="$(arg narrow_passage_hold_s)"/>
-      <arg name="narrow_passage_speed_cap" value="$(arg narrow_passage_speed_cap)"/>
-      <arg name="narrow_passage_cte_gain_scale" value="$(arg narrow_passage_cte_gain_scale)"/>
-      <arg name="narrow_passage_cte_deadband_m" value="$(arg narrow_passage_cte_deadband_m)"/>
-      <arg name="narrow_passage_cte_yaw_cap_deg" value="$(arg narrow_passage_cte_yaw_cap_deg)"/>
-      <arg name="narrow_passage_steer_filter_gain" value="$(arg narrow_passage_steer_filter_gain)"/>
-      <arg name="narrow_passage_yaw_rate_max_deg" value="$(arg narrow_passage_yaw_rate_max_deg)"/>
-      <arg name="narrow_passage_yaw_accel_max_deg" value="$(arg narrow_passage_yaw_accel_max_deg)"/>
-      <arg name="narrow_passage_target_step_m" value="$(arg narrow_passage_target_step_m)"/>
-      <arg name="narrow_passage_tangent_window_m" value="$(arg narrow_passage_tangent_window_m)"/>
-      <arg name="narrow_passage_log_period_s" value="$(arg narrow_passage_log_period_s)"/>
       <arg name="final_approach_window_m" value="$(arg final_approach_window_m)"/>
       <arg name="final_speed_k" value="$(arg final_speed_k)"/>
       <arg name="final_speed_min" value="$(arg final_speed_min)"/>
