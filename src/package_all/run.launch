@@ -53,6 +53,15 @@
   <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="travel_history_topic" default="/planning/travel_history"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
+  <arg name="enable_explainability_bridge" default="true"/>
+  <arg name="explainability_publish_hz" default="5.0"/>
+  <arg name="explainability_manifest_publish_period_s" default="10.0"/>
+  <arg name="explainability_stale_after_s" default="1.5"/>
+  <arg name="explainability_watch_raw_lidar" default="false"/>
+  <arg name="explainability_watch_obstacle_pointcloud" default="false"/>
+  <arg name="xai_topic_manifest_topic" default="/xai/topic_manifest"/>
+  <arg name="xai_planner_snapshot_topic" default="/xai/planner_snapshot"/>
+  <arg name="xai_event_log_topic" default="/xai/event_log"/>
   <arg name="use_free_area_goal" default="false"/>
   <arg name="free_area_goal_topic" default="/move_base_simple/goal"/>
   <arg name="enable_crossing_portal_manager" default="false"/>
@@ -276,7 +285,8 @@
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '5.0')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="3.0"/>
+  <arg name="candidate_route_switch_min_hold_s" default="4.0"/>
+  <arg name="candidate_route_switch_break_hold_score_threshold" default="$(eval float(arg('candidate_route_switch_blocked_score_threshold')) + float(arg('candidate_route_switch_score_margin')))"/>
   <arg name="candidate_route_switch_confirm_count" default="3"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
@@ -307,8 +317,8 @@
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_tangent_window_m" default="$(eval '0.80' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
-  <arg name="path_tracking_crawl_speed" default="$(eval '0.22' if str(arg('real_mode')).lower() == 'true' else '0.13')"/>
-  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
+  <arg name="path_tracking_crawl_speed" default="$(eval '0.22' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.14')"/>
   <arg name="final_approach_window_m" default="0.0"/>
   <arg name="final_speed_k" default="$(eval '0.95' if str(arg('real_mode')).lower() == 'true' else '0.75')"/>
   <arg name="final_speed_min" default="$(eval '0.34' if str(arg('real_mode')).lower() == 'true' else '0.22')"/>
@@ -750,6 +760,7 @@
         <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
+        <arg name="candidate_route_switch_break_hold_score_threshold" value="$(arg candidate_route_switch_break_hold_score_threshold)"/>
         <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
         <arg name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
@@ -806,6 +817,7 @@
         <arg name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
         <arg name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
         <arg name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
+        <arg name="candidate_route_switch_break_hold_score_threshold" value="$(arg candidate_route_switch_break_hold_score_threshold)"/>
         <arg name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
         <arg name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
@@ -1476,6 +1488,47 @@
       <arg name="teb_max_vel_theta_rps" value="$(arg teb_max_vel_theta_rps)"/>
       <arg name="teb_acc_lim_theta_rps2" value="$(arg teb_acc_lim_theta_rps2)"/>
       <arg name="teb_weight_forward_drive" value="$(arg teb_weight_forward_drive)"/>
+    </include>
+  </group>
+
+  <group if="$(arg enable_explainability_bridge)">
+    <include file="$(find autonomy_explainability_bridge)/launch/explainability_bridge.launch">
+      <arg name="publish_hz" value="$(arg explainability_publish_hz)"/>
+      <arg name="manifest_publish_period_s" value="$(arg explainability_manifest_publish_period_s)"/>
+      <arg name="stale_after_s" value="$(arg explainability_stale_after_s)"/>
+      <arg name="overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
+
+      <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="raw_lidar_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="watch_raw_lidar" value="$(arg explainability_watch_raw_lidar)"/>
+      <arg name="obstacle_pointcloud_topic" value="$(arg planning_obstacle_pointcloud_topic)"/>
+      <arg name="watch_obstacle_pointcloud" value="$(arg explainability_watch_obstacle_pointcloud)"/>
+
+      <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+      <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
+      <arg name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>
+      <arg name="global_obstacle_caution_topic" value="$(arg global_obstacle_caution_topic)"/>
+      <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
+
+      <arg name="global_path_topic" value="/astar/path"/>
+      <arg name="candidate_paths_topic" value="/astar/candidate_paths"/>
+      <arg name="tracking_reference_topic" value="$(arg tracking_reference_topic)"/>
+      <arg name="active_path_topic" value="$(arg active_path_topic)"/>
+      <arg name="local_path_topic" value="$(arg local_path_topic)"/>
+      <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+
+      <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
+      <arg name="global_obstacle_overlay_boxes_topic" value="$(arg global_obstacle_overlay_boxes_topic)"/>
+      <arg name="near_field_raw_overlay_hits_topic" value="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
+      <arg name="near_field_stop_hits_topic" value="$(arg near_field_raw_stop_hit_cloud_topic)"/>
+      <arg name="near_field_raw_debug_cloud_topic" value="$(arg near_field_raw_debug_cloud_topic)"/>
+      <arg name="near_field_stop_marker_topic" value="$(arg near_field_raw_stop_marker_topic)"/>
+      <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+
+      <arg name="topic_manifest_topic" value="$(arg xai_topic_manifest_topic)"/>
+      <arg name="planner_snapshot_topic" value="$(arg xai_planner_snapshot_topic)"/>
+      <arg name="event_log_topic" value="$(arg xai_event_log_topic)"/>
     </include>
   </group>
 

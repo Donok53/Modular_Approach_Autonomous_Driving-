@@ -56,6 +56,7 @@
   <arg name="candidate_route_switch_blocked_score_threshold" default="3.0"/>
   <arg name="candidate_route_switch_score_margin" default="1.0"/>
   <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
+  <arg name="candidate_route_switch_break_hold_score_threshold" default="$(eval float(arg('candidate_route_switch_blocked_score_threshold')) + float(arg('candidate_route_switch_score_margin')))"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="0.0"/>
@@ -123,6 +124,7 @@
     <param name="candidate_route_switch_blocked_score_threshold" value="$(arg candidate_route_switch_blocked_score_threshold)"/>
     <param name="candidate_route_switch_score_margin" value="$(arg candidate_route_switch_score_margin)"/>
     <param name="candidate_route_switch_min_hold_s" value="$(arg candidate_route_switch_min_hold_s)"/>
+    <param name="candidate_route_switch_break_hold_score_threshold" value="$(arg candidate_route_switch_break_hold_score_threshold)"/>
     <param name="candidate_route_switch_confirm_count" value="$(arg candidate_route_switch_confirm_count)"/>
     <param name="candidate_route_switch_require_centerline_blocked" value="$(arg candidate_route_switch_require_centerline_blocked)"/>
     <param name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
