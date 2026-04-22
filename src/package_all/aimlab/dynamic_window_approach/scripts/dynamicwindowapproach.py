@@ -305,35 +305,6 @@ class DWAControl:
         self._near_field_raw_stop_last_frame = ""
         self._near_field_raw_stop_tf_status = "not_started"
         self._near_field_raw_stop_last_marker_refresh = rospy.Time(0)
-        self.rotate_only_raw_guard_enabled = bool(
-            rospy.get_param("~rotate_only_raw_guard_enabled", True)
-        )
-        self.rotate_only_raw_guard_radius_m = max(
-            0.0, float(rospy.get_param("~rotate_only_raw_guard_radius_m", 1.10))
-        )
-        self.rotate_only_raw_guard_min_z_m = float(
-            rospy.get_param("~rotate_only_raw_guard_min_z_m", 0.08)
-        )
-        self.rotate_only_raw_guard_max_z_m = max(
-            self.rotate_only_raw_guard_min_z_m + 0.05,
-            float(rospy.get_param("~rotate_only_raw_guard_max_z_m", 1.40)),
-        )
-        self.rotate_only_raw_guard_cell_size_m = max(
-            0.05, float(rospy.get_param("~rotate_only_raw_guard_cell_size_m", 0.15))
-        )
-        self.rotate_only_raw_guard_min_points = max(
-            1, int(rospy.get_param("~rotate_only_raw_guard_min_points", 4))
-        )
-        self.rotate_only_raw_guard_min_cells = max(
-            1, int(rospy.get_param("~rotate_only_raw_guard_min_cells", 2))
-        )
-        self.rotate_only_raw_guard_timeout_s = max(
-            0.05, float(rospy.get_param("~rotate_only_raw_guard_timeout_s", 0.35))
-        )
-        self._rotate_only_raw_guard_blocked = False
-        self._rotate_only_raw_guard_last_stamp = rospy.Time(0)
-        self._rotate_only_raw_guard_count = 0
-        self._rotate_only_raw_guard_cells = 0
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -702,29 +673,6 @@ class DWAControl:
     def _rotate_only_obstacle_near(self):
         if not self.rotate_only_disable_near_obstacle:
             return False
-        now = rospy.Time.now()
-        raw_guard_fresh = (
-            self._rotate_only_raw_guard_last_stamp.to_sec() > 0.0
-            and (now - self._rotate_only_raw_guard_last_stamp).to_sec()
-            <= self.rotate_only_raw_guard_timeout_s
-        )
-        if raw_guard_fresh and self._rotate_only_raw_guard_blocked:
-            return True
-        if self._overlay_boxes_are_fresh() and self.global_obstacle_overlay_boxes:
-            pose = self.current_pose.pose.pose.position
-            yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
-            radius = max(0.0, self.rotate_only_near_obstacle_clearance_m)
-            for box in self.global_obstacle_overlay_boxes:
-                local_min_x, local_max_x, local_min_y, local_max_y = self._world_box_to_local_bounds(
-                    box,
-                    pose.x,
-                    pose.y,
-                    yaw,
-                )
-                dx = 0.0 if local_min_x <= 0.0 <= local_max_x else min(abs(local_min_x), abs(local_max_x))
-                dy = 0.0 if local_min_y <= 0.0 <= local_max_y else min(abs(local_min_y), abs(local_max_y))
-                if math.hypot(dx, dy) <= radius:
-                    return True
         return (
             math.isfinite(self.front_obstacle_clearance)
             and self.front_obstacle_clearance <= self.rotate_only_near_obstacle_clearance_m
@@ -1088,19 +1036,12 @@ class DWAControl:
                 self._near_field_raw_stop_last_count = 0
                 self._near_field_raw_stop_last_cells = 0
                 self._near_field_raw_stop_last_min_x = float("inf")
-                self._rotate_only_raw_guard_last_stamp = rospy.Time.now()
-                self._rotate_only_raw_guard_count = 0
-                self._rotate_only_raw_guard_cells = 0
-                self._rotate_only_raw_guard_blocked = False
                 self._publish_near_field_raw_stop_debug(header, [])
                 self._update_emergency_stop_state()
                 return
 
             hit_points = []
             occupied_cells = set()
-            rotate_guard_cells = set()
-            rotate_guard_count = 0
-            guard_radius_sq = self.rotate_only_raw_guard_radius_m * self.rotate_only_raw_guard_radius_m
             min_x = float("inf")
             i = 0
             for x, y, z in point_cloud2.read_points(
@@ -1113,24 +1054,6 @@ class DWAControl:
                 ):
                     continue
                 x, y, z = self._transform_point_xyz(transform_mat, float(x), float(y), float(z))
-                if self.rotate_only_raw_guard_enabled:
-                    in_height = (
-                        self.rotate_only_raw_guard_min_z_m
-                        <= z
-                        <= self.rotate_only_raw_guard_max_z_m
-                    )
-                    outside_self = (
-                        abs(x) > self.self_filter_radius_x
-                        or abs(y) > self.self_filter_radius_y
-                    )
-                    if in_height and outside_self and (x * x + y * y) <= guard_radius_sq:
-                        rotate_guard_count += 1
-                        rotate_guard_cells.add(
-                            (
-                                int(math.floor(x / self.rotate_only_raw_guard_cell_size_m)),
-                                int(math.floor(y / self.rotate_only_raw_guard_cell_size_m)),
-                            )
-                        )
                 if not (
                     self.near_field_raw_stop_min_x_m
                     <= x
@@ -1157,15 +1080,6 @@ class DWAControl:
 
             hit_count = len(hit_points)
             cell_count = len(occupied_cells)
-            rotate_guard_cell_count = len(rotate_guard_cells)
-            self._rotate_only_raw_guard_last_stamp = rospy.Time.now()
-            self._rotate_only_raw_guard_count = rotate_guard_count
-            self._rotate_only_raw_guard_cells = rotate_guard_cell_count
-            self._rotate_only_raw_guard_blocked = (
-                self.rotate_only_raw_guard_enabled
-                and rotate_guard_count >= self.rotate_only_raw_guard_min_points
-                and rotate_guard_cell_count >= self.rotate_only_raw_guard_min_cells
-            )
             detected = (
                 hit_count >= self.near_field_raw_stop_min_points
                 and cell_count >= self.near_field_raw_stop_min_cells
@@ -2409,7 +2323,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d rotate_guard=%s r=%.2fm pts=%d/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2438,10 +2352,6 @@ class DWAControl:
             self.near_field_raw_stop_min_z_m,
             self.near_field_raw_stop_max_z_m,
             self.near_field_raw_stop_min_points,
-            "on" if self.rotate_only_raw_guard_enabled else "off",
-            self.rotate_only_raw_guard_radius_m,
-            self.rotate_only_raw_guard_min_points,
-            self.rotate_only_raw_guard_min_cells,
             "on" if self.enable_self_filter else "off",
             self.self_filter_radius_x,
             self.self_filter_radius_y,
