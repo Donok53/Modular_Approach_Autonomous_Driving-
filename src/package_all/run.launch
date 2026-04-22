@@ -285,8 +285,8 @@
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '5.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '5.0')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="3.0"/>
-  <arg name="candidate_route_switch_break_hold_score_threshold" default="$(eval float(arg('candidate_route_switch_blocked_score_threshold')) + 1.0)"/>
+  <arg name="candidate_route_switch_min_hold_s" default="4.0"/>
+  <arg name="candidate_route_switch_break_hold_score_threshold" default="$(eval float(arg('candidate_route_switch_blocked_score_threshold')) + float(arg('candidate_route_switch_score_margin')))"/>
   <arg name="candidate_route_switch_confirm_count" default="3"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>

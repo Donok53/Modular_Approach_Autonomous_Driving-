@@ -284,7 +284,7 @@ class AStarPlanner:
                 rospy.get_param(
                     "~candidate_route_switch_break_hold_score_threshold",
                     self.candidate_route_switch_blocked_score_threshold
-                    + 1.0,
+                    + self.candidate_route_switch_score_margin,
                 )
             ),
         )
