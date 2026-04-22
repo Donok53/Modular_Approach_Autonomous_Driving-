@@ -1797,9 +1797,11 @@ class DWAControl:
 
         tx, ty, t_hat = self._interp_xy_smoothed_tangent_at_s(s_target)
 
-        # goal metrics
+        # Goal reach must use the actual distance to the path endpoint.  The
+        # projection progress can jump near the end of a short/snapped path,
+        # making arc_rem small while the robot is still physically far away.
         arc_rem = max(0.0, self.s_total - self.s_cur)
-        at_goal = (min(arc_rem, dist_to_goal) <= self.goal_thresh_m) and (abs(lat_err) <= self.lat_goal_slop)
+        at_goal = (dist_to_goal <= self.goal_thresh_m) and (abs(lat_err) <= self.lat_goal_slop)
 
         return (s_proj, lat_err, (tx, ty), t_hat, at_goal, dist_to_goal, arc_rem)
 
@@ -2467,7 +2469,7 @@ class DWAControl:
                 (not self._rot_mode)
                 and (err > self._ROT_HIGH)
                 and (dot_forward < 0.2)
-                and (min(arc_rem, dist_to_goal) > self.near_goal_no_rotate_m)
+                and (dist_to_goal > self.near_goal_no_rotate_m)
                 and (not rotate_cooldown_active or rotate_target_changed)
             ):
                 self.rotate_only_enter(yaw, desired)
@@ -2493,7 +2495,7 @@ class DWAControl:
 
             # final-approach speed cap
             final_window = self.final_approach_window_m
-            if min(arc_rem, dist_to_goal) <= final_window:
+            if dist_to_goal <= final_window:
                 v_cap = max(self.final_speed_min,
                             min(self.max_speed, self.final_speed_k * max(dist_to_goal, 0.0)))
             else:
@@ -2507,7 +2509,7 @@ class DWAControl:
                     t_hat,
                     lat_err,
                     v_cap,
-                    min(arc_rem, dist_to_goal),
+                    dist_to_goal,
                 )
             else:
                 u, predicted = self.dwa_control(x, target_xy, t_hat, lat_err)
@@ -2526,7 +2528,7 @@ class DWAControl:
             # 너무 느리게 기어가면 노이즈만 생기니, 아주 작으면 그냥 0으로
             if (
                 u_cmd[0] > 0.0
-                and min(arc_rem, dist_to_goal) > self.min_forward_cmd_distance
+                and dist_to_goal > self.min_forward_cmd_distance
                 and u_cmd[0] < self.min_forward_cmd
                 and (self.path_tracking_only or u_cmd[0] > self.forward_motion_deadband)
             ):
@@ -2535,7 +2537,7 @@ class DWAControl:
             if (
                 (not self.path_tracking_only)
                 and
-                min(arc_rem, dist_to_goal) > self.cruise_distance_m
+                dist_to_goal > self.cruise_distance_m
                 and abs(lat_err) < self.cruise_lat_err_m
                 and abs(u_cmd[1]) < self.cruise_max_yaw_rate
                 and u_cmd[0] > 0.0

@@ -171,6 +171,15 @@ class AStarPlanner:
         self.preserve_user_goal_on_drivable_grid = bool(
             rospy.get_param("~preserve_user_goal_on_drivable_grid", False)
         )
+        self.preserve_user_goal_max_gap_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~preserve_user_goal_max_gap_m",
+                    self.drivable_grid_goal_extension_max_gap_m,
+                )
+            ),
+        )
         self.continuous_replan = bool(rospy.get_param("~continuous_replan", True))
         self.replan_min_start_shift_m = max(
             0.0, float(rospy.get_param("~replan_min_start_shift_m", 0.15))
@@ -438,8 +447,9 @@ class AStarPlanner:
                 ),
             )
             rospy.loginfo(
-                "[astar] preserve exact user goal on drivable-grid path: %s",
+                "[astar] preserve exact user goal on drivable-grid path: %s (max_gap=%.2f m)",
                 "on" if self.preserve_user_goal_on_drivable_grid else "off",
+                self.preserve_user_goal_max_gap_m,
             )
         elif self.use_dynamic_risk_grid_global:
             rospy.logwarn(
@@ -2603,9 +2613,7 @@ class AStarPlanner:
             and snapped_goal_has_los_to_clicked
         ):
             extend_to_clicked_goal = True
-        preserve_goal_gap_cap_m = max(
-            1e-6, float(self.drivable_grid_goal_extension_max_gap_m)
-        )
+        preserve_goal_gap_cap_m = max(1e-6, float(self.preserve_user_goal_max_gap_m))
         preserve_exact_goal = (
             self.preserve_user_goal_on_drivable_grid
             and goal_gap_m > 1e-6
@@ -2808,9 +2816,7 @@ class AStarPlanner:
                 goal_gap_m,
                 self.drivable_grid_goal_extension_max_gap_m,
             )
-        preserve_goal_gap_cap_m = max(
-            1e-6, float(self.drivable_grid_goal_extension_max_gap_m)
-        )
+        preserve_goal_gap_cap_m = max(1e-6, float(self.preserve_user_goal_max_gap_m))
         if preserve_exact_goal and goal_cell != goal_raw and self.debug_log_enable:
             rospy.loginfo_throttle(
                 1.0,

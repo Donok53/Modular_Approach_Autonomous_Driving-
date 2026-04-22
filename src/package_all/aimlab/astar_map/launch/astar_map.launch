@@ -41,6 +41,7 @@
   <arg name="enable_graph_fallback" default="false"/>
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="preserve_user_goal_on_drivable_grid" default="false"/>
+  <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
   <arg name="continuous_replan" default="true"/>
   <arg name="replan_min_start_shift_m" default="0.15"/>
   <arg name="replan_min_interval_s" default="0.40"/>
@@ -108,6 +109,7 @@
     <param name="enable_graph_fallback" value="$(arg enable_graph_fallback)"/>
     <param name="drivable_grid_goal_extension_max_gap_m" value="$(arg drivable_grid_goal_extension_max_gap_m)"/>
     <param name="preserve_user_goal_on_drivable_grid" value="$(arg preserve_user_goal_on_drivable_grid)"/>
+    <param name="preserve_user_goal_max_gap_m" value="$(arg preserve_user_goal_max_gap_m)"/>
     <param name="continuous_replan" value="$(arg continuous_replan)"/>
     <param name="replan_min_start_shift_m" value="$(arg replan_min_start_shift_m)"/>
     <param name="replan_min_interval_s" value="$(arg replan_min_interval_s)"/>
