@@ -24,7 +24,9 @@
   <arg name="localizer_initial_pose_pitch_deg" default="0.0"/>
   <arg name="localizer_initial_pose_yaw_deg" default="160.6"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
+  <arg name="planning_pose_topic" default="$(arg pose_topic)"/>
   <arg name="controller_pose_topic" default="$(arg pose_topic)"/>
+  <arg name="enable_pose_filter" default="false"/>
   <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
@@ -872,7 +874,9 @@
   <group if="$(eval arg('local_planner_mode') == 'custom')">
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="planning_pose_topic" value="$(arg planning_pose_topic)"/>
       <arg name="controller_pose_topic" value="$(arg controller_pose_topic)"/>
+      <arg name="enable_pose_filter" value="$(arg enable_pose_filter)"/>
       <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
       <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>

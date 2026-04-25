@@ -1,12 +1,12 @@
 <launch>
     <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
-    <arg name="planning_pose_topic" default="/lio_localizer/odometry/planning"/>
-    <arg name="controller_pose_topic" default="$(arg planning_pose_topic)"/>
+    <arg name="planning_pose_topic" default="$(arg pose_topic)"/>
+    <arg name="controller_pose_topic" default="$(arg pose_topic)"/>
     <arg name="pose_filter_twist_topic" default="/lio_localizer/odometry/lidar_incremental"/>
     <arg name="pose_filter_twist_linear_frame" default="world"/>
     <arg name="pose_filter_twist_timeout_s" default="0.30"/>
     <arg name="pose_filter_output_child_frame_id" default="base_link"/>
-    <arg name="enable_pose_filter" default="true"/>
+    <arg name="enable_pose_filter" default="false"/>
     <arg name="pose_filter_forward_tau_s" default="0.18"/>
     <arg name="pose_filter_lateral_tau_s" default="0.70"/>
     <arg name="pose_filter_turning_lateral_tau_s" default="0.20"/>

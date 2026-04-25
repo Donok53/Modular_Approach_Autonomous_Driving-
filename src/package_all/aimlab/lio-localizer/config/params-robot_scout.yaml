@@ -72,6 +72,6 @@ lio_localizer:
   VoxelGridFilterSize: 0.1
   pointCorrespondenceDist: 5.
   numOfFindCorrespondence: 3
-  numOfOptimizationIteration: 100
+  numOfOptimizationIteration: 60
   numOfOptimizationCores: 4
   mapMatchingMethod: LOAM   # LOAM, ICP, GICP
