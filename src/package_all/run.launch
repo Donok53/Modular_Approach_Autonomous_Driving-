@@ -576,7 +576,8 @@
   <arg name="near_field_raw_stop_downsample" default="1"/>
   <arg name="near_field_raw_stop_on_count" default="1"/>
   <arg name="near_field_raw_stop_off_count" default="3"/>
-  <arg name="near_field_raw_stop_timeout_s" default="0.35"/>
+  <arg name="near_field_raw_stop_timeout_s" default="$(eval '0.60' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
+  <arg name="near_field_raw_stop_hold_s" default="$(eval '0.50' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
   <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
   <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
@@ -1216,6 +1217,7 @@
       <arg name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
       <arg name="near_field_raw_stop_off_count" value="$(arg near_field_raw_stop_off_count)"/>
       <arg name="near_field_raw_stop_timeout_s" value="$(arg near_field_raw_stop_timeout_s)"/>
+      <arg name="near_field_raw_stop_hold_s" value="$(arg near_field_raw_stop_hold_s)"/>
       <arg name="near_field_raw_stop_marker_topic" value="$(arg near_field_raw_stop_marker_topic)"/>
       <arg name="near_field_raw_stop_hit_cloud_topic" value="$(arg near_field_raw_stop_hit_cloud_topic)"/>
       <arg name="near_field_raw_stop_log_period_s" value="$(arg near_field_raw_stop_log_period_s)"/>

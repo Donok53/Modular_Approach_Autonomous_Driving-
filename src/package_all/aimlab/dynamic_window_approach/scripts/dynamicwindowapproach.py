@@ -278,6 +278,9 @@ class DWAControl:
         self.near_field_raw_stop_timeout_s = max(
             0.05, float(rospy.get_param("~near_field_raw_stop_timeout_s", 0.35))
         )
+        self.near_field_raw_stop_hold_s = max(
+            0.0, float(rospy.get_param("~near_field_raw_stop_hold_s", 0.45))
+        )
         self.near_field_raw_stop_marker_topic = str(
             rospy.get_param(
                 "~near_field_raw_stop_marker_topic",
@@ -305,6 +308,7 @@ class DWAControl:
         self._near_field_raw_stop_last_frame = ""
         self._near_field_raw_stop_tf_status = "not_started"
         self._near_field_raw_stop_last_marker_refresh = rospy.Time(0)
+        self._near_field_raw_stop_hold_until = rospy.Time(0)
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -776,7 +780,10 @@ class DWAControl:
                 rospy.Time.now() - self._near_field_raw_stop_last_stamp
             ).to_sec() <= self.near_field_raw_stop_timeout_s
         )
-        near_raw_blocked = self._near_field_raw_stop_blocked and near_raw_fresh
+        near_raw_hold_active = rospy.Time.now() < self._near_field_raw_stop_hold_until
+        near_raw_blocked = near_raw_hold_active or (
+            self._near_field_raw_stop_blocked and near_raw_fresh
+        )
 
         raw_fallback_blocked = self._raw_immediate_contact_blocked or (
             self._raw_emergency_band_blocked
@@ -1105,6 +1112,10 @@ class DWAControl:
             if stop_detected:
                 self._near_field_raw_stop_on += 1
                 self._near_field_raw_stop_off = 0
+                if self.near_field_raw_stop_hold_s > 0.0:
+                    self._near_field_raw_stop_hold_until = (
+                        rospy.Time.now() + rospy.Duration(self.near_field_raw_stop_hold_s)
+                    )
             else:
                 self._near_field_raw_stop_off += 1
                 self._near_field_raw_stop_on = 0

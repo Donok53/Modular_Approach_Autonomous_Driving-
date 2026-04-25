@@ -404,6 +404,7 @@
     <arg name="near_field_raw_stop_on_count" default="1"/>
     <arg name="near_field_raw_stop_off_count" default="3"/>
     <arg name="near_field_raw_stop_timeout_s" default="0.35"/>
+    <arg name="near_field_raw_stop_hold_s" default="0.45"/>
     <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
     <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
     <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
@@ -873,6 +874,7 @@
         <param name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
         <param name="near_field_raw_stop_off_count" value="$(arg near_field_raw_stop_off_count)"/>
         <param name="near_field_raw_stop_timeout_s" value="$(arg near_field_raw_stop_timeout_s)"/>
+        <param name="near_field_raw_stop_hold_s" value="$(arg near_field_raw_stop_hold_s)"/>
         <param name="near_field_raw_stop_marker_topic" value="$(arg near_field_raw_stop_marker_topic)"/>
         <param name="near_field_raw_stop_hit_cloud_topic" value="$(arg near_field_raw_stop_hit_cloud_topic)"/>
         <param name="near_field_raw_stop_log_period_s" value="$(arg near_field_raw_stop_log_period_s)"/>
