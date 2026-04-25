@@ -2100,6 +2100,16 @@ class DWAControl:
         )
         self._path_tracking_prev_w = w_cmd
 
+        if (
+            need_progress
+            and self.cruise_min_speed > 0.0
+            and remaining_dist > self.cruise_distance_m
+            and abs(self._path_tracking_filtered_lat_err) < self.cruise_lat_err_m
+            and abs(w_cmd) < self.cruise_max_yaw_rate
+            and v_cmd > 0.0
+        ):
+            v_cmd = min(v_limit, max(v_cmd, self.cruise_min_speed))
+
         traj = self.predict_trajectory(x, v_cmd, w_cmd)
         if not self._trajectory_in_drivable_area(
             traj,
