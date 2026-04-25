@@ -266,6 +266,21 @@ class DWAControl:
         self.near_field_raw_stop_min_cells = max(
             1, int(rospy.get_param("~near_field_raw_stop_min_cells", 1))
         )
+        self.near_field_raw_stop_close_override_distance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~near_field_raw_stop_close_override_distance_m",
+                    min(self.emergency_stop_distance, max(0.10, self.avoidance_hard_stop_distance)),
+                )
+            ),
+        )
+        self.near_field_raw_stop_close_override_min_points = max(
+            1, int(rospy.get_param("~near_field_raw_stop_close_override_min_points", 1))
+        )
+        self.near_field_raw_stop_close_override_min_cells = max(
+            1, int(rospy.get_param("~near_field_raw_stop_close_override_min_cells", 1))
+        )
         self.near_field_raw_stop_downsample = max(
             1, int(rospy.get_param("~near_field_raw_stop_downsample", 1))
         )
@@ -309,6 +324,7 @@ class DWAControl:
         self._near_field_raw_stop_tf_status = "not_started"
         self._near_field_raw_stop_last_marker_refresh = rospy.Time(0)
         self._near_field_raw_stop_hold_until = rospy.Time(0)
+        self._near_field_raw_stop_last_reason = "clear"
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -1038,7 +1054,7 @@ class DWAControl:
             self._near_field_raw_stop_last_cells,
             front_clearance if math.isfinite(front_clearance) else -1.0,
             self._near_field_raw_stop_last_frame or "-",
-            self._near_field_raw_stop_tf_status,
+            "{}|{}".format(self._near_field_raw_stop_tf_status, self._near_field_raw_stop_last_reason),
         )
         text.lifetime = box.lifetime
         markers.markers.append(text)
@@ -1106,9 +1122,21 @@ class DWAControl:
             min_front_clearance = (
                 min_x - footprint_front if math.isfinite(min_x) else float("inf")
             )
+            close_override_detected = (
+                hit_count >= self.near_field_raw_stop_close_override_min_points
+                and cell_count >= self.near_field_raw_stop_close_override_min_cells
+                and min_front_clearance <= self.near_field_raw_stop_close_override_distance_m
+            )
+            detected = detected or close_override_detected
             stop_detected = (
                 detected and min_front_clearance <= self.emergency_stop_distance
             )
+            if stop_detected:
+                self._near_field_raw_stop_last_reason = (
+                    "close_override" if close_override_detected else "standard"
+                )
+            else:
+                self._near_field_raw_stop_last_reason = "clear"
             if stop_detected:
                 self._near_field_raw_stop_on += 1
                 self._near_field_raw_stop_off = 0
@@ -1148,13 +1176,15 @@ class DWAControl:
                 ).to_sec() >= self.near_field_raw_stop_log_period_s:
                     self._near_field_raw_stop_last_log = now
                     rospy.loginfo(
-                        "near_field_raw_stop: %s pts=%d cells=%d min_x=%.2f clearance=%.2f stop_dist=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
+                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d min_x=%.2f clearance=%.2f stop_dist=%.2f close_override=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
                         "STOP" if self._near_field_raw_stop_blocked else "clear",
+                        self._near_field_raw_stop_last_reason,
                         hit_count,
                         cell_count,
                         min_x if math.isfinite(min_x) else float("inf"),
                         min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
                         self.emergency_stop_distance,
+                        self.near_field_raw_stop_close_override_distance_m,
                         self.near_field_raw_stop_min_x_m,
                         self.near_field_raw_stop_max_x_m,
                         self.near_field_raw_stop_half_width_m,
