@@ -783,7 +783,11 @@ class GlobalObstacleOverlayPublisher:
     @staticmethod
     def _cloud_header(stamp, frame_id):
         header = Header()
-        header.stamp = stamp if stamp is not None and stamp.to_sec() > 0.0 else rospy.Time.now()
+        # Raw-near debug clouds are emitted after transforming points into the
+        # chosen debug/local frame. Using the original cloud stamp makes RViz
+        # visualize them at an older TF snapshot, so they appear to trail the
+        # robot. Publish with the current time to match the current TF tree.
+        header.stamp = rospy.Time.now()
         header.frame_id = frame_id or "base_link"
         return header
 

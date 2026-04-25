@@ -957,7 +957,11 @@ class DWAControl:
 
     def _near_field_header(self, msg, frame_id=None):
         header = Header()
-        header.stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
+        # These debug markers/point clouds are already transformed into the
+        # local stop frame. Publishing them with the original LiDAR stamp makes
+        # RViz render them against an older TF snapshot, which looks like the
+        # near-stop box is lagging behind the robot in map-fixed view.
+        header.stamp = rospy.Time.now()
         header.frame_id = frame_id or self.near_field_raw_stop_base_frame or msg.header.frame_id
         return header
 
