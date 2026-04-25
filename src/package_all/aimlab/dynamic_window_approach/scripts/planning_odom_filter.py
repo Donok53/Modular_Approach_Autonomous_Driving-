@@ -132,6 +132,12 @@ class PlanningOdomFilter:
         self.history_marker_width_m = max(
             0.02, float(rospy.get_param("~history_marker_width_m", 0.08))
         )
+        self.predict_to_now = bool(rospy.get_param("~predict_to_now", True))
+        self.max_predict_age_s = max(
+            0.0, float(rospy.get_param("~max_predict_age_s", 0.25))
+        )
+        self.publish_now_stamp = bool(rospy.get_param("~publish_now_stamp", True))
+        self.publish_hz = max(0.0, float(rospy.get_param("~publish_hz", 25.0)))
 
         self.have_state = False
         self.last_stamp_s = None
@@ -147,6 +153,8 @@ class PlanningOdomFilter:
         self.fwz = 0.0
         self.latest_twist_msg = None
         self.latest_twist_stamp_s = 0.0
+        self.last_pose_msg = None
+        self.last_twist_msg = None
         self.history_points = deque(maxlen=self.history_max_points)
         self.history_frame_id = "map"
 
@@ -169,9 +177,14 @@ class PlanningOdomFilter:
             self.sub_twist = rospy.Subscriber(
                 self.twist_topic, Odometry, self.twist_callback, queue_size=50
             )
+        self.pub_timer = None
+        if self.publish_hz > 0.0:
+            self.pub_timer = rospy.Timer(
+                rospy.Duration(1.0 / self.publish_hz), self._timer_callback
+            )
 
         rospy.loginfo(
-            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f)",
+            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f",
             self.input_topic,
             self.twist_topic if self.twist_topic else "-",
             self.twist_linear_frame,
@@ -185,6 +198,10 @@ class PlanningOdomFilter:
             self.yaw_tau_s,
             self.turning_yaw_tau_s,
             self.twist_tau_s,
+            "on" if self.predict_to_now else "off",
+            self.max_predict_age_s,
+            "on" if self.publish_now_stamp else "off",
+            self.publish_hz,
         )
 
     @staticmethod
@@ -270,17 +287,39 @@ class PlanningOdomFilter:
         self.fwz = raw_wz
         self.have_state = True
 
-    def _publish_filtered(self, pose_msg, twist_msg):
+    def _predicted_state(self, target_stamp_s):
+        dt = 0.0
+        if self.predict_to_now and self.last_stamp_s is not None:
+            dt = max(0.0, float(target_stamp_s) - float(self.last_stamp_s))
+            if self.max_predict_age_s > 0.0:
+                dt = min(dt, self.max_predict_age_s)
+
+        pred_yaw = wrap_angle(self.fyaw + self.fwz * dt)
+        mid_yaw = wrap_angle(self.fyaw + 0.5 * self.fwz * dt)
+        cy = math.cos(mid_yaw)
+        sy = math.sin(mid_yaw)
+        world_vx = cy * self.fvx - sy * self.fvy
+        world_vy = sy * self.fvx + cy * self.fvy
+        pred_x = self.fx + world_vx * dt
+        pred_y = self.fy + world_vy * dt
+        pred_z = self.fz + self.fvz * dt
+        return pred_x, pred_y, pred_z, pred_yaw
+
+    def _publish_filtered(self, pose_msg, twist_msg, publish_stamp=None):
         out = Odometry()
         out.header = pose_msg.header
+        if publish_stamp is not None:
+            out.header.stamp = publish_stamp
         out.child_frame_id = self._resolved_child_frame_id(pose_msg, twist_msg)
         out.pose = pose_msg.pose
         out.twist = twist_msg.twist
 
-        out.pose.pose.position.x = self.fx
-        out.pose.pose.position.y = self.fy
-        out.pose.pose.position.z = self.fz
-        qx, qy, qz, qw = euler_to_quat(self.froll, self.fpitch, self.fyaw)
+        target_stamp_s = out.header.stamp.to_sec()
+        pred_x, pred_y, pred_z, pred_yaw = self._predicted_state(target_stamp_s)
+        out.pose.pose.position.x = pred_x
+        out.pose.pose.position.y = pred_y
+        out.pose.pose.position.z = pred_z
+        qx, qy, qz, qw = euler_to_quat(self.froll, self.fpitch, pred_yaw)
         out.pose.pose.orientation.x = qx
         out.pose.pose.orientation.y = qy
         out.pose.pose.orientation.z = qz
@@ -291,7 +330,13 @@ class PlanningOdomFilter:
         out.twist.twist.angular.z = self.fwz
         self.pub.publish(out)
         frame_id = str(out.header.frame_id).strip() or "map"
-        self._record_history_point(self.fx, self.fy, frame_id, out.header.stamp)
+        self._record_history_point(pred_x, pred_y, frame_id, out.header.stamp)
+
+    def _timer_callback(self, _event):
+        if not self.have_state or self.last_pose_msg is None or self.last_twist_msg is None:
+            return
+        stamp = rospy.Time.now() if self.publish_now_stamp else self.last_pose_msg.header.stamp
+        self._publish_filtered(self.last_pose_msg, self.last_twist_msg, stamp)
 
     def _publish_history_marker(self, stamp):
         if self.pub_history_marker is None:
@@ -366,20 +411,24 @@ class PlanningOdomFilter:
     def odom_callback(self, pose_msg):
         stamp_s = self._stamp_to_sec(pose_msg)
         twist_msg = self._select_twist_msg(pose_msg, stamp_s)
+        self.last_pose_msg = pose_msg
+        self.last_twist_msg = twist_msg
 
         raw_roll, raw_pitch, raw_yaw = quat_to_euler(pose_msg.pose.pose.orientation)
 
         if (not self.have_state) or (self.last_stamp_s is None):
             self._reset_state(pose_msg, raw_roll, raw_pitch, raw_yaw, twist_msg)
             self.last_stamp_s = stamp_s
-            self._publish_filtered(pose_msg, twist_msg)
+            stamp = rospy.Time.now() if self.publish_now_stamp else pose_msg.header.stamp
+            self._publish_filtered(pose_msg, twist_msg, stamp)
             return
 
         dt = stamp_s - self.last_stamp_s
         self.last_stamp_s = stamp_s
         if dt <= 0.0 or dt > self.reinit_gap_s:
             self._reset_state(pose_msg, raw_roll, raw_pitch, raw_yaw, twist_msg)
-            self._publish_filtered(pose_msg, twist_msg)
+            stamp = rospy.Time.now() if self.publish_now_stamp else pose_msg.header.stamp
+            self._publish_filtered(pose_msg, twist_msg, stamp)
             return
 
         raw_x = float(pose_msg.pose.pose.position.x)
@@ -435,7 +484,8 @@ class PlanningOdomFilter:
         self.fvz += alpha_twist * (raw_vz - self.fvz)
         self.fwz += alpha_twist * (raw_wz - self.fwz)
 
-        self._publish_filtered(pose_msg, twist_msg)
+        stamp = rospy.Time.now() if self.publish_now_stamp else pose_msg.header.stamp
+        self._publish_filtered(pose_msg, twist_msg, stamp)
 
 
 def main():

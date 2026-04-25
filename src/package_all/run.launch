@@ -24,19 +24,23 @@
   <arg name="localizer_initial_pose_pitch_deg" default="0.0"/>
   <arg name="localizer_initial_pose_yaw_deg" default="160.6"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
-  <arg name="planning_pose_topic" default="$(arg pose_topic)"/>
-  <arg name="controller_pose_topic" default="$(arg pose_topic)"/>
-  <arg name="enable_pose_filter" default="false"/>
+  <arg name="planning_pose_topic" default="/lio_localizer/odometry/planning"/>
+  <arg name="controller_pose_topic" default="$(arg planning_pose_topic)"/>
+  <arg name="enable_pose_filter" default="true"/>
   <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
-  <arg name="pose_filter_forward_tau_s" default="0.24"/>
-  <arg name="pose_filter_lateral_tau_s" default="1.30"/>
-  <arg name="pose_filter_turning_lateral_tau_s" default="0.38"/>
-  <arg name="pose_filter_yaw_tau_s" default="0.90"/>
-  <arg name="pose_filter_turning_yaw_tau_s" default="0.30"/>
-  <arg name="pose_filter_twist_tau_s" default="0.30"/>
+  <arg name="pose_filter_forward_tau_s" default="0.05"/>
+  <arg name="pose_filter_lateral_tau_s" default="0.10"/>
+  <arg name="pose_filter_turning_lateral_tau_s" default="0.05"/>
+  <arg name="pose_filter_yaw_tau_s" default="0.12"/>
+  <arg name="pose_filter_turning_yaw_tau_s" default="0.06"/>
+  <arg name="pose_filter_twist_tau_s" default="0.08"/>
+  <arg name="pose_filter_predict_to_now" default="true"/>
+  <arg name="pose_filter_max_predict_age_s" default="0.25"/>
+  <arg name="pose_filter_publish_now_stamp" default="true"/>
+  <arg name="pose_filter_publish_hz" default="25.0"/>
   <arg name="pose_filter_lateral_deadband_m" default="0.04"/>
   <arg name="pose_filter_yaw_deadband_deg" default="2.0"/>
   <arg name="pose_filter_straight_speed_min_mps" default="0.12"/>
@@ -887,6 +891,10 @@
       <arg name="pose_filter_yaw_tau_s" value="$(arg pose_filter_yaw_tau_s)"/>
       <arg name="pose_filter_turning_yaw_tau_s" value="$(arg pose_filter_turning_yaw_tau_s)"/>
       <arg name="pose_filter_twist_tau_s" value="$(arg pose_filter_twist_tau_s)"/>
+      <arg name="pose_filter_predict_to_now" value="$(arg pose_filter_predict_to_now)"/>
+      <arg name="pose_filter_max_predict_age_s" value="$(arg pose_filter_max_predict_age_s)"/>
+      <arg name="pose_filter_publish_now_stamp" value="$(arg pose_filter_publish_now_stamp)"/>
+      <arg name="pose_filter_publish_hz" value="$(arg pose_filter_publish_hz)"/>
       <arg name="pose_filter_lateral_deadband_m" value="$(arg pose_filter_lateral_deadband_m)"/>
       <arg name="pose_filter_yaw_deadband_deg" value="$(arg pose_filter_yaw_deadband_deg)"/>
       <arg name="pose_filter_straight_speed_min_mps" value="$(arg pose_filter_straight_speed_min_mps)"/>

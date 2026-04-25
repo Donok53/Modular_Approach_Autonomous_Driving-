@@ -955,6 +955,15 @@ class DWAControl:
             float(mat[2, 0] * x + mat[2, 1] * y + mat[2, 2] * z + mat[2, 3]),
         )
 
+    @staticmethod
+    def _transform_local_to_world_xy(local_x, local_y, pose_x, pose_y, yaw):
+        c = math.cos(float(yaw))
+        s = math.sin(float(yaw))
+        return (
+            float(pose_x) + c * float(local_x) - s * float(local_y),
+            float(pose_y) + s * float(local_x) + c * float(local_y),
+        )
+
     def _near_field_header(self, msg, frame_id=None):
         header = Header()
         # These debug markers/point clouds are already transformed into the
@@ -1003,8 +1012,23 @@ class DWAControl:
             return
 
         marker_header = Header()
-        marker_header.stamp = rospy.Time(0)
+        marker_header.stamp = rospy.Time.now()
         marker_header.frame_id = header.frame_id
+        use_world_pose = False
+        pose_frame = str(self.current_pose.header.frame_id).strip()
+        pose_x = 0.0
+        pose_y = 0.0
+        pose_z = 0.0
+        pose_yaw = 0.0
+        pose_orientation = None
+        if pose_frame:
+            marker_header.frame_id = pose_frame
+            pose_x = float(self.current_pose.pose.pose.position.x)
+            pose_y = float(self.current_pose.pose.pose.position.y)
+            pose_z = float(self.current_pose.pose.pose.position.z)
+            pose_orientation = self.current_pose.pose.pose.orientation
+            pose_yaw = self.get_yaw_from_quaternion(pose_orientation)
+            use_world_pose = True
 
         markers = MarkerArray()
         delete_all = Marker()
@@ -1017,15 +1041,28 @@ class DWAControl:
         box.id = 0
         box.type = Marker.CUBE
         box.action = Marker.ADD
-        box.frame_locked = True
-        box.pose.position.x = 0.5 * (
+        center_x_local = 0.5 * (
             self.near_field_raw_stop_min_x_m + self.near_field_raw_stop_max_x_m
         )
-        box.pose.position.y = 0.0
-        box.pose.position.z = 0.5 * (
+        center_y_local = 0.0
+        center_z_local = 0.5 * (
             self.near_field_raw_stop_min_z_m + self.near_field_raw_stop_max_z_m
         )
-        box.pose.orientation.w = 1.0
+        if use_world_pose:
+            wx, wy = self._transform_local_to_world_xy(
+                center_x_local, center_y_local, pose_x, pose_y, pose_yaw
+            )
+            box.pose.position.x = wx
+            box.pose.position.y = wy
+            box.pose.position.z = pose_z + center_z_local
+            box.pose.orientation = pose_orientation
+            box.frame_locked = False
+        else:
+            box.pose.position.x = center_x_local
+            box.pose.position.y = center_y_local
+            box.pose.position.z = center_z_local
+            box.pose.orientation.w = 1.0
+            box.frame_locked = True
         box.scale.x = self.near_field_raw_stop_max_x_m - self.near_field_raw_stop_min_x_m
         box.scale.y = 2.0 * self.near_field_raw_stop_half_width_m
         box.scale.z = self.near_field_raw_stop_max_z_m - self.near_field_raw_stop_min_z_m
@@ -1042,7 +1079,7 @@ class DWAControl:
         outline.id = 2
         outline.type = Marker.LINE_LIST
         outline.action = Marker.ADD
-        outline.frame_locked = True
+        outline.frame_locked = not use_world_pose
         outline.pose.orientation.w = 1.0
         outline.scale.x = 0.03
         outline.color.a = 1.0
@@ -1056,16 +1093,25 @@ class DWAControl:
         max_y = self.near_field_raw_stop_half_width_m
         min_z = self.near_field_raw_stop_min_z_m
         max_z = self.near_field_raw_stop_max_z_m
-        corners = [
-            Point(min_x, min_y, min_z),
-            Point(max_x, min_y, min_z),
-            Point(max_x, max_y, min_z),
-            Point(min_x, max_y, min_z),
-            Point(min_x, min_y, max_z),
-            Point(max_x, min_y, max_z),
-            Point(max_x, max_y, max_z),
-            Point(min_x, max_y, max_z),
+        corners_local = [
+            (min_x, min_y, min_z),
+            (max_x, min_y, min_z),
+            (max_x, max_y, min_z),
+            (min_x, max_y, min_z),
+            (min_x, min_y, max_z),
+            (max_x, min_y, max_z),
+            (max_x, max_y, max_z),
+            (min_x, max_y, max_z),
         ]
+        corners = []
+        for lx, ly, lz in corners_local:
+            if use_world_pose:
+                wx, wy = self._transform_local_to_world_xy(
+                    lx, ly, pose_x, pose_y, pose_yaw
+                )
+                corners.append(Point(wx, wy, pose_z + lz))
+            else:
+                corners.append(Point(lx, ly, lz))
         edge_indices = (
             (0, 1), (1, 2), (2, 3), (3, 0),
             (4, 5), (5, 6), (6, 7), (7, 4),
@@ -1082,10 +1128,19 @@ class DWAControl:
         text.id = 1
         text.type = Marker.TEXT_VIEW_FACING
         text.action = Marker.ADD
-        text.frame_locked = True
-        text.pose.position.x = self.near_field_raw_stop_max_x_m
-        text.pose.position.y = 0.0
-        text.pose.position.z = self.near_field_raw_stop_max_z_m + 0.25
+        if use_world_pose:
+            text_x, text_y = self._transform_local_to_world_xy(
+                self.near_field_raw_stop_max_x_m, 0.0, pose_x, pose_y, pose_yaw
+            )
+            text.pose.position.x = text_x
+            text.pose.position.y = text_y
+            text.pose.position.z = pose_z + self.near_field_raw_stop_max_z_m + 0.25
+            text.frame_locked = False
+        else:
+            text.pose.position.x = self.near_field_raw_stop_max_x_m
+            text.pose.position.y = 0.0
+            text.pose.position.z = self.near_field_raw_stop_max_z_m + 0.25
+            text.frame_locked = True
         text.pose.orientation.w = 1.0
         text.scale.z = 0.22
         text.color.a = 1.0
