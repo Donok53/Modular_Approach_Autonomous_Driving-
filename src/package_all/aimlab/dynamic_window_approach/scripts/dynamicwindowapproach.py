@@ -1925,22 +1925,40 @@ class DWAControl:
         if goal_align_active:
             s_target = self.s_total
         else:
-            # Follow the currently selected active-path segment directly.
-            # Keep the target only a short distance ahead on the same segment so
-            # the robot does not cut diagonally across corners or skip ahead to a
-            # visually different shortcut.
-            target_seg_idx = idx
-            if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
-                target_seg_idx += 1
-            segment_end_s = self.cum_len[target_seg_idx + 1]
-            segment_target_step = min(
-                max(0.05, self.path_tracking_target_step_m),
-                max(0.05, 0.8 * self.seg_lens[target_seg_idx]),
-            )
-            s_target = min(
-                self.s_total,
-                min(segment_end_s, max(base_s, s_proj + segment_target_step)),
-            )
+            if self.active_path_source == "global":
+                # On long global paths, following each tiny segment change from
+                # the grid planner can create visible S-shaped steering.  Look
+                # farther ahead on the smoothed path so the robot tracks the
+                # route trend instead of every micro-kink.
+                global_target_step = min(
+                    max(
+                        0.35,
+                        self.path_tracking_target_step_m,
+                        self.lookahead_distance,
+                    ),
+                    max(0.35, self.tracking_projection_forward_window_m),
+                )
+                s_target = min(
+                    self.s_total,
+                    max(base_s, base_s + global_target_step),
+                )
+            else:
+                # Follow the currently selected active-path segment directly.
+                # Keep the target only a short distance ahead on the same
+                # segment so the robot does not cut diagonally across corners
+                # or skip ahead to a visually different shortcut.
+                target_seg_idx = idx
+                if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
+                    target_seg_idx += 1
+                segment_end_s = self.cum_len[target_seg_idx + 1]
+                segment_target_step = min(
+                    max(0.05, self.path_tracking_target_step_m),
+                    max(0.05, 0.8 * self.seg_lens[target_seg_idx]),
+                )
+                s_target = min(
+                    self.s_total,
+                    min(segment_end_s, max(base_s, s_proj + segment_target_step)),
+                )
 
         tx, ty, t_hat = self._interp_xy_smoothed_tangent_at_s(s_target)
 
