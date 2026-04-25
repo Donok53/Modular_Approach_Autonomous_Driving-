@@ -24,23 +24,23 @@
   <arg name="localizer_initial_pose_pitch_deg" default="0.0"/>
   <arg name="localizer_initial_pose_yaw_deg" default="160.6"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
-  <arg name="controller_pose_topic" default="$(eval arg('pose_topic') if str(arg('real_mode')).lower() == 'true' else '/lio_localizer/odometry/planning')"/>
+  <arg name="controller_pose_topic" default="$(arg pose_topic)"/>
   <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
-  <arg name="pose_filter_forward_tau_s" default="$(eval '0.24' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
-  <arg name="pose_filter_lateral_tau_s" default="$(eval '1.30' if str(arg('real_mode')).lower() == 'true' else '0.70')"/>
-  <arg name="pose_filter_turning_lateral_tau_s" default="$(eval '0.38' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
-  <arg name="pose_filter_yaw_tau_s" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
-  <arg name="pose_filter_turning_yaw_tau_s" default="$(eval '0.30' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
-  <arg name="pose_filter_twist_tau_s" default="$(eval '0.30' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
-  <arg name="pose_filter_lateral_deadband_m" default="$(eval '0.04' if str(arg('real_mode')).lower() == 'true' else '0.03')"/>
-  <arg name="pose_filter_yaw_deadband_deg" default="$(eval '2.0' if str(arg('real_mode')).lower() == 'true' else '1.5')"/>
-  <arg name="pose_filter_straight_speed_min_mps" default="$(eval '0.12' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
-  <arg name="pose_filter_turning_yaw_rate_threshold_rps" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
-  <arg name="pose_filter_turning_yaw_error_deg" default="$(eval '12.0' if str(arg('real_mode')).lower() == 'true' else '10.0')"/>
-  <arg name="pose_filter_max_straight_lateral_correction_mps" default="$(eval '0.12' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="pose_filter_forward_tau_s" default="0.24"/>
+  <arg name="pose_filter_lateral_tau_s" default="1.30"/>
+  <arg name="pose_filter_turning_lateral_tau_s" default="0.38"/>
+  <arg name="pose_filter_yaw_tau_s" default="0.90"/>
+  <arg name="pose_filter_turning_yaw_tau_s" default="0.30"/>
+  <arg name="pose_filter_twist_tau_s" default="0.30"/>
+  <arg name="pose_filter_lateral_deadband_m" default="0.04"/>
+  <arg name="pose_filter_yaw_deadband_deg" default="2.0"/>
+  <arg name="pose_filter_straight_speed_min_mps" default="0.12"/>
+  <arg name="pose_filter_turning_yaw_rate_threshold_rps" default="0.28"/>
+  <arg name="pose_filter_turning_yaw_error_deg" default="12.0"/>
+  <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.12"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="imu_topic" default="/imu/data"/>
   <arg name="cloud_tracker_pointcloud_topic" default="$(eval '/lio_sam/deskew/cloud_deskewed' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/cloud_deskewed')"/>
@@ -236,7 +236,7 @@
   <arg name="teb_slowdown_side_margin" default="0.08"/>
   <arg name="teb_slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
-  <arg name="teb_filter_max_range_m" default="$(eval '20.0' if str(arg('real_mode')).lower() == 'true' else '10.0')"/>
+  <arg name="teb_filter_max_range_m" default="20.0"/>
   <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
   <arg name="teb_filter_self_margin_m" default="0.11"/>
   <arg name="teb_filter_self_padding_m" default="0.03"/>
@@ -275,9 +275,9 @@
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
   <arg name="global_obstacle_overlay_clearance_extra_m" default="0.08"/>
   <arg name="global_path_use_any_angle" default="true"/>
-  <arg name="global_path_clearance_m" default="$(eval '0.00' if str(arg('real_mode')).lower() == 'true' else '0.02')"/>
-  <arg name="global_path_clearance_model" default="$(eval 'width' if str(arg('real_mode')).lower() == 'true' else 'circumscribed')"/>
-  <arg name="global_path_drivable_area_is_center_safe" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
+  <arg name="global_path_clearance_m" default="0.00"/>
+  <arg name="global_path_clearance_model" default="width"/>
+  <arg name="global_path_drivable_area_is_center_safe" default="true"/>
   <arg name="global_path_goal_tail_clearance_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="global_path_enable_graph_fallback" default="false"/>
@@ -292,70 +292,70 @@
   <arg name="global_path_replan_start_deviation_m" default="0.60"/>
   <arg name="global_path_planner_loop_hz" default="8.0"/>
   <arg name="global_path_republish_period_s" default="0.50"/>
-  <arg name="grid_snap_search_radius_cells" default="$(eval '60' if str(arg('real_mode')).lower() == 'true' else '30')"/>
+  <arg name="grid_snap_search_radius_cells" default="60"/>
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
-  <arg name="candidate_route_switch_score_margin" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '5.0')"/>
-  <arg name="candidate_route_switch_min_hold_s" default="$(eval '1.5' if str(arg('real_mode')).lower() == 'true' else '3.0')"/>
-  <arg name="candidate_route_switch_confirm_count" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '3')"/>
+  <arg name="candidate_route_switch_score_margin" default="4.0"/>
+  <arg name="candidate_route_switch_min_hold_s" default="1.5"/>
+  <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
-  <arg name="candidate_route_switch_centerline_clearance_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.00')"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="0.10"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
   <arg name="path_tracking_only" default="true"/>
-  <arg name="path_tracking_speed_cap" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
-  <arg name="path_tracking_steer_filter_gain" default="$(eval '0.30' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
-  <arg name="lookahead_distance" default="$(eval '1.40' if str(arg('real_mode')).lower() == 'true' else '1.15')"/>
+  <arg name="path_tracking_speed_cap" default="0.90"/>
+  <arg name="path_tracking_steer_filter_gain" default="0.30"/>
+  <arg name="lookahead_distance" default="1.40"/>
   <arg name="snap_lat_err" default="0.20"/>
   <arg name="snap_target_ahead_m" default="0.60"/>
   <arg name="tracking_projection_back_window_m" default="0.35"/>
-  <arg name="tracking_projection_forward_window_m" default="$(eval '2.20' if str(arg('real_mode')).lower() == 'true' else '1.50')"/>
-  <arg name="tracking_path_smoothing_passes" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '3')"/>
+  <arg name="tracking_projection_forward_window_m" default="2.20"/>
+  <arg name="tracking_path_smoothing_passes" default="4"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '42.0' if str(arg('real_mode')).lower() == 'true' else '42.0')"/>
-  <arg name="path_tracking_in_place_yaw_rate_max_deg" default="$(eval '26.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
+  <arg name="path_tracking_in_place_yaw_rate_max_deg" default="26.0"/>
   <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '120.0')"/>
-  <arg name="path_tracking_kp" default="$(eval '0.92' if str(arg('real_mode')).lower() == 'true' else '1.20')"/>
+  <arg name="path_tracking_kp" default="0.92"/>
   <arg name="cmd_smoothing_enabled" default="true"/>
-  <arg name="cmd_linear_accel_max_mps2" default="$(eval '0.68' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
+  <arg name="cmd_linear_accel_max_mps2" default="0.68"/>
   <arg name="cmd_linear_decel_max_mps2" default="0.90"/>
-  <arg name="cmd_angular_accel_max_degps2" default="$(eval '95.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
-  <arg name="cmd_angular_decel_max_degps2" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '130.0')"/>
+  <arg name="cmd_angular_accel_max_degps2" default="95.0"/>
+  <arg name="cmd_angular_decel_max_degps2" default="120.0"/>
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
-  <arg name="path_tracking_slowdown_yaw_deg" default="$(eval '65.0' if str(arg('real_mode')).lower() == 'true' else '40.0')"/>
-  <arg name="path_tracking_stop_yaw_deg" default="$(eval '95.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
-  <arg name="path_tracking_cte_gain" default="$(eval '0.38' if str(arg('real_mode')).lower() == 'true' else '0.80')"/>
+  <arg name="path_tracking_slowdown_yaw_deg" default="65.0"/>
+  <arg name="path_tracking_stop_yaw_deg" default="95.0"/>
+  <arg name="path_tracking_cte_gain" default="0.38"/>
   <arg name="path_tracking_cte_soft_mps" default="0.25"/>
-  <arg name="path_tracking_cte_deadband_m" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.05')"/>
-  <arg name="path_tracking_cte_filter_gain" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="path_tracking_cte_deadband_m" default="0.10"/>
+  <arg name="path_tracking_cte_filter_gain" default="0.28"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
-  <arg name="path_tracking_heading_filter_gain" default="$(eval '0.14' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
-  <arg name="path_tracking_goal_bearing_gain" default="$(eval '0.50' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
+  <arg name="path_tracking_heading_filter_gain" default="0.14"/>
+  <arg name="path_tracking_goal_bearing_gain" default="0.50"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
-  <arg name="path_tracking_target_step_m" default="$(eval '0.70' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
-  <arg name="path_tracking_tangent_window_m" default="$(eval '1.55' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
-  <arg name="path_tracking_crawl_speed" default="$(eval '0.24' if str(arg('real_mode')).lower() == 'true' else '0.13')"/>
-  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
+  <arg name="path_tracking_target_step_m" default="0.70"/>
+  <arg name="path_tracking_tangent_window_m" default="1.55"/>
+  <arg name="path_tracking_crawl_speed" default="0.24"/>
+  <arg name="path_tracking_large_yaw_crawl_speed" default="0.18"/>
   <arg name="final_approach_window_m" default="0.0"/>
-  <arg name="final_speed_k" default="$(eval '0.95' if str(arg('real_mode')).lower() == 'true' else '0.75')"/>
-  <arg name="final_speed_min" default="$(eval '0.34' if str(arg('real_mode')).lower() == 'true' else '0.22')"/>
-  <arg name="path_tracking_stop_distance_m" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.80')"/>
-  <arg name="path_tracking_goal_yaw_rate_max_deg" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '25.0')"/>
-  <arg name="path_tracking_drivable_ignore_start_distance_m" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
-  <arg name="path_tracking_recovery_ignore_start_distance_m" default="$(eval '1.80' if str(arg('real_mode')).lower() == 'true' else '0.90')"/>
+  <arg name="final_speed_k" default="0.95"/>
+  <arg name="final_speed_min" default="0.34"/>
+  <arg name="path_tracking_stop_distance_m" default="0.35"/>
+  <arg name="path_tracking_goal_yaw_rate_max_deg" default="18.0"/>
+  <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.90"/>
+  <arg name="path_tracking_recovery_ignore_start_distance_m" default="1.80"/>
   <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
-  <arg name="path_tracking_minor_replan_delta_m" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
+  <arg name="path_tracking_minor_replan_delta_m" default="0.35"/>
   <arg name="forward_motion_deadband" default="0.01"/>
-  <arg name="min_forward_cmd" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
-  <arg name="min_forward_cmd_distance" default="$(eval '0.45' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
-  <arg name="cruise_min_speed" default="$(eval '0.42' if str(arg('real_mode')).lower() == 'true' else '0.0')"/>
-  <arg name="cruise_distance_m" default="$(eval '1.80' if str(arg('real_mode')).lower() == 'true' else '2.50')"/>
-  <arg name="rotate_only_deg" default="$(eval '150.0' if str(arg('real_mode')).lower() == 'true' else '110.0')"/>
+  <arg name="min_forward_cmd" default="0.10"/>
+  <arg name="min_forward_cmd_distance" default="0.45"/>
+  <arg name="cruise_min_speed" default="0.42"/>
+  <arg name="cruise_distance_m" default="1.80"/>
+  <arg name="rotate_only_deg" default="150.0"/>
   <arg name="rotate_exit_deg" default="40.0"/>
-  <arg name="rotate_w_max_deg" default="$(eval '28.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
+  <arg name="rotate_w_max_deg" default="28.0"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.45"/>
@@ -402,7 +402,7 @@
   <arg name="local_blind_zone_guard_lookahead_m" default="1.0"/>
   <arg name="local_blind_zone_guard_heading_deadband_deg" default="12.0"/>
   <arg name="tracked_object_virtual_obstacles_enabled" default="true"/>
-  <arg name="tracked_object_avoidance_enabled" default="$(eval 'true' if str(arg('real_mode')).lower() == 'true' else 'false')"/>
+  <arg name="tracked_object_avoidance_enabled" default="true"/>
   <arg name="tracked_object_virtual_max_range_m" default="4.0"/>
   <arg name="tracked_object_prediction_horizon_s" default="1.2"/>
   <arg name="tracked_object_prediction_step_s" default="0.3"/>
@@ -461,7 +461,7 @@
   <arg name="global_obstacle_overlay_downsample" default="1"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
   <arg name="enable_planning_slowdown_manager" default="true"/>
-  <arg name="planning_slowdown_speed_limit_mps" default="$(eval '0.34' if str(arg('real_mode')).lower() == 'true' else '0.22')"/>
+  <arg name="planning_slowdown_speed_limit_mps" default="0.34"/>
   <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
   <arg name="planning_slowdown_hold_s" default="2.0"/>
   <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
@@ -499,12 +499,12 @@
   <arg name="cross_path_vehicle_min_relative_speed_mps" default="0.50"/>
   <arg name="pedestrian_stop_distance_m" default="1.05"/>
   <arg name="pedestrian_caution_distance_m" default="2.00"/>
-  <arg name="static_stop_distance_m" default="$(eval '1.30' if str(arg('real_mode')).lower() == 'true' else '1.10')"/>
-  <arg name="static_caution_distance_m" default="$(eval '2.20' if str(arg('real_mode')).lower() == 'true' else '2.00')"/>
-  <arg name="behavior_stop_on_count" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
+  <arg name="static_stop_distance_m" default="1.30"/>
+  <arg name="static_caution_distance_m" default="2.20"/>
+  <arg name="behavior_stop_on_count" default="2"/>
   <arg name="behavior_stop_off_count" default="4"/>
   <arg name="behavior_stop_hold_s" default="0.25"/>
-  <arg name="cloud_tracker_max_range_m" default="$(eval '45.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
+  <arg name="cloud_tracker_max_range_m" default="45.0"/>
   <arg name="cloud_tracker_max_assoc_dist_m" default="1.5"/>
   <arg name="cloud_tracker_dynamic_assoc_bonus_m" default="0.5"/>
   <arg name="cloud_tracker_track_timeout_s" default="2.0"/>
@@ -523,13 +523,13 @@
   <arg name="cloud_tracker_recent_dynamic_hold_s" default="2.5"/>
   <arg name="cloud_tracker_recent_dynamic_velocity_decay" default="0.65"/>
   <arg name="cloud_tracker_position_jitter_m" default="0.16"/>
-  <arg name="cloud_tracker_prediction_lead_s" default="$(eval '0.10' if str(arg('real_mode')).lower() == 'true' else '0.08')"/>
-  <arg name="cloud_tracker_pedestrian_prediction_lead_s" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.14')"/>
+  <arg name="cloud_tracker_prediction_lead_s" default="0.10"/>
+  <arg name="cloud_tracker_pedestrian_prediction_lead_s" default="0.18"/>
   <arg name="cloud_tracker_allow_out_of_grid_clusters" default="true"/>
-  <arg name="cloud_tracker_grid_relaxation_distance_m" default="$(eval '10.0' if str(arg('real_mode')).lower() == 'true' else '8.0')"/>
+  <arg name="cloud_tracker_grid_relaxation_distance_m" default="10.0"/>
   <arg name="cloud_tracker_forward_non_drivable_detection_enabled" default="true"/>
   <arg name="cloud_tracker_forward_non_drivable_forward_range_m" default="$(arg cloud_tracker_max_range_m)"/>
-  <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="$(eval '6.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
+  <arg name="cloud_tracker_forward_non_drivable_side_lateral_m" default="6.0"/>
   <arg name="cloud_tracker_forward_non_drivable_rear_margin_m" default="-0.4"/>
   <arg name="cloud_tracker_forward_non_drivable_max_cluster_span_m" default="8.0"/>
   <arg name="cloud_tracker_forward_non_drivable_max_cluster_aspect_ratio" default="6.0"/>
