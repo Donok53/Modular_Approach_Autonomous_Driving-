@@ -1020,12 +1020,51 @@ class DWAControl:
         box.scale.x = self.near_field_raw_stop_max_x_m - self.near_field_raw_stop_min_x_m
         box.scale.y = 2.0 * self.near_field_raw_stop_half_width_m
         box.scale.z = self.near_field_raw_stop_max_z_m - self.near_field_raw_stop_min_z_m
-        box.color.a = 0.22 if self._near_field_raw_stop_blocked else 0.12
-        box.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.1
-        box.color.g = 0.05 if self._near_field_raw_stop_blocked else 0.9
-        box.color.b = 0.05
+        box.color.a = 0.32 if self._near_field_raw_stop_blocked else 0.18
+        box.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.0
+        box.color.g = 0.05 if self._near_field_raw_stop_blocked else 0.95
+        box.color.b = 0.05 if self._near_field_raw_stop_blocked else 0.95
         box.lifetime = rospy.Duration(max(0.2, self.near_field_raw_stop_timeout_s * 2.0))
         markers.markers.append(box)
+
+        outline = Marker()
+        outline.header = header
+        outline.ns = "near_field_raw_stop"
+        outline.id = 2
+        outline.type = Marker.LINE_LIST
+        outline.action = Marker.ADD
+        outline.pose.orientation.w = 1.0
+        outline.scale.x = 0.03
+        outline.color.a = 1.0
+        outline.color.r = 1.0 if self._near_field_raw_stop_blocked else 0.0
+        outline.color.g = 0.05 if self._near_field_raw_stop_blocked else 0.95
+        outline.color.b = 0.05 if self._near_field_raw_stop_blocked else 1.0
+        outline.lifetime = box.lifetime
+        min_x = self.near_field_raw_stop_min_x_m
+        max_x = self.near_field_raw_stop_max_x_m
+        min_y = -self.near_field_raw_stop_half_width_m
+        max_y = self.near_field_raw_stop_half_width_m
+        min_z = self.near_field_raw_stop_min_z_m
+        max_z = self.near_field_raw_stop_max_z_m
+        corners = [
+            Point(min_x, min_y, min_z),
+            Point(max_x, min_y, min_z),
+            Point(max_x, max_y, min_z),
+            Point(min_x, max_y, min_z),
+            Point(min_x, min_y, max_z),
+            Point(max_x, min_y, max_z),
+            Point(max_x, max_y, max_z),
+            Point(min_x, max_y, max_z),
+        ]
+        edge_indices = (
+            (0, 1), (1, 2), (2, 3), (3, 0),
+            (4, 5), (5, 6), (6, 7), (7, 4),
+            (0, 4), (1, 5), (2, 6), (3, 7),
+        )
+        for start_idx, end_idx in edge_indices:
+            outline.points.append(corners[start_idx])
+            outline.points.append(corners[end_idx])
+        markers.markers.append(outline)
 
         text = Marker()
         text.header = header
