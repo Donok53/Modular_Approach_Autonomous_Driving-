@@ -358,7 +358,7 @@
   <arg name="rotate_w_max_deg" default="$(eval '28.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
-  <arg name="avoidance_hard_stop_distance" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
+  <arg name="avoidance_hard_stop_distance" default="$(eval '0.45' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
   <arg name="pointcloud_static_block_margin_m" default="0.06"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
@@ -549,7 +549,7 @@
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
   <arg name="enable_emergency_stop" default="true"/>
-  <arg name="emergency_stop_distance" default="$(eval '0.50' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
+  <arg name="emergency_stop_distance" default="$(eval '0.70' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
   <arg name="emergency_bin_size_m" default="0.10"/>
   <arg name="emergency_min_close_points" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '4')"/>
   <arg name="emergency_immediate_contact_min_points" default="$(eval '1' if str(arg('real_mode')).lower() == 'true' else '3')"/>
@@ -566,8 +566,8 @@
   <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
   <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
-  <arg name="near_field_raw_stop_max_x_m" default="1.05"/>
-  <arg name="near_field_raw_stop_half_width_m" default="0.30"/>
+  <arg name="near_field_raw_stop_max_x_m" default="$(eval '1.25' if str(arg('real_mode')).lower() == 'true' else '1.05')"/>
+  <arg name="near_field_raw_stop_half_width_m" default="$(eval '0.34' if str(arg('real_mode')).lower() == 'true' else '0.30')"/>
   <arg name="near_field_raw_stop_min_z_m" default="0.08"/>
   <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
   <arg name="near_field_raw_stop_min_points" default="3"/>
