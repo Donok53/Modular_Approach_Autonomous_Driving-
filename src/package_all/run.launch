@@ -24,6 +24,7 @@
   <arg name="localizer_initial_pose_pitch_deg" default="0.0"/>
   <arg name="localizer_initial_pose_yaw_deg" default="160.6"/>
   <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
+  <arg name="controller_pose_topic" default="$(eval arg('pose_topic') if str(arg('real_mode')).lower() == 'true' else '/lio_localizer/odometry/planning')"/>
   <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
@@ -307,7 +308,7 @@
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.75' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
-  <arg name="path_tracking_steer_filter_gain" default="$(eval '0.16' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
+  <arg name="path_tracking_steer_filter_gain" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
   <arg name="lookahead_distance" default="$(eval '1.20' if str(arg('real_mode')).lower() == 'true' else '1.15')"/>
   <arg name="snap_lat_err" default="0.20"/>
   <arg name="snap_target_ahead_m" default="0.60"/>
@@ -316,11 +317,11 @@
   <arg name="tracking_path_smoothing_passes" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '3')"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '38.0' if str(arg('real_mode')).lower() == 'true' else '42.0')"/>
   <arg name="path_tracking_in_place_yaw_rate_max_deg" default="$(eval '26.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
-  <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '90.0' if str(arg('real_mode')).lower() == 'true' else '120.0')"/>
+  <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '120.0')"/>
   <arg name="cmd_smoothing_enabled" default="true"/>
   <arg name="cmd_linear_accel_max_mps2" default="$(eval '0.55' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="cmd_linear_decel_max_mps2" default="0.90"/>
-  <arg name="cmd_angular_accel_max_degps2" default="$(eval '75.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
+  <arg name="cmd_angular_accel_max_degps2" default="$(eval '95.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
   <arg name="cmd_angular_decel_max_degps2" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '130.0')"/>
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="$(eval '55.0' if str(arg('real_mode')).lower() == 'true' else '40.0')"/>
@@ -328,9 +329,9 @@
   <arg name="path_tracking_cte_gain" default="$(eval '0.42' if str(arg('real_mode')).lower() == 'true' else '0.80')"/>
   <arg name="path_tracking_cte_soft_mps" default="0.25"/>
   <arg name="path_tracking_cte_deadband_m" default="$(eval '0.09' if str(arg('real_mode')).lower() == 'true' else '0.05')"/>
-  <arg name="path_tracking_cte_filter_gain" default="$(eval '0.20' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="path_tracking_cte_filter_gain" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
-  <arg name="path_tracking_heading_filter_gain" default="$(eval '0.05' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
+  <arg name="path_tracking_heading_filter_gain" default="$(eval '0.14' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
   <arg name="path_tracking_goal_bearing_gain" default="$(eval '0.65' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="$(eval '0.70' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
@@ -866,6 +867,7 @@
   <group if="$(eval arg('local_planner_mode') == 'custom')">
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
       <arg name="pose_topic" value="$(arg pose_topic)"/>
+      <arg name="controller_pose_topic" value="$(arg controller_pose_topic)"/>
       <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
       <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>

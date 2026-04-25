@@ -1,6 +1,7 @@
 <launch>
     <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
     <arg name="planning_pose_topic" default="/lio_localizer/odometry/planning"/>
+    <arg name="controller_pose_topic" default="$(arg planning_pose_topic)"/>
     <arg name="pose_filter_twist_topic" default="/lio_localizer/odometry/lidar_incremental"/>
     <arg name="pose_filter_twist_linear_frame" default="world"/>
     <arg name="pose_filter_twist_timeout_s" default="0.30"/>
@@ -762,7 +763,7 @@
     </group>
 
     <node pkg="dynamic_window_approach" type="dynamicwindowapproach.py" name="dynamic_window_approach" output="screen" respawn="false">
-        <param name="pose_topic" value="$(arg planning_pose_topic)"/>
+        <param name="pose_topic" value="$(arg controller_pose_topic)"/>
         <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
