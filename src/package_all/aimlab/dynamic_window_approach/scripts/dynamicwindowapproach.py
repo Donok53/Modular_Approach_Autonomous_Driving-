@@ -1002,17 +1002,22 @@ class DWAControl:
         if self.near_field_raw_stop_marker_pub is None:
             return
 
+        marker_header = Header()
+        marker_header.stamp = rospy.Time(0)
+        marker_header.frame_id = header.frame_id
+
         markers = MarkerArray()
         delete_all = Marker()
         delete_all.action = Marker.DELETEALL
         markers.markers.append(delete_all)
 
         box = Marker()
-        box.header = header
+        box.header = marker_header
         box.ns = "near_field_raw_stop"
         box.id = 0
         box.type = Marker.CUBE
         box.action = Marker.ADD
+        box.frame_locked = True
         box.pose.position.x = 0.5 * (
             self.near_field_raw_stop_min_x_m + self.near_field_raw_stop_max_x_m
         )
@@ -1032,11 +1037,12 @@ class DWAControl:
         markers.markers.append(box)
 
         outline = Marker()
-        outline.header = header
+        outline.header = marker_header
         outline.ns = "near_field_raw_stop"
         outline.id = 2
         outline.type = Marker.LINE_LIST
         outline.action = Marker.ADD
+        outline.frame_locked = True
         outline.pose.orientation.w = 1.0
         outline.scale.x = 0.03
         outline.color.a = 1.0
@@ -1071,11 +1077,12 @@ class DWAControl:
         markers.markers.append(outline)
 
         text = Marker()
-        text.header = header
+        text.header = marker_header
         text.ns = "near_field_raw_stop"
         text.id = 1
         text.type = Marker.TEXT_VIEW_FACING
         text.action = Marker.ADD
+        text.frame_locked = True
         text.pose.position.x = self.near_field_raw_stop_max_x_m
         text.pose.position.y = 0.0
         text.pose.position.z = self.near_field_raw_stop_max_z_m + 0.25
