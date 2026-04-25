@@ -1977,6 +1977,7 @@ class DWAControl:
         return u, trajectory
 
     def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap, remaining_dist):
+        obstacle_response_active = str(self.behavior_reason).strip().lower() != "clear"
         path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
         if abs(lat_err) <= self.path_tracking_cte_deadband_m:
             lat_err_ctrl = 0.0
@@ -2011,9 +2012,12 @@ class DWAControl:
                 )
             )
             goal_align_ratio = max(0.0, min(1.0, goal_align_ratio))
+        goal_bearing_gain = self.path_tracking_goal_bearing_gain
+        if obstacle_response_active:
+            goal_bearing_gain *= 1.20
         goal_heading_weight = 0.0
         if remaining_dist <= max(self.lookahead_distance, 0.8):
-            goal_heading_weight = min(0.20, self.path_tracking_goal_bearing_gain)
+            goal_heading_weight = min(0.28 if obstacle_response_active else 0.20, goal_bearing_gain)
         goal_heading_weight = max(goal_heading_weight, goal_align_ratio)
         cte_correction = math.atan2(
             self.path_tracking_cte_gain * self._path_tracking_filtered_lat_err,
@@ -2054,24 +2058,27 @@ class DWAControl:
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
+        tracking_kp = self.path_tracking_kp * (1.15 if obstacle_response_active else 1.0)
+        yaw_rate_limit = self.path_tracking_yaw_rate_max * (1.12 if obstacle_response_active else 1.0)
         if abs_err >= self.path_tracking_stop_yaw:
-            w_target = self.path_tracking_kp * yaw_err
+            w_target = tracking_kp * yaw_err
             if need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0:
                 v_cmd = min(v_limit, self.path_tracking_large_yaw_crawl_speed)
-                w_limit = self.path_tracking_yaw_rate_max
+                w_limit = yaw_rate_limit
             else:
                 v_cmd = 0.0
                 w_limit = self.path_tracking_in_place_yaw_rate_max
         else:
             if self.path_tracking_slowdown_yaw > 1e-6:
-                slow_ratio = max(0.25, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
+                slow_ratio_floor = 0.18 if obstacle_response_active else 0.25
+                slow_ratio = max(slow_ratio_floor, 1.0 - abs_err / self.path_tracking_slowdown_yaw)
             else:
                 slow_ratio = 1.0
             v_cmd = min(v_limit, max(0.0, v_limit * slow_ratio))
             if need_progress and v_cmd > 0.0 and self.path_tracking_crawl_speed > 0.0:
                 v_cmd = max(v_cmd, min(v_limit, self.path_tracking_crawl_speed))
-            w_target = self.path_tracking_kp * yaw_err
-            w_limit = self.path_tracking_yaw_rate_max
+            w_target = tracking_kp * yaw_err
+            w_limit = yaw_rate_limit
 
         if goal_align_ratio > 0.0:
             w_limit = min(
@@ -2102,6 +2109,7 @@ class DWAControl:
 
         if (
             need_progress
+            and (not obstacle_response_active)
             and self.cruise_min_speed > 0.0
             and remaining_dist > self.cruise_distance_m
             and abs(self._path_tracking_filtered_lat_err) < self.cruise_lat_err_m
@@ -2743,6 +2751,7 @@ class DWAControl:
 
             # low-speed clamp with cap in direction of chosen v sign
             u_cmd = list(u)
+            obstacle_response_active = str(self.behavior_reason).strip().lower() != "clear"
 
             if u_cmd[0] >= 0.0:
                 u_cmd[0] = min(v_cap, max(0.0, u_cmd[0]))
@@ -2752,6 +2761,8 @@ class DWAControl:
 
             # 너무 느리게 기어가면 노이즈만 생기니, 아주 작으면 그냥 0으로
             if (
+                (not obstacle_response_active)
+                and
                 u_cmd[0] > 0.0
                 and dist_to_goal > self.min_forward_cmd_distance
                 and u_cmd[0] < self.min_forward_cmd
