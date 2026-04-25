@@ -344,6 +344,8 @@
   <arg name="path_tracking_goal_yaw_rate_max_deg" default="$(eval '18.0' if str(arg('real_mode')).lower() == 'true' else '25.0')"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="$(eval '1.80' if str(arg('real_mode')).lower() == 'true' else '0.90')"/>
+  <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
+  <arg name="path_tracking_minor_replan_delta_m" default="$(eval '0.35' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
   <arg name="forward_motion_deadband" default="0.01"/>
   <arg name="min_forward_cmd" default="$(eval '0.18' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
   <arg name="min_forward_cmd_distance" default="$(eval '0.25' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
@@ -1037,6 +1039,8 @@
       <arg name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
       <arg name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
       <arg name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
+      <arg name="path_tracking_reset_goal_delta_m" value="$(arg path_tracking_reset_goal_delta_m)"/>
+      <arg name="path_tracking_minor_replan_delta_m" value="$(arg path_tracking_minor_replan_delta_m)"/>
       <arg name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
       <arg name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
       <arg name="rotate_w_max_deg" value="$(arg rotate_w_max_deg)"/>

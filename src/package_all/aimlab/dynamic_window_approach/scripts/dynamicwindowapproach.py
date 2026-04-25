@@ -526,6 +526,12 @@ class DWAControl:
                 )
             ),
         )
+        self.path_tracking_reset_goal_delta_m = max(
+            0.0, float(rospy.get_param("~path_tracking_reset_goal_delta_m", 0.80))
+        )
+        self.path_tracking_minor_replan_delta_m = max(
+            0.0, float(rospy.get_param("~path_tracking_minor_replan_delta_m", 0.30))
+        )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
         self._path_tracking_filtered_lat_err = 0.0
@@ -1414,6 +1420,109 @@ class DWAControl:
                 round(p_mid.x, 3), round(p_mid.y, 3),
                 round(p1.x, 3), round(p1.y, 3))
 
+    def _build_geometry_from_path_msg(self, path_msg):
+        if path_msg is None or len(path_msg.poses) < 2:
+            return [], [], [0.0], 0.0
+
+        path_pts = []
+        for ps in path_msg.poses:
+            p = ps.pose.position
+            path_pts.append((float(p.x), float(p.y)))
+        path_pts = self._smooth_tracking_polyline(path_pts)
+
+        seg_lens = []
+        cum_len = [0.0]
+        s_total = 0.0
+        for i in range(len(path_pts) - 1):
+            dx = path_pts[i + 1][0] - path_pts[i][0]
+            dy = path_pts[i + 1][1] - path_pts[i][1]
+            seg_len = math.hypot(dx, dy)
+            seg_lens.append(seg_len)
+            s_total += seg_len
+            cum_len.append(s_total)
+        return path_pts, seg_lens, cum_len, s_total
+
+    def _interp_geometry_xy_at_s(self, path_pts, seg_lens, cum_len, s_total, s):
+        if len(path_pts) < 2:
+            return 0.0, 0.0
+        if s <= 0.0:
+            return float(path_pts[0][0]), float(path_pts[0][1])
+        if s >= s_total:
+            return float(path_pts[-1][0]), float(path_pts[-1][1])
+
+        i = 0
+        while i < len(seg_lens) and cum_len[i + 1] < s:
+            i += 1
+        seg_len = seg_lens[i]
+        ds = s - cum_len[i]
+        t = 0.0 if seg_len < 1e-9 else (ds / seg_len)
+        x0, y0 = path_pts[i]
+        x1, y1 = path_pts[i + 1]
+        return (
+            float(x0 + t * (x1 - x0)),
+            float(y0 + t * (y1 - y0)),
+        )
+
+    def _incoming_path_requires_activation(self, path_msg, sig, source):
+        if source != self.active_path_source:
+            return True
+        if self.path_sig == sig:
+            return False
+        if source != "global":
+            return True
+        if path_msg is None or self.path_msg is None:
+            return True
+        if (
+            self.path_tracking_minor_replan_delta_m <= 0.0
+            or len(self.path_pts) < 2
+            or not path_msg.poses
+            or not self.path_msg.poses
+        ):
+            return True
+
+        new_goal = path_msg.poses[-1].pose.position
+        old_goal = self.path_msg.poses[-1].pose.position
+        goal_delta = math.hypot(
+            float(new_goal.x) - float(old_goal.x),
+            float(new_goal.y) - float(old_goal.y),
+        )
+        if goal_delta > self.path_tracking_reset_goal_delta_m:
+            return True
+
+        self._sync_progress_to_current_pose()
+        new_pts, new_seg_lens, new_cum_len, new_s_total = self._build_geometry_from_path_msg(path_msg)
+        if len(new_pts) < 2:
+            return True
+
+        sample_offsets = []
+        for d in (1.0, 2.5, 4.0):
+            if self.s_cur + d <= self.s_total - 0.05 and d <= new_s_total - 0.05:
+                sample_offsets.append(d)
+        if not sample_offsets:
+            self.path_sig = sig
+            return False
+
+        for d in sample_offsets:
+            cur_x, cur_y = self._interp_geometry_xy_at_s(
+                self.path_pts,
+                self.seg_lens,
+                self.cum_len,
+                self.s_total,
+                self.s_cur + d,
+            )
+            new_x, new_y = self._interp_geometry_xy_at_s(
+                new_pts,
+                new_seg_lens,
+                new_cum_len,
+                new_s_total,
+                d,
+            )
+            if math.hypot(cur_x - new_x, cur_y - new_y) > self.path_tracking_minor_replan_delta_m:
+                return True
+
+        self.path_sig = sig
+        return False
+
     def _rebuild_path_geometry(self):
         self.path_pts = []
         for ps in self.path_msg.poses:
@@ -1539,11 +1648,27 @@ class DWAControl:
 
     def _activate_path(self, path_msg, sig, source):
         path_changed = sig != self.path_sig
+        goal_changed = False
+        if (
+            path_changed
+            and source == self.active_path_source
+            and path_msg is not None
+            and self.path_msg is not None
+            and self.path_tracking_reset_goal_delta_m > 0.0
+            and path_msg.poses
+            and self.path_msg.poses
+        ):
+            new_goal = path_msg.poses[-1].pose.position
+            old_goal = self.path_msg.poses[-1].pose.position
+            goal_changed = (
+                math.hypot(float(new_goal.x) - float(old_goal.x), float(new_goal.y) - float(old_goal.y))
+                > self.path_tracking_reset_goal_delta_m
+            )
         reset_tracking = (
             source != self.active_path_source
             or path_msg is None
             or self.path_msg is None
-            or path_changed
+            or goal_changed
         )
         self.path_sig = sig
         self.path_msg = path_msg
@@ -1590,7 +1715,7 @@ class DWAControl:
         now = rospy.Time.now()
         if self.follow_global_path_only:
             if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
-                if self.active_path_source != "global" or self.path_sig != self.global_path_sig:
+                if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
                     self._activate_path(self.global_path_msg, self.global_path_sig, "global")
                 return
             if self.path_msg is not None or self.active_path_source != "none":
@@ -1604,7 +1729,7 @@ class DWAControl:
             )
             if active_fresh:
                 if self.active_path_msg is not None and len(self.active_path_msg.poses) >= 2:
-                    if self.active_path_source != "active" or self.path_sig != self.active_path_sig:
+                    if self._incoming_path_requires_activation(self.active_path_msg, self.active_path_sig, "active"):
                         self._activate_path(self.active_path_msg, self.active_path_sig, "active")
                 elif self.path_msg is not None or self.active_path_source != "none":
                     self._activate_path(None, None, "none")
@@ -1620,7 +1745,7 @@ class DWAControl:
             and (now - self.avoidance_path_stamp).to_sec() <= self.avoidance_path_timeout_s
         )
         if use_avoidance:
-            if self.active_path_source != "avoidance" or self.path_sig != self.avoidance_path_sig:
+            if self._incoming_path_requires_activation(self.avoidance_path_msg, self.avoidance_path_sig, "avoidance"):
                 self._activate_path(self.avoidance_path_msg, self.avoidance_path_sig, "avoidance")
             return
 
@@ -1630,12 +1755,12 @@ class DWAControl:
             and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
         )
         if use_local:
-            if self.active_path_source != "local" or self.path_sig != self.local_path_sig:
+            if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
                 self._activate_path(self.local_path_msg, self.local_path_sig, "local")
             return
 
         if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
-            if self.active_path_source != "global" or self.path_sig != self.global_path_sig:
+            if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
                 self._activate_path(self.global_path_msg, self.global_path_sig, "global")
             return
 

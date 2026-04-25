@@ -166,6 +166,8 @@
     <arg name="path_tracking_goal_yaw_rate_max_deg" default="25.0"/>
     <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.45"/>
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.90"/>
+    <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
+    <arg name="path_tracking_minor_replan_delta_m" default="0.30"/>
     <arg name="rotate_only_deg" default="110.0"/>
     <arg name="rotate_exit_deg" default="40.0"/>
     <arg name="rotate_w_max_deg" default="30.0"/>
@@ -822,6 +824,8 @@
         <param name="final_speed_k" value="$(arg final_speed_k)"/>
         <param name="final_speed_min" value="$(arg final_speed_min)"/>
         <param name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
+        <param name="path_tracking_reset_goal_delta_m" value="$(arg path_tracking_reset_goal_delta_m)"/>
+        <param name="path_tracking_minor_replan_delta_m" value="$(arg path_tracking_minor_replan_delta_m)"/>
         <param name="path_tracking_stop_distance_m" value="$(arg path_tracking_stop_distance_m)"/>
         <param name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
         <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
