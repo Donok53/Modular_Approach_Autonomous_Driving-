@@ -28,6 +28,18 @@
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
+  <arg name="pose_filter_forward_tau_s" default="$(eval '0.24' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="pose_filter_lateral_tau_s" default="$(eval '1.30' if str(arg('real_mode')).lower() == 'true' else '0.70')"/>
+  <arg name="pose_filter_turning_lateral_tau_s" default="$(eval '0.38' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
+  <arg name="pose_filter_yaw_tau_s" default="$(eval '0.90' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
+  <arg name="pose_filter_turning_yaw_tau_s" default="$(eval '0.30' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="pose_filter_twist_tau_s" default="$(eval '0.30' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
+  <arg name="pose_filter_lateral_deadband_m" default="$(eval '0.04' if str(arg('real_mode')).lower() == 'true' else '0.03')"/>
+  <arg name="pose_filter_yaw_deadband_deg" default="$(eval '2.0' if str(arg('real_mode')).lower() == 'true' else '1.5')"/>
+  <arg name="pose_filter_straight_speed_min_mps" default="$(eval '0.12' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
+  <arg name="pose_filter_turning_yaw_rate_threshold_rps" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.20')"/>
+  <arg name="pose_filter_turning_yaw_error_deg" default="$(eval '12.0' if str(arg('real_mode')).lower() == 'true' else '10.0')"/>
+  <arg name="pose_filter_max_straight_lateral_correction_mps" default="$(eval '0.12' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="pointcloud_topic" default="/ouster/points"/>
   <arg name="imu_topic" default="/imu/data"/>
   <arg name="cloud_tracker_pointcloud_topic" default="$(eval '/lio_sam/deskew/cloud_deskewed' if arg('use_lio_sam') == 'true' else '/lio_localizer/localization/cloud_deskewed')"/>
@@ -295,16 +307,16 @@
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.75' if str(arg('real_mode')).lower() == 'true' else '0.35')"/>
-  <arg name="path_tracking_steer_filter_gain" default="0.25"/>
-  <arg name="lookahead_distance" default="$(eval '1.05' if str(arg('real_mode')).lower() == 'true' else '1.15')"/>
+  <arg name="path_tracking_steer_filter_gain" default="$(eval '0.16' if str(arg('real_mode')).lower() == 'true' else '0.25')"/>
+  <arg name="lookahead_distance" default="$(eval '1.20' if str(arg('real_mode')).lower() == 'true' else '1.15')"/>
   <arg name="snap_lat_err" default="0.20"/>
   <arg name="snap_target_ahead_m" default="0.60"/>
   <arg name="tracking_projection_back_window_m" default="0.35"/>
-  <arg name="tracking_projection_forward_window_m" default="$(eval '1.70' if str(arg('real_mode')).lower() == 'true' else '1.50')"/>
-  <arg name="tracking_path_smoothing_passes" default="$(eval '2' if str(arg('real_mode')).lower() == 'true' else '3')"/>
+  <arg name="tracking_projection_forward_window_m" default="$(eval '2.00' if str(arg('real_mode')).lower() == 'true' else '1.50')"/>
+  <arg name="tracking_path_smoothing_passes" default="$(eval '4' if str(arg('real_mode')).lower() == 'true' else '3')"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '38.0' if str(arg('real_mode')).lower() == 'true' else '42.0')"/>
   <arg name="path_tracking_in_place_yaw_rate_max_deg" default="$(eval '26.0' if str(arg('real_mode')).lower() == 'true' else '30.0')"/>
-  <arg name="path_tracking_yaw_accel_max_deg" default="120.0"/>
+  <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '90.0' if str(arg('real_mode')).lower() == 'true' else '120.0')"/>
   <arg name="cmd_smoothing_enabled" default="true"/>
   <arg name="cmd_linear_accel_max_mps2" default="$(eval '0.55' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="cmd_linear_decel_max_mps2" default="0.90"/>
@@ -313,16 +325,16 @@
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="$(eval '55.0' if str(arg('real_mode')).lower() == 'true' else '40.0')"/>
   <arg name="path_tracking_stop_yaw_deg" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
-  <arg name="path_tracking_cte_gain" default="$(eval '0.55' if str(arg('real_mode')).lower() == 'true' else '0.80')"/>
+  <arg name="path_tracking_cte_gain" default="$(eval '0.42' if str(arg('real_mode')).lower() == 'true' else '0.80')"/>
   <arg name="path_tracking_cte_soft_mps" default="0.25"/>
-  <arg name="path_tracking_cte_deadband_m" default="$(eval '0.07' if str(arg('real_mode')).lower() == 'true' else '0.05')"/>
+  <arg name="path_tracking_cte_deadband_m" default="$(eval '0.09' if str(arg('real_mode')).lower() == 'true' else '0.05')"/>
   <arg name="path_tracking_cte_filter_gain" default="$(eval '0.20' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="25.0"/>
-  <arg name="path_tracking_heading_filter_gain" default="$(eval '0.08' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
+  <arg name="path_tracking_heading_filter_gain" default="$(eval '0.05' if str(arg('real_mode')).lower() == 'true' else '0.12')"/>
   <arg name="path_tracking_goal_bearing_gain" default="$(eval '0.65' if str(arg('real_mode')).lower() == 'true' else '0.45')"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
-  <arg name="path_tracking_target_step_m" default="$(eval '0.48' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
-  <arg name="path_tracking_tangent_window_m" default="$(eval '1.00' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
+  <arg name="path_tracking_target_step_m" default="$(eval '0.70' if str(arg('real_mode')).lower() == 'true' else '0.18')"/>
+  <arg name="path_tracking_tangent_window_m" default="$(eval '1.30' if str(arg('real_mode')).lower() == 'true' else '0.60')"/>
   <arg name="path_tracking_crawl_speed" default="$(eval '0.28' if str(arg('real_mode')).lower() == 'true' else '0.13')"/>
   <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.24' if str(arg('real_mode')).lower() == 'true' else '0.10')"/>
   <arg name="final_approach_window_m" default="0.0"/>
@@ -856,6 +868,18 @@
       <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
+      <arg name="pose_filter_forward_tau_s" value="$(arg pose_filter_forward_tau_s)"/>
+      <arg name="pose_filter_lateral_tau_s" value="$(arg pose_filter_lateral_tau_s)"/>
+      <arg name="pose_filter_turning_lateral_tau_s" value="$(arg pose_filter_turning_lateral_tau_s)"/>
+      <arg name="pose_filter_yaw_tau_s" value="$(arg pose_filter_yaw_tau_s)"/>
+      <arg name="pose_filter_turning_yaw_tau_s" value="$(arg pose_filter_turning_yaw_tau_s)"/>
+      <arg name="pose_filter_twist_tau_s" value="$(arg pose_filter_twist_tau_s)"/>
+      <arg name="pose_filter_lateral_deadband_m" value="$(arg pose_filter_lateral_deadband_m)"/>
+      <arg name="pose_filter_yaw_deadband_deg" value="$(arg pose_filter_yaw_deadband_deg)"/>
+      <arg name="pose_filter_straight_speed_min_mps" value="$(arg pose_filter_straight_speed_min_mps)"/>
+      <arg name="pose_filter_turning_yaw_rate_threshold_rps" value="$(arg pose_filter_turning_yaw_rate_threshold_rps)"/>
+      <arg name="pose_filter_turning_yaw_error_deg" value="$(arg pose_filter_turning_yaw_error_deg)"/>
+      <arg name="pose_filter_max_straight_lateral_correction_mps" value="$(arg pose_filter_max_straight_lateral_correction_mps)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="$(arg planning_obstacle_pointcloud_topic)"/>
@@ -1221,6 +1245,18 @@
       <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
+      <arg name="pose_filter_forward_tau_s" value="$(arg pose_filter_forward_tau_s)"/>
+      <arg name="pose_filter_lateral_tau_s" value="$(arg pose_filter_lateral_tau_s)"/>
+      <arg name="pose_filter_turning_lateral_tau_s" value="$(arg pose_filter_turning_lateral_tau_s)"/>
+      <arg name="pose_filter_yaw_tau_s" value="$(arg pose_filter_yaw_tau_s)"/>
+      <arg name="pose_filter_turning_yaw_tau_s" value="$(arg pose_filter_turning_yaw_tau_s)"/>
+      <arg name="pose_filter_twist_tau_s" value="$(arg pose_filter_twist_tau_s)"/>
+      <arg name="pose_filter_lateral_deadband_m" value="$(arg pose_filter_lateral_deadband_m)"/>
+      <arg name="pose_filter_yaw_deadband_deg" value="$(arg pose_filter_yaw_deadband_deg)"/>
+      <arg name="pose_filter_straight_speed_min_mps" value="$(arg pose_filter_straight_speed_min_mps)"/>
+      <arg name="pose_filter_turning_yaw_rate_threshold_rps" value="$(arg pose_filter_turning_yaw_rate_threshold_rps)"/>
+      <arg name="pose_filter_turning_yaw_error_deg" value="$(arg pose_filter_turning_yaw_error_deg)"/>
+      <arg name="pose_filter_max_straight_lateral_correction_mps" value="$(arg pose_filter_max_straight_lateral_correction_mps)"/>
       <arg name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
       <arg name="cloud_tracker_pointcloud_topic" value="$(arg cloud_tracker_pointcloud_topic)"/>
       <arg name="obstacle_pointcloud_topic" value="/move_base/filtered_obstacles"/>
