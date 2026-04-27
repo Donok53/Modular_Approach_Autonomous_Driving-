@@ -249,7 +249,7 @@
     <arg name="global_obstacle_overlay_topic" default="/planning/global_obstacle_overlay"/>
     <arg name="global_obstacle_overlay_boxes_topic" default="/planning/global_obstacle_overlay_boxes"/>
     <arg name="global_obstacle_caution_topic" default="/planning/global_obstacle_caution"/>
-    <arg name="use_global_obstacle_overlay_boxes_for_stop" default="true"/>
+    <arg name="use_global_obstacle_overlay_boxes_for_stop" default="false"/>
     <arg name="global_obstacle_overlay_stop_locked_only" default="true"/>
     <arg name="global_obstacle_overlay_box_timeout_s" default="1.5"/>
     <arg name="suppress_dynamic_tracked_boxes" default="true"/>

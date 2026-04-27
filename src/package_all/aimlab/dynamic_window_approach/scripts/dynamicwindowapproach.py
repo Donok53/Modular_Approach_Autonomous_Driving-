@@ -311,6 +311,17 @@ class DWAControl:
         self.near_field_raw_stop_log_period_s = max(
             0.0, float(rospy.get_param("~near_field_raw_stop_log_period_s", 0.5))
         )
+        # When near-field raw stop is enabled, a second full /ouster/points pass
+        # inside this node can delay the critical stop callback under load.
+        self.enable_raw_cloud_fallback_stop = bool(
+            rospy.get_param(
+                "~enable_raw_cloud_fallback_stop",
+                not self.near_field_raw_stop_enabled,
+            )
+        )
+        self.enable_raw_cloud_processing = bool(
+            self.use_pointcloud_obstacle_cost or self.enable_raw_cloud_fallback_stop
+        )
         self._near_field_raw_stop_blocked = False
         self._near_field_raw_stop_on = 0
         self._near_field_raw_stop_off = 0
@@ -658,7 +669,16 @@ class DWAControl:
             self.near_field_raw_stop_tf_listener = tf2_ros.TransformListener(
                 self.near_field_raw_stop_tf_buffer
             )
-        self.sub_cloud = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=1)
+        self.sub_cloud = None
+        if self.enable_raw_cloud_processing:
+            self.sub_cloud = rospy.Subscriber(
+                self.cloud_topic,
+                PointCloud2,
+                self.cloud_callback,
+                queue_size=1,
+                buff_size=2**24,
+                tcp_nodelay=True,
+            )
         self.sub_near_field_raw_stop = None
         if self.near_field_raw_stop_enabled and self.near_field_raw_stop_topic:
             self.sub_near_field_raw_stop = rospy.Subscriber(
@@ -667,6 +687,7 @@ class DWAControl:
                 self.near_field_raw_stop_callback,
                 queue_size=1,
                 buff_size=2**24,
+                tcp_nodelay=True,
             )
         self.sub_global_obstacle_overlay_boxes = None
         if (
@@ -801,9 +822,13 @@ class DWAControl:
             self._near_field_raw_stop_blocked and near_raw_fresh
         )
 
-        raw_fallback_blocked = self._raw_immediate_contact_blocked or (
-            self._raw_emergency_band_blocked
-            and self._raw_front_obstacle_clearance <= self.avoidance_hard_stop_distance
+        raw_fallback_blocked = self.enable_raw_cloud_fallback_stop and (
+            self._raw_immediate_contact_blocked
+            or (
+                self._raw_emergency_band_blocked
+                and self._raw_front_obstacle_clearance
+                <= self.avoidance_hard_stop_distance
+            )
         )
         if self.use_global_obstacle_overlay_boxes_for_stop:
             near = self.overlay_box_blocked or raw_fallback_blocked or near_raw_blocked
@@ -850,6 +875,10 @@ class DWAControl:
         if not self.emergency_blocked and self._blk_on >= self.block_on_count:
             self.emergency_blocked = True
             state_changed = True
+            self.last_cmd = Twist()
+            self._last_cmd_smooth_stamp = rospy.Time.now()
+            if getattr(self, "cmd_vel_pub", None) is not None:
+                self.cmd_vel_pub.publish(self.last_cmd)
             rospy.logwarn(
                 "Emergency STOP: obstacle <= %.2fm | clearance=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s",
                 self.emergency_stop_distance,
@@ -1182,6 +1211,9 @@ class DWAControl:
             hit_points = []
             occupied_cells = set()
             min_x = float("inf")
+            footprint_front = self.robot_half_length_m + self.footprint_padding_m
+            stop_detected = False
+            close_override_detected = False
             i = 0
             for x, y, z in point_cloud2.read_points(
                 msg, field_names=("x", "y", "z"), skip_nans=True
@@ -1216,26 +1248,51 @@ class DWAControl:
                 )
                 if x < min_x:
                     min_x = x
+                hit_count = len(hit_points)
+                cell_count = len(occupied_cells)
+                min_front_clearance = (
+                    min_x - footprint_front if math.isfinite(min_x) else float("inf")
+                )
+                if (
+                    hit_count >= self.near_field_raw_stop_close_override_min_points
+                    and cell_count >= self.near_field_raw_stop_close_override_min_cells
+                    and min_front_clearance
+                    <= min(
+                        self.emergency_stop_distance,
+                        self.near_field_raw_stop_close_override_distance_m,
+                    )
+                ):
+                    close_override_detected = True
+                    stop_detected = True
+                    break
+                if (
+                    hit_count >= self.near_field_raw_stop_min_points
+                    and cell_count >= self.near_field_raw_stop_min_cells
+                    and min_front_clearance <= self.emergency_stop_distance
+                ):
+                    stop_detected = True
+                    break
 
             hit_count = len(hit_points)
             cell_count = len(occupied_cells)
-            detected = (
-                hit_count >= self.near_field_raw_stop_min_points
-                and cell_count >= self.near_field_raw_stop_min_cells
-            )
-            footprint_front = self.robot_half_length_m + self.footprint_padding_m
             min_front_clearance = (
                 min_x - footprint_front if math.isfinite(min_x) else float("inf")
             )
-            close_override_detected = (
-                hit_count >= self.near_field_raw_stop_close_override_min_points
-                and cell_count >= self.near_field_raw_stop_close_override_min_cells
-                and min_front_clearance <= self.near_field_raw_stop_close_override_distance_m
-            )
-            detected = detected or close_override_detected
-            stop_detected = (
-                detected and min_front_clearance <= self.emergency_stop_distance
-            )
+            if not stop_detected:
+                detected = (
+                    hit_count >= self.near_field_raw_stop_min_points
+                    and cell_count >= self.near_field_raw_stop_min_cells
+                )
+                close_override_detected = (
+                    hit_count >= self.near_field_raw_stop_close_override_min_points
+                    and cell_count >= self.near_field_raw_stop_close_override_min_cells
+                    and min_front_clearance
+                    <= self.near_field_raw_stop_close_override_distance_m
+                )
+                detected = detected or close_override_detected
+                stop_detected = (
+                    detected and min_front_clearance <= self.emergency_stop_distance
+                )
             if stop_detected:
                 self._near_field_raw_stop_last_reason = (
                     "close_override" if close_override_detected else "standard"
@@ -1371,6 +1428,8 @@ class DWAControl:
         return max_free_gap_m + 1e-6 < self.emergency_passable_width_m
 
     def cloud_callback(self, msg):
+        if not self.enable_raw_cloud_processing:
+            return
         try:
             obs = []
             close_points = []
@@ -2682,7 +2741,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -2703,6 +2762,7 @@ class DWAControl:
             "on" if self.global_obstacle_overlay_stop_locked_only else "off",
             self.global_obstacle_overlay_boxes_topic if self.global_obstacle_overlay_boxes_topic else "-",
             "on" if self.near_field_raw_stop_enabled else "off",
+            "on" if self.enable_raw_cloud_fallback_stop else "off",
             self.near_field_raw_stop_topic if self.near_field_raw_stop_topic else "-",
             self.near_field_raw_stop_base_frame if self.near_field_raw_stop_base_frame else "-",
             self.near_field_raw_stop_min_x_m,
