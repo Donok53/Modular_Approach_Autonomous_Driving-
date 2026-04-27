@@ -15,6 +15,7 @@ Fixes vs. original:
 """
 
 import math
+import time
 import numpy as np
 import rospy
 import tf2_ros
@@ -311,6 +312,9 @@ class DWAControl:
         self.near_field_raw_stop_log_period_s = max(
             0.0, float(rospy.get_param("~near_field_raw_stop_log_period_s", 0.5))
         )
+        self.near_field_raw_stop_publish_max_points = max(
+            0, int(rospy.get_param("~near_field_raw_stop_publish_max_points", 600))
+        )
         # When near-field raw stop is enabled, a second full /ouster/points pass
         # inside this node can delay the critical stop callback under load.
         self.enable_raw_cloud_fallback_stop = bool(
@@ -336,6 +340,7 @@ class DWAControl:
         self._near_field_raw_stop_last_marker_refresh = rospy.Time(0)
         self._near_field_raw_stop_hold_until = rospy.Time(0)
         self._near_field_raw_stop_last_reason = "clear"
+        self._near_field_raw_stop_last_process_ms = 0.0
         self._last_emergency_source = "none"
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
@@ -985,6 +990,67 @@ class DWAControl:
         )
 
     @staticmethod
+    def _pointcloud_xyz_offsets(msg):
+        offsets = {}
+        for field in msg.fields:
+            name = str(field.name)
+            if name in ("x", "y", "z"):
+                offsets[name] = int(field.offset)
+        if len(offsets) != 3:
+            return None
+        return offsets["x"], offsets["y"], offsets["z"]
+
+    def _pointcloud_xyz_numpy(self, msg, downsample=1):
+        offsets = self._pointcloud_xyz_offsets(msg)
+        if offsets is None:
+            return None
+        point_step = int(msg.point_step)
+        count = max(0, int(msg.width) * max(1, int(msg.height)))
+        if point_step <= 0 or count <= 0:
+            return None
+        if len(msg.data) < count * point_step:
+            return None
+
+        endian = ">" if bool(msg.is_bigendian) else "<"
+        dtype = np.dtype(
+            {
+                "names": ("x", "y", "z"),
+                "formats": (endian + "f4", endian + "f4", endian + "f4"),
+                "offsets": offsets,
+                "itemsize": point_step,
+            }
+        )
+        try:
+            raw = np.frombuffer(msg.data, dtype=dtype, count=count)
+        except (TypeError, ValueError):
+            return None
+
+        step = max(1, int(downsample))
+        raw = raw[::step]
+        points = np.empty((raw.shape[0], 3), dtype=np.float32)
+        points[:, 0] = raw["x"]
+        points[:, 1] = raw["y"]
+        points[:, 2] = raw["z"]
+        return points
+
+    @staticmethod
+    def _transform_points_xyz(mat, points):
+        if mat is None or points.size == 0:
+            return points
+        rot = np.asarray(mat[:3, :3], dtype=np.float32)
+        trans = np.asarray(mat[:3, 3], dtype=np.float32)
+        return points @ rot.T + trans
+
+    def _points_to_publish_xyz(self, points):
+        if points.size == 0:
+            return []
+        max_points = int(self.near_field_raw_stop_publish_max_points)
+        if max_points > 0 and points.shape[0] > max_points:
+            idx = np.linspace(0, points.shape[0] - 1, max_points, dtype=np.int32)
+            points = points[idx]
+        return [tuple(map(float, row)) for row in points]
+
+    @staticmethod
     def _transform_local_to_world_xy(local_x, local_y, pose_x, pose_y, yaw):
         c = math.cos(float(yaw))
         s = math.sin(float(yaw))
@@ -1197,6 +1263,7 @@ class DWAControl:
 
     def near_field_raw_stop_callback(self, msg):
         try:
+            process_start = time.monotonic()
             transform_mat, transform_ok, debug_frame = self._near_field_raw_stop_transform_matrix(msg)
             header = self._near_field_header(msg, debug_frame)
             if not transform_ok:
@@ -1204,95 +1271,101 @@ class DWAControl:
                 self._near_field_raw_stop_last_count = 0
                 self._near_field_raw_stop_last_cells = 0
                 self._near_field_raw_stop_last_min_x = float("inf")
+                self._near_field_raw_stop_last_process_ms = (
+                    time.monotonic() - process_start
+                ) * 1000.0
                 self._publish_near_field_raw_stop_debug(header, [])
                 self._update_emergency_stop_state()
                 return
 
             hit_points = []
-            occupied_cells = set()
             min_x = float("inf")
             footprint_front = self.robot_half_length_m + self.footprint_padding_m
             stop_detected = False
             close_override_detected = False
-            i = 0
-            for x, y, z in point_cloud2.read_points(
-                msg, field_names=("x", "y", "z"), skip_nans=True
-            ):
-                i += 1
-                if (
-                    self.near_field_raw_stop_downsample > 1
-                    and (i % self.near_field_raw_stop_downsample != 0)
+            points = self._pointcloud_xyz_numpy(
+                msg, downsample=self.near_field_raw_stop_downsample
+            )
+            if points is None:
+                occupied_cells = set()
+                i = 0
+                for x, y, z in point_cloud2.read_points(
+                    msg, field_names=("x", "y", "z"), skip_nans=True
                 ):
-                    continue
-                x, y, z = self._transform_point_xyz(transform_mat, float(x), float(y), float(z))
-                if not (
-                    self.near_field_raw_stop_min_x_m
-                    <= x
-                    <= self.near_field_raw_stop_max_x_m
-                ):
-                    continue
-                if abs(y) > self.near_field_raw_stop_half_width_m:
-                    continue
-                if not (
-                    self.near_field_raw_stop_min_z_m
-                    <= z
-                    <= self.near_field_raw_stop_max_z_m
-                ):
-                    continue
-                hit_points.append((x, y, z))
-                occupied_cells.add(
-                    (
-                        int(math.floor(x / self.near_field_raw_stop_cell_size_m)),
-                        int(math.floor(y / self.near_field_raw_stop_cell_size_m)),
+                    i += 1
+                    if (
+                        self.near_field_raw_stop_downsample > 1
+                        and (i % self.near_field_raw_stop_downsample != 0)
+                    ):
+                        continue
+                    x, y, z = self._transform_point_xyz(
+                        transform_mat, float(x), float(y), float(z)
                     )
-                )
-                if x < min_x:
-                    min_x = x
+                    if not (
+                        self.near_field_raw_stop_min_x_m
+                        <= x
+                        <= self.near_field_raw_stop_max_x_m
+                    ):
+                        continue
+                    if abs(y) > self.near_field_raw_stop_half_width_m:
+                        continue
+                    if not (
+                        self.near_field_raw_stop_min_z_m
+                        <= z
+                        <= self.near_field_raw_stop_max_z_m
+                    ):
+                        continue
+                    hit_points.append((x, y, z))
+                    occupied_cells.add(
+                        (
+                            int(math.floor(x / self.near_field_raw_stop_cell_size_m)),
+                            int(math.floor(y / self.near_field_raw_stop_cell_size_m)),
+                        )
+                    )
+                    if x < min_x:
+                        min_x = x
                 hit_count = len(hit_points)
                 cell_count = len(occupied_cells)
-                min_front_clearance = (
-                    min_x - footprint_front if math.isfinite(min_x) else float("inf")
+            else:
+                finite_mask = np.isfinite(points).all(axis=1)
+                points = points[finite_mask]
+                points = self._transform_points_xyz(transform_mat, points)
+                roi_mask = (
+                    (points[:, 0] >= self.near_field_raw_stop_min_x_m)
+                    & (points[:, 0] <= self.near_field_raw_stop_max_x_m)
+                    & (np.abs(points[:, 1]) <= self.near_field_raw_stop_half_width_m)
+                    & (points[:, 2] >= self.near_field_raw_stop_min_z_m)
+                    & (points[:, 2] <= self.near_field_raw_stop_max_z_m)
                 )
-                if (
-                    hit_count >= self.near_field_raw_stop_close_override_min_points
-                    and cell_count >= self.near_field_raw_stop_close_override_min_cells
-                    and min_front_clearance
-                    <= min(
-                        self.emergency_stop_distance,
-                        self.near_field_raw_stop_close_override_distance_m,
-                    )
-                ):
-                    close_override_detected = True
-                    stop_detected = True
-                    break
-                if (
-                    hit_count >= self.near_field_raw_stop_min_points
-                    and cell_count >= self.near_field_raw_stop_min_cells
-                    and min_front_clearance <= self.emergency_stop_distance
-                ):
-                    stop_detected = True
-                    break
+                hit_points_arr = points[roi_mask]
+                hit_count = int(hit_points_arr.shape[0])
+                if hit_count > 0:
+                    min_x = float(np.min(hit_points_arr[:, 0]))
+                    cells = np.floor(
+                        hit_points_arr[:, :2] / self.near_field_raw_stop_cell_size_m
+                    ).astype(np.int32)
+                    cell_count = int(np.unique(cells, axis=0).shape[0])
+                    hit_points = self._points_to_publish_xyz(hit_points_arr)
+                else:
+                    cell_count = 0
 
-            hit_count = len(hit_points)
-            cell_count = len(occupied_cells)
             min_front_clearance = (
                 min_x - footprint_front if math.isfinite(min_x) else float("inf")
             )
-            if not stop_detected:
-                detected = (
-                    hit_count >= self.near_field_raw_stop_min_points
-                    and cell_count >= self.near_field_raw_stop_min_cells
-                )
-                close_override_detected = (
-                    hit_count >= self.near_field_raw_stop_close_override_min_points
-                    and cell_count >= self.near_field_raw_stop_close_override_min_cells
-                    and min_front_clearance
-                    <= self.near_field_raw_stop_close_override_distance_m
-                )
-                detected = detected or close_override_detected
-                stop_detected = (
-                    detected and min_front_clearance <= self.emergency_stop_distance
-                )
+            detected = (
+                hit_count >= self.near_field_raw_stop_min_points
+                and cell_count >= self.near_field_raw_stop_min_cells
+            )
+            close_override_detected = (
+                hit_count >= self.near_field_raw_stop_close_override_min_points
+                and cell_count >= self.near_field_raw_stop_close_override_min_cells
+                and min_front_clearance
+                <= self.near_field_raw_stop_close_override_distance_m
+            )
+            detected = detected or close_override_detected
+            stop_detected = (
+                detected and min_front_clearance <= self.emergency_stop_distance
+            )
             if stop_detected:
                 self._near_field_raw_stop_last_reason = (
                     "close_override" if close_override_detected else "standard"
@@ -1328,6 +1401,9 @@ class DWAControl:
             self._near_field_raw_stop_last_count = hit_count
             self._near_field_raw_stop_last_cells = cell_count
             self._near_field_raw_stop_last_min_x = min_x
+            self._near_field_raw_stop_last_process_ms = (
+                time.monotonic() - process_start
+            ) * 1000.0
             self._publish_near_field_raw_stop_debug(header, hit_points)
             self._update_emergency_stop_state()
 
@@ -1338,7 +1414,7 @@ class DWAControl:
                 ).to_sec() >= self.near_field_raw_stop_log_period_s:
                     self._near_field_raw_stop_last_log = now
                     rospy.loginfo(
-                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d min_x=%.2f clearance=%.2f stop_dist=%.2f close_override=%.2f roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
+                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d min_x=%.2f clearance=%.2f stop_dist=%.2f close_override=%.2f process=%.1fms roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
                         "STOP" if self._near_field_raw_stop_blocked else "clear",
                         self._near_field_raw_stop_last_reason,
                         hit_count,
@@ -1347,6 +1423,7 @@ class DWAControl:
                         min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
                         self.emergency_stop_distance,
                         self.near_field_raw_stop_close_override_distance_m,
+                        self._near_field_raw_stop_last_process_ms,
                         self.near_field_raw_stop_min_x_m,
                         self.near_field_raw_stop_max_x_m,
                         self.near_field_raw_stop_half_width_m,
