@@ -277,11 +277,11 @@
   <arg name="global_path_candidate_fanout_enabled" default="true"/>
   <arg name="global_path_candidate_fanout_anchor_count" default="2"/>
   <arg name="global_path_candidate_fanout_levels" default="2"/>
-  <arg name="global_path_candidate_fanout_lateral_step_m" default="0.90"/>
+  <arg name="global_path_candidate_fanout_lateral_step_m" default="1.00"/>
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
-  <arg name="global_obstacle_overlay_clearance_extra_m" default="0.08"/>
+  <arg name="global_obstacle_overlay_clearance_extra_m" default="0.12"/>
   <arg name="global_path_use_any_angle" default="true"/>
-  <arg name="global_path_clearance_m" default="0.00"/>
+  <arg name="global_path_clearance_m" default="0.04"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="true"/>
   <arg name="global_path_goal_tail_clearance_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
@@ -302,13 +302,13 @@
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
-  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))"/>
+  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.06)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="4.0"/>
   <arg name="candidate_route_switch_min_hold_s" default="1.5"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
-  <arg name="candidate_route_switch_centerline_clearance_m" default="0.10"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="0.16"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
