@@ -555,7 +555,7 @@
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
   <arg name="enable_emergency_stop" default="true"/>
-  <arg name="emergency_stop_distance" default="0.70"/>
+  <arg name="emergency_stop_distance" default="0.60"/>
   <arg name="emergency_bin_size_m" default="0.10"/>
   <arg name="emergency_min_close_points" default="2"/>
   <arg name="emergency_immediate_contact_min_points" default="1"/>
@@ -572,7 +572,7 @@
   <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
   <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
-  <arg name="near_field_raw_stop_max_x_m" default="1.25"/>
+  <arg name="near_field_raw_stop_max_x_m" default="1.15"/>
   <arg name="near_field_raw_stop_half_width_m" default="0.34"/>
   <arg name="near_field_raw_stop_min_z_m" default="0.08"/>
   <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
