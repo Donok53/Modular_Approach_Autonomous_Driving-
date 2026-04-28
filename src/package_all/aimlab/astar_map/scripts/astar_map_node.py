@@ -241,6 +241,15 @@ class AStarPlanner:
             1,
             int(rospy.get_param("~global_path_candidate_fanout_snap_radius_cells", 8)),
         )
+        self.global_path_candidate_fanout_inner_lateral_step_m = max(
+            0.10,
+            float(
+                rospy.get_param(
+                    "~global_path_candidate_fanout_inner_lateral_step_m",
+                    min(0.40, self.global_path_candidate_fanout_lateral_step_m),
+                )
+            ),
+        )
         self.global_path_candidate_penalty_radius_m = max(
             0.1,
             float(
@@ -306,6 +315,27 @@ class AStarPlanner:
                 rospy.get_param(
                     "~candidate_route_switch_best_clear_score_threshold",
                     self.candidate_route_switch_blocked_score_threshold,
+                )
+            ),
+        )
+        self.candidate_route_switch_prefer_passable_enabled = bool(
+            rospy.get_param("~candidate_route_switch_prefer_passable_enabled", True)
+        )
+        self.candidate_route_switch_passable_clearance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~candidate_route_switch_passable_clearance_m",
+                    0.5 * self.robot_width_m + self.footprint_padding_m + 0.03,
+                )
+            ),
+        )
+        self.candidate_route_switch_passable_length_margin_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~candidate_route_switch_passable_length_margin_m",
+                    0.35,
                 )
             ),
         )
@@ -445,6 +475,13 @@ class AStarPlanner:
                     if self.global_path_drivable_area_is_center_safe
                     else "shrink-by-%s" % self.global_path_clearance_model
                 ),
+            )
+            rospy.loginfo(
+                "[astar] candidate route policy: inner_fanout=%.2fm prefer_passable=%s passable_clearance=%.2fm shorter_margin=%.2fm",
+                self.global_path_candidate_fanout_inner_lateral_step_m,
+                "on" if self.candidate_route_switch_prefer_passable_enabled else "off",
+                self.candidate_route_switch_passable_clearance_m,
+                self.candidate_route_switch_passable_length_margin_m,
             )
             rospy.loginfo(
                 "[astar] preserve exact user goal on drivable-grid path: %s (max_gap=%.2f m)",
@@ -1339,6 +1376,29 @@ class AStarPlanner:
                 )
         return self._dedupe_world_points(out)
 
+    def _world_path_length_within_lookahead(self, world_points, lookahead_m, start_ignore_m):
+        pts = self._dedupe_world_points(self._trim_world_path_from_current_start(world_points))
+        if len(pts) < 2:
+            return float("inf")
+
+        accumulated_m = 0.0
+        total_m = 0.0
+        for idx in range(len(pts) - 1):
+            ax, ay = pts[idx]
+            bx, by = pts[idx + 1]
+            seg_len = math.hypot(float(bx) - float(ax), float(by) - float(ay))
+            if seg_len <= 1e-6:
+                continue
+            seg_start_m = accumulated_m
+            seg_end_m = accumulated_m + seg_len
+            accumulated_m = seg_end_m
+            if seg_end_m <= start_ignore_m:
+                continue
+            if seg_start_m >= lookahead_m:
+                break
+            total_m += max(0.0, min(seg_end_m, lookahead_m) - max(seg_start_m, start_ignore_m))
+        return total_m
+
     def _overlay_world_path_obstacle_score(self, overlay_grid, world_points, occupied_threshold):
         if overlay_grid is None or len(world_points) < 2:
             return 0.0
@@ -1437,6 +1497,75 @@ class AStarPlanner:
             or best_score < self.candidate_route_switch_best_clear_score_threshold
         )
 
+    def _candidate_passage_metrics(self, world_paths, scores):
+        metrics = []
+        overlay_grid = self.global_obstacle_overlay
+        for idx, path in enumerate(world_paths):
+            path_length_m = self._world_path_length_within_lookahead(
+                path,
+                self.candidate_route_switch_lookahead_m,
+                self.candidate_route_switch_start_ignore_m,
+            )
+            centerline_clear = True
+            if (
+                overlay_grid is not None
+                and len(path) >= 2
+                and self.candidate_route_switch_passable_clearance_m > 0.0
+            ):
+                centerline_clear = not self._overlay_world_path_centerline_blocked(
+                    overlay_grid,
+                    path,
+                    self.global_obstacle_overlay_threshold,
+                    clearance_m=self.candidate_route_switch_passable_clearance_m,
+                )
+            metrics.append(
+                {
+                    "index": idx,
+                    "score": float(scores[idx]),
+                    "path_length_m": float(path_length_m),
+                    "passable": bool(centerline_clear),
+                }
+            )
+        return metrics
+
+    def _preferred_passable_candidate(self, world_paths, scores, active_index=0):
+        if (
+            (not self.candidate_route_switch_prefer_passable_enabled)
+            or len(world_paths) <= 1
+            or self.global_obstacle_overlay is None
+        ):
+            return None, None
+
+        metrics = self._candidate_passage_metrics(world_paths, scores)
+        passable = [item for item in metrics if item["passable"]]
+        if not passable:
+            return None, metrics
+
+        preferred = min(
+            passable,
+            key=lambda item: (
+                item["path_length_m"],
+                item["score"],
+                0 if item["index"] == active_index else 1,
+                item["index"],
+            ),
+        )
+        return int(preferred["index"]), metrics
+
+    def _should_prefer_passable_candidate(self, metrics, active_index, preferred_index):
+        if metrics is None or preferred_index is None or preferred_index == active_index:
+            return False
+
+        active = metrics[active_index]
+        preferred = metrics[preferred_index]
+        if not preferred["passable"]:
+            return False
+        if not active["passable"]:
+            return True
+        return (
+            preferred["path_length_m"] + self.candidate_route_switch_passable_length_margin_m
+        ) < active["path_length_m"]
+
     def _world_path_similarity_cost(self, reference_path, candidate_path):
         reference = self._sampled_world_points_within_lookahead(
             reference_path,
@@ -1505,6 +1634,27 @@ class AStarPlanner:
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
+        preferred_index, passage_metrics = self._preferred_passable_candidate(
+            world_paths, scores, active_index=active_index
+        )
+        if self._should_prefer_passable_candidate(passage_metrics, active_index, preferred_index):
+            active_metric = passage_metrics[active_index]
+            preferred_metric = passage_metrics[preferred_index]
+            self._last_candidate_switch_s = rospy.get_time()
+            self._pending_candidate_switch_index = -1
+            self._pending_candidate_switch_count = 0
+            self._publish_path_blocked_state(False)
+            if self.debug_log_enable:
+                rospy.loginfo(
+                    "[astar] selecting initial passable candidate %d -> %d (len=%.2fm->%.2fm scores=%s)",
+                    active_index,
+                    preferred_index,
+                    active_metric["path_length_m"],
+                    preferred_metric["path_length_m"],
+                    ",".join("%.1f" % s for s in scores),
+                )
+            return preferred_index, scores
+
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
         active_score = scores[active_index]
         if best_index == active_index:
@@ -1563,9 +1713,15 @@ class AStarPlanner:
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
+        preferred_index, passage_metrics = self._preferred_passable_candidate(
+            world_paths, scores, active_index=active_index
+        )
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
         current_score = scores[active_index]
-        if best_index == active_index:
+        prefer_passable_switch = self._should_prefer_passable_candidate(
+            passage_metrics, active_index, preferred_index
+        )
+        if best_index == active_index and (not prefer_passable_switch):
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
             self._publish_path_blocked_state(
@@ -1574,6 +1730,11 @@ class AStarPlanner:
             return active_index, scores
 
         best_score = scores[best_index]
+        switch_index = best_index
+        switch_reason = "overlay"
+        if prefer_passable_switch:
+            switch_index = int(preferred_index)
+            switch_reason = "passable"
         current_blocked = current_score >= self.candidate_route_switch_blocked_score_threshold
         current_centerline_blocked = True
         if self.candidate_route_switch_require_centerline_blocked:
@@ -1594,11 +1755,14 @@ class AStarPlanner:
             and (best_score + self.candidate_route_switch_score_margin) < current_score
             and self._candidate_best_is_clear_enough(best_score)
         )
+        if prefer_passable_switch:
+            should_switch = True
+
         if should_switch:
-            if best_index == self._pending_candidate_switch_index:
+            if switch_index == self._pending_candidate_switch_index:
                 self._pending_candidate_switch_count += 1
             else:
-                self._pending_candidate_switch_index = int(best_index)
+                self._pending_candidate_switch_index = int(switch_index)
                 self._pending_candidate_switch_count = 1
         else:
             self._pending_candidate_switch_index = -1
@@ -1614,13 +1778,25 @@ class AStarPlanner:
             self._pending_candidate_switch_count = 0
             self._publish_path_blocked_state(False)
             if self.debug_log_enable:
-                rospy.loginfo(
-                    "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s centerline=blocked",
-                    active_index,
-                    best_index,
-                    ",".join("%.1f" % s for s in scores),
-                )
-            return best_index, scores
+                if switch_reason == "passable" and passage_metrics is not None:
+                    active_metric = passage_metrics[active_index]
+                    target_metric = passage_metrics[switch_index]
+                    rospy.loginfo(
+                        "[astar] switching active candidate %d -> %d to prefer passable corridor (len=%.2fm->%.2fm scores=%s)",
+                        active_index,
+                        switch_index,
+                        active_metric["path_length_m"],
+                        target_metric["path_length_m"],
+                        ",".join("%.1f" % s for s in scores),
+                    )
+                else:
+                    rospy.loginfo(
+                        "[astar] switching active candidate %d -> %d from pointcloud overlay scores=%s centerline=blocked",
+                        active_index,
+                        switch_index,
+                        ",".join("%.1f" % s for s in scores),
+                    )
+            return switch_index, scores
 
         if self.debug_log_enable and current_blocked:
             rospy.loginfo_throttle(
@@ -2146,6 +2322,16 @@ class AStarPlanner:
             1,
             int(math.ceil(self.global_path_candidate_fanout_lateral_step_m / res)),
         )
+        inner_step_cells = max(
+            1,
+            int(math.ceil(self.global_path_candidate_fanout_inner_lateral_step_m / res)),
+        )
+        lateral_offsets = []
+        if inner_step_cells < lateral_step_cells:
+            lateral_offsets.append(inner_step_cells)
+        for level in range(1, self.global_path_candidate_fanout_levels + 1):
+            lateral_offsets.append(level * lateral_step_cells)
+
         via_cells = []
         seen = set()
         for anchor_idx in self._path_fanout_anchor_indices(primary_path):
@@ -2159,8 +2345,8 @@ class AStarPlanner:
                 continue
             nx = -dy / norm
             ny = dx / norm
-            for level in range(1, self.global_path_candidate_fanout_levels + 1):
-                lateral_cells = float(level * lateral_step_cells)
+            for lateral_cells in lateral_offsets:
+                lateral_cells = float(lateral_cells)
                 for side in (-1.0, 1.0):
                     hint = (
                         int(round(float(cur_cell[0]) + side * nx * lateral_cells)),

@@ -32,6 +32,7 @@
   <arg name="global_path_candidate_fanout_levels" default="1"/>
   <arg name="global_path_candidate_fanout_lateral_step_m" default="0.75"/>
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
+  <arg name="global_path_candidate_fanout_inner_lateral_step_m" default="0.35"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
@@ -62,6 +63,9 @@
   <arg name="candidate_route_switch_centerline_clearance_m" default="0.0"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
+  <arg name="candidate_route_switch_prefer_passable_enabled" default="true"/>
+  <arg name="candidate_route_switch_passable_clearance_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
+  <arg name="candidate_route_switch_passable_length_margin_m" default="0.35"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.60"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
@@ -100,6 +104,7 @@
     <param name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
     <param name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
     <param name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
+    <param name="global_path_candidate_fanout_inner_lateral_step_m" value="$(arg global_path_candidate_fanout_inner_lateral_step_m)"/>
     <param name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
     <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
     <param name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
@@ -130,6 +135,9 @@
     <param name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
     <param name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
     <param name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
+    <param name="candidate_route_switch_prefer_passable_enabled" value="$(arg candidate_route_switch_prefer_passable_enabled)"/>
+    <param name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
+    <param name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
     <param name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
     <param name="enable_map_reload" value="$(arg enable_map_reload)"/>
     <param name="reload_topic" value="$(arg reload_topic)"/>

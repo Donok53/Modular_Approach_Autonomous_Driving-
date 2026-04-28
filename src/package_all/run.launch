@@ -279,6 +279,7 @@
   <arg name="global_path_candidate_fanout_levels" default="2"/>
   <arg name="global_path_candidate_fanout_lateral_step_m" default="1.00"/>
   <arg name="global_path_candidate_fanout_snap_radius_cells" default="8"/>
+  <arg name="global_path_candidate_fanout_inner_lateral_step_m" default="0.35"/>
   <arg name="global_obstacle_overlay_clearance_extra_m" default="0.12"/>
   <arg name="global_path_use_any_angle" default="true"/>
   <arg name="global_path_clearance_m" default="0.04"/>
@@ -311,6 +312,9 @@
   <arg name="candidate_route_switch_centerline_clearance_m" default="0.16"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
+  <arg name="candidate_route_switch_prefer_passable_enabled" default="true"/>
+  <arg name="candidate_route_switch_passable_clearance_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
+  <arg name="candidate_route_switch_passable_length_margin_m" default="0.35"/>
   <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.90"/>
@@ -766,6 +770,7 @@
         <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
         <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
         <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
+        <arg name="global_path_candidate_fanout_inner_lateral_step_m" value="$(arg global_path_candidate_fanout_inner_lateral_step_m)"/>
         <arg name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
@@ -798,6 +803,9 @@
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
         <arg name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
         <arg name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
+        <arg name="candidate_route_switch_prefer_passable_enabled" value="$(arg candidate_route_switch_prefer_passable_enabled)"/>
+        <arg name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
+        <arg name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
         <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
       </include>
     </group>
@@ -823,6 +831,7 @@
         <arg name="global_path_candidate_fanout_levels" value="$(arg global_path_candidate_fanout_levels)"/>
         <arg name="global_path_candidate_fanout_lateral_step_m" value="$(arg global_path_candidate_fanout_lateral_step_m)"/>
         <arg name="global_path_candidate_fanout_snap_radius_cells" value="$(arg global_path_candidate_fanout_snap_radius_cells)"/>
+        <arg name="global_path_candidate_fanout_inner_lateral_step_m" value="$(arg global_path_candidate_fanout_inner_lateral_step_m)"/>
         <arg name="global_obstacle_overlay_clearance_extra_m" value="$(arg global_obstacle_overlay_clearance_extra_m)"/>
         <arg name="global_path_use_any_angle" value="$(arg global_path_use_any_angle)"/>
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
@@ -855,6 +864,9 @@
         <arg name="candidate_route_switch_centerline_clearance_m" value="$(arg candidate_route_switch_centerline_clearance_m)"/>
         <arg name="candidate_route_switch_require_best_clear" value="$(arg candidate_route_switch_require_best_clear)"/>
         <arg name="candidate_route_switch_best_clear_score_threshold" value="$(arg candidate_route_switch_best_clear_score_threshold)"/>
+        <arg name="candidate_route_switch_prefer_passable_enabled" value="$(arg candidate_route_switch_prefer_passable_enabled)"/>
+        <arg name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
+        <arg name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
         <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
       </include>
     </group>
