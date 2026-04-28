@@ -579,7 +579,7 @@
   <arg name="near_field_raw_stop_max_x_m" default="0.75"/>
   <arg name="near_field_raw_stop_half_width_m" default="0.28"/>
   <arg name="near_field_raw_stop_min_z_m" default="0.08"/>
-  <arg name="near_field_raw_stop_max_z_m" default="1.20"/>
+  <arg name="near_field_raw_stop_max_z_m" default="0.70"/>
   <arg name="near_field_raw_stop_min_points" default="2"/>
   <arg name="near_field_raw_stop_cell_size_m" default="0.12"/>
   <arg name="near_field_raw_stop_min_cells" default="1"/>
