@@ -57,7 +57,7 @@
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.05)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="3.0"/>
   <arg name="candidate_route_switch_score_margin" default="1.0"/>
-  <arg name="candidate_route_switch_min_hold_s" default="0.8"/>
+  <arg name="candidate_route_switch_min_hold_s" default="2.0"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="0.0"/>
@@ -65,8 +65,8 @@
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_switch_prefer_passable_enabled" default="true"/>
   <arg name="candidate_route_switch_passable_clearance_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
-  <arg name="candidate_route_switch_passable_length_margin_m" default="0.35"/>
-  <arg name="candidate_route_replan_match_distance_m" default="0.60"/>
+  <arg name="candidate_route_switch_passable_length_margin_m" default="0.60"/>
+  <arg name="candidate_route_replan_match_distance_m" default="1.10"/>
   <arg name="enable_map_reload" default="true"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
   <arg name="publish_smoothed_path" default="true"/>

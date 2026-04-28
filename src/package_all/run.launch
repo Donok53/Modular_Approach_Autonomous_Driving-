@@ -306,7 +306,7 @@
   <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.06)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="4.0"/>
-  <arg name="candidate_route_switch_min_hold_s" default="1.5"/>
+  <arg name="candidate_route_switch_min_hold_s" default="2.5"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="0.16"/>
@@ -314,8 +314,8 @@
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_switch_prefer_passable_enabled" default="true"/>
   <arg name="candidate_route_switch_passable_clearance_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
-  <arg name="candidate_route_switch_passable_length_margin_m" default="0.35"/>
-  <arg name="candidate_route_replan_match_distance_m" default="0.80"/>
+  <arg name="candidate_route_switch_passable_length_margin_m" default="0.60"/>
+  <arg name="candidate_route_replan_match_distance_m" default="1.10"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.90"/>
   <arg name="path_tracking_steer_filter_gain" default="0.45"/>

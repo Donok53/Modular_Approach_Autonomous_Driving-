@@ -1552,7 +1552,13 @@ class AStarPlanner:
         )
         return int(preferred["index"]), metrics
 
-    def _should_prefer_passable_candidate(self, metrics, active_index, preferred_index):
+    def _should_prefer_passable_candidate(
+        self,
+        metrics,
+        active_index,
+        preferred_index,
+        active_blocked=False,
+    ):
         if metrics is None or preferred_index is None or preferred_index == active_index:
             return False
 
@@ -1562,6 +1568,8 @@ class AStarPlanner:
             return False
         if not active["passable"]:
             return True
+        if not active_blocked:
+            return False
         return (
             preferred["path_length_m"] + self.candidate_route_switch_passable_length_margin_m
         ) < active["path_length_m"]
@@ -1634,10 +1642,20 @@ class AStarPlanner:
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
+        best_index = min(range(len(scores)), key=lambda idx: scores[idx])
+        active_score = scores[active_index]
         preferred_index, passage_metrics = self._preferred_passable_candidate(
             world_paths, scores, active_index=active_index
         )
-        if self._should_prefer_passable_candidate(passage_metrics, active_index, preferred_index):
+        prefer_passable_initial = self._should_prefer_passable_candidate(
+            passage_metrics,
+            active_index,
+            preferred_index,
+            active_blocked=(
+                active_score >= self.candidate_route_switch_blocked_score_threshold
+            ),
+        )
+        if prefer_passable_initial:
             active_metric = passage_metrics[active_index]
             preferred_metric = passage_metrics[preferred_index]
             self._last_candidate_switch_s = rospy.get_time()
@@ -1655,8 +1673,6 @@ class AStarPlanner:
                 )
             return preferred_index, scores
 
-        best_index = min(range(len(scores)), key=lambda idx: scores[idx])
-        active_score = scores[active_index]
         if best_index == active_index:
             self._publish_path_blocked_state(
                 active_score >= self.candidate_route_switch_blocked_score_threshold
@@ -1719,7 +1735,12 @@ class AStarPlanner:
         best_index = min(range(len(scores)), key=lambda idx: scores[idx])
         current_score = scores[active_index]
         prefer_passable_switch = self._should_prefer_passable_candidate(
-            passage_metrics, active_index, preferred_index
+            passage_metrics,
+            active_index,
+            preferred_index,
+            active_blocked=(
+                current_score >= self.candidate_route_switch_blocked_score_threshold
+            ),
         )
         if best_index == active_index and (not prefer_passable_switch):
             self._pending_candidate_switch_index = -1
