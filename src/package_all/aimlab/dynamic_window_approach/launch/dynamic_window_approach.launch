@@ -295,6 +295,7 @@
     <arg name="enable_planning_slowdown_manager" default="false"/>
     <arg name="planning_slowdown_speed_limit_mps" default="0.22"/>
     <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
+    <arg name="planning_slowdown_narrow_speed_limit_mps" default="0.24"/>
     <arg name="planning_slowdown_hold_s" default="2.0"/>
     <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
     <arg name="planning_slowdown_caution_timeout_s" default="1.2"/>
@@ -303,6 +304,7 @@
     <arg name="planning_slowdown_goal_topic" default="/move_base_simple/goal"/>
     <arg name="planning_slowdown_path_is_fallback_topic" default="/astar/path_is_fallback"/>
     <arg name="planning_slowdown_path_blocked_topic" default="/astar/path_blocked"/>
+    <arg name="planning_slowdown_narrow_path_topic" default="/astar/path_narrow_passage"/>
     <arg name="dynamic_speed_thresh_mps" default="0.08"/>
     <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
     <arg name="prediction_horizon_s" default="2.2"/>
@@ -654,11 +656,13 @@
             <param name="global_path_topic" value="$(arg global_path_topic)"/>
             <param name="path_is_fallback_topic" value="$(arg planning_slowdown_path_is_fallback_topic)"/>
             <param name="path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
+            <param name="narrow_path_topic" value="$(arg planning_slowdown_narrow_path_topic)"/>
             <param name="caution_topic" value="$(arg global_obstacle_caution_topic)"/>
             <param name="goal_topic" value="$(arg planning_slowdown_goal_topic)"/>
             <param name="marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
             <param name="slow_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
             <param name="clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
+            <param name="narrow_speed_limit_mps" value="$(arg planning_slowdown_narrow_speed_limit_mps)"/>
             <param name="hold_s" value="$(arg planning_slowdown_hold_s)"/>
             <param name="no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
             <param name="caution_timeout_s" value="$(arg planning_slowdown_caution_timeout_s)"/>
