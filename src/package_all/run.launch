@@ -62,7 +62,6 @@
   <arg name="enable_tracked_objects_marker_viz" default="false"/>
   <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
   <arg name="path_blocked_topic" default="/astar/path_blocked"/>
-  <arg name="path_narrow_topic" default="/astar/path_narrow_passage"/>
   <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
@@ -316,8 +315,6 @@
   <arg name="candidate_route_switch_prefer_passable_enabled" default="true"/>
   <arg name="candidate_route_switch_passable_clearance_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
   <arg name="candidate_route_switch_passable_length_margin_m" default="0.60"/>
-  <arg name="candidate_route_narrow_lookahead_m" default="4.0"/>
-  <arg name="candidate_route_narrow_clearance_margin_m" default="0.08"/>
   <arg name="candidate_route_replan_match_distance_m" default="1.10"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="0.90"/>
@@ -476,14 +473,12 @@
   <arg name="enable_planning_slowdown_manager" default="true"/>
   <arg name="planning_slowdown_speed_limit_mps" default="0.34"/>
   <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
-  <arg name="planning_slowdown_narrow_speed_limit_mps" default="0.24"/>
   <arg name="planning_slowdown_hold_s" default="2.0"/>
   <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
   <arg name="planning_slowdown_caution_timeout_s" default="1.2"/>
   <arg name="planning_slowdown_publish_hz" default="5.0"/>
   <arg name="planning_slowdown_marker_topic" default="/planning/planning_speed_limit_marker"/>
   <arg name="planning_slowdown_path_blocked_topic" default="$(arg path_blocked_topic)"/>
-  <arg name="planning_slowdown_narrow_path_topic" default="$(arg path_narrow_topic)"/>
   <arg name="dynamic_speed_thresh_mps" default="0.08"/>
   <arg name="pedestrian_dynamic_speed_thresh_mps" default="0.05"/>
   <arg name="prediction_horizon_s" default="2.2"/>
@@ -765,7 +760,6 @@
         <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
         <arg name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
         <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
-        <arg name="path_narrow_topic" value="$(arg path_narrow_topic)"/>
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -812,8 +806,6 @@
         <arg name="candidate_route_switch_prefer_passable_enabled" value="$(arg candidate_route_switch_prefer_passable_enabled)"/>
         <arg name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
         <arg name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
-        <arg name="candidate_route_narrow_lookahead_m" value="$(arg candidate_route_narrow_lookahead_m)"/>
-        <arg name="candidate_route_narrow_clearance_margin_m" value="$(arg candidate_route_narrow_clearance_margin_m)"/>
         <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
       </include>
     </group>
@@ -829,7 +821,6 @@
         <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
         <arg name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
         <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
-        <arg name="path_narrow_topic" value="$(arg path_narrow_topic)"/>
         <arg name="robot_width_m" value="$(arg robot_width_m)"/>
         <arg name="robot_length_m" value="$(arg robot_length_m)"/>
         <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -876,8 +867,6 @@
         <arg name="candidate_route_switch_prefer_passable_enabled" value="$(arg candidate_route_switch_prefer_passable_enabled)"/>
         <arg name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
         <arg name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
-        <arg name="candidate_route_narrow_lookahead_m" value="$(arg candidate_route_narrow_lookahead_m)"/>
-        <arg name="candidate_route_narrow_clearance_margin_m" value="$(arg candidate_route_narrow_clearance_margin_m)"/>
         <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
       </include>
     </group>
@@ -1029,14 +1018,12 @@
       <arg name="enable_planning_slowdown_manager" value="$(arg enable_planning_slowdown_manager)"/>
       <arg name="planning_slowdown_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
       <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
-      <arg name="planning_slowdown_narrow_speed_limit_mps" value="$(arg planning_slowdown_narrow_speed_limit_mps)"/>
       <arg name="planning_slowdown_hold_s" value="$(arg planning_slowdown_hold_s)"/>
       <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
       <arg name="planning_slowdown_caution_timeout_s" value="$(arg planning_slowdown_caution_timeout_s)"/>
       <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
       <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
       <arg name="planning_slowdown_path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
-      <arg name="planning_slowdown_narrow_path_topic" value="$(arg planning_slowdown_narrow_path_topic)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
@@ -1432,13 +1419,11 @@
       <arg name="enable_planning_slowdown_manager" value="$(arg enable_planning_slowdown_manager)"/>
       <arg name="planning_slowdown_speed_limit_mps" value="$(arg planning_slowdown_speed_limit_mps)"/>
       <arg name="planning_slowdown_clear_speed_limit_mps" value="$(arg planning_slowdown_clear_speed_limit_mps)"/>
-      <arg name="planning_slowdown_narrow_speed_limit_mps" value="$(arg planning_slowdown_narrow_speed_limit_mps)"/>
       <arg name="planning_slowdown_hold_s" value="$(arg planning_slowdown_hold_s)"/>
       <arg name="planning_slowdown_no_path_grace_s" value="$(arg planning_slowdown_no_path_grace_s)"/>
       <arg name="planning_slowdown_publish_hz" value="$(arg planning_slowdown_publish_hz)"/>
       <arg name="planning_slowdown_marker_topic" value="$(arg planning_slowdown_marker_topic)"/>
       <arg name="planning_slowdown_path_blocked_topic" value="$(arg planning_slowdown_path_blocked_topic)"/>
-      <arg name="planning_slowdown_narrow_path_topic" value="$(arg planning_slowdown_narrow_path_topic)"/>
       <arg name="robot_base_frame" value="$(arg robot_base_frame)"/>
       <arg name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
       <arg name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>

@@ -126,9 +126,6 @@ class AStarPlanner:
         self.path_blocked_topic = rospy.get_param(
             "~path_blocked_topic", "/astar/path_blocked"
         )
-        self.path_narrow_topic = rospy.get_param(
-            "~path_narrow_topic", "/astar/path_narrow_passage"
-        )
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
@@ -342,24 +339,6 @@ class AStarPlanner:
                 )
             ),
         )
-        self.candidate_route_narrow_lookahead_m = max(
-            0.5,
-            float(
-                rospy.get_param(
-                    "~candidate_route_narrow_lookahead_m",
-                    min(4.0, self.candidate_route_switch_lookahead_m),
-                )
-            ),
-        )
-        self.candidate_route_narrow_clearance_margin_m = max(
-            0.0,
-            float(
-                rospy.get_param(
-                    "~candidate_route_narrow_clearance_margin_m",
-                    0.08,
-                )
-            ),
-        )
         self.candidate_route_replan_match_distance_m = max(
             0.0,
             float(rospy.get_param("~candidate_route_replan_match_distance_m", 0.75)),
@@ -413,7 +392,6 @@ class AStarPlanner:
         self._manual_start_reset_seq = 0
         self._path_is_fallback = False
         self._path_blocked = False
-        self._path_narrow = False
         self._last_planned_start_xy = None
         self._last_planned_goal_xy = None
         self._last_planned_start_id = None
@@ -439,7 +417,6 @@ class AStarPlanner:
         self.pub_path_node_id_list = rospy.Publisher('/astar/path_node_id_list', Int32MultiArray, queue_size=10, latch=True)
         self.pub_path_is_fallback = rospy.Publisher('/astar/path_is_fallback', Bool, queue_size=10, latch=True)
         self.pub_path_blocked = rospy.Publisher(self.path_blocked_topic, Bool, queue_size=10, latch=True)
-        self.pub_path_narrow = rospy.Publisher(self.path_narrow_topic, Bool, queue_size=10, latch=True)
         self.pub_candidate_paths = rospy.Publisher('/astar/candidate_paths', MarkerArray, queue_size=5, latch=True)
         self.pub_server_dst_list = rospy.Publisher('/astar/server_dst_node_list', PointCloud2, queue_size=10)
 
@@ -500,13 +477,11 @@ class AStarPlanner:
                 ),
             )
             rospy.loginfo(
-                "[astar] candidate route policy: inner_fanout=%.2fm prefer_passable=%s passable_clearance=%.2fm shorter_margin=%.2fm narrow_lookahead=%.2fm narrow_margin=%.2fm",
+                "[astar] candidate route policy: inner_fanout=%.2fm prefer_passable=%s passable_clearance=%.2fm shorter_margin=%.2fm",
                 self.global_path_candidate_fanout_inner_lateral_step_m,
                 "on" if self.candidate_route_switch_prefer_passable_enabled else "off",
                 self.candidate_route_switch_passable_clearance_m,
                 self.candidate_route_switch_passable_length_margin_m,
-                self.candidate_route_narrow_lookahead_m,
-                self.candidate_route_narrow_clearance_margin_m,
             )
             rospy.loginfo(
                 "[astar] preserve exact user goal on drivable-grid path: %s (max_gap=%.2f m)",
@@ -1317,13 +1292,6 @@ class AStarPlanner:
         self._path_blocked = is_blocked
         self.pub_path_blocked.publish(Bool(data=is_blocked))
 
-    def _publish_path_narrow_state(self, is_narrow, force=False):
-        is_narrow = bool(is_narrow)
-        if (not force) and self._path_narrow == is_narrow:
-            return
-        self._path_narrow = is_narrow
-        self.pub_path_narrow.publish(Bool(data=is_narrow))
-
     def _capture_published_path_context(self):
         self._last_published_start_xy = (
             tuple(self._display_start_xy) if self._display_start_xy is not None else None
@@ -1532,10 +1500,6 @@ class AStarPlanner:
     def _candidate_passage_metrics(self, world_paths, scores):
         metrics = []
         overlay_grid = self.global_obstacle_overlay
-        local_lookahead_m = min(
-            self.candidate_route_switch_lookahead_m,
-            self.candidate_route_narrow_lookahead_m,
-        )
         for idx, path in enumerate(world_paths):
             path_length_m = self._world_path_length_within_lookahead(
                 path,
@@ -1543,8 +1507,6 @@ class AStarPlanner:
                 self.candidate_route_switch_start_ignore_m,
             )
             centerline_clear = True
-            relaxed_clear = True
-            narrow = False
             if (
                 overlay_grid is not None
                 and len(path) >= 2
@@ -1555,49 +1517,16 @@ class AStarPlanner:
                     path,
                     self.global_obstacle_overlay_threshold,
                     clearance_m=self.candidate_route_switch_passable_clearance_m,
-                    lookahead_m=local_lookahead_m,
-                    start_ignore_m=self.candidate_route_switch_start_ignore_m,
                 )
-                if (
-                    centerline_clear
-                    and self.candidate_route_narrow_clearance_margin_m > 1e-6
-                ):
-                    relaxed_clearance_m = (
-                        self.candidate_route_switch_passable_clearance_m
-                        + self.candidate_route_narrow_clearance_margin_m
-                    )
-                    relaxed_clear = not self._overlay_world_path_centerline_blocked(
-                        overlay_grid,
-                        path,
-                        self.global_obstacle_overlay_threshold,
-                        clearance_m=relaxed_clearance_m,
-                        lookahead_m=local_lookahead_m,
-                        start_ignore_m=self.candidate_route_switch_start_ignore_m,
-                    )
-                    narrow = not relaxed_clear
             metrics.append(
                 {
                     "index": idx,
                     "score": float(scores[idx]),
                     "path_length_m": float(path_length_m),
                     "passable": bool(centerline_clear),
-                    "relaxed_clear": bool(relaxed_clear),
-                    "narrow": bool(narrow),
                 }
             )
         return metrics
-
-    def _candidate_metric_for_index(self, metrics, index):
-        if not metrics:
-            return None
-        index = int(max(0, min(index, len(metrics) - 1)))
-        return metrics[index]
-
-    def _update_active_path_narrow_state(self, metrics, active_index, force=False):
-        metric = self._candidate_metric_for_index(metrics, active_index)
-        is_narrow = bool(metric and metric.get("passable") and metric.get("narrow"))
-        self._publish_path_narrow_state(is_narrow, force=force)
-        return is_narrow
 
     def _preferred_passable_candidate(self, world_paths, scores, active_index=0):
         if (
@@ -1701,7 +1630,6 @@ class AStarPlanner:
     def select_initial_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
             self._publish_path_blocked_state(False)
-            self._publish_path_narrow_state(False)
             return 0, []
         active_index = int(max(0, min(active_index, len(world_paths) - 1)))
         if (
@@ -1711,7 +1639,6 @@ class AStarPlanner:
             or self.global_obstacle_overlay is None
         ):
             self._publish_path_blocked_state(False)
-            self._publish_path_narrow_state(False)
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
@@ -1735,9 +1662,6 @@ class AStarPlanner:
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
             self._publish_path_blocked_state(False)
-            self._update_active_path_narrow_state(
-                passage_metrics, preferred_index, force=True
-            )
             if self.debug_log_enable:
                 rospy.loginfo(
                     "[astar] selecting initial passable candidate %d -> %d (len=%.2fm->%.2fm scores=%s)",
@@ -1753,9 +1677,6 @@ class AStarPlanner:
             self._publish_path_blocked_state(
                 active_score >= self.candidate_route_switch_blocked_score_threshold
             )
-            self._update_active_path_narrow_state(
-                passage_metrics, active_index, force=True
-            )
             return active_index, scores
 
         best_score = scores[best_index]
@@ -1769,9 +1690,6 @@ class AStarPlanner:
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
             self._publish_path_blocked_state(False)
-            self._update_active_path_narrow_state(
-                passage_metrics, best_index, force=True
-            )
             if self.debug_log_enable:
                 rospy.loginfo(
                     "[astar] selecting initial active candidate %d -> %d from pointcloud overlay scores=%s",
@@ -1794,15 +1712,11 @@ class AStarPlanner:
         self._publish_path_blocked_state(
             active_score >= self.candidate_route_switch_blocked_score_threshold
         )
-        self._update_active_path_narrow_state(
-            passage_metrics, active_index, force=True
-        )
         return active_index, scores
 
     def select_best_candidate_world_path(self, world_paths, active_index=0):
         if not world_paths:
             self._publish_path_blocked_state(False)
-            self._publish_path_narrow_state(False)
             return 0, []
         active_index = int(max(0, min(active_index, len(world_paths) - 1)))
         if (
@@ -1812,7 +1726,6 @@ class AStarPlanner:
             or self.global_obstacle_overlay is None
         ):
             self._publish_path_blocked_state(False)
-            self._publish_path_narrow_state(False)
             return active_index, [0.0 for _ in world_paths]
 
         scores = self._candidate_overlay_scores(world_paths)
@@ -1834,9 +1747,6 @@ class AStarPlanner:
             self._pending_candidate_switch_count = 0
             self._publish_path_blocked_state(
                 current_score >= self.candidate_route_switch_blocked_score_threshold
-            )
-            self._update_active_path_narrow_state(
-                passage_metrics, active_index, force=True
             )
             return active_index, scores
 
@@ -1888,9 +1798,6 @@ class AStarPlanner:
             self._pending_candidate_switch_index = -1
             self._pending_candidate_switch_count = 0
             self._publish_path_blocked_state(False)
-            self._update_active_path_narrow_state(
-                passage_metrics, switch_index, force=True
-            )
             if self.debug_log_enable:
                 if switch_reason == "passable" and passage_metrics is not None:
                     active_metric = passage_metrics[active_index]
@@ -1926,9 +1833,6 @@ class AStarPlanner:
                 "yes" if self._candidate_best_is_clear_enough(best_score) else "no",
             )
         self._publish_path_blocked_state(current_blocked)
-        self._update_active_path_narrow_state(
-            passage_metrics, active_index, force=True
-        )
         return active_index, scores
 
     def _world_path_conflicts_with_blocked_grid(self, g, blocked, world_points):
@@ -2086,7 +1990,6 @@ class AStarPlanner:
             self.clear_candidate_world_paths(stamp=stamp, force=True)
             self._publish_path_fallback_state(False, force=True)
             self._publish_path_blocked_state(False, force=True)
-            self._publish_path_narrow_state(False, force=True)
             return
         if stamp is None:
             stamp = rospy.Time.now()
@@ -2106,7 +2009,6 @@ class AStarPlanner:
         self.clear_candidate_world_paths(stamp=stamp, force=True)
         self._publish_path_fallback_state(False, force=True)
         self._publish_path_blocked_state(False, force=True)
-        self._publish_path_narrow_state(False, force=True)
         if self.debug_log_enable:
             rospy.loginfo("[astar] cleared published path")
 
