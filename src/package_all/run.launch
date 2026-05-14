@@ -268,10 +268,12 @@
   <arg name="robot_width_m" default="0.58"/>
   <arg name="robot_length_m" default="0.612"/>
   <arg name="footprint_padding_m" default="0.05"/>
-  <arg name="path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.16)"/>
-  <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="minimum_passage_width_m" default="0.70"/>
+  <arg name="minimum_passage_clearance_radius_m" default="$(eval max(0.5 * float(arg('minimum_passage_width_m')), 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m'))))"/>
+  <arg name="path_blocking_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
+  <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
-  <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
   <arg name="global_path_candidate_count" default="7"/>
   <arg name="global_path_candidate_fanout_enabled" default="true"/>
@@ -282,10 +284,10 @@
   <arg name="global_path_candidate_fanout_inner_lateral_step_m" default="0.35"/>
   <arg name="global_obstacle_overlay_clearance_extra_m" default="0.12"/>
   <arg name="global_path_use_any_angle" default="true"/>
-  <arg name="global_path_clearance_m" default="0.04"/>
+  <arg name="global_path_clearance_m" default="$(eval max(0.0, float(arg('minimum_passage_clearance_radius_m')) - (0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))))"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="true"/>
-  <arg name="global_path_goal_tail_clearance_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="global_path_goal_tail_clearance_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="global_path_enable_graph_fallback" default="false"/>
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
@@ -303,17 +305,17 @@
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
-  <arg name="candidate_route_switch_corridor_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.06)"/>
+  <arg name="candidate_route_switch_corridor_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="$(eval '4.0' if str(arg('real_mode')).lower() == 'true' else '4.0')"/>
   <arg name="candidate_route_switch_score_margin" default="4.0"/>
   <arg name="candidate_route_switch_min_hold_s" default="2.5"/>
   <arg name="candidate_route_switch_confirm_count" default="2"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="true"/>
-  <arg name="candidate_route_switch_centerline_clearance_m" default="0.16"/>
+  <arg name="candidate_route_switch_centerline_clearance_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>
   <arg name="candidate_route_switch_best_clear_score_threshold" default="$(arg candidate_route_switch_blocked_score_threshold)"/>
   <arg name="candidate_route_switch_prefer_passable_enabled" default="true"/>
-  <arg name="candidate_route_switch_passable_clearance_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.03)"/>
+  <arg name="candidate_route_switch_passable_clearance_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="candidate_route_switch_passable_length_margin_m" default="0.60"/>
   <arg name="candidate_route_replan_match_distance_m" default="1.10"/>
   <arg name="path_tracking_only" default="true"/>
