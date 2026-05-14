@@ -17,9 +17,6 @@ class PlanningSlowdownManager:
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.path_is_fallback_topic = rospy.get_param("~path_is_fallback_topic", "/astar/path_is_fallback")
         self.path_blocked_topic = rospy.get_param("~path_blocked_topic", "/astar/path_blocked")
-        self.narrow_path_topic = rospy.get_param(
-            "~narrow_path_topic", "/astar/path_narrow_passage"
-        )
         self.caution_topic = str(
             rospy.get_param("~caution_topic", "/planning/global_obstacle_caution")
         ).strip()
@@ -34,18 +31,6 @@ class PlanningSlowdownManager:
             self.slow_speed_limit_mps,
             float(rospy.get_param("~clear_speed_limit_mps", 99.0)),
         )
-        self.narrow_speed_limit_mps = max(
-            0.0,
-            min(
-                self.clear_speed_limit_mps,
-                float(
-                    rospy.get_param(
-                        "~narrow_speed_limit_mps",
-                        self.slow_speed_limit_mps,
-                    )
-                ),
-            ),
-        )
         self.hold_s = max(0.0, float(rospy.get_param("~hold_s", 2.0)))
         self.no_path_grace_s = max(0.0, float(rospy.get_param("~no_path_grace_s", 0.8)))
         self.caution_timeout_s = max(
@@ -55,7 +40,6 @@ class PlanningSlowdownManager:
 
         self.fallback_active = False
         self.path_blocked_active = False
-        self.narrow_path_active = False
         self.caution_active = False
         self.path_has_poses = False
         self.active_goal = False
@@ -76,9 +60,6 @@ class PlanningSlowdownManager:
         self.sub_path_blocked = rospy.Subscriber(
             self.path_blocked_topic, Bool, self.path_blocked_callback, queue_size=5
         )
-        self.sub_narrow_path = rospy.Subscriber(
-            self.narrow_path_topic, Bool, self.narrow_path_callback, queue_size=5
-        )
         self.sub_caution = None
         if self.caution_topic:
             self.sub_caution = rospy.Subscriber(
@@ -93,17 +74,15 @@ class PlanningSlowdownManager:
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self.timer_callback)
 
         rospy.loginfo(
-            "planning_slowdown_manager started | path=%s fallback=%s blocked=%s narrow=%s caution=%s goal=%s behavior=%s marker=%s slow=%.2fm/s narrow=%.2fm/s hold=%.1fs no_path_grace=%.1fs caution_timeout=%.1fs",
+            "planning_slowdown_manager started | path=%s fallback=%s blocked=%s caution=%s goal=%s behavior=%s marker=%s slow=%.2fm/s hold=%.1fs no_path_grace=%.1fs caution_timeout=%.1fs",
             self.global_path_topic,
             self.path_is_fallback_topic,
             self.path_blocked_topic,
-            self.narrow_path_topic,
             self.caution_topic if self.caution_topic else "-",
             self.goal_topic,
             self.behavior_cmd_topic,
             self.marker_topic,
             self.slow_speed_limit_mps,
-            self.narrow_speed_limit_mps,
             self.hold_s,
             self.no_path_grace_s,
             self.caution_timeout_s,
@@ -114,9 +93,6 @@ class PlanningSlowdownManager:
 
     def path_blocked_callback(self, msg):
         self.path_blocked_active = bool(msg.data)
-
-    def narrow_path_callback(self, msg):
-        self.narrow_path_active = bool(msg.data)
 
     def caution_callback(self, msg):
         self.caution_active = bool(msg.data)
@@ -150,8 +126,6 @@ class PlanningSlowdownManager:
             return "observe: replanning fallback"
         if self.path_blocked_active:
             return "observe: global path blocked"
-        if self.narrow_path_active:
-            return "observe: narrow corridor"
         if self._caution_is_fresh(now_sec):
             return "observe: distant obstacle evidence"
 
@@ -169,13 +143,6 @@ class PlanningSlowdownManager:
             return "observe: hold"
         return ""
 
-    def _speed_limit_for_reason(self, reason):
-        if reason == "observe: narrow corridor":
-            return float(self.narrow_speed_limit_mps)
-        if reason and reason != "clear":
-            return float(self.slow_speed_limit_mps)
-        return float(self.clear_speed_limit_mps)
-
     def timer_callback(self, _event):
         now = rospy.Time.now()
         now_sec = now.to_sec()
@@ -188,12 +155,11 @@ class PlanningSlowdownManager:
         cmd = BehaviorCommand()
         cmd.header.stamp = now
         cmd.stop = False
-        target_speed_limit = self._speed_limit_for_reason(reason)
         if reason:
-            cmd.speed_limit = target_speed_limit
+            cmd.speed_limit = float(self.slow_speed_limit_mps)
             cmd.reason = reason
         else:
-            cmd.speed_limit = target_speed_limit
+            cmd.speed_limit = float(self.clear_speed_limit_mps)
             cmd.reason = "clear"
         self.pub_behavior.publish(cmd)
         self._publish_marker(now, cmd.speed_limit, cmd.reason)
