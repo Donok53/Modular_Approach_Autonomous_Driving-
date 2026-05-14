@@ -315,6 +315,33 @@ class DWAControl:
         self.near_field_raw_stop_publish_max_points = max(
             0, int(rospy.get_param("~near_field_raw_stop_publish_max_points", 600))
         )
+        self.emergency_bypass_enabled = bool(
+            rospy.get_param("~emergency_bypass_enabled", True)
+        )
+        self.emergency_bypass_preview_m = max(
+            0.10, float(rospy.get_param("~emergency_bypass_preview_m", 0.90))
+        )
+        self.emergency_bypass_target_lateral_m = max(
+            0.02, float(rospy.get_param("~emergency_bypass_target_lateral_m", 0.10))
+        )
+        self.emergency_bypass_bearing_rad = math.radians(
+            max(1.0, float(rospy.get_param("~emergency_bypass_bearing_deg", 8.0)))
+        )
+        self.emergency_bypass_yaw_err_rad = math.radians(
+            max(1.0, float(rospy.get_param("~emergency_bypass_yaw_err_deg", 10.0)))
+        )
+        self.emergency_bypass_clearance_margin_m = max(
+            0.0,
+            float(rospy.get_param("~emergency_bypass_clearance_margin_m", 0.03)),
+        )
+        self.emergency_bypass_goal_window_m = max(
+            0.0,
+            float(rospy.get_param("~emergency_bypass_goal_window_m", 0.60)),
+        )
+        self.emergency_bypass_speed_limit_mps = max(
+            0.05,
+            float(rospy.get_param("~emergency_bypass_speed_limit_mps", 0.18)),
+        )
         # When near-field raw stop is enabled, a second full /ouster/points pass
         # inside this node can delay the critical stop callback under load.
         self.enable_raw_cloud_fallback_stop = bool(
@@ -342,6 +369,8 @@ class DWAControl:
         self._near_field_raw_stop_last_reason = "clear"
         self._near_field_raw_stop_last_process_ms = 0.0
         self._last_emergency_source = "none"
+        self._emergency_bypass_active = False
+        self._emergency_bypass_debug = {}
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
 
@@ -2236,6 +2265,79 @@ class DWAControl:
 
         return (s_proj, lat_err, (tx, ty), t_hat, at_goal, dist_to_goal, arc_rem)
 
+    def _compute_emergency_bypass_state(
+        self,
+        pose_x,
+        pose_y,
+        yaw,
+        s_proj,
+        lat_err,
+        target_xy,
+        remaining_dist,
+    ):
+        # Let a planned detour keep moving only when the path clearly bends
+        # around the obstacle and the obstacle is not yet in the hard-stop zone.
+        self._emergency_bypass_debug = {}
+        if not self.emergency_bypass_enabled:
+            return False
+        if not self.path_tracking_only or len(self.path_pts) < 2:
+            return False
+        if self.active_path_source == "none":
+            return False
+        if self._raw_immediate_contact_blocked:
+            return False
+        if not math.isfinite(self.front_obstacle_clearance):
+            return False
+        min_bypass_clearance = (
+            self.avoidance_hard_stop_distance + self.emergency_bypass_clearance_margin_m
+        )
+        if self.front_obstacle_clearance <= min_bypass_clearance:
+            return False
+        if remaining_dist <= max(self.goal_thresh_m, self.emergency_bypass_goal_window_m):
+            return False
+
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+
+        def _to_local(world_x, world_y):
+            dx = float(world_x) - float(pose_x)
+            dy = float(world_y) - float(pose_y)
+            return (
+                cos_yaw * dx + sin_yaw * dy,
+                -sin_yaw * dx + cos_yaw * dy,
+            )
+
+        target_local_x, target_local_y = _to_local(target_xy[0], target_xy[1])
+        base_s = max(self.s_cur, s_proj)
+        preview_s = min(self.s_total, base_s + self.emergency_bypass_preview_m)
+        preview_x, preview_y, preview_t_hat = self._interp_xy_smoothed_tangent_at_s(preview_s)
+        preview_local_x, preview_local_y = _to_local(preview_x, preview_y)
+        preview_path_yaw = math.atan2(preview_t_hat[1], preview_t_hat[0])
+        preview_yaw_err = angdiff(preview_path_yaw, yaw)
+        preview_bearing = math.atan2(
+            preview_local_y,
+            preview_local_x if preview_local_x > 1e-6 else 1e-6,
+        )
+
+        self._emergency_bypass_debug = {
+            "preview_local_x": preview_local_x,
+            "preview_local_y": preview_local_y,
+            "preview_bearing_deg": math.degrees(preview_bearing),
+            "preview_yaw_err_deg": math.degrees(preview_yaw_err),
+            "target_local_x": target_local_x,
+            "target_local_y": target_local_y,
+        }
+
+        if preview_local_x <= 0.05:
+            return False
+
+        lateral_detour = max(abs(target_local_y), abs(preview_local_y))
+        return (
+            lateral_detour >= self.emergency_bypass_target_lateral_m
+            or abs(preview_bearing) >= self.emergency_bypass_bearing_rad
+            or abs(preview_yaw_err) >= self.emergency_bypass_yaw_err_rad
+        )
+
     # ------------------------------- dwa core ------------------------------------
     def dwa_control(self, x, goal_xy, t_hat, lat_err):
         dw = self.calc_dynamic_window(x)
@@ -2243,7 +2345,10 @@ class DWAControl:
         return u, trajectory
 
     def path_tracking_control(self, x, goal_xy, t_hat, lat_err, v_cap, remaining_dist):
-        obstacle_response_active = str(self.behavior_reason).strip().lower() != "clear"
+        obstacle_response_active = (
+            str(self.behavior_reason).strip().lower() != "clear"
+            or self._emergency_bypass_active
+        )
         path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
         if abs(lat_err) <= self.path_tracking_cte_deadband_m:
             lat_err_ctrl = 0.0
@@ -2322,6 +2427,8 @@ class DWAControl:
             "filtered_lat_err": self._path_tracking_filtered_lat_err,
         }
         v_limit = min(v_cap, self.path_tracking_speed_cap)
+        if self._emergency_bypass_active:
+            v_limit = min(v_limit, self.emergency_bypass_speed_limit_mps)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
         tracking_kp = self.path_tracking_kp * (1.15 if obstacle_response_active else 1.0)
@@ -2857,31 +2964,8 @@ class DWAControl:
         while not rospy.is_shutdown():
             self._refresh_active_path()
             self._update_emergency_stop_state()
-
-            # emergency stop only (avoidance can proceed unless obstacle is critically close)
-            avoidance_can_continue = (
-                (not self.follow_global_path_only)
-                and self.active_path_source == "avoidance"
-                and self.front_obstacle_clearance > self.avoidance_hard_stop_distance
-            )
-            if self.enable_emergency_stop and self.emergency_blocked and not avoidance_can_continue:
-                self._rot_mode = False
-                self._log_nav_reason(
-                    "stop_emergency",
-                    "front obstacle stop active clr=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s" % (
-                        self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
-                        self._raw_front_obstacle_clearance if math.isfinite(self._raw_front_obstacle_clearance) else float("inf"),
-                        self.overlay_box_front_clearance if math.isfinite(self.overlay_box_front_clearance) else float("inf"),
-                        self._last_emergency_close_points,
-                        self._last_emergency_intrusion_points,
-                        self._overlay_box_match_count,
-                        self._last_emergency_source,
-                    ),
-                    warn=True,
-                )
-                self.publish_drive([0.0, 0.0])
-                rate.sleep()
-                continue
+            self._emergency_bypass_active = False
+            self._emergency_bypass_debug = {}
 
             # behavior-layer hard stop
             if self.behavior_stop:
@@ -2931,6 +3015,35 @@ class DWAControl:
                 self._update_progress_and_target(px, py, yaw)
             if s_proj is None:
                 self._log_nav_reason("stop_no_target", "failed to compute target from current path", warn=True)
+                self.publish_drive([0.0, 0.0])
+                rate.sleep()
+                continue
+
+            avoidance_can_continue = self._compute_emergency_bypass_state(
+                px,
+                py,
+                yaw,
+                s_proj,
+                lat_err,
+                target_xy,
+                dist_to_goal,
+            )
+            self._emergency_bypass_active = bool(avoidance_can_continue)
+            if self.enable_emergency_stop and self.emergency_blocked and not avoidance_can_continue:
+                self._rot_mode = False
+                self._log_nav_reason(
+                    "stop_emergency",
+                    "front obstacle stop active clr=%.2f raw=%.2f overlay=%.2f close=%d intrusion=%d overlay_boxes=%d source=%s" % (
+                        self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                        self._raw_front_obstacle_clearance if math.isfinite(self._raw_front_obstacle_clearance) else float("inf"),
+                        self.overlay_box_front_clearance if math.isfinite(self.overlay_box_front_clearance) else float("inf"),
+                        self._last_emergency_close_points,
+                        self._last_emergency_intrusion_points,
+                        self._overlay_box_match_count,
+                        self._last_emergency_source,
+                    ),
+                    warn=True,
+                )
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -3018,7 +3131,10 @@ class DWAControl:
 
             # low-speed clamp with cap in direction of chosen v sign
             u_cmd = list(u)
-            obstacle_response_active = str(self.behavior_reason).strip().lower() != "clear"
+            obstacle_response_active = (
+                str(self.behavior_reason).strip().lower() != "clear"
+                or self._emergency_bypass_active
+            )
 
             if u_cmd[0] >= 0.0:
                 u_cmd[0] = min(v_cap, max(0.0, u_cmd[0]))
@@ -3078,7 +3194,7 @@ class DWAControl:
                 dbg = self._last_tracking_debug
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f" % (
+                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f" % (
                         self.active_path_source,
                         u_cmd[0],
                         u_cmd[1],
@@ -3090,6 +3206,9 @@ class DWAControl:
                         dbg.get("desired_yaw_deg", 0.0),
                         dbg.get("yaw_err_deg", 0.0),
                         dbg.get("cte_correction_deg", 0.0),
+                        "on" if self._emergency_bypass_active else "off",
+                        self._emergency_bypass_debug.get("preview_local_y", 0.0),
+                        self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
                     ),
                 )
 

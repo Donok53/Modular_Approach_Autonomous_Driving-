@@ -419,6 +419,14 @@
     <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
     <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
     <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
+    <arg name="emergency_bypass_enabled" default="true"/>
+    <arg name="emergency_bypass_preview_m" default="0.90"/>
+    <arg name="emergency_bypass_target_lateral_m" default="0.10"/>
+    <arg name="emergency_bypass_bearing_deg" default="8.0"/>
+    <arg name="emergency_bypass_yaw_err_deg" default="10.0"/>
+    <arg name="emergency_bypass_clearance_margin_m" default="0.03"/>
+    <arg name="emergency_bypass_goal_window_m" default="0.60"/>
+    <arg name="emergency_bypass_speed_limit_mps" default="0.18"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
     <arg name="debug_stop_logging" default="true"/>
     <arg name="debug_dwa_stats" default="true"/>
@@ -892,6 +900,14 @@
         <param name="near_field_raw_stop_marker_topic" value="$(arg near_field_raw_stop_marker_topic)"/>
         <param name="near_field_raw_stop_hit_cloud_topic" value="$(arg near_field_raw_stop_hit_cloud_topic)"/>
         <param name="near_field_raw_stop_log_period_s" value="$(arg near_field_raw_stop_log_period_s)"/>
+        <param name="emergency_bypass_enabled" value="$(arg emergency_bypass_enabled)"/>
+        <param name="emergency_bypass_preview_m" value="$(arg emergency_bypass_preview_m)"/>
+        <param name="emergency_bypass_target_lateral_m" value="$(arg emergency_bypass_target_lateral_m)"/>
+        <param name="emergency_bypass_bearing_deg" value="$(arg emergency_bypass_bearing_deg)"/>
+        <param name="emergency_bypass_yaw_err_deg" value="$(arg emergency_bypass_yaw_err_deg)"/>
+        <param name="emergency_bypass_clearance_margin_m" value="$(arg emergency_bypass_clearance_margin_m)"/>
+        <param name="emergency_bypass_goal_window_m" value="$(arg emergency_bypass_goal_window_m)"/>
+        <param name="emergency_bypass_speed_limit_mps" value="$(arg emergency_bypass_speed_limit_mps)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>
         <param name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
         <param name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
