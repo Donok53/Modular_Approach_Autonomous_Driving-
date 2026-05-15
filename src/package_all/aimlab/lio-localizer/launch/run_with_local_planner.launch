@@ -1,6 +1,6 @@
 <launch>
     <arg name="base_config_file" default="$(find lio_localizer)/config/params-robot_scout.yaml"/>
-    <arg name="environment" default="indoor"/>
+    <arg name="environment" default="outdoor"/>
     <arg name="pose_topic" default="/lio_localizer/odometry/optimization"/>
     <arg name="pointcloud_topic" default="/ouster/points"/>
     <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>

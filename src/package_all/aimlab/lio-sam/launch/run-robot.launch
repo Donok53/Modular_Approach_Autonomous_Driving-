@@ -5,7 +5,7 @@
     <arg name="map_profile_name" default="$(eval 'real' if arg('real_mode') == 'true' else 'test')"/>
     <arg name="map_profile_suffix" default="$(eval '_real' if arg('real_mode') == 'true' else '')"/>
     <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
-    <arg name="environment" default="indoor"/>
+    <arg name="environment" default="outdoor"/>
     <arg name="enable_map_sync" default="true"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
     <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>

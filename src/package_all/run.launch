@@ -8,7 +8,7 @@
   <arg name="localizer_map_relative_path" default="$(eval '/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test')"/>
   <arg name="localizer_map_bundle_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
   <arg name="runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
-  <arg name="localization_environment" default="indoor"/>
+  <arg name="localization_environment" default="outdoor"/>
   <arg name="enable_rviz" default="true"/>
   <arg name="enable_localizer_drivable_area" default="true"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>

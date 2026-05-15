@@ -3,7 +3,7 @@
     <arg name="real_mode" default="false"/>
     <arg name="map_profile_name" default="$(eval 'real' if arg('real_mode') == 'true' else 'test')"/>
     <arg name="base_config_file" default="$(find lio_localizer)/config/params-robot_scout.yaml"/>
-    <arg name="environment" default="indoor"/>
+    <arg name="environment" default="outdoor"/>
     <arg name="enable_drivable_area" default="true"/>
     <arg name="drivable_area_config_file" default="$(find lio_sam)/config/drivable_area_builder_localizer.yaml"/>
     <arg name="drivable_area_state_file_path" default="$(eval env('HOME') + '/.ros/lio_sam_drivable_area_state_real.json' if arg('real_mode') == 'true' else env('HOME') + '/.ros/lio_sam_drivable_area_state.json')"/>
