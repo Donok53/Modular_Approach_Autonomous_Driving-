@@ -1698,7 +1698,6 @@ class DWAControl:
         self._rot_accum = 0.0
         self._rot_ok = 0
         self._rot_start_time = rospy.Time.now()
-        self._rot_cooldown_until = rospy.Time(0)
         rospy.loginfo("Rotate-only ENTER: target %.1f°", math.degrees(self._rot_yaw_target))
 
     def rotate_only_step(self, cur_yaw):
@@ -1723,16 +1722,21 @@ class DWAControl:
             exit_reason = "timeout"
         if exit_reason is not None:
             self._rot_mode = False
-            if exit_reason == "aligned":
-                self._rot_last_timeout_target = None
-                self._rot_cooldown_until = rospy.Time(0)
-            else:
-                self._rot_last_timeout_target = self._rot_yaw_target
-                self._rot_cooldown_until = now + rospy.Duration(self.rotate_reentry_cooldown_s)
+            self._rot_last_timeout_target = self._rot_yaw_target
+            self._rot_cooldown_until = now + rospy.Duration(self.rotate_reentry_cooldown_s)
             rospy.loginfo("Rotate-only EXIT: err=%.1f°, accum=%.1f°, t=%.1fs",
                           math.degrees(err), math.degrees(self._rot_accum), time_in)
             return None, True, exit_reason
         return u, False, None
+
+    def _rotate_only_allowed(self, dist_to_goal, obstacle_response_active):
+        if dist_to_goal <= self.near_goal_no_rotate_m:
+            return False
+        if obstacle_response_active:
+            return False
+        if self.active_path_source in ("local", "avoidance"):
+            return False
+        return True
 
     # ------------------------------ path handling --------------------------------
     def _path_signature(self, path_msg):
@@ -3105,6 +3109,10 @@ class DWAControl:
             # if we're roughly aligned with path tangent (forward progress), avoid entering rotate-only
             heading_vec = np.array([math.cos(yaw), math.sin(yaw)])
             dot_forward = float(np.dot(heading_vec, np.array(t_hat)))
+            rotate_only_allowed = self._rotate_only_allowed(
+                dist_to_goal,
+                obstacle_response_active=self._emergency_bypass_active or str(self.behavior_reason).strip().lower() != "clear",
+            )
             rotate_cooldown_active = rospy.Time.now() < self._rot_cooldown_until
             rotate_target_changed = (
                 self._rot_last_timeout_target is None or
@@ -3112,31 +3120,46 @@ class DWAControl:
             )
             if (
                 (not self._rot_mode)
+                and rotate_only_allowed
                 and (err > self._ROT_HIGH)
                 and (dot_forward < 0.2)
-                and (dist_to_goal > self.near_goal_no_rotate_m)
                 and (not rotate_cooldown_active or rotate_target_changed)
             ):
                 self.rotate_only_enter(yaw, desired)
             if self._rot_mode:
-                u_rot, done, exit_reason = self.rotate_only_step(yaw)
-                if not done:
-                    self._log_nav_reason(
-                        "rotate_only",
-                        "target=%.1fdeg" % math.degrees(self._rot_yaw_target),
+                if not rotate_only_allowed:
+                    self._rot_mode = False
+                    self._rot_last_timeout_target = self._rot_yaw_target
+                    self._rot_cooldown_until = rospy.Time.now() + rospy.Duration(
+                        self.rotate_reentry_cooldown_s
                     )
-                    x = self.moving(x, u_rot)
-                    self.publish_drive(u_rot)
-                    rate.sleep()
-                    continue
-                if exit_reason in ("timeout", "spin_limit"):
                     self._log_nav_reason(
-                        "rotate_cooldown",
-                        "skip re-entry for %.1fs after %s" % (
-                            self.rotate_reentry_cooldown_s,
-                            exit_reason,
+                        "rotate_cancel",
+                        "cancel rotate-only: active_path=%s behavior=%s bypass=%s" % (
+                            self.active_path_source,
+                            self.behavior_reason,
+                            "on" if self._emergency_bypass_active else "off",
                         ),
                     )
+                else:
+                    u_rot, done, exit_reason = self.rotate_only_step(yaw)
+                    if not done:
+                        self._log_nav_reason(
+                            "rotate_only",
+                            "target=%.1fdeg" % math.degrees(self._rot_yaw_target),
+                        )
+                        x = self.moving(x, u_rot)
+                        self.publish_drive(u_rot)
+                        rate.sleep()
+                        continue
+                    if exit_reason is not None:
+                        self._log_nav_reason(
+                            "rotate_cooldown",
+                            "skip re-entry for %.1fs after %s" % (
+                                self.rotate_reentry_cooldown_s,
+                                exit_reason,
+                            ),
+                        )
 
             # final-approach speed cap
             final_window = self.final_approach_window_m
