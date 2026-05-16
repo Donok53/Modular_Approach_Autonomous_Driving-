@@ -359,8 +359,8 @@
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="0.25"/>
   <arg name="path_tracking_tangent_window_m" default="0.75"/>
-  <arg name="path_tracking_crawl_speed" default="0.24"/>
-  <arg name="path_tracking_large_yaw_crawl_speed" default="0.18"/>
+  <arg name="path_tracking_crawl_speed" default="0.42"/>
+  <arg name="path_tracking_large_yaw_crawl_speed" default="0.34"/>
   <arg name="final_approach_window_m" default="0.0"/>
   <arg name="final_speed_k" default="0.95"/>
   <arg name="final_speed_min" default="0.34"/>
@@ -373,7 +373,7 @@
   <arg name="forward_motion_deadband" default="0.01"/>
   <arg name="min_forward_cmd" default="0.08"/>
   <arg name="min_forward_cmd_distance" default="0.80"/>
-  <arg name="cruise_min_speed" default="0.0"/>
+  <arg name="cruise_min_speed" default="0.62"/>
   <arg name="cruise_distance_m" default="1.80"/>
   <arg name="rotate_only_deg" default="150.0"/>
   <arg name="rotate_exit_deg" default="40.0"/>
@@ -483,7 +483,7 @@
   <arg name="global_obstacle_overlay_downsample" default="1"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
   <arg name="enable_planning_slowdown_manager" default="true"/>
-  <arg name="planning_slowdown_speed_limit_mps" default="0.50"/>
+  <arg name="planning_slowdown_speed_limit_mps" default="0.65"/>
   <arg name="planning_slowdown_clear_speed_limit_mps" default="99.0"/>
   <arg name="planning_slowdown_hold_s" default="2.0"/>
   <arg name="planning_slowdown_no_path_grace_s" default="0.8"/>
@@ -613,7 +613,7 @@
   <arg name="emergency_bypass_yaw_err_deg" default="10.0"/>
   <arg name="emergency_bypass_clearance_margin_m" default="0.03"/>
   <arg name="emergency_bypass_goal_window_m" default="0.60"/>
-  <arg name="emergency_bypass_speed_limit_mps" default="0.22"/>
+  <arg name="emergency_bypass_speed_limit_mps" default="0.32"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
   <arg name="use_auto_osm" default="true"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
