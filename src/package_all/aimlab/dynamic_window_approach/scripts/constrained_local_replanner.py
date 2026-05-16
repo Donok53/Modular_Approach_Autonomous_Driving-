@@ -499,7 +499,11 @@ class ConstrainedLocalReplanner:
         self.local_clear_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
-        self.current_path_mode = "follow_global"
+        # Default to following the replanner's nominal local segment.  The
+        # global route should supply direction, while the local replanner owns
+        # the short-horizon maneuvering path that the controller actually
+        # tracks outdoors.
+        self.current_path_mode = "follow_local"
         self.rejoin_mode_until_sec = 0.0
         self._last_explain_key = None
         self._last_explain_time = 0.0
@@ -4503,7 +4507,8 @@ class ConstrainedLocalReplanner:
                 elif avoidance_state == "clear":
                     self.local_blocked_since_sec = 0.0
                     self.local_clear_since_sec = 0.0
-                    self._publish_path_mode("follow_global")
+                    self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
+                    self._publish_path_mode("follow_local")
                 return
 
             resumed_from_local_block = self.local_blocked_since_sec > 0.0
@@ -4554,16 +4559,13 @@ class ConstrainedLocalReplanner:
                 self.rejoin_mode_until_sec = 0.0
                 self._publish_path_mode("hold")
                 return
-            if resumed_from_local_block:
-                if self._arm_rejoin_mode(now_sec):
-                    self._publish_path_mode("rejoin_global")
-                else:
-                    self._publish_path_mode("follow_global")
-            elif self._is_rejoin_mode_active(now_sec):
-                self._publish_path_mode("rejoin_global")
-            else:
-                self.rejoin_mode_until_sec = 0.0
-                self._publish_path_mode("follow_global")
+            # Keep the controller on the replanner's nominal local path even
+            # after an avoidance episode clears.  Falling back to the full
+            # global path here reintroduces late switching and S-curve chasing
+            # because the mux stops using the fresh local segment that was just
+            # built around the current pose.
+            self.rejoin_mode_until_sec = 0.0
+            self._publish_path_mode("follow_local")
             self._publish_debug_text(
                 self._build_debug_text(
                     "follow_nominal",

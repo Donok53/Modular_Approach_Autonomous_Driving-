@@ -388,7 +388,7 @@
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
   <arg name="obstacle_block_margin_m" default="0.24"/>
   <arg name="avoidance_trigger_margin_m" default="0.18"/>
-  <arg name="avoidance_trigger_ahead_m" default="6.0"/>
+  <arg name="avoidance_trigger_ahead_m" default="$(arg local_replan_lookahead_m)"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
   <arg name="risk_block_confirm_cells" default="2"/>
