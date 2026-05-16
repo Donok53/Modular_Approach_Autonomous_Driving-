@@ -389,15 +389,15 @@ class DWAControl:
         self.risk_grid_data = None
 
         # ===== Rotate-only mode =====
-        self.rotate_only_deg = rospy.get_param("~rotate_only_deg", 80.0)
-        self.rotate_exit_deg = rospy.get_param("~rotate_exit_deg", 30.0)
+        self.rotate_only_deg = rospy.get_param("~rotate_only_deg", 150.0)
+        self.rotate_exit_deg = rospy.get_param("~rotate_exit_deg", 40.0)
         self.rotate_kp = rospy.get_param("~rotate_kp", 2.0)
-        self.rotate_w_max_deg = rospy.get_param("~rotate_w_max_deg", 30.0)
+        self.rotate_w_max_deg = rospy.get_param("~rotate_w_max_deg", 28.0)
         self.rotate_ok_count = rospy.get_param("~rotate_ok_count", 3)
         self.rotate_max_spin_deg = rospy.get_param("~rotate_max_spin_deg", 420.0)
         self.rotate_max_time_s = rospy.get_param("~rotate_max_time_s", 6.0)
         self.rotate_reentry_cooldown_s = max(
-            0.0, float(rospy.get_param("~rotate_reentry_cooldown_s", 2.5))
+            0.0, float(rospy.get_param("~rotate_reentry_cooldown_s", 4.0))
         )
         self.rotate_reentry_target_delta_deg = max(
             0.0, float(rospy.get_param("~rotate_reentry_target_delta_deg", 12.0))
@@ -416,26 +416,37 @@ class DWAControl:
         self._rot_last_timeout_target = None
 
         # ===== Path tracking (s-based) =====
-        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.55)
+        self.lookahead_distance = rospy.get_param("~lookahead_distance", 1.40)
+        self.lookahead_speed_gain = max(
+            0.0, float(rospy.get_param("~lookahead_speed_gain", 1.80))
+        )
+        self.lookahead_error_gain = max(
+            0.0, float(rospy.get_param("~lookahead_error_gain", 0.80))
+        )
+        self.lookahead_max_distance = max(
+            self.lookahead_distance,
+            float(rospy.get_param("~lookahead_max_distance", 3.50)),
+        )
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 0.0)
-        self.final_speed_k = rospy.get_param("~final_speed_k", 0.75)
-        self.final_speed_min = rospy.get_param("~final_speed_min", 0.22)
+        self.final_speed_k = rospy.get_param("~final_speed_k", 0.95)
+        self.final_speed_min = rospy.get_param("~final_speed_min", 0.34)
         self.lat_goal_slop = rospy.get_param("~lat_goal_slop", 0.6)
-        self.near_goal_no_rotate_m = rospy.get_param("~near_goal_no_rotate_m", 1.0)
-        self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.02)
-        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.20)
+        self.near_goal_no_rotate_m = rospy.get_param("~near_goal_no_rotate_m", 1.5)
+        self.forward_motion_deadband = rospy.get_param("~forward_motion_deadband", 0.01)
+        self.min_forward_cmd = rospy.get_param("~min_forward_cmd", 0.08)
         self.min_forward_cmd_distance = rospy.get_param("~min_forward_cmd_distance", 0.8)
         self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.0)
-        self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 2.5)
+        self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 1.8)
         self.cruise_lat_err_m = rospy.get_param("~cruise_lat_err_m", 0.25)
         self.cruise_max_yaw_rate = math.radians(rospy.get_param("~cruise_max_yaw_rate_deg", 45.0))
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
         self.snap_lat_err = rospy.get_param("~snap_lat_err", 0.25)
         self.snap_target_ahead_m = max(
-            0.0, float(rospy.get_param("~snap_target_ahead_m", 0.40))
+            self.lookahead_distance,
+            float(rospy.get_param("~snap_target_ahead_m", 2.20)),
         )
         self.tracking_projection_back_window_m = max(
             0.0, float(rospy.get_param("~tracking_projection_back_window_m", 0.35))
@@ -448,32 +459,32 @@ class DWAControl:
             0, int(rospy.get_param("~tracking_path_smoothing_passes", 2))
         )
         self.path_tracking_only = bool(rospy.get_param("~path_tracking_only", True))
-        self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 1.2))
+        self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 0.92))
         self.path_tracking_yaw_rate_max = math.radians(
-            rospy.get_param("~path_tracking_yaw_rate_max_deg", 55.0)
+            rospy.get_param("~path_tracking_yaw_rate_max_deg", 42.0)
         )
         self.path_tracking_in_place_yaw_rate_max = math.radians(
             rospy.get_param(
                 "~path_tracking_in_place_yaw_rate_max_deg",
-                rospy.get_param("~path_tracking_yaw_rate_max_deg", 55.0),
+                26.0,
             )
         )
         self.path_tracking_yaw_accel_max = math.radians(
-            rospy.get_param("~path_tracking_yaw_accel_max_deg", 180.0)
+            rospy.get_param("~path_tracking_yaw_accel_max_deg", 120.0)
         )
         self.path_tracking_speed_cap = max(
-            0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.25))
+            0.05, float(rospy.get_param("~path_tracking_speed_cap", 0.90))
         )
         self.path_tracking_steer_filter_gain = min(
-            1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.20)))
+            1.0, max(0.05, float(rospy.get_param("~path_tracking_steer_filter_gain", 0.55)))
         )
         self.cmd_smoothing_enabled = bool(rospy.get_param("~cmd_smoothing_enabled", True))
         self.cmd_linear_accel_max = max(
-            0.05, float(rospy.get_param("~cmd_linear_accel_max_mps2", 0.35))
+            0.05, float(rospy.get_param("~cmd_linear_accel_max_mps2", 0.68))
         )
         self.cmd_linear_decel_max = max(
             self.cmd_linear_accel_max,
-            float(rospy.get_param("~cmd_linear_decel_max_mps2", 0.80)),
+            float(rospy.get_param("~cmd_linear_decel_max_mps2", 0.90)),
         )
         self.cmd_angular_accel_max = math.radians(
             max(10.0, float(rospy.get_param("~cmd_angular_accel_max_degps2", 85.0)))
@@ -481,69 +492,69 @@ class DWAControl:
         self.cmd_angular_decel_max = math.radians(
             max(
                 math.degrees(self.cmd_angular_accel_max),
-                float(rospy.get_param("~cmd_angular_decel_max_degps2", 130.0)),
+                float(rospy.get_param("~cmd_angular_decel_max_degps2", 120.0)),
             )
         )
         self.cmd_smoothing_zero_snap = max(
             0.0, float(rospy.get_param("~cmd_smoothing_zero_snap", 0.015))
         )
         self.path_tracking_slowdown_yaw = math.radians(
-            rospy.get_param("~path_tracking_slowdown_yaw_deg", 35.0)
+            rospy.get_param("~path_tracking_slowdown_yaw_deg", 65.0)
         )
         self.path_tracking_stop_yaw = math.radians(
-            rospy.get_param("~path_tracking_stop_yaw_deg", 65.0)
+            rospy.get_param("~path_tracking_stop_yaw_deg", 95.0)
         )
-        self.path_tracking_cte_gain = float(rospy.get_param("~path_tracking_cte_gain", 1.6))
+        self.path_tracking_cte_gain = float(rospy.get_param("~path_tracking_cte_gain", 0.38))
         self.path_tracking_cte_soft_mps = max(
-            0.05, float(rospy.get_param("~path_tracking_cte_soft_mps", 0.25))
+            0.05, float(rospy.get_param("~path_tracking_cte_soft_mps", 0.55))
         )
         self.path_tracking_cte_deadband_m = max(
-            0.0, float(rospy.get_param("~path_tracking_cte_deadband_m", 0.03))
+            0.0, float(rospy.get_param("~path_tracking_cte_deadband_m", 0.10))
         )
         self.path_tracking_cte_filter_gain = min(
             1.0,
             max(0.05, float(rospy.get_param("~path_tracking_cte_filter_gain", 0.25))),
         )
         self.path_tracking_cte_yaw_cap = math.radians(
-            rospy.get_param("~path_tracking_cte_yaw_cap_deg", 35.0)
+            rospy.get_param("~path_tracking_cte_yaw_cap_deg", 15.0)
         )
         self.path_tracking_heading_filter_gain = min(
             1.0,
-            max(0.05, float(rospy.get_param("~path_tracking_heading_filter_gain", 0.18))),
+            max(0.05, float(rospy.get_param("~path_tracking_heading_filter_gain", 0.35))),
         )
         self.path_tracking_goal_bearing_gain = min(
             1.0,
-            max(0.0, float(rospy.get_param("~path_tracking_goal_bearing_gain", 0.45))),
+            max(0.0, float(rospy.get_param("~path_tracking_goal_bearing_gain", 0.50))),
         )
         self.path_tracking_goal_bearing_cap = math.radians(
             rospy.get_param("~path_tracking_goal_bearing_cap_deg", 35.0)
         )
         self.path_tracking_target_step_m = max(
-            0.05, float(rospy.get_param("~path_tracking_target_step_m", 0.18))
+            0.05, float(rospy.get_param("~path_tracking_target_step_m", 0.25))
         )
         self.path_tracking_tangent_window_m = max(
             0.0,
             float(
                 rospy.get_param(
                     "~path_tracking_tangent_window_m",
-                    max(0.25, min(0.60, self.lookahead_distance)),
+                    0.75,
                 )
             ),
         )
         self.path_tracking_crawl_speed = max(
-            0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.10))
+            0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.12))
         )
         self.path_tracking_large_yaw_crawl_speed = max(
             0.0,
             float(
                 rospy.get_param(
                     "~path_tracking_large_yaw_crawl_speed",
-                    self.path_tracking_crawl_speed,
+                    0.10,
                 )
             ),
         )
         self.path_tracking_stop_distance_m = max(
-            0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.80))
+            0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.35))
         )
         self.path_tracking_goal_align_window_m = max(
             self.goal_thresh_m,
@@ -568,7 +579,7 @@ class DWAControl:
                 math.radians(
                     rospy.get_param(
                         "~path_tracking_goal_yaw_rate_max_deg",
-                        min(25.0, math.degrees(self.path_tracking_yaw_rate_max)),
+                        18.0,
                     )
                 ),
             ),
@@ -578,7 +589,7 @@ class DWAControl:
             float(
                 rospy.get_param(
                     "~path_tracking_drivable_ignore_start_distance_m",
-                    0.45,
+                    0.90,
                 )
             ),
         )
@@ -595,7 +606,7 @@ class DWAControl:
             0.0, float(rospy.get_param("~path_tracking_reset_goal_delta_m", 0.80))
         )
         self.path_tracking_minor_replan_delta_m = max(
-            0.0, float(rospy.get_param("~path_tracking_minor_replan_delta_m", 0.30))
+            0.0, float(rospy.get_param("~path_tracking_minor_replan_delta_m", 0.12))
         )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
@@ -755,11 +766,16 @@ class DWAControl:
             self._publish_near_field_raw_stop_debug(self._near_field_status_header(), [])
 
     def _cmd_timer_callback(self, _event):
-        if self._publish_emergency_stop_state():
-            self.last_cmd = Twist()
-            self._last_cmd_smooth_stamp = rospy.Time.now()
-        self.cmd_vel_pub.publish(self.last_cmd)
-        self._refresh_near_field_raw_stop_marker_if_waiting()
+        if rospy.is_shutdown():
+            return
+        try:
+            if self._publish_emergency_stop_state():
+                self.last_cmd = Twist()
+                self._last_cmd_smooth_stamp = rospy.Time.now()
+            self.cmd_vel_pub.publish(self.last_cmd)
+            self._refresh_near_field_raw_stop_marker_if_waiting()
+        except rospy.ROSException:
+            pass
 
     def _hard_stop_active(self):
         return bool((self.enable_emergency_stop and self.emergency_blocked) or self.behavior_stop)
@@ -1977,6 +1993,7 @@ class DWAControl:
             )
         reset_tracking = (
             source != self.active_path_source
+            or sig != self.path_sig
             or path_msg is None
             or self.path_msg is None
             or goal_changed
@@ -2226,6 +2243,13 @@ class DWAControl:
             self.s_cur = max(self.s_cur, s_proj)
 
         base_s = max(self.s_cur, s_proj)
+        preview_lookahead = self.lookahead_distance
+        preview_lookahead += self.lookahead_speed_gain * max(0.0, abs(self.last_cmd.linear.x))
+        preview_lookahead += self.lookahead_error_gain * abs(lat_err)
+        preview_lookahead = max(
+            self.lookahead_distance,
+            min(self.lookahead_max_distance, preview_lookahead),
+        )
         gx, gy = self.path_pts[-1]
         dist_to_goal = math.hypot(gx - pose_x, gy - pose_y)
         goal_align_active = (
@@ -2235,6 +2259,14 @@ class DWAControl:
 
         if goal_align_active:
             s_target = self.s_total
+        elif self.follow_global_path_only or self.active_path_source == "global":
+            if abs(lat_err) > self.snap_lat_err:
+                s_target = min(
+                    self.s_total,
+                    base_s + max(preview_lookahead, self.snap_target_ahead_m),
+                )
+            else:
+                s_target = min(self.s_total, base_s + preview_lookahead)
         else:
             # Follow the currently selected path segment more directly instead
             # of skipping far ahead on a heavily smoothed global path.  This
