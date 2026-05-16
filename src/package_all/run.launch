@@ -99,7 +99,7 @@
   <arg name="published_path_spacing_m" default="0.25"/>
   <arg name="path_history_max_paths" default="12"/>
   <arg name="local_replan_hz" default="3.0"/>
-  <arg name="local_replan_lookahead_m" default="4.0"/>
+  <arg name="local_replan_lookahead_m" default="6.0"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
   <arg name="enable_avoidance_path" default="false"/>
@@ -205,7 +205,7 @@
   <arg name="teb_enable_local_path_hold_stop" default="true"/>
   <arg name="teb_allow_in_place_rotation_near_obstacle" default="true"/>
   <arg name="teb_allow_in_place_rotation_during_local_hold" default="true"/>
-  <arg name="teb_max_angular_slew_rps2" default="0.95"/>
+  <arg name="teb_max_angular_slew_rps2" default="1.25"/>
   <arg name="teb_defer_local_hold_while_avoidance_active" default="true"/>
   <arg name="teb_min_in_place_rotation_angular_speed" default="0.05"/>
   <arg name="teb_reverse_replacement_speed_mps" default="0.03"/>
@@ -224,6 +224,12 @@
   <arg name="teb_blind_zone_front_hold_min_points" default="3"/>
   <arg name="teb_blind_zone_turn_guard_linear_cap_mps" default="0.12"/>
   <arg name="teb_blind_zone_turn_recovery_stop_s" default="0.35"/>
+  <arg name="teb_near_goal_side_turn_guard_stop_distance_m" default="0.22"/>
+  <arg name="teb_near_goal_side_turn_guard_release_distance_m" default="0.30"/>
+  <arg name="teb_near_goal_side_turn_guard_short_segment_stop_distance_m" default="0.12"/>
+  <arg name="teb_near_goal_side_turn_guard_short_segment_release_distance_m" default="0.18"/>
+  <arg name="teb_near_goal_side_turn_guard_rotate_away_angular_speed" default="0.12"/>
+  <arg name="teb_near_goal_side_turn_guard_rotate_away_linear_cap_mps" default="0.04"/>
   <arg name="teb_behavior_cmd_timeout_s" default="0.8"/>
   <arg name="teb_rear_approach_conservative_enabled" default="true"/>
   <arg name="teb_rear_approach_max_angular_speed" default="0.12"/>
@@ -231,8 +237,8 @@
   <arg name="teb_rear_approach_no_reverse" default="true"/>
   <arg name="teb_local_hold_timeout_s" default="1.0"/>
   <arg name="teb_publish_final_goal_only" default="true"/>
-  <arg name="teb_move_base_goal_lookahead_m" default="1.5"/>
-  <arg name="teb_move_base_goal_update_min_dist_m" default="0.50"/>
+  <arg name="teb_move_base_goal_lookahead_m" default="3.0"/>
+  <arg name="teb_move_base_goal_update_min_dist_m" default="0.70"/>
   <arg name="teb_local_goal_tail_backoff_m" default="0.45"/>
   <arg name="teb_local_goal_tail_backoff_trigger_m" default="1.10"/>
   <arg name="teb_emergency_stop_front_margin" default="0.40"/>
@@ -243,19 +249,19 @@
   <arg name="teb_slowdown_far_lateral_ratio" default="0.75"/>
   <arg name="teb_move_base_goal_topic" default="/planning/teb_goal"/>
   <arg name="teb_filter_max_range_m" default="20.0"/>
-  <arg name="teb_filter_lateral_limit_y_m" default="3.5"/>
+  <arg name="teb_filter_lateral_limit_y_m" default="5.0"/>
   <arg name="teb_filter_self_margin_m" default="0.11"/>
   <arg name="teb_filter_self_padding_m" default="0.03"/>
-  <arg name="teb_local_costmap_width_m" default="12.0"/>
-  <arg name="teb_local_costmap_height_m" default="12.0"/>
-  <arg name="teb_local_obstacle_range_m" default="8.0"/>
-  <arg name="teb_local_raytrace_range_m" default="8.5"/>
+  <arg name="teb_local_costmap_width_m" default="16.0"/>
+  <arg name="teb_local_costmap_height_m" default="16.0"/>
+  <arg name="teb_local_obstacle_range_m" default="10.0"/>
+  <arg name="teb_local_raytrace_range_m" default="10.5"/>
   <arg name="teb_local_observation_persistence_s" default="0.40"/>
-  <arg name="teb_local_inflation_radius_m" default="0.24"/>
-  <arg name="teb_global_inflation_radius_m" default="0.06"/>
-  <arg name="teb_min_obstacle_dist_m" default="0.14"/>
-  <arg name="teb_inflation_dist_m" default="0.24"/>
-  <arg name="teb_weight_viapoint" default="60.0"/>
+  <arg name="teb_local_inflation_radius_m" default="0.32"/>
+  <arg name="teb_global_inflation_radius_m" default="0.08"/>
+  <arg name="teb_min_obstacle_dist_m" default="0.20"/>
+  <arg name="teb_inflation_dist_m" default="0.32"/>
+  <arg name="teb_weight_viapoint" default="35.0"/>
   <arg name="teb_max_vel_x_backwards_mps" default="0.05"/>
   <arg name="teb_max_vel_theta_rps" default="0.35"/>
   <arg name="teb_acc_lim_theta_rps2" default="0.60"/>
@@ -295,10 +301,10 @@
   <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
   <arg name="global_path_continuous_replan" default="true"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
-  <arg name="global_path_replan_min_interval_s" default="0.20"/>
+  <arg name="global_path_replan_min_interval_s" default="0.60"/>
   <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
-  <arg name="global_path_replan_start_deviation_m" default="0.60"/>
+  <arg name="global_path_replan_start_deviation_m" default="0.90"/>
   <arg name="global_path_planner_loop_hz" default="10.0"/>
   <arg name="global_path_republish_period_s" default="0.20"/>
   <arg name="grid_snap_search_radius_cells" default="60"/>
@@ -378,7 +384,7 @@
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
   <arg name="obstacle_block_margin_m" default="0.24"/>
   <arg name="avoidance_trigger_margin_m" default="0.18"/>
-  <arg name="avoidance_trigger_ahead_m" default="4.0"/>
+  <arg name="avoidance_trigger_ahead_m" default="6.0"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
   <arg name="risk_block_confirm_cells" default="2"/>
@@ -398,7 +404,7 @@
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="static_obstacle_memory_enabled" default="true"/>
   <arg name="static_obstacle_memory_ttl_s" default="1.2"/>
-  <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
+  <arg name="static_obstacle_memory_max_range_m" default="5.0"/>
   <arg name="static_obstacle_memory_max_support" default="8"/>
   <arg name="static_obstacle_memory_max_points" default="40"/>
   <arg name="static_obstacle_memory_persistence_frames" default="3"/>
@@ -422,7 +428,7 @@
   <arg name="tracked_object_virtual_margin_m" default="0.20"/>
   <arg name="near_field_object_memory_enabled" default="true"/>
   <arg name="near_field_object_memory_ttl_s" default="1.5"/>
-  <arg name="near_field_object_memory_max_range_m" default="2.5"/>
+  <arg name="near_field_object_memory_max_range_m" default="4.0"/>
   <arg name="near_field_object_memory_merge_radius_m" default="0.30"/>
   <arg name="near_field_object_memory_max_points" default="120"/>
   <arg name="enable_global_pointcloud_overlay" default="true"/>
@@ -1556,7 +1562,13 @@
       <arg name="blind_zone_turn_guard_min_points" value="$(arg teb_blind_zone_turn_guard_min_points)"/>
       <arg name="blind_zone_front_hold_min_points" value="$(arg teb_blind_zone_front_hold_min_points)"/>
       <arg name="blind_zone_turn_guard_linear_cap_mps" value="$(arg teb_blind_zone_turn_guard_linear_cap_mps)"/>
-      <arg name="blind_zone_turn_recovery_stop_s" value="$(arg teb_blind_zone_turn_recovery_stop_s)"/>
+  <arg name="blind_zone_turn_recovery_stop_s" value="$(arg teb_blind_zone_turn_recovery_stop_s)"/>
+  <arg name="near_goal_side_turn_guard_stop_distance_m" value="$(arg teb_near_goal_side_turn_guard_stop_distance_m)"/>
+  <arg name="near_goal_side_turn_guard_release_distance_m" value="$(arg teb_near_goal_side_turn_guard_release_distance_m)"/>
+  <arg name="near_goal_side_turn_guard_short_segment_stop_distance_m" value="$(arg teb_near_goal_side_turn_guard_short_segment_stop_distance_m)"/>
+  <arg name="near_goal_side_turn_guard_short_segment_release_distance_m" value="$(arg teb_near_goal_side_turn_guard_short_segment_release_distance_m)"/>
+  <arg name="near_goal_side_turn_guard_rotate_away_angular_speed" value="$(arg teb_near_goal_side_turn_guard_rotate_away_angular_speed)"/>
+  <arg name="near_goal_side_turn_guard_rotate_away_linear_cap_mps" value="$(arg teb_near_goal_side_turn_guard_rotate_away_linear_cap_mps)"/>
       <arg name="behavior_cmd_timeout_s" value="$(arg teb_behavior_cmd_timeout_s)"/>
       <arg name="rear_approach_conservative_enabled" value="$(arg teb_rear_approach_conservative_enabled)"/>
       <arg name="rear_approach_max_angular_speed" value="$(arg teb_rear_approach_max_angular_speed)"/>

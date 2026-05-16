@@ -44,11 +44,11 @@
   <arg name="preserve_user_goal_on_drivable_grid" default="false"/>
   <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
   <arg name="continuous_replan" default="true"/>
-  <arg name="replan_min_start_shift_m" default="0.15"/>
-  <arg name="replan_min_interval_s" default="0.40"/>
-  <arg name="replan_path_validation_lookahead_m" default="8.0"/>
+  <arg name="replan_min_start_shift_m" default="0.30"/>
+  <arg name="replan_min_interval_s" default="0.60"/>
+  <arg name="replan_path_validation_lookahead_m" default="10.0"/>
   <arg name="replan_path_start_ignore_m" default="0.35"/>
-  <arg name="replan_path_start_deviation_m" default="0.60"/>
+  <arg name="replan_path_start_deviation_m" default="0.90"/>
   <arg name="planner_loop_hz" default="8.0"/>
   <arg name="path_repub_period" default="0.20"/>
   <arg name="candidate_route_switching_enabled" default="true"/>

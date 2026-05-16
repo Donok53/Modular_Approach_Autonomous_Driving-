@@ -22,7 +22,7 @@
     <arg name="pose_filter_straight_speed_min_mps" default="0.10"/>
     <arg name="pose_filter_turning_yaw_rate_threshold_rps" default="0.20"/>
     <arg name="pose_filter_turning_yaw_error_deg" default="10.0"/>
-    <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.18"/>
+    <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.32"/>
 
     <group if="$(arg enable_pose_filter)">
         <node pkg="dynamic_window_approach" type="planning_odom_filter.py" name="planning_odom_filter" output="screen" respawn="false">
@@ -123,7 +123,7 @@
     <arg name="published_path_spacing_m" default="0.25"/>
     <arg name="path_history_max_paths" default="12"/>
     <arg name="replan_hz" default="3.0"/>
-    <arg name="lookahead_m" default="4.0"/>
+    <arg name="lookahead_m" default="6.0"/>
     <arg name="allow_best_effort_path" default="true"/>
     <arg name="best_effort_max_goal_gap_m" default="0.60"/>
     <arg name="enable_avoidance_path" default="false"/>
@@ -197,7 +197,7 @@
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
     <arg name="obstacle_block_margin_m" default="0.30"/>
     <arg name="avoidance_trigger_margin_m" default="0.25"/>
-    <arg name="avoidance_trigger_ahead_m" default="4.0"/>
+    <arg name="avoidance_trigger_ahead_m" default="6.0"/>
     <arg name="forward_path_obstacle_filter_enabled" default="true"/>
     <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
     <arg name="risk_block_confirm_cells" default="2"/>
@@ -218,7 +218,7 @@
     <arg name="debug_avoidance_log_period_s" default="1.0"/>
     <arg name="static_obstacle_memory_enabled" default="true"/>
     <arg name="static_obstacle_memory_ttl_s" default="1.2"/>
-    <arg name="static_obstacle_memory_max_range_m" default="3.0"/>
+    <arg name="static_obstacle_memory_max_range_m" default="5.0"/>
     <arg name="static_obstacle_memory_max_support" default="8"/>
     <arg name="static_obstacle_memory_max_points" default="40"/>
     <arg name="static_obstacle_memory_persistence_frames" default="3"/>
@@ -242,7 +242,7 @@
     <arg name="tracked_object_virtual_margin_m" default="0.20"/>
     <arg name="near_field_object_memory_enabled" default="true"/>
     <arg name="near_field_object_memory_ttl_s" default="1.5"/>
-    <arg name="near_field_object_memory_max_range_m" default="2.5"/>
+    <arg name="near_field_object_memory_max_range_m" default="4.0"/>
     <arg name="near_field_object_memory_merge_radius_m" default="0.30"/>
     <arg name="near_field_object_memory_max_points" default="120"/>
     <arg name="enable_global_pointcloud_overlay" default="false"/>
