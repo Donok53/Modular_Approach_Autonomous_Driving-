@@ -55,8 +55,8 @@
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="enable_cloud_tracker" default="false"/>
   <arg name="enable_dynamic_risk_manager" default="false"/>
-  <arg name="enable_local_replanner" default="false"/>
-  <arg name="follow_global_path_only" default="true"/>
+  <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
   <arg name="use_dynamic_risk_grid" default="false"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="enable_tracked_objects_marker_viz" default="false"/>
@@ -68,7 +68,7 @@
   <arg name="active_path_topic" default="/planning/active_path"/>
   <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
   <arg name="tracking_reference_topic" default="/planning/tracking_reference_path"/>
-  <arg name="use_local_path_fallback" default="false"/>
+  <arg name="use_local_path_fallback" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="path_history_topic" default="/planning/path_history"/>
   <arg name="travel_history_topic" default="/planning/travel_history"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
@@ -98,11 +98,11 @@
   <arg name="max_los_segment_m" default="4.0"/>
   <arg name="published_path_spacing_m" default="0.25"/>
   <arg name="path_history_max_paths" default="12"/>
-  <arg name="local_replan_hz" default="3.0"/>
-  <arg name="local_replan_lookahead_m" default="6.0"/>
+  <arg name="local_replan_hz" default="$(eval '5.0' if str(arg('localization_environment')).lower() == 'outdoor' else '3.0')"/>
+  <arg name="local_replan_lookahead_m" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '6.0')"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
-  <arg name="enable_avoidance_path" default="false"/>
+  <arg name="enable_avoidance_path" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="enable_graph_planner" default="true"/>
   <arg name="enable_robot_send" default="false"/>
   <arg name="enable_wave_cmd_bridge" default="false"/>
@@ -158,7 +158,8 @@
   <arg name="linefit_slope_residual_min_points_per_cell" default="2"/>
   <arg name="linefit_slope_residual_remove_sparse_cells" default="true"/>
   <arg name="linefit_slope_residual_keep_front_close_m" default="0.35"/>
-  <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('linefit_selector_non_ground_cloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() == 'true' else arg('pointcloud_topic'))"/>
+  <arg name="planning_use_filtered_non_ground_cloud" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('pointcloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() != 'true' else (arg('linefit_non_ground_cloud_topic') if str(arg('planning_use_filtered_non_ground_cloud')).lower() == 'true' else arg('linefit_selector_non_ground_cloud_topic')))"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="publish_os_sensor_static_tf" default="true"/>
   <arg name="os_sensor_frame" default="os_sensor"/>
@@ -301,7 +302,7 @@
   <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
   <arg name="global_path_continuous_replan" default="true"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
-  <arg name="global_path_replan_min_interval_s" default="0.60"/>
+  <arg name="global_path_replan_min_interval_s" default="$(eval '0.90' if str(arg('localization_environment')).lower() == 'outdoor' else '0.60')"/>
   <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
   <arg name="global_path_replan_start_ignore_m" default="0.35"/>
   <arg name="global_path_replan_start_deviation_m" default="0.90"/>
@@ -313,9 +314,9 @@
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="candidate_route_switch_blocked_score_threshold" default="2.5"/>
-  <arg name="candidate_route_switch_score_margin" default="1.5"/>
-  <arg name="candidate_route_switch_min_hold_s" default="1.0"/>
-  <arg name="candidate_route_switch_confirm_count" default="1"/>
+  <arg name="candidate_route_switch_score_margin" default="$(eval '2.5' if str(arg('localization_environment')).lower() == 'outdoor' else '1.5')"/>
+  <arg name="candidate_route_switch_min_hold_s" default="$(eval '2.0' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
+  <arg name="candidate_route_switch_confirm_count" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '1')"/>
   <arg name="candidate_route_switch_require_centerline_blocked" default="false"/>
   <arg name="candidate_route_switch_centerline_clearance_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="candidate_route_switch_require_best_clear" default="true"/>

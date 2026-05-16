@@ -690,6 +690,7 @@
             <param name="path_history_topic" value="$(arg path_history_topic)"/>
             <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
+            <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
             <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
             <param name="use_direct_goal" value="$(arg use_direct_goal)"/>
             <param name="direct_goal_topic" value="$(arg direct_goal_topic)"/>
