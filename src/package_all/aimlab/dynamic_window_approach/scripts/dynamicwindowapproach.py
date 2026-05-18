@@ -649,6 +649,15 @@ class DWAControl:
                 )
             ),
         )
+        self.path_tracking_drivable_boundary_tolerance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_tracking_drivable_boundary_tolerance_m",
+                    0.12,
+                )
+            ),
+        )
         self.path_tracking_reset_goal_delta_m = max(
             0.0, float(rospy.get_param("~path_tracking_reset_goal_delta_m", 0.80))
         )
@@ -1664,6 +1673,20 @@ class DWAControl:
                     best = dist
         return best
 
+    def _is_xy_drivable_grid_ok_with_tolerance(self, x, y, tolerance_m=None):
+        if self._is_xy_drivable_grid_ok(x, y):
+            return True
+        tol = (
+            self.path_tracking_drivable_boundary_tolerance_m
+            if tolerance_m is None
+            else max(0.0, float(tolerance_m))
+        )
+        if tol <= 1e-6:
+            return False
+        search_m = tol + max(0.05, float(self.grid_resolution or 0.05))
+        nearest = self._nearest_drivable_grid_distance_m(x, y, max_search_m=search_m)
+        return math.isfinite(nearest) and nearest <= tol
+
     def _initial_inward_recovery_window_ok(self, traj, offsets, ignore_start_distance_m):
         if (
             (not self.use_drivable_grid)
@@ -1691,7 +1714,7 @@ class DWAControl:
             wy = float(pose0[1]) + s0 * float(ox) + c0 * float(oy)
             if not self._is_xy_risk_ok(wx, wy):
                 return False
-            ok = self._is_xy_drivable_grid_ok(wx, wy)
+            ok = self._is_xy_drivable_grid_ok_with_tolerance(wx, wy)
             base_ok.append(ok)
             if ok:
                 prev_dists.append(0.0)
@@ -1720,7 +1743,7 @@ class DWAControl:
                 wy = float(row[1]) + s * float(ox) + c * float(oy)
                 if not self._is_xy_risk_ok(wx, wy):
                     return False
-                ok = self._is_xy_drivable_grid_ok(wx, wy)
+                ok = self._is_xy_drivable_grid_ok_with_tolerance(wx, wy)
                 if ok:
                     row_dists.append(0.0)
                     continue
@@ -3272,12 +3295,17 @@ class DWAControl:
                     # Near the robot, only permit a short inward-recovery window:
                     # we still reject any newly outward-growing footprint, but allow
                     # existing edge overlap to shrink back inside the drivable mask.
-                    if self.use_drivable_grid and not self._is_xy_drivable_grid_ok(wx, wy):
+                    if self.use_drivable_grid and not self._is_xy_drivable_grid_ok_with_tolerance(wx, wy):
                         continue
                     if not self._is_xy_risk_ok(wx, wy):
                         return False
                     continue
-                if not self._is_xy_drivable(wx, wy):
+                if (
+                    self.use_drivable_grid
+                    and (not self._is_xy_drivable_grid_ok_with_tolerance(wx, wy))
+                ):
+                    return False
+                if not self._is_xy_risk_ok(wx, wy):
                     return False
         return True
 
