@@ -276,7 +276,7 @@
   <arg name="robot_width_m" default="0.58"/>
   <arg name="robot_length_m" default="0.612"/>
   <arg name="footprint_padding_m" default="0.05"/>
-  <arg name="minimum_passage_width_m" default="$(eval '0.80' if str(arg('localization_environment')).lower() == 'outdoor' else '0.70')"/>
+  <arg name="minimum_passage_width_m" default="0.70"/>
   <arg name="minimum_passage_clearance_radius_m" default="$(eval max(0.5 * float(arg('minimum_passage_width_m')), 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m'))))"/>
   <arg name="path_blocking_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
@@ -576,7 +576,7 @@
   <arg name="emergency_bin_size_m" default="0.10"/>
   <arg name="emergency_min_close_points" default="2"/>
   <arg name="emergency_immediate_contact_min_points" default="1"/>
-  <arg name="emergency_passable_width_m" default="$(arg minimum_passage_width_m)"/>
+  <arg name="emergency_passable_width_m" default="$(eval max(0.68, float(arg('robot_width_m')) + 2.0 * float(arg('footprint_padding_m'))))"/>
   <arg name="block_on_count" default="1"/>
   <arg name="block_off_count" default="4"/>
   <arg name="obstacle_consider_side_m" default="0.80"/>

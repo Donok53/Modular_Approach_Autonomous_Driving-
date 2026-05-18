@@ -390,7 +390,7 @@
     <arg name="emergency_bin_size_m" default="0.10"/>
     <arg name="emergency_min_close_points" default="2"/>
     <arg name="emergency_immediate_contact_min_points" default="1"/>
-    <arg name="emergency_passable_width_m" default="0.80"/>
+    <arg name="emergency_passable_width_m" default="0.68"/>
     <arg name="block_on_count" default="1"/>
     <arg name="block_off_count" default="4"/>
     <arg name="obstacle_consider_side_m" default="0.80"/>
