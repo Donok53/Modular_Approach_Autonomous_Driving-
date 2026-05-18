@@ -1371,6 +1371,7 @@ class DWAControl:
                         min_x = x
                 hit_count = len(hit_points)
                 cell_count = len(occupied_cells)
+                close_xy_points = [(float(x), float(y)) for x, y, _ in hit_points]
             else:
                 finite_mask = np.isfinite(points).all(axis=1)
                 points = points[finite_mask]
@@ -1391,8 +1392,12 @@ class DWAControl:
                     ).astype(np.int32)
                     cell_count = int(np.unique(cells, axis=0).shape[0])
                     hit_points = self._points_to_publish_xyz(hit_points_arr)
+                    close_xy_points = [
+                        (float(x), float(y)) for x, y in hit_points_arr[:, :2]
+                    ]
                 else:
                     cell_count = 0
+                    close_xy_points = []
 
             min_front_clearance = (
                 min_x - footprint_front if math.isfinite(min_x) else float("inf")
@@ -1407,14 +1412,25 @@ class DWAControl:
                 and min_front_clearance
                 <= self.near_field_raw_stop_close_override_distance_m
             )
+            passable_gap_blocked = self._emergency_band_is_blocked(
+                close_xy_points,
+                max(
+                    self.near_field_raw_stop_half_width_m,
+                    self.robot_half_width_m + self.footprint_padding_m,
+                ),
+            )
             detected = detected or close_override_detected
             stop_detected = (
-                detected and min_front_clearance <= self.emergency_stop_distance
+                detected
+                and min_front_clearance <= self.emergency_stop_distance
+                and (close_override_detected or passable_gap_blocked)
             )
             if stop_detected:
                 self._near_field_raw_stop_last_reason = (
                     "close_override" if close_override_detected else "standard"
                 )
+            elif detected and math.isfinite(min_front_clearance):
+                self._near_field_raw_stop_last_reason = "passable_gap"
             else:
                 self._near_field_raw_stop_last_reason = "clear"
             if stop_detected:
@@ -1522,6 +1538,38 @@ class DWAControl:
         return offsets
 
     # ------------------------------- obstacle stop -------------------------------
+    def _active_path_preview_local_xy(self, preview_m=None):
+        if self.active_path_source not in ("local", "avoidance"):
+            return None
+        if len(self.path_pts) < 2:
+            return None
+
+        try:
+            pose_x = float(self.current_pose.pose.pose.position.x)
+            pose_y = float(self.current_pose.pose.pose.position.y)
+            yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
+            cos_yaw = math.cos(yaw)
+            sin_yaw = math.sin(yaw)
+            s_min = max(0.0, self.s_cur - self.tracking_projection_back_window_m)
+            s_max = min(self.s_total, self.s_cur + self.tracking_projection_forward_window_m)
+            s_proj, _, _, _ = self._project_to_path(pose_x, pose_y, s_min=s_min, s_max=s_max)
+            base_s = max(self.s_cur, s_proj)
+            preview_dist = (
+                self.emergency_bypass_preview_m
+                if preview_m is None
+                else max(0.05, float(preview_m))
+            )
+            preview_s = min(self.s_total, base_s + preview_dist)
+            preview_x, preview_y, _ = self._interp_xy_smoothed_tangent_at_s(preview_s)
+            dx = float(preview_x) - pose_x
+            dy = float(preview_y) - pose_y
+            return (
+                cos_yaw * dx + sin_yaw * dy,
+                -sin_yaw * dx + cos_yaw * dy,
+            )
+        except Exception:
+            return None
+
     def _emergency_band_is_blocked(self, close_points, lateral_limit):
         if len(close_points) < self.emergency_min_close_points:
             return False
@@ -1547,7 +1595,36 @@ class DWAControl:
                 free_run += 1
         longest_free_run = max(longest_free_run, free_run)
         max_free_gap_m = float(longest_free_run) * bin_size
-        return max_free_gap_m + 1e-6 < self.emergency_passable_width_m
+        if max_free_gap_m + 1e-6 >= self.emergency_passable_width_m:
+            return False
+
+        preview_local = self._active_path_preview_local_xy()
+        if preview_local is None:
+            return True
+
+        preview_local_x, preview_local_y = preview_local
+        if preview_local_x <= 0.05:
+            return True
+        if abs(preview_local_y) < self.emergency_bypass_target_lateral_m:
+            return True
+
+        center_idx = int(math.floor((lateral_limit) / bin_size))
+        center_idx = max(0, min(bin_count - 1, center_idx))
+        side_free_run = 0
+        if preview_local_y > 0.0:
+            idx_iter = range(center_idx, bin_count)
+        else:
+            idx_iter = range(center_idx - 1, -1, -1)
+
+        for idx in idx_iter:
+            if idx < 0 or idx >= bin_count:
+                break
+            if occupied[idx]:
+                break
+            side_free_run += 1
+
+        side_free_gap_m = float(side_free_run) * bin_size
+        return side_free_gap_m + 1e-6 < self.emergency_passable_width_m
 
     def cloud_callback(self, msg):
         if not self.enable_raw_cloud_processing:
