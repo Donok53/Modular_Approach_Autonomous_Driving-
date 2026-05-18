@@ -1,20 +1,21 @@
 <launch>
   <arg name="use_sim_time" default="false"/>
   <param name="/use_sim_time" value="$(arg use_sim_time)"/>
-  <arg name="use_lio_sam" default="false"/>
   <arg name="real_mode" default="false"/>
+  <arg name="localization_environment" default="outdoor"/>
+  <arg name="outdoor_use_saved_map_assets" default="true"/>
+  <arg name="use_lio_sam" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'false')"/>
   <arg name="map_profile_name" default="$(eval 'real' if str(arg('real_mode')).lower() == 'true' else 'test')"/>
   <arg name="map_profile_suffix" default="$(eval '_real' if str(arg('real_mode')).lower() == 'true' else '')"/>
   <arg name="localizer_map_relative_path" default="$(eval '/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test')"/>
   <arg name="localizer_map_bundle_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
   <arg name="runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
-  <arg name="localization_environment" default="outdoor"/>
   <arg name="enable_rviz" default="true"/>
-  <arg name="enable_localizer_drivable_area" default="true"/>
+  <arg name="enable_localizer_drivable_area" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
   <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
-  <arg name="enable_localizer_global_map_2d_background" default="true"/>
-  <arg name="enable_localizer_global_map_2d_edit_plane" default="true"/>
+  <arg name="enable_localizer_global_map_2d_background" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
+  <arg name="enable_localizer_global_map_2d_edit_plane" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="localizer_global_map_2d_reload_period_s" default="2.0"/>
   <arg name="localizer_use_internal_initial_pose" default="false"/>
   <arg name="localizer_initial_pose_x_m" default="0.0"/>
@@ -103,7 +104,7 @@
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
   <arg name="enable_avoidance_path" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="enable_graph_planner" default="true"/>
+  <arg name="enable_graph_planner" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="enable_robot_send" default="false"/>
   <arg name="enable_wave_cmd_bridge" default="false"/>
   <arg name="wave_port_name" default=""/>
@@ -615,11 +616,11 @@
   <arg name="emergency_bypass_goal_window_m" default="0.60"/>
   <arg name="emergency_bypass_speed_limit_mps" default="0.32"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
-  <arg name="use_auto_osm" default="true"/>
+  <arg name="use_auto_osm" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
   <arg name="auto_osm_file" default="$(find astar_map)/map/auto_trajectory$(arg map_profile_suffix).osm"/>
   <arg name="astar_ref_file" default="$(arg localizer_map_bundle_dir)/map_reference_coordinate.csv"/>
-  <arg name="enable_monitoring_asset_bundle" default="true"/>
+  <arg name="enable_monitoring_asset_bundle" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="monitoring_asset_bundle_dir" default="$(find lio_localizer)/../../monitoring_delivery/latest$(arg map_profile_suffix)"/>
   <arg name="monitoring_bundle_source_dir" default="$(arg localizer_map_bundle_dir)"/>
   <arg name="monitoring_bundle_osm_file" default="$(eval arg('auto_osm_file') if arg('use_auto_osm') == 'true' else arg('default_osm_file'))"/>
