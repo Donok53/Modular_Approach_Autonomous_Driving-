@@ -3853,6 +3853,33 @@ class ConstrainedLocalReplanner:
         if trigger_reason is None:
             self._clear_blocking_obstacle_markers(stamp)
             self._clear_avoidance_path(frame_id, stamp)
+            if (
+                self.avoidance_active
+                and self.last_avoidance_grid_path is not None
+                and len(self.last_avoidance_grid_path) >= 2
+            ):
+                # Keep the last valid detour fresh while the clear-hold / clear-confirm
+                # logic is still active.  Otherwise the controller can fall back to the
+                # nominal local path too early and re-approach the obstacle corridor
+                # before the recent person / object evidence has really cleared.
+                self._publish_avoidance_path(
+                    self.last_avoidance_grid_path,
+                    dg,
+                    stamp,
+                    start_xy=(self.odom_x, self.odom_y),
+                    record_history=False,
+                )
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "avoid_hold",
+                        stamp,
+                        trigger_reason="recent_clear_hold",
+                        path_len=len(self.last_avoidance_grid_path),
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                )
+                return "avoidance"
             self._publish_debug_text(
                 self._build_debug_text(
                     "follow_nominal",
