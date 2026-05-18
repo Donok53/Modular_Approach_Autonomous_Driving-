@@ -2,8 +2,8 @@
 
     <arg name="project" default="lio_sam"/>
     <arg name="real_mode" default="false"/>
-    <arg name="map_profile_name" default="$(eval 'real' if arg('real_mode') == 'true' else 'test')"/>
-    <arg name="map_profile_suffix" default="$(eval '_real' if arg('real_mode') == 'true' else '')"/>
+    <arg name="map_profile_name" default="$(eval 'outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('real' if str(arg('real_mode')).lower() == 'true' else 'test'))"/>
+    <arg name="map_profile_suffix" default="$(eval '_outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('_real' if str(arg('real_mode')).lower() == 'true' else ''))"/>
     <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
     <arg name="environment" default="outdoor"/>
     <arg name="enable_map_sync" default="true"/>
