@@ -208,15 +208,15 @@
     <arg name="avoidance_hold_s" default="1.5"/>
     <arg name="avoidance_clear_confirm_cycles" default="10"/>
     <arg name="blocked_clear_hold_s" default="0.35"/>
-    <arg name="avoidance_branch_backtrack_cells" default="2"/>
-    <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
+    <arg name="avoidance_branch_backtrack_cells" default="4"/>
+    <arg name="avoidance_rejoin_min_distance_m" default="1.8"/>
     <arg name="rejoin_mode_hold_s" default="1.0"/>
     <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
     <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
     <arg name="near_goal_tail_block_ignore_distance_m" default="0.45"/>
     <arg name="near_goal_block_ignore_after_avoidance_s" default="1.0"/>
     <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
-    <arg name="allow_avoidance_reuse_on_no_solution" default="false"/>
+    <arg name="allow_avoidance_reuse_on_no_solution" default="true"/>
     <arg name="debug_avoidance_logging" default="true"/>
     <arg name="debug_avoidance_log_period_s" default="1.0"/>
     <arg name="static_obstacle_memory_enabled" default="true"/>
@@ -423,11 +423,11 @@
     <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
     <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
     <arg name="emergency_bypass_enabled" default="true"/>
-    <arg name="emergency_bypass_preview_m" default="0.90"/>
-    <arg name="emergency_bypass_target_lateral_m" default="0.10"/>
-    <arg name="emergency_bypass_bearing_deg" default="8.0"/>
-    <arg name="emergency_bypass_yaw_err_deg" default="10.0"/>
-    <arg name="emergency_bypass_clearance_margin_m" default="0.03"/>
+    <arg name="emergency_bypass_preview_m" default="1.20"/>
+    <arg name="emergency_bypass_target_lateral_m" default="0.08"/>
+    <arg name="emergency_bypass_bearing_deg" default="6.0"/>
+    <arg name="emergency_bypass_yaw_err_deg" default="8.0"/>
+    <arg name="emergency_bypass_clearance_margin_m" default="0.00"/>
     <arg name="emergency_bypass_goal_window_m" default="0.60"/>
     <arg name="emergency_bypass_speed_limit_mps" default="0.32"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>

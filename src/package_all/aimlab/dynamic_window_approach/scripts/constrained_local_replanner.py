@@ -3698,7 +3698,14 @@ class ConstrainedLocalReplanner:
         if blocked_idx is None:
             return None, None
 
-        branch_start_idx = max(start_idx, blocked_idx - self.avoidance_branch_backtrack_cells)
+        res_m = max(1e-3, float(dg.info.resolution))
+        blocked_delta_cells = max(0, blocked_idx - start_idx)
+        close_blocked_cells = max(3, int(math.ceil(1.0 / res_m)))
+        backtrack_cells = self.avoidance_branch_backtrack_cells
+        if blocked_delta_cells <= close_blocked_cells:
+            backtrack_cells = max(backtrack_cells, int(math.ceil(0.8 / res_m)))
+
+        branch_start_idx = max(start_idx, blocked_idx - backtrack_cells)
         while branch_start_idx > start_idx:
             bx, by = nominal_path[branch_start_idx]
             if self._in_bounds_blocked(dynamic_blocked, bx, by) and not dynamic_blocked[by][bx]:
@@ -3706,59 +3713,80 @@ class ConstrainedLocalReplanner:
             branch_start_idx -= 1
 
         branch_start = nominal_path[branch_start_idx]
-        min_rejoin_cells = max(
-            1, int(math.ceil(self.avoidance_rejoin_min_distance_m / max(1e-3, float(dg.info.resolution))))
-        )
-        first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
-
-        for rejoin_idx in range(first_rejoin_idx, len(nominal_path)):
-            rejoin_cell = nominal_path[rejoin_idx]
-            rx, ry = rejoin_cell
-            if not self._in_bounds_blocked(dynamic_blocked, rx, ry) or dynamic_blocked[ry][rx]:
-                continue
-            detour = self._astar(
-                dynamic_blocked,
-                branch_start,
-                rejoin_cell,
-                allow_best_effort=False,
+        rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
+        if self.avoidance_rejoin_min_distance_m > 0.8:
+            rejoin_distance_candidates_m.append(
+                max(0.8, self.avoidance_rejoin_min_distance_m * 0.75)
             )
-            if detour is None or len(detour) < 2:
-                continue
-
-            detour = self._simplify_grid_path(
-                detour,
-                dynamic_blocked,
-                float(dg.info.resolution),
-                force=self.smooth_avoidance_line_of_sight,
+        if blocked_delta_cells <= close_blocked_cells and self.avoidance_rejoin_min_distance_m > 1.0:
+            rejoin_distance_candidates_m.append(
+                max(0.8, self.avoidance_rejoin_min_distance_m * 0.5)
             )
-            if len(detour) < 2:
+
+        seen_rejoin_distances = set()
+        ordered_rejoin_distances = []
+        for candidate_m in rejoin_distance_candidates_m:
+            key = round(float(candidate_m), 3)
+            if key in seen_rejoin_distances:
                 continue
+            seen_rejoin_distances.add(key)
+            ordered_rejoin_distances.append(float(candidate_m))
 
-            composed = []
-            self._append_path_segment(composed, [start_cell])
-            self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
-            self._append_path_segment(composed, detour[1:])
-            self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+        # Try the normal rejoin spacing first, then relax it for close blockers so
+        # the robot can still slip around obstacles that appear only a short
+        # distance ahead instead of dropping straight into hold-stop.
+        for rejoin_distance_m in ordered_rejoin_distances:
+            min_rejoin_cells = max(1, int(math.ceil(rejoin_distance_m / res_m)))
+            first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
 
-            blind_zone_conflict = self._path_blind_zone_turn_conflict(
-                composed, dg, now_sec=now_sec
-            )
-            if blind_zone_conflict is not None:
-                rospy.loginfo_throttle(
-                    1.0,
-                    "constrained_local_replanner: rejecting avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
-                    "left" if int(blind_zone_conflict["side"]) > 0 else "right",
-                    float(blind_zone_conflict["x"]),
-                    float(blind_zone_conflict["y"]),
-                    float(blind_zone_conflict["age_s"]),
-                    float(blind_zone_conflict["path_heading_deg"]),
+            for rejoin_idx in range(first_rejoin_idx, len(nominal_path)):
+                rejoin_cell = nominal_path[rejoin_idx]
+                rx, ry = rejoin_cell
+                if not self._in_bounds_blocked(dynamic_blocked, rx, ry) or dynamic_blocked[ry][rx]:
+                    continue
+                detour = self._astar(
+                    dynamic_blocked,
+                    branch_start,
+                    rejoin_cell,
+                    allow_best_effort=False,
                 )
-                continue
+                if detour is None or len(detour) < 2:
+                    continue
 
-            branch_history_points = self._sample_world_points(
-                [self._grid_to_world(dg, gx, gy) for gx, gy in detour]
-            )
-            return composed, branch_history_points
+                detour = self._simplify_grid_path(
+                    detour,
+                    dynamic_blocked,
+                    float(dg.info.resolution),
+                    force=self.smooth_avoidance_line_of_sight,
+                )
+                if len(detour) < 2:
+                    continue
+
+                composed = []
+                self._append_path_segment(composed, [start_cell])
+                self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
+                self._append_path_segment(composed, detour[1:])
+                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+
+                blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                    composed, dg, now_sec=now_sec
+                )
+                if blind_zone_conflict is not None:
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: rejecting avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
+                        "left" if int(blind_zone_conflict["side"]) > 0 else "right",
+                        float(blind_zone_conflict["x"]),
+                        float(blind_zone_conflict["y"]),
+                        float(blind_zone_conflict["age_s"]),
+                        float(blind_zone_conflict["path_heading_deg"]),
+                    )
+                    continue
+
+                branch_history_points = self._sample_world_points(
+                    [self._grid_to_world(dg, gx, gy) for gx, gy in detour]
+                )
+                return composed, branch_history_points
 
         return None, None
 
