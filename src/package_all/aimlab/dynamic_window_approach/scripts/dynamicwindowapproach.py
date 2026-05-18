@@ -355,6 +355,14 @@ class DWAControl:
         self.reverse_recovery_speed_mps = max(
             0.02, float(rospy.get_param("~reverse_recovery_speed_mps", 0.16))
         )
+        self.reverse_recovery_clearance_margin_m = max(
+            0.0,
+            float(rospy.get_param("~reverse_recovery_clearance_margin_m", 0.08)),
+        )
+        self.reverse_recovery_max_distance_m = max(
+            self.reverse_recovery_distance_m,
+            float(rospy.get_param("~reverse_recovery_max_distance_m", 1.00)),
+        )
         self.reverse_recovery_min_active_time_s = max(
             0.0,
             float(rospy.get_param("~reverse_recovery_min_active_time_s", 0.70)),
@@ -771,6 +779,10 @@ class DWAControl:
         self._reverse_recovery_last_exit_reason = ""
         self._reverse_recovery_last_log_sec = 0.0
         self._reverse_recovery_trigger_since_sec = 0.0
+        self._reverse_recovery_resume_distance_m = self.reverse_recovery_distance_m
+        self._reverse_recovery_required_front_clearance_m = (
+            self.emergency_stop_distance + self.reverse_recovery_clearance_margin_m
+        )
         self.reverse_recovery_rear_local_points = np.empty((0, 2), dtype=np.float32)
 
         # ===== ROS I/O =====
@@ -2087,6 +2099,10 @@ class DWAControl:
         self._reverse_recovery_start_xy = None
         self._reverse_recovery_trigger_since_sec = 0.0
         self._reverse_recovery_last_exit_reason = str(reason or "")
+        self._reverse_recovery_resume_distance_m = self.reverse_recovery_distance_m
+        self._reverse_recovery_required_front_clearance_m = (
+            self.emergency_stop_distance + self.reverse_recovery_clearance_margin_m
+        )
         self._reverse_recovery_cooldown_until = now + rospy.Duration(
             self.reverse_recovery_cooldown_s
         )
@@ -2102,6 +2118,22 @@ class DWAControl:
             return 0.0
         start_x, start_y = self._reverse_recovery_start_xy
         return math.hypot(float(pose_x) - start_x, float(pose_y) - start_y)
+
+    def _compute_reverse_recovery_targets(self):
+        required_front_clearance = max(
+            self.emergency_stop_distance + self.reverse_recovery_clearance_margin_m,
+            self.avoidance_hard_stop_distance + self.reverse_recovery_clearance_margin_m,
+        )
+        resume_distance = self.reverse_recovery_distance_m
+        if math.isfinite(self.front_obstacle_clearance):
+            deficit = required_front_clearance - self.front_obstacle_clearance
+            if deficit > 0.0:
+                resume_distance = max(resume_distance, deficit)
+        resume_distance = min(
+            max(self.reverse_recovery_distance_m, resume_distance),
+            self.reverse_recovery_max_distance_m,
+        )
+        return resume_distance, required_front_clearance
 
     def _reverse_recovery_rear_points_blocked(self):
         if self.reverse_recovery_rear_local_points.size == 0:
@@ -2153,7 +2185,17 @@ class DWAControl:
     def _reverse_recovery_forward_resume_ready(self, elapsed_s=0.0, traveled_m=0.0):
         if elapsed_s < self.reverse_recovery_min_active_time_s:
             return False
-        if traveled_m < self.reverse_recovery_min_distance_before_resume_m:
+        required_travel = max(
+            self.reverse_recovery_min_distance_before_resume_m,
+            self._reverse_recovery_resume_distance_m,
+        )
+        if traveled_m < required_travel:
+            return False
+        if (
+            math.isfinite(self.front_obstacle_clearance)
+            and self.front_obstacle_clearance
+            < self._reverse_recovery_required_front_clearance_m
+        ):
             return False
         if self.current_path_mode == "hold":
             return False
@@ -2213,13 +2255,17 @@ class DWAControl:
                 self.publish_drive([0.0, 0.0])
                 return True
 
-            if traveled >= self.reverse_recovery_distance_m:
-                self._finish_reverse_recovery("distance_reached", apply_pause=True)
+            if traveled >= self.reverse_recovery_max_distance_m:
+                self._finish_reverse_recovery("max_distance_reached", apply_pause=True)
                 self._log_nav_reason(
                     "reverse_done",
-                    "distance=%.2f/%.2f" % (
+                    "distance=%.2f/%.2f clr=%.2f req=%.2f" % (
                         traveled,
-                        self.reverse_recovery_distance_m,
+                        self.reverse_recovery_max_distance_m,
+                        self.front_obstacle_clearance
+                        if math.isfinite(self.front_obstacle_clearance)
+                        else float("inf"),
+                        self._reverse_recovery_required_front_clearance_m,
                     ),
                 )
                 self.publish_drive([0.0, 0.0])
@@ -2237,11 +2283,15 @@ class DWAControl:
             self._rot_mode = False
             self._log_nav_reason(
                 "reverse_recovery",
-                "mode=%s dist=%.2f/%.2f speed=%.2f" % (
+                "mode=%s dist=%.2f/%.2f speed=%.2f clr=%.2f req=%.2f" % (
                     self.current_path_mode,
                     traveled,
-                    self.reverse_recovery_distance_m,
+                    self._reverse_recovery_resume_distance_m,
                     self.reverse_recovery_speed_mps,
+                    self.front_obstacle_clearance
+                    if math.isfinite(self.front_obstacle_clearance)
+                    else float("inf"),
+                    self._reverse_recovery_required_front_clearance_m,
                 ),
             )
             self.publish_drive([-self.reverse_recovery_speed_mps, 0.0])
@@ -2304,6 +2354,10 @@ class DWAControl:
         self._reverse_recovery_start_xy = (float(pose_x), float(pose_y))
         self._reverse_recovery_last_exit_reason = ""
         self._reverse_recovery_pause_until = rospy.Time(0)
+        (
+            self._reverse_recovery_resume_distance_m,
+            self._reverse_recovery_required_front_clearance_m,
+        ) = self._compute_reverse_recovery_targets()
         self._rot_mode = False
         trigger_label = []
         if trigger_hold:
@@ -2314,11 +2368,16 @@ class DWAControl:
             trigger_label.append("no_valid")
         self._log_nav_reason(
             "reverse_start",
-            "trigger=%s held=%.2fs dist=%.2f speed=%.2f" % (
+            "trigger=%s held=%.2fs dist=%.2f speed=%.2f clr=%.2f req=%.2f max=%.2f" % (
                 "+".join(trigger_label) if trigger_label else "unknown",
                 held_s,
-                self.reverse_recovery_distance_m,
+                self._reverse_recovery_resume_distance_m,
                 self.reverse_recovery_speed_mps,
+                self.front_obstacle_clearance
+                if math.isfinite(self.front_obstacle_clearance)
+                else float("inf"),
+                self._reverse_recovery_required_front_clearance_m,
+                self.reverse_recovery_max_distance_m,
             ),
             warn=True,
         )

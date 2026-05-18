@@ -385,6 +385,8 @@
   <arg name="reverse_recovery_hold_trigger_s" default="1.20"/>
   <arg name="reverse_recovery_distance_m" default="0.40"/>
   <arg name="reverse_recovery_speed_mps" default="0.16"/>
+  <arg name="reverse_recovery_clearance_margin_m" default="0.08"/>
+  <arg name="reverse_recovery_max_distance_m" default="1.00"/>
   <arg name="reverse_recovery_min_active_time_s" default="0.70"/>
   <arg name="reverse_recovery_min_distance_before_resume_m" default="0.08"/>
   <arg name="reverse_recovery_timeout_s" default="6.5"/>
@@ -1133,6 +1135,8 @@
       <arg name="reverse_recovery_hold_trigger_s" value="$(arg reverse_recovery_hold_trigger_s)"/>
       <arg name="reverse_recovery_distance_m" value="$(arg reverse_recovery_distance_m)"/>
       <arg name="reverse_recovery_speed_mps" value="$(arg reverse_recovery_speed_mps)"/>
+      <arg name="reverse_recovery_clearance_margin_m" value="$(arg reverse_recovery_clearance_margin_m)"/>
+      <arg name="reverse_recovery_max_distance_m" value="$(arg reverse_recovery_max_distance_m)"/>
       <arg name="reverse_recovery_min_active_time_s" value="$(arg reverse_recovery_min_active_time_s)"/>
       <arg name="reverse_recovery_min_distance_before_resume_m" value="$(arg reverse_recovery_min_distance_before_resume_m)"/>
       <arg name="reverse_recovery_timeout_s" value="$(arg reverse_recovery_timeout_s)"/>
