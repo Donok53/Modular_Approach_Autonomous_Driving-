@@ -2937,6 +2937,20 @@ class DWAControl:
             or abs(preview_yaw_err) >= self.emergency_bypass_yaw_err_rad
         )
 
+    def _near_goal_completion_allowed(self, dist_to_goal, arc_rem, lat_err):
+        if self.enable_emergency_stop and self.emergency_blocked:
+            return False
+        if str(self.behavior_reason).strip().lower() != "clear":
+            return False
+        completion_window = max(self.goal_thresh_m, self.path_tracking_stop_distance_m)
+        if dist_to_goal > completion_window:
+            return False
+        if arc_rem > completion_window:
+            return False
+        if abs(lat_err) > self.lat_goal_slop:
+            return False
+        return True
+
     # ------------------------------- dwa core ------------------------------------
     def dwa_control(self, x, goal_xy, t_hat, lat_err):
         dw = self.calc_dynamic_window(x)
@@ -3688,6 +3702,12 @@ class DWAControl:
             # goal handling
             self.prev_goal_flag = self.reach_goal_flag
             self.reach_goal_flag = at_goal
+            if (not self.reach_goal_flag) and self._near_goal_completion_allowed(
+                dist_to_goal,
+                arc_rem,
+                lat_err,
+            ):
+                self.reach_goal_flag = True
             if self.reach_goal_flag:
                 self._log_nav_reason(
                     "goal_reached",
