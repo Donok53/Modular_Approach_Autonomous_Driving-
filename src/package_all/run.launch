@@ -371,9 +371,9 @@
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
-  <arg name="goal_completion_stuck_distance_m" default="0.80"/>
-  <arg name="goal_completion_stuck_arc_m" default="0.40"/>
-  <arg name="goal_completion_stuck_hold_s" default="0.80"/>
+  <arg name="goal_completion_stuck_distance_m" default="0.95"/>
+  <arg name="goal_completion_stuck_arc_m" default="0.55"/>
+  <arg name="goal_completion_stuck_hold_s" default="0.60"/>
   <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
   <arg name="path_tracking_minor_replan_delta_m" default="0.12"/>
   <arg name="forward_motion_deadband" default="0.01"/>
@@ -385,6 +385,8 @@
   <arg name="reverse_recovery_hold_trigger_s" default="1.20"/>
   <arg name="reverse_recovery_distance_m" default="0.40"/>
   <arg name="reverse_recovery_speed_mps" default="0.16"/>
+  <arg name="reverse_recovery_min_active_time_s" default="0.70"/>
+  <arg name="reverse_recovery_min_distance_before_resume_m" default="0.08"/>
   <arg name="reverse_recovery_timeout_s" default="6.5"/>
   <arg name="reverse_recovery_pause_s" default="0.45"/>
   <arg name="reverse_recovery_cooldown_s" default="4.0"/>
@@ -1131,6 +1133,8 @@
       <arg name="reverse_recovery_hold_trigger_s" value="$(arg reverse_recovery_hold_trigger_s)"/>
       <arg name="reverse_recovery_distance_m" value="$(arg reverse_recovery_distance_m)"/>
       <arg name="reverse_recovery_speed_mps" value="$(arg reverse_recovery_speed_mps)"/>
+      <arg name="reverse_recovery_min_active_time_s" value="$(arg reverse_recovery_min_active_time_s)"/>
+      <arg name="reverse_recovery_min_distance_before_resume_m" value="$(arg reverse_recovery_min_distance_before_resume_m)"/>
       <arg name="reverse_recovery_timeout_s" value="$(arg reverse_recovery_timeout_s)"/>
       <arg name="reverse_recovery_pause_s" value="$(arg reverse_recovery_pause_s)"/>
       <arg name="reverse_recovery_cooldown_s" value="$(arg reverse_recovery_cooldown_s)"/>

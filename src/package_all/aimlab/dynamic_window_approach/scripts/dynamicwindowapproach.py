@@ -355,6 +355,18 @@ class DWAControl:
         self.reverse_recovery_speed_mps = max(
             0.02, float(rospy.get_param("~reverse_recovery_speed_mps", 0.16))
         )
+        self.reverse_recovery_min_active_time_s = max(
+            0.0,
+            float(rospy.get_param("~reverse_recovery_min_active_time_s", 0.70)),
+        )
+        self.reverse_recovery_min_distance_before_resume_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~reverse_recovery_min_distance_before_resume_m", 0.08
+                )
+            ),
+        )
         default_reverse_timeout_s = max(
             2.0, (self.reverse_recovery_distance_m / self.reverse_recovery_speed_mps) * 2.5
         )
@@ -672,7 +684,7 @@ class DWAControl:
                     max(
                         self.path_tracking_stop_distance_m,
                         self.avoidance_hard_stop_distance,
-                        0.80,
+                        0.95,
                     ),
                 )
             ),
@@ -684,14 +696,14 @@ class DWAControl:
                     "~goal_completion_stuck_arc_m",
                     max(
                         self.path_tracking_stop_distance_m,
-                        0.40,
+                        0.55,
                     ),
                 )
             ),
         )
         self.goal_completion_stuck_hold_s = max(
             0.0,
-            float(rospy.get_param("~goal_completion_stuck_hold_s", 0.8)),
+            float(rospy.get_param("~goal_completion_stuck_hold_s", 0.6)),
         )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
@@ -2053,8 +2065,6 @@ class DWAControl:
             self._hold_mode_enter_sec = now_sec
         else:
             self._hold_mode_enter_sec = 0.0
-            if self._reverse_recovery_active:
-                self._finish_reverse_recovery("path_mode_cleared", apply_pause=False)
 
     def _log_nav_reason(self, reason, msg, warn=False):
         if not self.debug_stop_logging:
@@ -2140,7 +2150,11 @@ class DWAControl:
             return False, "rear_drivable=false"
         return True, "rear_clear"
 
-    def _reverse_recovery_forward_resume_ready(self):
+    def _reverse_recovery_forward_resume_ready(self, elapsed_s=0.0, traveled_m=0.0):
+        if elapsed_s < self.reverse_recovery_min_active_time_s:
+            return False
+        if traveled_m < self.reverse_recovery_min_distance_before_resume_m:
+            return False
         if self.current_path_mode == "hold":
             return False
         if self.active_path_source not in ("local", "avoidance"):
@@ -2171,7 +2185,7 @@ class DWAControl:
                 self.publish_drive([0.0, 0.0])
                 return True
 
-            if self._reverse_recovery_forward_resume_ready():
+            if self._reverse_recovery_forward_resume_ready(elapsed, traveled):
                 self._finish_reverse_recovery("forward_path_ready", apply_pause=False)
                 self._log_nav_reason(
                     "reverse_done",
