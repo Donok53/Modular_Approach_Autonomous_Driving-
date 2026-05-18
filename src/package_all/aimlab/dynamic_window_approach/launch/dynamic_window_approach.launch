@@ -180,6 +180,9 @@
     <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
     <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
+    <arg name="goal_completion_stuck_distance_m" default="0.80"/>
+    <arg name="goal_completion_stuck_arc_m" default="0.40"/>
+    <arg name="goal_completion_stuck_hold_s" default="0.80"/>
     <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
     <arg name="path_tracking_minor_replan_delta_m" default="0.12"/>
     <arg name="rotate_only_deg" default="150.0"/>
@@ -873,6 +876,9 @@
         <param name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
         <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
         <param name="path_tracking_drivable_boundary_tolerance_m" value="$(arg path_tracking_drivable_boundary_tolerance_m)"/>
+        <param name="goal_completion_stuck_distance_m" value="$(arg goal_completion_stuck_distance_m)"/>
+        <param name="goal_completion_stuck_arc_m" value="$(arg goal_completion_stuck_arc_m)"/>
+        <param name="goal_completion_stuck_hold_s" value="$(arg goal_completion_stuck_hold_s)"/>
         <param name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
         <param name="rotate_w_max_deg" value="$(arg rotate_w_max_deg)"/>

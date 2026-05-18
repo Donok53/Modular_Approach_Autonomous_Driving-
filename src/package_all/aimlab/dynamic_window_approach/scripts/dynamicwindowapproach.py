@@ -664,6 +664,35 @@ class DWAControl:
         self.path_tracking_minor_replan_delta_m = max(
             0.0, float(rospy.get_param("~path_tracking_minor_replan_delta_m", 0.12))
         )
+        self.goal_completion_stuck_distance_m = max(
+            self.goal_thresh_m,
+            float(
+                rospy.get_param(
+                    "~goal_completion_stuck_distance_m",
+                    max(
+                        self.path_tracking_stop_distance_m,
+                        self.avoidance_hard_stop_distance,
+                        0.80,
+                    ),
+                )
+            ),
+        )
+        self.goal_completion_stuck_arc_m = max(
+            self.goal_thresh_m,
+            float(
+                rospy.get_param(
+                    "~goal_completion_stuck_arc_m",
+                    max(
+                        self.path_tracking_stop_distance_m,
+                        0.40,
+                    ),
+                )
+            ),
+        )
+        self.goal_completion_stuck_hold_s = max(
+            0.0,
+            float(rospy.get_param("~goal_completion_stuck_hold_s", 0.8)),
+        )
         self._path_tracking_prev_w = 0.0
         self._path_tracking_prev_desired_yaw = None
         self._path_tracking_filtered_lat_err = 0.0
@@ -695,6 +724,10 @@ class DWAControl:
         self.prev_goal_flag = False
         self._last_nav_reason = None
         self._last_nav_log_sec = 0.0
+        self._no_valid_traj_since_sec = 0.0
+        self._no_valid_traj_dist_m = float("inf")
+        self._no_valid_traj_arc_m = float("inf")
+        self._no_valid_traj_lat_m = float("inf")
         self._last_eval_stats = {
             "sampled": 0,
             "skip_spin": 0,
@@ -2220,7 +2253,12 @@ class DWAControl:
 
         trigger_hold = self.current_path_mode == "hold"
         trigger_emergency = bool(self.enable_emergency_stop and self.emergency_blocked)
-        if not (trigger_hold or trigger_emergency):
+        trigger_no_valid = (
+            self._no_valid_traj_since_sec > 0.0
+            and (now.to_sec() - self._no_valid_traj_since_sec) >= self.reverse_recovery_hold_trigger_s
+            and (not self._near_goal_stuck_completion_allowed(now.to_sec()))
+        )
+        if not (trigger_hold or trigger_emergency or trigger_no_valid):
             self._reverse_recovery_trigger_since_sec = 0.0
             return False
 
@@ -2258,6 +2296,8 @@ class DWAControl:
             trigger_label.append("hold")
         if trigger_emergency:
             trigger_label.append("emergency")
+        if trigger_no_valid:
+            trigger_label.append("no_valid")
         self._log_nav_reason(
             "reverse_start",
             "trigger=%s held=%.2fs dist=%.2f speed=%.2f" % (
@@ -2973,6 +3013,29 @@ class DWAControl:
         if abs(lat_err) > self.lat_goal_slop:
             return False
         return True
+
+    def _near_goal_stuck_completion_allowed(self, now_sec):
+        if self._no_valid_traj_since_sec <= 0.0:
+            return False
+        if self.enable_emergency_stop and self.emergency_blocked:
+            return False
+        if str(self.behavior_reason).strip().lower() != "clear":
+            return False
+        if (now_sec - self._no_valid_traj_since_sec) < self.goal_completion_stuck_hold_s:
+            return False
+        if self._no_valid_traj_dist_m > self.goal_completion_stuck_distance_m:
+            return False
+        if self._no_valid_traj_arc_m > self.goal_completion_stuck_arc_m:
+            return False
+        if abs(self._no_valid_traj_lat_m) > self.lat_goal_slop:
+            return False
+        return True
+
+    def _clear_no_valid_traj_state(self):
+        self._no_valid_traj_since_sec = 0.0
+        self._no_valid_traj_dist_m = float("inf")
+        self._no_valid_traj_arc_m = float("inf")
+        self._no_valid_traj_lat_m = float("inf")
 
     # ------------------------------- dwa core ------------------------------------
     def dwa_control(self, x, goal_xy, t_hat, lat_err):
@@ -3736,7 +3799,12 @@ class DWAControl:
                 lat_err,
             ):
                 self.reach_goal_flag = True
+            if (not self.reach_goal_flag) and self._near_goal_stuck_completion_allowed(
+                rospy.Time.now().to_sec()
+            ):
+                self.reach_goal_flag = True
             if self.reach_goal_flag:
+                self._clear_no_valid_traj_state()
                 self._log_nav_reason(
                     "goal_reached",
                     "dist=%.2f arc=%.2f lat=%.2f" % (dist_to_goal, arc_rem, lat_err),
@@ -3864,6 +3932,12 @@ class DWAControl:
 
             if abs(u_cmd[0]) < self.forward_motion_deadband:
                 if abs(u[0]) < self.forward_motion_deadband and abs(u[1]) < math.radians(1.0):
+                    now_sec = rospy.Time.now().to_sec()
+                    if self._no_valid_traj_since_sec <= 0.0:
+                        self._no_valid_traj_since_sec = now_sec
+                    self._no_valid_traj_dist_m = float(dist_to_goal)
+                    self._no_valid_traj_arc_m = float(arc_rem)
+                    self._no_valid_traj_lat_m = float(lat_err)
                     st = self._last_eval_stats
                     self._log_nav_reason(
                         "stop_no_valid_traj",
@@ -3879,6 +3953,7 @@ class DWAControl:
                         warn=True,
                     )
                 elif abs(u[0]) > 0.0:
+                    self._clear_no_valid_traj_state()
                     self._log_nav_reason(
                         "stop_deadband",
                         "raw_v=%.3f dist=%.2f arc=%.2f v_cap=%.2f" % (
@@ -3890,6 +3965,7 @@ class DWAControl:
                     )
                 u_cmd[0] = 0.0
             else:
+                self._clear_no_valid_traj_state()
                 dbg = self._last_tracking_debug
                 self._log_nav_reason(
                     "tracking",
