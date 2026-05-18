@@ -716,6 +716,7 @@ class DWAControl:
         self._reverse_recovery_cooldown_until = rospy.Time(0)
         self._reverse_recovery_last_exit_reason = ""
         self._reverse_recovery_last_log_sec = 0.0
+        self._reverse_recovery_trigger_since_sec = 0.0
         self.reverse_recovery_rear_local_points = np.empty((0, 2), dtype=np.float32)
 
         # ===== ROS I/O =====
@@ -1891,6 +1892,7 @@ class DWAControl:
         self._reverse_recovery_active = False
         self._reverse_recovery_start_time = rospy.Time(0)
         self._reverse_recovery_start_xy = None
+        self._reverse_recovery_trigger_since_sec = 0.0
         self._reverse_recovery_last_exit_reason = str(reason or "")
         self._reverse_recovery_cooldown_until = now + rospy.Duration(
             self.reverse_recovery_cooldown_s
@@ -1955,6 +1957,17 @@ class DWAControl:
             return False, "rear_drivable=false"
         return True, "rear_clear"
 
+    def _reverse_recovery_forward_resume_ready(self):
+        if self.current_path_mode == "hold":
+            return False
+        if self.active_path_source not in ("local", "avoidance"):
+            return False
+        if len(self.path_pts) < 2:
+            return False
+        if self.enable_emergency_stop and self.emergency_blocked:
+            return False
+        return True
+
     def _handle_reverse_recovery(self, pose_x, pose_y, yaw):
         if not self.enable_reverse_recovery or self.follow_global_path_only:
             return False
@@ -1963,15 +1976,29 @@ class DWAControl:
         if self._reverse_recovery_active:
             elapsed = (now - self._reverse_recovery_start_time).to_sec()
             traveled = self._reverse_recovery_distance_traveled(pose_x, pose_y)
-            if self.behavior_stop or self.emergency_blocked:
+            if self.behavior_stop:
                 self._finish_reverse_recovery("hard_stop", apply_pause=True)
                 self._log_nav_reason(
                     "reverse_abort",
-                    "abort reverse recovery: behavior_stop=%s emergency=%s" % (
+                    "abort reverse recovery: behavior_stop=%s" % (
                         self.behavior_stop,
-                        self.emergency_blocked,
                     ),
                     warn=True,
+                )
+                self.publish_drive([0.0, 0.0])
+                return True
+
+            if self._reverse_recovery_forward_resume_ready():
+                self._finish_reverse_recovery("forward_path_ready", apply_pause=False)
+                self._log_nav_reason(
+                    "reverse_done",
+                    "resume forward: src=%s mode=%s clr=%.2f" % (
+                        self.active_path_source,
+                        self.current_path_mode,
+                        self.front_obstacle_clearance
+                        if math.isfinite(self.front_obstacle_clearance)
+                        else float("inf"),
+                    ),
                 )
                 self.publish_drive([0.0, 0.0])
                 return True
@@ -2037,16 +2064,22 @@ class DWAControl:
 
         if now < self._reverse_recovery_cooldown_until:
             return False
-        if self.current_path_mode != "hold":
-            return False
-        if self.behavior_stop or self.emergency_blocked or self._rot_mode:
-            return False
-
-        if self._hold_mode_enter_sec <= 0.0:
-            self._hold_mode_enter_sec = now.to_sec()
+        if self.behavior_stop or self._rot_mode:
+            self._reverse_recovery_trigger_since_sec = 0.0
             return False
 
-        held_s = max(0.0, now.to_sec() - self._hold_mode_enter_sec)
+        trigger_hold = self.current_path_mode == "hold"
+        trigger_emergency = bool(self.enable_emergency_stop and self.emergency_blocked)
+        if not (trigger_hold or trigger_emergency):
+            self._reverse_recovery_trigger_since_sec = 0.0
+            return False
+
+        if self._reverse_recovery_trigger_since_sec <= 0.0:
+            self._reverse_recovery_trigger_since_sec = now.to_sec()
+
+        held_s = max(0.0, now.to_sec() - self._reverse_recovery_trigger_since_sec)
+        if trigger_hold and self._hold_mode_enter_sec > 0.0:
+            held_s = max(held_s, now.to_sec() - self._hold_mode_enter_sec)
         if held_s < self.reverse_recovery_hold_trigger_s:
             return False
 
@@ -2070,9 +2103,15 @@ class DWAControl:
         self._reverse_recovery_last_exit_reason = ""
         self._reverse_recovery_pause_until = rospy.Time(0)
         self._rot_mode = False
+        trigger_label = []
+        if trigger_hold:
+            trigger_label.append("hold")
+        if trigger_emergency:
+            trigger_label.append("emergency")
         self._log_nav_reason(
             "reverse_start",
-            "hold=%.2fs dist=%.2f speed=%.2f" % (
+            "trigger=%s held=%.2fs dist=%.2f speed=%.2f" % (
+                "+".join(trigger_label) if trigger_label else "unknown",
                 held_s,
                 self.reverse_recovery_distance_m,
                 self.reverse_recovery_speed_mps,
@@ -3334,7 +3373,15 @@ class DWAControl:
 
     def publish_drive(self, u):
         cmd = Twist()
-        if self._publish_emergency_stop_state():
+        hard_stop_active = self._hard_stop_active()
+        self._publish_emergency_stop_state()
+        allow_reverse_recovery_motion = (
+            self._reverse_recovery_active
+            and (not self.behavior_stop)
+            and len(u) >= 1
+            and float(u[0]) < -1e-4
+        )
+        if hard_stop_active and not allow_reverse_recovery_motion:
             cmd.linear.x = 0.0
             cmd.angular.z = 0.0
             self._last_cmd_smooth_stamp = rospy.Time.now()
