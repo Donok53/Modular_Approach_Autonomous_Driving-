@@ -1614,6 +1614,133 @@ class DWAControl:
         self._footprint_sample_cache[key] = offsets
         return offsets
 
+    def _nearest_drivable_grid_distance_m(self, x, y, max_search_m=None):
+        if not self.use_drivable_grid:
+            return 0.0
+        if (
+            self.grid_data is None
+            or self.grid_width <= 0
+            or self.grid_height <= 0
+            or self.grid_resolution is None
+            or self.grid_resolution <= 0.0
+        ):
+            return 0.0
+
+        gx = int(math.floor((x - self.grid_origin_x) / self.grid_resolution))
+        gy = int(math.floor((y - self.grid_origin_y) / self.grid_resolution))
+        if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
+            idx = gy * self.grid_width + gx
+            occ = self.grid_data[idx]
+            if occ >= 0 and occ == 0:
+                return 0.0
+            if occ < 0 and (not self.grid_unknown_is_occupied):
+                return 0.0
+
+        search_m = (
+            max_search_m
+            if max_search_m is not None
+            else max(self.robot_length_m, self.robot_width_m) + 2.0 * self.footprint_padding_m + 0.25
+        )
+        max_cells = max(1, int(math.ceil(search_m / max(1e-6, self.grid_resolution))))
+        best = float("inf")
+
+        x_min = max(0, gx - max_cells)
+        x_max = min(self.grid_width - 1, gx + max_cells)
+        y_min = max(0, gy - max_cells)
+        y_max = min(self.grid_height - 1, gy + max_cells)
+        for ny in range(y_min, y_max + 1):
+            row = ny * self.grid_width
+            cy = self.grid_origin_y + (float(ny) + 0.5) * self.grid_resolution
+            for nx in range(x_min, x_max + 1):
+                occ = self.grid_data[row + nx]
+                if occ < 0:
+                    if self.grid_unknown_is_occupied:
+                        continue
+                elif occ != 0:
+                    continue
+                cx = self.grid_origin_x + (float(nx) + 0.5) * self.grid_resolution
+                dist = math.hypot(cx - float(x), cy - float(y))
+                if dist < best:
+                    best = dist
+        return best
+
+    def _initial_inward_recovery_window_ok(self, traj, offsets, ignore_start_distance_m):
+        if (
+            (not self.use_drivable_grid)
+            or ignore_start_distance_m <= 1e-6
+            or traj is None
+            or len(traj) < 2
+        ):
+            return True
+
+        tol = max(0.02, 0.5 * max(0.05, float(self.grid_resolution or 0.05)))
+        search_m = max(
+            self.robot_length_m,
+            self.robot_width_m,
+        ) + 2.0 * self.footprint_padding_m + tol
+
+        pose0 = traj[0]
+        yaw0 = float(pose0[2])
+        c0 = math.cos(yaw0)
+        s0 = math.sin(yaw0)
+        base_ok = []
+        prev_dists = []
+        prev_outside = 0
+        for ox, oy in offsets:
+            wx = float(pose0[0]) + c0 * float(ox) - s0 * float(oy)
+            wy = float(pose0[1]) + s0 * float(ox) + c0 * float(oy)
+            if not self._is_xy_risk_ok(wx, wy):
+                return False
+            ok = self._is_xy_drivable_grid_ok(wx, wy)
+            base_ok.append(ok)
+            if ok:
+                prev_dists.append(0.0)
+            else:
+                dist = self._nearest_drivable_grid_distance_m(wx, wy, max_search_m=search_m)
+                if not math.isfinite(dist):
+                    return False
+                prev_dists.append(dist)
+                prev_outside += 1
+
+        traveled_m = 0.0
+        prev_row = pose0
+        for row in traj[1::self.traj_check_step]:
+            traveled_m += math.hypot(float(row[0]) - float(prev_row[0]), float(row[1]) - float(prev_row[1]))
+            prev_row = row
+            if traveled_m >= ignore_start_distance_m:
+                break
+
+            yaw = float(row[2])
+            c = math.cos(yaw)
+            s = math.sin(yaw)
+            row_dists = []
+            row_outside = 0
+            for idx, (ox, oy) in enumerate(offsets):
+                wx = float(row[0]) + c * float(ox) - s * float(oy)
+                wy = float(row[1]) + s * float(ox) + c * float(oy)
+                if not self._is_xy_risk_ok(wx, wy):
+                    return False
+                ok = self._is_xy_drivable_grid_ok(wx, wy)
+                if ok:
+                    row_dists.append(0.0)
+                    continue
+                if base_ok[idx]:
+                    return False
+                dist = self._nearest_drivable_grid_distance_m(wx, wy, max_search_m=search_m)
+                if not math.isfinite(dist):
+                    return False
+                if dist > prev_dists[idx] + tol:
+                    return False
+                row_dists.append(dist)
+                row_outside += 1
+
+            if row_outside > prev_outside:
+                return False
+            prev_dists = row_dists
+            prev_outside = row_outside
+
+        return True
+
     # ------------------------------- obstacle stop -------------------------------
     def _active_path_preview_local_xy(self, preview_m=None):
         if self.active_path_source not in ("local", "avoidance"):
@@ -3109,6 +3236,13 @@ class DWAControl:
             res_candidates.append(float(self.risk_grid_resolution))
         sample_step = min(res_candidates) if res_candidates else 0.1
         offsets = self._footprint_sample_offsets(sample_step)
+        inward_recovery_ok = self._initial_inward_recovery_window_ok(
+            traj,
+            offsets,
+            ignore_start_distance_m,
+        )
+        if not inward_recovery_ok:
+            return False
         traveled_m = 0.0
         prev_row = traj[0]
         for row in traj[1::self.traj_check_step]:
@@ -3121,10 +3255,11 @@ class DWAControl:
                 wx = float(row[0]) + c * float(ox) - s * float(oy)
                 wy = float(row[1]) + s * float(ox) + c * float(oy)
                 if traveled_m < ignore_start_distance_m:
-                    # Never skip drivable-grid enforcement near the robot.
-                    # The ignore window only relaxes optional risk-grid checks.
+                    # Near the robot, only permit a short inward-recovery window:
+                    # we still reject any newly outward-growing footprint, but allow
+                    # existing edge overlap to shrink back inside the drivable mask.
                     if self.use_drivable_grid and not self._is_xy_drivable_grid_ok(wx, wy):
-                        return False
+                        continue
                     if not self._is_xy_risk_ok(wx, wy):
                         return False
                     continue
