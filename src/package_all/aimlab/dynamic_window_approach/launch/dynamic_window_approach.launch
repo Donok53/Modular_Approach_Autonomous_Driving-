@@ -143,6 +143,10 @@
     <arg name="lookahead_speed_gain" default="1.80"/>
     <arg name="lookahead_error_gain" default="0.80"/>
     <arg name="lookahead_max_distance" default="3.50"/>
+    <arg name="obstacle_response_clearance_m" default="1.80"/>
+    <arg name="obstacle_response_lookahead_scale" default="0.72"/>
+    <arg name="obstacle_response_tracking_kp_scale" default="1.30"/>
+    <arg name="obstacle_response_yaw_rate_scale" default="1.25"/>
     <arg name="snap_lat_err" default="0.20"/>
     <arg name="snap_target_ahead_m" default="2.20"/>
     <arg name="tracking_projection_back_window_m" default="0.35"/>
@@ -843,6 +847,10 @@
         <param name="lookahead_speed_gain" value="$(arg lookahead_speed_gain)"/>
         <param name="lookahead_error_gain" value="$(arg lookahead_error_gain)"/>
         <param name="lookahead_max_distance" value="$(arg lookahead_max_distance)"/>
+        <param name="obstacle_response_clearance_m" value="$(arg obstacle_response_clearance_m)"/>
+        <param name="obstacle_response_lookahead_scale" value="$(arg obstacle_response_lookahead_scale)"/>
+        <param name="obstacle_response_tracking_kp_scale" value="$(arg obstacle_response_tracking_kp_scale)"/>
+        <param name="obstacle_response_yaw_rate_scale" value="$(arg obstacle_response_yaw_rate_scale)"/>
         <param name="snap_lat_err" value="$(arg snap_lat_err)"/>
         <param name="snap_target_ahead_m" value="$(arg snap_target_ahead_m)"/>
         <param name="tracking_projection_back_window_m" value="$(arg tracking_projection_back_window_m)"/>

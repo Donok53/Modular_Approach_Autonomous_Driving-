@@ -498,6 +498,25 @@ class DWAControl:
             self.lookahead_distance,
             float(rospy.get_param("~lookahead_max_distance", 3.50)),
         )
+        self.obstacle_response_clearance_m = max(
+            self.emergency_stop_distance,
+            float(rospy.get_param("~obstacle_response_clearance_m", 1.80)),
+        )
+        self.obstacle_response_lookahead_scale = max(
+            0.45,
+            min(
+                1.0,
+                float(rospy.get_param("~obstacle_response_lookahead_scale", 0.72)),
+            ),
+        )
+        self.obstacle_response_tracking_kp_scale = max(
+            1.0,
+            float(rospy.get_param("~obstacle_response_tracking_kp_scale", 1.30)),
+        )
+        self.obstacle_response_yaw_rate_scale = max(
+            1.0,
+            float(rospy.get_param("~obstacle_response_yaw_rate_scale", 1.25)),
+        )
         self.back_jitter_m = rospy.get_param("~back_jitter_m", 0.3)
         self.goal_thresh_m = rospy.get_param("~goal_thresh_m", 0.25)
         self.final_approach_window_m = rospy.get_param("~final_approach_window_m", 0.0)
@@ -2950,6 +2969,15 @@ class DWAControl:
         if not self.path_pts:
             return None, None, None, None, False, None, None
 
+        obstacle_response_active = (
+            str(self.behavior_reason).strip().lower() != "clear"
+            or self.active_path_source == "avoidance"
+            or (
+                math.isfinite(self.front_obstacle_clearance)
+                and self.front_obstacle_clearance <= self.obstacle_response_clearance_m
+            )
+        )
+
         s_min = max(0.0, self.s_cur - self.tracking_projection_back_window_m)
         s_max = min(self.s_total, self.s_cur + self.tracking_projection_forward_window_m)
         s_proj, lat_err, idx, t = self._project_to_path(
@@ -2964,11 +2992,20 @@ class DWAControl:
             self.s_cur = max(self.s_cur, s_proj)
 
         base_s = max(self.s_cur, s_proj)
-        preview_lookahead = self.lookahead_distance
+        preview_lookahead_min = self.lookahead_distance
+        if (
+            obstacle_response_active
+            and (not self.follow_global_path_only)
+            and self.active_path_source in ("local", "avoidance")
+        ):
+            preview_lookahead_min = max(
+                0.80, self.lookahead_distance * self.obstacle_response_lookahead_scale
+            )
+        preview_lookahead = preview_lookahead_min
         preview_lookahead += self.lookahead_speed_gain * max(0.0, abs(self.last_cmd.linear.x))
         preview_lookahead += self.lookahead_error_gain * abs(lat_err)
         preview_lookahead = max(
-            self.lookahead_distance,
+            preview_lookahead_min,
             min(self.lookahead_max_distance, preview_lookahead),
         )
         gx, gy = self.path_pts[-1]
@@ -2999,6 +3036,8 @@ class DWAControl:
                 target_seg_idx += 1
             segment_end_s = self.cum_len[target_seg_idx + 1]
             segment_step_scale = 0.65 if self.active_path_source == "global" else 0.8
+            if obstacle_response_active and self.active_path_source in ("local", "avoidance"):
+                segment_step_scale = min(segment_step_scale, 0.55)
             segment_target_step = min(
                 max(0.05, self.path_tracking_target_step_m),
                 max(0.05, segment_step_scale * self.seg_lens[target_seg_idx]),
@@ -3138,6 +3177,11 @@ class DWAControl:
         obstacle_response_active = (
             str(self.behavior_reason).strip().lower() != "clear"
             or self._emergency_bypass_active
+            or self.active_path_source == "avoidance"
+            or (
+                math.isfinite(self.front_obstacle_clearance)
+                and self.front_obstacle_clearance <= self.obstacle_response_clearance_m
+            )
         )
         path_yaw_raw = math.atan2(t_hat[1], t_hat[0])
         if abs(lat_err) <= self.path_tracking_cte_deadband_m:
@@ -3221,8 +3265,12 @@ class DWAControl:
             v_limit = min(v_limit, self.emergency_bypass_speed_limit_mps)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
-        tracking_kp = self.path_tracking_kp * (1.15 if obstacle_response_active else 1.0)
-        yaw_rate_limit = self.path_tracking_yaw_rate_max * (1.12 if obstacle_response_active else 1.0)
+        tracking_kp = self.path_tracking_kp * (
+            self.obstacle_response_tracking_kp_scale if obstacle_response_active else 1.0
+        )
+        yaw_rate_limit = self.path_tracking_yaw_rate_max * (
+            self.obstacle_response_yaw_rate_scale if obstacle_response_active else 1.0
+        )
         if abs_err >= self.path_tracking_stop_yaw:
             w_target = tracking_kp * yaw_err
             if need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0:
