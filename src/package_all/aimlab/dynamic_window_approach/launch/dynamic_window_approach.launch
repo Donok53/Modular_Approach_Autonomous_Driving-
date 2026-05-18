@@ -180,11 +180,12 @@
     <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
     <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
+    <arg name="path_tracking_enforce_drivable_grid" default="false"/>
     <arg name="goal_completion_stuck_distance_m" default="0.95"/>
     <arg name="goal_completion_stuck_arc_m" default="0.55"/>
     <arg name="goal_completion_stuck_hold_s" default="0.60"/>
     <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
-    <arg name="path_tracking_minor_replan_delta_m" default="0.12"/>
+    <arg name="path_tracking_minor_replan_delta_m" default="0.20"/>
     <arg name="rotate_only_deg" default="150.0"/>
     <arg name="rotate_exit_deg" default="40.0"/>
     <arg name="rotate_w_max_deg" default="28.0"/>
@@ -197,6 +198,7 @@
     <arg name="cruise_distance_m" default="1.80"/>
     <arg name="enable_reverse_recovery" default="false"/>
     <arg name="reverse_recovery_hold_trigger_s" default="1.2"/>
+    <arg name="reverse_recovery_emergency_trigger_s" default="0.35"/>
     <arg name="reverse_recovery_distance_m" default="0.40"/>
     <arg name="reverse_recovery_speed_mps" default="0.16"/>
     <arg name="reverse_recovery_clearance_margin_m" default="0.08"/>
@@ -880,6 +882,7 @@
         <param name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
         <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
         <param name="path_tracking_drivable_boundary_tolerance_m" value="$(arg path_tracking_drivable_boundary_tolerance_m)"/>
+        <param name="path_tracking_enforce_drivable_grid" value="$(arg path_tracking_enforce_drivable_grid)"/>
         <param name="goal_completion_stuck_distance_m" value="$(arg goal_completion_stuck_distance_m)"/>
         <param name="goal_completion_stuck_arc_m" value="$(arg goal_completion_stuck_arc_m)"/>
         <param name="goal_completion_stuck_hold_s" value="$(arg goal_completion_stuck_hold_s)"/>
@@ -895,6 +898,7 @@
         <param name="cruise_distance_m" value="$(arg cruise_distance_m)"/>
         <param name="enable_reverse_recovery" value="$(arg enable_reverse_recovery)"/>
         <param name="reverse_recovery_hold_trigger_s" value="$(arg reverse_recovery_hold_trigger_s)"/>
+        <param name="reverse_recovery_emergency_trigger_s" value="$(arg reverse_recovery_emergency_trigger_s)"/>
         <param name="reverse_recovery_distance_m" value="$(arg reverse_recovery_distance_m)"/>
         <param name="reverse_recovery_speed_mps" value="$(arg reverse_recovery_speed_mps)"/>
         <param name="reverse_recovery_clearance_margin_m" value="$(arg reverse_recovery_clearance_margin_m)"/>

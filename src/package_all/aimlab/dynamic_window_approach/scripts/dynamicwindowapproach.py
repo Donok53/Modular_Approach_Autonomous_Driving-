@@ -349,6 +349,10 @@ class DWAControl:
         self.reverse_recovery_hold_trigger_s = max(
             0.1, float(rospy.get_param("~reverse_recovery_hold_trigger_s", 1.2))
         )
+        self.reverse_recovery_emergency_trigger_s = max(
+            0.0,
+            float(rospy.get_param("~reverse_recovery_emergency_trigger_s", 0.35)),
+        )
         self.reverse_recovery_distance_m = max(
             0.05, float(rospy.get_param("~reverse_recovery_distance_m", 0.40))
         )
@@ -677,6 +681,9 @@ class DWAControl:
                     0.12,
                 )
             ),
+        )
+        self.path_tracking_enforce_drivable_grid = bool(
+            rospy.get_param("~path_tracking_enforce_drivable_grid", False)
         )
         self.path_tracking_reset_goal_delta_m = max(
             0.0, float(rospy.get_param("~path_tracking_reset_goal_delta_m", 0.80))
@@ -1744,9 +1751,15 @@ class DWAControl:
         nearest = self._nearest_drivable_grid_distance_m(x, y, max_search_m=search_m)
         return math.isfinite(nearest) and nearest <= tol
 
-    def _initial_inward_recovery_window_ok(self, traj, offsets, ignore_start_distance_m):
+    def _initial_inward_recovery_window_ok(
+        self,
+        traj,
+        offsets,
+        ignore_start_distance_m,
+        check_drivable_grid=True,
+    ):
         if (
-            (not self.use_drivable_grid)
+            (not check_drivable_grid)
             or ignore_start_distance_m <= 1e-6
             or traj is None
             or len(traj) < 2
@@ -2332,7 +2345,12 @@ class DWAControl:
         held_s = max(0.0, now.to_sec() - self._reverse_recovery_trigger_since_sec)
         if trigger_hold and self._hold_mode_enter_sec > 0.0:
             held_s = max(held_s, now.to_sec() - self._hold_mode_enter_sec)
-        if held_s < self.reverse_recovery_hold_trigger_s:
+        required_hold_s = self.reverse_recovery_hold_trigger_s
+        if trigger_emergency:
+            required_hold_s = min(
+                required_hold_s, self.reverse_recovery_emergency_trigger_s
+            )
+        if held_s < required_hold_s:
             return False
 
         rear_safe, rear_reason = self._reverse_recovery_rear_is_safe(
@@ -3264,9 +3282,13 @@ class DWAControl:
             v_cmd = min(v_limit, max(v_cmd, self.cruise_min_speed))
 
         traj = self.predict_trajectory(x, v_cmd, w_cmd)
+        enforce_track_drivable = bool(
+            self.use_drivable_grid and self.path_tracking_enforce_drivable_grid
+        )
         if not self._trajectory_in_drivable_area(
             traj,
             ignore_start_distance_m=self.path_tracking_drivable_ignore_start_distance_m,
+            check_drivable_grid=enforce_track_drivable,
         ):
             recovery_v = min(
                 v_limit,
@@ -3282,6 +3304,7 @@ class DWAControl:
                 and self._trajectory_in_drivable_area(
                     recovery_traj,
                     ignore_start_distance_m=self.path_tracking_recovery_ignore_start_distance_m,
+                    check_drivable_grid=enforce_track_drivable,
                 )
             ):
                 v_cmd = recovery_v
@@ -3289,7 +3312,7 @@ class DWAControl:
             elif (
                 need_progress
                 and recovery_v > 1e-4
-                and (not self.use_drivable_grid)
+                and (not enforce_track_drivable)
                 and self._trajectory_is_risk_only_safe(recovery_traj)
             ):
                 v_cmd = recovery_v
@@ -3399,13 +3422,31 @@ class DWAControl:
                     return False
         return True
 
-    def _trajectory_in_drivable_area(self, traj, ignore_start_distance_m=0.0):
-        if not self.use_drivable_grid and not self.use_dynamic_risk_grid:
+    def _trajectory_in_drivable_area(
+        self,
+        traj,
+        ignore_start_distance_m=0.0,
+        check_drivable_grid=None,
+        check_risk_grid=None,
+    ):
+        if check_drivable_grid is None:
+            check_drivable_grid = bool(self.use_drivable_grid)
+        if check_risk_grid is None:
+            check_risk_grid = bool(self.use_dynamic_risk_grid)
+        if not check_drivable_grid and not check_risk_grid:
             return True
         res_candidates = []
-        if self.grid_resolution is not None and self.grid_resolution > 0.0:
+        if (
+            check_drivable_grid
+            and self.grid_resolution is not None
+            and self.grid_resolution > 0.0
+        ):
             res_candidates.append(float(self.grid_resolution))
-        if self.risk_grid_resolution is not None and self.risk_grid_resolution > 0.0:
+        if (
+            check_risk_grid
+            and self.risk_grid_resolution is not None
+            and self.risk_grid_resolution > 0.0
+        ):
             res_candidates.append(float(self.risk_grid_resolution))
         sample_step = min(res_candidates) if res_candidates else 0.1
         offsets = self._footprint_sample_offsets(sample_step)
@@ -3413,6 +3454,7 @@ class DWAControl:
             traj,
             offsets,
             ignore_start_distance_m,
+            check_drivable_grid=check_drivable_grid,
         )
         if not inward_recovery_ok:
             return False
@@ -3431,17 +3473,17 @@ class DWAControl:
                     # Near the robot, only permit a short inward-recovery window:
                     # we still reject any newly outward-growing footprint, but allow
                     # existing edge overlap to shrink back inside the drivable mask.
-                    if self.use_drivable_grid and not self._is_xy_drivable_grid_ok_with_tolerance(wx, wy):
+                    if check_drivable_grid and not self._is_xy_drivable_grid_ok_with_tolerance(wx, wy):
                         continue
-                    if not self._is_xy_risk_ok(wx, wy):
+                    if check_risk_grid and (not self._is_xy_risk_ok(wx, wy)):
                         return False
                     continue
                 if (
-                    self.use_drivable_grid
+                    check_drivable_grid
                     and (not self._is_xy_drivable_grid_ok_with_tolerance(wx, wy))
                 ):
                     return False
-                if not self._is_xy_risk_ok(wx, wy):
+                if check_risk_grid and (not self._is_xy_risk_ok(wx, wy)):
                     return False
         return True
 
