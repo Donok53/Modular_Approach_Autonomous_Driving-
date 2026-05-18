@@ -2950,6 +2950,7 @@ class DWAControl:
             elif (
                 need_progress
                 and recovery_v > 1e-4
+                and (not self.use_drivable_grid)
                 and self._trajectory_is_risk_only_safe(recovery_traj)
             ):
                 v_cmd = recovery_v
@@ -3081,6 +3082,10 @@ class DWAControl:
                 wx = float(row[0]) + c * float(ox) - s * float(oy)
                 wy = float(row[1]) + s * float(ox) + c * float(oy)
                 if traveled_m < ignore_start_distance_m:
+                    # Never skip drivable-grid enforcement near the robot.
+                    # The ignore window only relaxes optional risk-grid checks.
+                    if self.use_drivable_grid and not self._is_xy_drivable_grid_ok(wx, wy):
+                        return False
                     if not self._is_xy_risk_ok(wx, wy):
                         return False
                     continue
