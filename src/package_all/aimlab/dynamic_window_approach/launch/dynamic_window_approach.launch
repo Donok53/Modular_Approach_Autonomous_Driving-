@@ -191,6 +191,17 @@
     <arg name="min_forward_cmd_distance" default="0.80"/>
     <arg name="cruise_min_speed" default="0.62"/>
     <arg name="cruise_distance_m" default="1.80"/>
+    <arg name="enable_reverse_recovery" default="false"/>
+    <arg name="reverse_recovery_hold_trigger_s" default="1.2"/>
+    <arg name="reverse_recovery_distance_m" default="0.40"/>
+    <arg name="reverse_recovery_speed_mps" default="0.16"/>
+    <arg name="reverse_recovery_timeout_s" default="6.5"/>
+    <arg name="reverse_recovery_pause_s" default="0.45"/>
+    <arg name="reverse_recovery_cooldown_s" default="4.0"/>
+    <arg name="reverse_recovery_rear_check_distance_m" default="0.60"/>
+    <arg name="reverse_recovery_rear_half_width_m" default="0.42"/>
+    <arg name="reverse_recovery_rear_min_points" default="2"/>
+    <arg name="reverse_recovery_rear_drivable_margin_m" default="0.05"/>
     <arg name="avoidance_hard_stop_distance" default="0.45"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
     <arg name="pointcloud_static_block_margin_m" default="0.08"/>
@@ -792,6 +803,7 @@
         <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
+        <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
         <param name="active_path_topic" value="$(arg active_path_topic)"/>
         <param name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
         <param name="use_muxed_active_path" value="false"/>
@@ -869,6 +881,17 @@
         <param name="min_forward_cmd_distance" value="$(arg min_forward_cmd_distance)"/>
         <param name="cruise_min_speed" value="$(arg cruise_min_speed)"/>
         <param name="cruise_distance_m" value="$(arg cruise_distance_m)"/>
+        <param name="enable_reverse_recovery" value="$(arg enable_reverse_recovery)"/>
+        <param name="reverse_recovery_hold_trigger_s" value="$(arg reverse_recovery_hold_trigger_s)"/>
+        <param name="reverse_recovery_distance_m" value="$(arg reverse_recovery_distance_m)"/>
+        <param name="reverse_recovery_speed_mps" value="$(arg reverse_recovery_speed_mps)"/>
+        <param name="reverse_recovery_timeout_s" value="$(arg reverse_recovery_timeout_s)"/>
+        <param name="reverse_recovery_pause_s" value="$(arg reverse_recovery_pause_s)"/>
+        <param name="reverse_recovery_cooldown_s" value="$(arg reverse_recovery_cooldown_s)"/>
+        <param name="reverse_recovery_rear_check_distance_m" value="$(arg reverse_recovery_rear_check_distance_m)"/>
+        <param name="reverse_recovery_rear_half_width_m" value="$(arg reverse_recovery_rear_half_width_m)"/>
+        <param name="reverse_recovery_rear_min_points" value="$(arg reverse_recovery_rear_min_points)"/>
+        <param name="reverse_recovery_rear_drivable_margin_m" value="$(arg reverse_recovery_rear_drivable_margin_m)"/>
         <param name="avoidance_hard_stop_distance" value="$(arg avoidance_hard_stop_distance)"/>
         <param name="enable_emergency_stop" value="$(arg enable_emergency_stop)"/>
         <param name="emergency_stop_distance" value="$(arg emergency_stop_distance)"/>

@@ -24,7 +24,7 @@ import tf.transformations as transformations
 from geometry_msgs.msg import Twist, Point, PoseStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import Bool, Float32MultiArray, Header
+from std_msgs.msg import Bool, Float32MultiArray, Header, String
 
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
@@ -74,6 +74,7 @@ class DWAControl:
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
         self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
+        self.path_mode_topic = rospy.get_param("~path_mode_topic", "/planning/path_mode")
         self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
         self.follow_global_path_only = bool(
             rospy.get_param("~follow_global_path_only", False)
@@ -342,6 +343,50 @@ class DWAControl:
             0.05,
             float(rospy.get_param("~emergency_bypass_speed_limit_mps", 0.18)),
         )
+        self.enable_reverse_recovery = bool(
+            rospy.get_param("~enable_reverse_recovery", False)
+        )
+        self.reverse_recovery_hold_trigger_s = max(
+            0.1, float(rospy.get_param("~reverse_recovery_hold_trigger_s", 1.2))
+        )
+        self.reverse_recovery_distance_m = max(
+            0.05, float(rospy.get_param("~reverse_recovery_distance_m", 0.40))
+        )
+        self.reverse_recovery_speed_mps = max(
+            0.02, float(rospy.get_param("~reverse_recovery_speed_mps", 0.16))
+        )
+        default_reverse_timeout_s = max(
+            2.0, (self.reverse_recovery_distance_m / self.reverse_recovery_speed_mps) * 2.5
+        )
+        self.reverse_recovery_timeout_s = max(
+            0.5,
+            float(
+                rospy.get_param(
+                    "~reverse_recovery_timeout_s", default_reverse_timeout_s
+                )
+            ),
+        )
+        self.reverse_recovery_pause_s = max(
+            0.0, float(rospy.get_param("~reverse_recovery_pause_s", 0.45))
+        )
+        self.reverse_recovery_cooldown_s = max(
+            0.0, float(rospy.get_param("~reverse_recovery_cooldown_s", 4.0))
+        )
+        self.reverse_recovery_rear_check_distance_m = max(
+            0.10,
+            float(rospy.get_param("~reverse_recovery_rear_check_distance_m", 0.60)),
+        )
+        self.reverse_recovery_rear_half_width_m = max(
+            0.10,
+            float(rospy.get_param("~reverse_recovery_rear_half_width_m", 0.42)),
+        )
+        self.reverse_recovery_rear_min_points = max(
+            1, int(rospy.get_param("~reverse_recovery_rear_min_points", 2))
+        )
+        self.reverse_recovery_rear_drivable_margin_m = max(
+            0.0,
+            float(rospy.get_param("~reverse_recovery_rear_drivable_margin_m", 0.05)),
+        )
         # When near-field raw stop is enabled, a second full /ouster/points pass
         # inside this node can delay the critical stop callback under load.
         self.enable_raw_cloud_fallback_stop = bool(
@@ -351,7 +396,9 @@ class DWAControl:
             )
         )
         self.enable_raw_cloud_processing = bool(
-            self.use_pointcloud_obstacle_cost or self.enable_raw_cloud_fallback_stop
+            self.use_pointcloud_obstacle_cost
+            or self.enable_raw_cloud_fallback_stop
+            or self.enable_reverse_recovery
         )
         self._near_field_raw_stop_blocked = False
         self._near_field_raw_stop_on = 0
@@ -653,11 +700,23 @@ class DWAControl:
         self.behavior_stop = False
         self.behavior_speed_limit = self.max_speed
         self.behavior_reason = "clear"
+        self.current_path_mode = (
+            "follow_global" if self.follow_global_path_only else "follow_local"
+        )
+        self._hold_mode_enter_sec = 0.0
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
         self.emergency_stop_topic = rospy.get_param("~emergency_stop_topic", "/planning/emergency_stop")
         self.cmd_publish_hz = max(5.0, float(rospy.get_param("~cmd_publish_hz", 20.0)))
         self.last_cmd = Twist()
         self._last_cmd_smooth_stamp = rospy.Time(0)
+        self._reverse_recovery_active = False
+        self._reverse_recovery_start_time = rospy.Time(0)
+        self._reverse_recovery_start_xy = None
+        self._reverse_recovery_pause_until = rospy.Time(0)
+        self._reverse_recovery_cooldown_until = rospy.Time(0)
+        self._reverse_recovery_last_exit_reason = ""
+        self._reverse_recovery_last_log_sec = 0.0
+        self.reverse_recovery_rear_local_points = np.empty((0, 2), dtype=np.float32)
 
         # ===== ROS I/O =====
         self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
@@ -689,6 +748,14 @@ class DWAControl:
             self.behavior_cmd_callback,
             queue_size=10,
         )
+        self.sub_path_mode = None
+        if not self.follow_global_path_only:
+            self.sub_path_mode = rospy.Subscriber(
+                self.path_mode_topic,
+                String,
+                self.path_mode_callback,
+                queue_size=10,
+            )
         self.near_field_raw_stop_marker_pub = None
         if self.near_field_raw_stop_marker_topic:
             self.near_field_raw_stop_marker_pub = rospy.Publisher(
@@ -794,6 +861,15 @@ class DWAControl:
         c = math.cos(float(yaw))
         s = math.sin(float(yaw))
         return c * dx + s * dy, -s * dx + c * dy
+
+    @staticmethod
+    def _transform_local_to_world(lx, ly, pose_x, pose_y, yaw):
+        c = math.cos(float(yaw))
+        s = math.sin(float(yaw))
+        return (
+            float(pose_x) + c * float(lx) - s * float(ly),
+            float(pose_y) + s * float(lx) + c * float(ly),
+        )
 
     def _world_box_to_local_bounds(self, box, pose_x, pose_y, yaw):
         corners = (
@@ -1631,10 +1707,18 @@ class DWAControl:
             return
         try:
             obs = []
+            rear_obs = []
             close_points = []
             intrusion_points = []
             min_front_clearance = float("inf")
-            influence_sq = self.obstacle_influence_distance * self.obstacle_influence_distance
+            influence_radius = max(
+                self.obstacle_influence_distance,
+                self.reverse_recovery_rear_check_distance_m
+                + self.robot_half_length_m
+                + self.footprint_padding_m
+                + 0.10,
+            )
+            influence_sq = influence_radius * influence_radius
             stop_half_w = 0.5 * max(self.stop_width, self.robot_width_m) + self.footprint_padding_m
             i = 0
             for pt in point_cloud2.read_points(msg, field_names=('x','y','z'), skip_nans=True):
@@ -1654,6 +1738,15 @@ class DWAControl:
                 d2 = x * x + y * y
                 if d2 > influence_sq:
                     continue
+                rear_check_limit_x = -(
+                    self.robot_half_length_m + self.footprint_padding_m
+                ) - self.reverse_recovery_rear_check_distance_m
+                if (
+                    x >= rear_check_limit_x
+                    and x <= 0.10
+                    and abs(y) <= self.reverse_recovery_rear_half_width_m
+                ):
+                    rear_obs.append((x, y))
                 if x < self.obstacle_consider_back_m or abs(y) > self.obstacle_consider_side_m:
                     continue
                 obs.append((x, y))
@@ -1685,6 +1778,15 @@ class DWAControl:
                 self.obstacle_local_points = np.array(obs[::step], dtype=np.float32)
             else:
                 self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
+            if rear_obs:
+                step = max(1, len(rear_obs) // self.max_obstacle_points)
+                self.reverse_recovery_rear_local_points = np.array(
+                    rear_obs[::step], dtype=np.float32
+                )
+            else:
+                self.reverse_recovery_rear_local_points = np.empty(
+                    (0, 2), dtype=np.float32
+                )
             self._raw_front_obstacle_clearance = min_front_clearance
             self._update_emergency_stop_state()
         except Exception as e:
@@ -1753,6 +1855,23 @@ class DWAControl:
         self.behavior_reason = str(msg.reason)
         self._publish_emergency_stop_state()
 
+    def path_mode_callback(self, msg):
+        mode = str(getattr(msg, "data", "") or "").strip().lower()
+        if not mode:
+            mode = "hold"
+        now_sec = rospy.Time.now().to_sec()
+        if mode == self.current_path_mode:
+            if mode == "hold" and self._hold_mode_enter_sec <= 0.0:
+                self._hold_mode_enter_sec = now_sec
+            return
+        self.current_path_mode = mode
+        if mode == "hold":
+            self._hold_mode_enter_sec = now_sec
+        else:
+            self._hold_mode_enter_sec = 0.0
+            if self._reverse_recovery_active:
+                self._finish_reverse_recovery("path_mode_cleared", apply_pause=False)
+
     def _log_nav_reason(self, reason, msg, warn=False):
         if not self.debug_stop_logging:
             return
@@ -1766,6 +1885,202 @@ class DWAControl:
             rospy.logwarn(text)
         else:
             rospy.loginfo(text)
+
+    def _finish_reverse_recovery(self, reason, apply_pause=True):
+        now = rospy.Time.now()
+        self._reverse_recovery_active = False
+        self._reverse_recovery_start_time = rospy.Time(0)
+        self._reverse_recovery_start_xy = None
+        self._reverse_recovery_last_exit_reason = str(reason or "")
+        self._reverse_recovery_cooldown_until = now + rospy.Duration(
+            self.reverse_recovery_cooldown_s
+        )
+        if apply_pause and self.reverse_recovery_pause_s > 0.0:
+            self._reverse_recovery_pause_until = now + rospy.Duration(
+                self.reverse_recovery_pause_s
+            )
+        else:
+            self._reverse_recovery_pause_until = rospy.Time(0)
+
+    def _reverse_recovery_distance_traveled(self, pose_x, pose_y):
+        if self._reverse_recovery_start_xy is None:
+            return 0.0
+        start_x, start_y = self._reverse_recovery_start_xy
+        return math.hypot(float(pose_x) - start_x, float(pose_y) - start_y)
+
+    def _reverse_recovery_rear_points_blocked(self):
+        if self.reverse_recovery_rear_local_points.size == 0:
+            return False, 0
+        rear_limit_x = -(
+            self.robot_half_length_m + self.footprint_padding_m
+        )
+        check_min_x = rear_limit_x - self.reverse_recovery_rear_check_distance_m
+        half_width = self.reverse_recovery_rear_half_width_m
+        pts = self.reverse_recovery_rear_local_points
+        mask = (
+            (pts[:, 0] >= check_min_x)
+            & (pts[:, 0] <= rear_limit_x + 0.05)
+            & (np.abs(pts[:, 1]) <= half_width)
+        )
+        count = int(np.count_nonzero(mask))
+        return count >= self.reverse_recovery_rear_min_points, count
+
+    def _reverse_recovery_rear_drivable_ok(self, pose_x, pose_y, yaw):
+        if not self.use_drivable_grid:
+            return True
+        rear_extent = (
+            self.robot_half_length_m
+            + self.footprint_padding_m
+            + self.reverse_recovery_rear_drivable_margin_m
+        )
+        side_extent = self.robot_half_width_m + self.footprint_padding_m
+        samples = (
+            (-rear_extent, 0.0),
+            (-rear_extent - 0.5 * self.reverse_recovery_distance_m, 0.0),
+            (-rear_extent - self.reverse_recovery_distance_m, 0.0),
+            (-rear_extent - self.reverse_recovery_distance_m, 0.8 * side_extent),
+            (-rear_extent - self.reverse_recovery_distance_m, -0.8 * side_extent),
+        )
+        for lx, ly in samples:
+            wx, wy = self._transform_local_to_world(lx, ly, pose_x, pose_y, yaw)
+            if not self._is_xy_drivable_grid_ok(wx, wy):
+                return False
+        return True
+
+    def _reverse_recovery_rear_is_safe(self, pose_x, pose_y, yaw):
+        blocked, rear_count = self._reverse_recovery_rear_points_blocked()
+        if blocked:
+            return False, "rear_points=%d" % rear_count
+        if not self._reverse_recovery_rear_drivable_ok(pose_x, pose_y, yaw):
+            return False, "rear_drivable=false"
+        return True, "rear_clear"
+
+    def _handle_reverse_recovery(self, pose_x, pose_y, yaw):
+        if not self.enable_reverse_recovery or self.follow_global_path_only:
+            return False
+
+        now = rospy.Time.now()
+        if self._reverse_recovery_active:
+            elapsed = (now - self._reverse_recovery_start_time).to_sec()
+            traveled = self._reverse_recovery_distance_traveled(pose_x, pose_y)
+            if self.behavior_stop or self.emergency_blocked:
+                self._finish_reverse_recovery("hard_stop", apply_pause=True)
+                self._log_nav_reason(
+                    "reverse_abort",
+                    "abort reverse recovery: behavior_stop=%s emergency=%s" % (
+                        self.behavior_stop,
+                        self.emergency_blocked,
+                    ),
+                    warn=True,
+                )
+                self.publish_drive([0.0, 0.0])
+                return True
+
+            rear_safe, rear_reason = self._reverse_recovery_rear_is_safe(
+                pose_x, pose_y, yaw
+            )
+            if not rear_safe:
+                self._finish_reverse_recovery(rear_reason, apply_pause=True)
+                self._log_nav_reason(
+                    "reverse_abort",
+                    "rear no longer safe: %s" % rear_reason,
+                    warn=True,
+                )
+                self.publish_drive([0.0, 0.0])
+                return True
+
+            if traveled >= self.reverse_recovery_distance_m:
+                self._finish_reverse_recovery("distance_reached", apply_pause=True)
+                self._log_nav_reason(
+                    "reverse_done",
+                    "distance=%.2f/%.2f" % (
+                        traveled,
+                        self.reverse_recovery_distance_m,
+                    ),
+                )
+                self.publish_drive([0.0, 0.0])
+                return True
+            if elapsed >= self.reverse_recovery_timeout_s:
+                self._finish_reverse_recovery("timeout", apply_pause=True)
+                self._log_nav_reason(
+                    "reverse_done",
+                    "timeout=%.2fs distance=%.2f" % (elapsed, traveled),
+                    warn=True,
+                )
+                self.publish_drive([0.0, 0.0])
+                return True
+
+            self._rot_mode = False
+            self._log_nav_reason(
+                "reverse_recovery",
+                "mode=%s dist=%.2f/%.2f speed=%.2f" % (
+                    self.current_path_mode,
+                    traveled,
+                    self.reverse_recovery_distance_m,
+                    self.reverse_recovery_speed_mps,
+                ),
+            )
+            self.publish_drive([-self.reverse_recovery_speed_mps, 0.0])
+            return True
+
+        if now < self._reverse_recovery_pause_until:
+            remaining = (self._reverse_recovery_pause_until - now).to_sec()
+            self._log_nav_reason(
+                "reverse_pause",
+                "pause %.2fs after %s" % (
+                    remaining,
+                    self._reverse_recovery_last_exit_reason or "reverse_done",
+                ),
+            )
+            self.publish_drive([0.0, 0.0])
+            return True
+
+        if now < self._reverse_recovery_cooldown_until:
+            return False
+        if self.current_path_mode != "hold":
+            return False
+        if self.behavior_stop or self.emergency_blocked or self._rot_mode:
+            return False
+
+        if self._hold_mode_enter_sec <= 0.0:
+            self._hold_mode_enter_sec = now.to_sec()
+            return False
+
+        held_s = max(0.0, now.to_sec() - self._hold_mode_enter_sec)
+        if held_s < self.reverse_recovery_hold_trigger_s:
+            return False
+
+        rear_safe, rear_reason = self._reverse_recovery_rear_is_safe(
+            pose_x, pose_y, yaw
+        )
+        if not rear_safe:
+            log_now = now.to_sec()
+            if (log_now - self._reverse_recovery_last_log_sec) >= self.stop_log_period_s:
+                self._reverse_recovery_last_log_sec = log_now
+                self._log_nav_reason(
+                    "reverse_blocked",
+                    "hold=%.2fs but rear not safe: %s" % (held_s, rear_reason),
+                    warn=True,
+                )
+            return False
+
+        self._reverse_recovery_active = True
+        self._reverse_recovery_start_time = now
+        self._reverse_recovery_start_xy = (float(pose_x), float(pose_y))
+        self._reverse_recovery_last_exit_reason = ""
+        self._reverse_recovery_pause_until = rospy.Time(0)
+        self._rot_mode = False
+        self._log_nav_reason(
+            "reverse_start",
+            "hold=%.2fs dist=%.2f speed=%.2f" % (
+                held_s,
+                self.reverse_recovery_distance_m,
+                self.reverse_recovery_speed_mps,
+            ),
+            warn=True,
+        )
+        self.publish_drive([-self.reverse_recovery_speed_mps, 0.0])
+        return True
 
     # ------------------------------- rotate-only --------------------------------
     def rotate_only_enter(self, cur_yaw, desired_yaw):
@@ -2127,6 +2442,11 @@ class DWAControl:
                 if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
                     self._activate_path(self.global_path_msg, self.global_path_sig, "global")
                 return
+            if self.path_msg is not None or self.active_path_source != "none":
+                self._activate_path(None, None, "none")
+            return
+
+        if self.current_path_mode == "hold":
             if self.path_msg is not None or self.active_path_source != "none":
                 self._activate_path(None, None, "none")
             return
@@ -3022,12 +3342,13 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
+            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s path_mode=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
             self.avoidance_path_topic,
             self.active_path_topic,
+            self.path_mode_topic,
             "on" if self.follow_global_path_only else "off",
             "on" if self.use_muxed_active_path else "off",
             self.behavior_cmd_topic,
@@ -3052,6 +3373,13 @@ class DWAControl:
             self.near_field_raw_stop_min_z_m,
             self.near_field_raw_stop_max_z_m,
             self.near_field_raw_stop_min_points,
+            "on" if self.enable_reverse_recovery else "off",
+            self.reverse_recovery_hold_trigger_s,
+            self.reverse_recovery_distance_m,
+            self.reverse_recovery_speed_mps,
+            self.reverse_recovery_rear_check_distance_m,
+            self.reverse_recovery_rear_half_width_m,
+            self.reverse_recovery_rear_min_points,
             "on" if self.enable_self_filter else "off",
             self.self_filter_radius_x,
             self.self_filter_radius_y,
@@ -3092,6 +3420,15 @@ class DWAControl:
                 rate.sleep()
                 continue
 
+            # current pose snapshot
+            yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
+            px = self.current_pose.pose.pose.position.x
+            py = self.current_pose.pose.pose.position.y
+
+            if self._handle_reverse_recovery(px, py, yaw):
+                rate.sleep()
+                continue
+
             if not self.path_pts:
                 if self.follow_global_path_only:
                     self._log_nav_reason(
@@ -3117,11 +3454,6 @@ class DWAControl:
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
-
-            # current pose snapshot
-            yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
-            px = self.current_pose.pose.pose.position.x
-            py = self.current_pose.pose.pose.position.y
 
             # progress / target compute
             s_proj, lat_err, target_xy, t_hat, at_goal, dist_to_goal, arc_rem = \
