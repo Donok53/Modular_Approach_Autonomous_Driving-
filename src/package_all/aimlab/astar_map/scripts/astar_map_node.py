@@ -390,6 +390,8 @@ class AStarPlanner:
         self._last_published_goal_id = None
         self._last_published_start_reset_seq = 0
         self._manual_start_reset_seq = 0
+        self._frozen_display_world_points = None
+        self._frozen_display_goal_xy = None
         self._path_is_fallback = False
         self._path_blocked = False
         self._last_planned_start_xy = None
@@ -1091,6 +1093,22 @@ class AStarPlanner:
                 pts = list(pts) + [tuple(self._goal_display_xy)]
         return self._dedupe_world_points(pts)
 
+    def _reset_frozen_display_route(self):
+        self._frozen_display_world_points = None
+        self._frozen_display_goal_xy = None
+
+    def _resolve_visualization_path(self, world_points, simplify=True):
+        goal_xy = tuple(self._goal_display_xy) if self._goal_display_xy is not None else None
+        if (
+            self._frozen_display_world_points is not None
+            and self._frozen_display_goal_xy == goal_xy
+        ):
+            return list(self._frozen_display_world_points)
+        pts = self._prepare_visualization_path(world_points, simplify=simplify)
+        self._frozen_display_world_points = list(pts)
+        self._frozen_display_goal_xy = goal_xy
+        return list(pts)
+
     def _apply_start_yaw_hint(self, yaws):
         if (not yaws) or self._display_start_yaw is None:
             return yaws
@@ -1207,7 +1225,7 @@ class AStarPlanner:
         pd = Path()
         pd.header.frame_id = "map"
         pd.header.stamp = stamp
-        viz_points = self._prepare_visualization_path(world_points, simplify=simplify)
+        viz_points = self._resolve_visualization_path(world_points, simplify=simplify)
         viz_yaws = self._apply_start_yaw_hint(self._path_yaws(viz_points))
         for (x, y), yaw in zip(viz_points, viz_yaws):
             pds = PoseStamped()
@@ -3174,7 +3192,7 @@ class AStarPlanner:
             self._set_pose_yaw(ps, yaw)
             p.poses.append(ps)
 
-        viz_points = self._prepare_visualization_path(world_points)
+        viz_points = self._resolve_visualization_path(world_points)
         viz_yaws = self._apply_start_yaw_hint(self._path_yaws(viz_points))
         for (x, y), yaw in zip(viz_points, viz_yaws):
             pds = PoseStamped(); pds.header = pd.header
@@ -3381,6 +3399,7 @@ class AStarPlanner:
 
     def callback_start(self, data):
         self._manual_start_reset_seq += 1
+        self._reset_frozen_display_route()
         n = self._snap_and_update_from_position(data.pose.pose.position)
         self._display_start_xy = (
             float(data.pose.pose.position.x),
@@ -3405,6 +3424,7 @@ class AStarPlanner:
     def callback_goal_from_rviz(self, data):
         goal_x = data.pose.position.x
         goal_y = data.pose.position.y
+        self._reset_frozen_display_route()
         self._goal_display_xy = (goal_x, goal_y)
         self._goal_marker_xy = (goal_x, goal_y)
         n, snap_x, snap_y = self._snap_goal_node_from_xy(goal_x, goal_y)
@@ -3429,11 +3449,13 @@ class AStarPlanner:
             nid = self.server_dst_node_list[data.Cmd_dest_index]
             n = self.findNodeById(nid)
             if n and self.goal_id != n.id:
+                self._reset_frozen_display_route()
                 self.goal_id = n.id; self.new_goal_flag = True
                 if self.debug_log_enable:
                     rospy.loginfo(f"[astar] goal set by server index -> node {n.id}")
         elif data.Cmd_dest_lat > 0.01 and data.Cmd_dest_lon > 0.01:
             # WGS84 dest -> local map XY (mode-aware)
+            self._reset_frozen_display_route()
             if self.mode == "UTM":
                 ue, un, _, _ = utm.from_latlon(data.Cmd_dest_lat, data.Cmd_dest_lon)
                 mx, my = self._xy_to_map(ue - self._utm_ref_e, un - self._utm_ref_n)

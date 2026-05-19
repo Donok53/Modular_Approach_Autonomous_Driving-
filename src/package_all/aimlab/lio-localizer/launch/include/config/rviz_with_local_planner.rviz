@@ -640,12 +640,16 @@ Visualization Manager:
       Unreliable: false
       Value: true
     - Class: rviz/MarkerArray
-      Enabled: false
+      Enabled: true
       Marker Topic: /planning/path_history
       Name: path_history
-      Namespaces: {}
+      Namespaces:
+        avoidance_branch: false
+        avoidance_branch_entry: false
+        avoidance_branch_exit: false
+        local_path_used: true
       Queue Size: 100
-      Value: false
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /planning/recognized_obstacles

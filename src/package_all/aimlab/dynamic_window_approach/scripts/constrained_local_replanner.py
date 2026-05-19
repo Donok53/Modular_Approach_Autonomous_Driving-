@@ -149,6 +149,10 @@ class ConstrainedLocalReplanner:
         self.path_history_max_paths = max(
             1, int(rospy.get_param("~path_history_max_paths", 12))
         )
+        self.used_local_path_commit_distance_m = max(
+            0.05,
+            float(rospy.get_param("~used_local_path_commit_distance_m", 0.20)),
+        )
         self.travel_history_max_points = max(
             2, int(rospy.get_param("~travel_history_max_points", 400))
         )
@@ -523,7 +527,16 @@ class ConstrainedLocalReplanner:
         self._last_explain_time = 0.0
         self.path_history_entries = deque(maxlen=self.path_history_max_paths)
         self.path_history_next_id = 0
-        self.last_history_signature = {"local": None, "avoidance": None}
+        self.last_history_signature = {
+            "local": None,
+            "avoidance": None,
+            "used_local": None,
+        }
+        self.pending_used_local_points = None
+        self.pending_used_local_frame_id = "map"
+        self.pending_used_local_origin_xy = None
+        self.pending_used_local_signature = None
+        self.pending_used_local_committed = False
         self.travel_history_points = deque(maxlen=self.travel_history_max_points)
         self.debug_text_topic = str(
             rospy.get_param("~debug_text_topic", "/planning/local_replanner_debug_text")
@@ -2470,6 +2483,38 @@ class ConstrainedLocalReplanner:
             exit_marker.pose.position.y = float(entry["points"][-1][1])
             exit_marker.pose.position.z = 0.14
             markers.markers.append(exit_marker)
+
+        used_local_entries = [
+            entry for entry in self.path_history_entries if entry["source"] == "used_local"
+        ]
+        for idx, entry in enumerate(used_local_entries):
+            age_norm = (
+                0.0
+                if len(used_local_entries) <= 1
+                else float(len(used_local_entries) - 1 - idx)
+                / float(len(used_local_entries) - 1)
+            )
+            alpha = 0.50 + 0.35 * (1.0 - age_norm)
+            marker = Marker()
+            marker.header.stamp = now
+            marker.header.frame_id = entry["frame_id"]
+            marker.ns = "local_path_used"
+            marker.id = int(entry["id"] * 10)
+            marker.type = Marker.LINE_STRIP
+            marker.action = Marker.ADD
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.10
+            marker.color.a = alpha
+            marker.color.r = 0.92
+            marker.color.g = 0.08 + 0.06 * age_norm
+            marker.color.b = 0.10 + 0.10 * age_norm
+            for x, y in entry["points"]:
+                p = Point()
+                p.x = float(x)
+                p.y = float(y)
+                p.z = 0.10
+                marker.points.append(p)
+            markers.markers.append(marker)
         self.pub_path_history.publish(markers)
 
     def _publish_travel_history_marker(self):
@@ -2543,7 +2588,7 @@ class ConstrainedLocalReplanner:
         self._publish_travel_history_path()
 
     def _record_path_history(self, source, sampled_points, frame_id):
-        if source != "avoidance":
+        if source not in ("avoidance", "used_local"):
             return
         if len(sampled_points) < 2:
             return
@@ -2565,8 +2610,59 @@ class ConstrainedLocalReplanner:
     def _clear_path_history(self):
         self.path_history_entries.clear()
         self.path_history_next_id = 0
-        self.last_history_signature = {"local": None, "avoidance": None}
+        self.last_history_signature = {
+            "local": None,
+            "avoidance": None,
+            "used_local": None,
+        }
+        self._reset_pending_used_local_trace()
         self._publish_path_history_markers()
+
+    def _arm_pending_used_local_trace(self, sampled_points, frame_id):
+        if sampled_points is None or len(sampled_points) < 2 or not self.have_odom:
+            self._reset_pending_used_local_trace()
+            return
+        if (
+            self.pending_used_local_points is not None
+            and not self.pending_used_local_committed
+        ):
+            return
+        sig = self._path_signature_from_points(sampled_points)
+        if sig == self.pending_used_local_signature:
+            return
+        self.pending_used_local_points = list(sampled_points)
+        self.pending_used_local_frame_id = frame_id if frame_id else "map"
+        self.pending_used_local_origin_xy = (float(self.odom_x), float(self.odom_y))
+        self.pending_used_local_signature = sig
+        self.pending_used_local_committed = False
+
+    def _maybe_commit_pending_used_local_trace(self):
+        if (
+            self.pending_used_local_points is None
+            or self.pending_used_local_origin_xy is None
+            or self.pending_used_local_committed
+            or not self.have_odom
+        ):
+            return
+        dist_m = math.hypot(
+            float(self.odom_x) - float(self.pending_used_local_origin_xy[0]),
+            float(self.odom_y) - float(self.pending_used_local_origin_xy[1]),
+        )
+        if dist_m < self.used_local_path_commit_distance_m:
+            return
+        self._record_path_history(
+            "used_local",
+            self.pending_used_local_points,
+            self.pending_used_local_frame_id,
+        )
+        self.pending_used_local_committed = True
+
+    def _reset_pending_used_local_trace(self):
+        self.pending_used_local_points = None
+        self.pending_used_local_frame_id = "map"
+        self.pending_used_local_origin_xy = None
+        self.pending_used_local_signature = None
+        self.pending_used_local_committed = False
 
     def _publish_local_path(self, grid_path, dg, stamp, start_xy=None, end_xy=None):
         if start_xy is None and self.have_odom:
@@ -2627,6 +2723,10 @@ class ConstrainedLocalReplanner:
         self._publish_path_mode("follow_avoidance")
         self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
         self.last_avoidance_active_sec = stamp.to_sec()
+        self._arm_pending_used_local_trace(
+            history_points if history_points is not None else sampled_points,
+            frame_id,
+        )
         if record_history:
             self._record_path_history(
                 "avoidance",
@@ -2755,14 +2855,34 @@ class ConstrainedLocalReplanner:
         start_idx,
         branch_start_idx,
         branch_start,
+        blocked_idx,
         rejoin_idx,
         rejoin_cell,
         res_m,
     ):
-        dx = int(rejoin_cell[0]) - int(branch_start[0])
-        dy = int(rejoin_cell[1]) - int(branch_start[1])
-        step_x = 0 if dx == 0 else (1 if dx > 0 else -1)
-        step_y = 0 if dy == 0 else (1 if dy > 0 else -1)
+        if blocked_idx < 0 or blocked_idx >= len(nominal_path):
+            return None
+
+        ref_prev = nominal_path[max(branch_start_idx, blocked_idx - 1)]
+        ref_next = nominal_path[min(len(nominal_path) - 1, blocked_idx + 1)]
+        dir_dx = int(ref_next[0]) - int(ref_prev[0])
+        dir_dy = int(ref_next[1]) - int(ref_prev[1])
+        if abs(dir_dx) >= abs(dir_dy):
+            step_x = 1 if dir_dx >= 0 else -1
+            step_y = 0
+        else:
+            step_x = 0
+            step_y = 1 if dir_dy >= 0 else -1
+
+        if step_x == 0 and step_y == 0:
+            dx = int(rejoin_cell[0]) - int(branch_start[0])
+            dy = int(rejoin_cell[1]) - int(branch_start[1])
+            if abs(dx) >= abs(dy):
+                step_x = 1 if dx >= 0 else -1
+                step_y = 0
+            else:
+                step_x = 0
+                step_y = 1 if dy >= 0 else -1
         if step_x == 0 and step_y == 0:
             return None
 
@@ -2775,10 +2895,18 @@ class ConstrainedLocalReplanner:
         )
         min_offset_cells = max(1, int(math.ceil(base_offset_m / max(1e-3, res_m))))
         max_offset_cells = min_offset_cells + max(3, int(math.ceil(0.8 / max(1e-3, res_m))))
-
-        prefix = self._collapse_straight_grid_runs(
-            nominal_path[start_idx:branch_start_idx + 1]
+        forward_clear_m = max(
+            self.avoidance_rejoin_min_distance_m,
+            self.robot_length_m + self.obstacle_block_margin_m + 0.20,
         )
+        min_forward_cells = max(1, int(math.ceil(forward_clear_m / max(1e-3, res_m))))
+        max_forward_cells = min_forward_cells + max(
+            3, int(math.ceil(0.6 / max(1e-3, res_m)))
+        )
+
+        prefix = [nominal_path[start_idx]]
+        if branch_start != nominal_path[start_idx]:
+            prefix.append(branch_start)
 
         best_path = None
         best_len = None
@@ -2790,38 +2918,66 @@ class ConstrainedLocalReplanner:
                     int(branch_start[0]) + lat_dx * offset_cells,
                     int(branch_start[1]) + lat_dy * offset_cells,
                 )
-                p2 = (
-                    int(rejoin_cell[0]) + lat_dx * offset_cells,
-                    int(rejoin_cell[1]) + lat_dy * offset_cells,
-                )
-                box_waypoints = [branch_start, p1, p2, rejoin_cell]
-                if any(
-                    (not self._in_bounds_blocked(dynamic_blocked, wx, wy))
-                    or dynamic_blocked[wy][wx]
-                    for wx, wy in box_waypoints
-                ):
-                    continue
-                clear = True
-                for idx in range(len(box_waypoints) - 1):
-                    if not self._has_line_of_sight(
-                        dynamic_blocked, box_waypoints[idx], box_waypoints[idx + 1]
-                    ):
-                        clear = False
-                        break
-                if not clear:
-                    continue
+                for forward_cells in range(min_forward_cells, max_forward_cells + 1):
+                    target_rejoin = (
+                        int(nominal_path[blocked_idx][0]) + step_x * forward_cells,
+                        int(nominal_path[blocked_idx][1]) + step_y * forward_cells,
+                    )
+                    best_rejoin = None
+                    best_rejoin_cost = None
+                    for cand_idx in range(max(blocked_idx + 1, rejoin_idx - 2), len(nominal_path)):
+                        cand = nominal_path[cand_idx]
+                        along = (
+                            (int(cand[0]) - int(branch_start[0])) * step_x
+                            + (int(cand[1]) - int(branch_start[1])) * step_y
+                        )
+                        if along < forward_cells:
+                            continue
+                        lateral_error = abs(int(cand[0]) - int(target_rejoin[0])) + abs(
+                            int(cand[1]) - int(target_rejoin[1])
+                        )
+                        if lateral_error > max(2, offset_cells):
+                            continue
+                        cost = (lateral_error, cand_idx)
+                        if best_rejoin_cost is None or cost < best_rejoin_cost:
+                            best_rejoin = cand
+                            best_rejoin_cost = cost
+                    if best_rejoin is None:
+                        best_rejoin = rejoin_cell
 
-                detour = self._compose_grid_path_from_waypoints(box_waypoints)
-                composed = []
-                self._append_path_segment(composed, [nominal_path[start_idx]])
-                self._append_path_segment(composed, prefix)
-                self._append_path_segment(composed, detour[1:])
-                if len(composed) < 2:
-                    continue
-                path_len = len(composed)
-                if best_path is None or path_len < best_len:
-                    best_path = composed
-                    best_len = path_len
+                    if step_x != 0:
+                        p2 = (int(best_rejoin[0]), int(branch_start[1]) + lat_dy * offset_cells)
+                    else:
+                        p2 = (int(branch_start[0]) + lat_dx * offset_cells, int(best_rejoin[1]))
+
+                    box_waypoints = [branch_start, p1, p2, best_rejoin]
+                    if any(
+                        (not self._in_bounds_blocked(dynamic_blocked, wx, wy))
+                        or dynamic_blocked[wy][wx]
+                        for wx, wy in box_waypoints
+                    ):
+                        continue
+                    clear = True
+                    for idx in range(len(box_waypoints) - 1):
+                        if not self._has_line_of_sight(
+                            dynamic_blocked, box_waypoints[idx], box_waypoints[idx + 1]
+                        ):
+                            clear = False
+                            break
+                    if not clear:
+                        continue
+
+                    detour = self._compose_grid_path_from_waypoints(box_waypoints)
+                    composed = []
+                    self._append_path_segment(composed, [nominal_path[start_idx]])
+                    self._append_path_segment(composed, prefix)
+                    self._append_path_segment(composed, detour[1:])
+                    if len(composed) < 2:
+                        continue
+                    path_len = len(composed)
+                    if best_path is None or path_len < best_len:
+                        best_path = composed
+                        best_len = path_len
 
         return best_path
 
@@ -2905,6 +3061,8 @@ class ConstrainedLocalReplanner:
 
     def _clear_local_path(self, frame_id, stamp, force=False):
         self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+        if self._use_global_nominal_reference():
+            self._reset_pending_used_local_trace()
 
     def _clear_avoidance_path(self, frame_id, stamp, force=False):
         if self.avoidance_active and (not force):
@@ -4024,6 +4182,7 @@ class ConstrainedLocalReplanner:
                         start_idx,
                         branch_start_idx,
                         branch_start,
+                        blocked_idx,
                         rejoin_idx,
                         rejoin_cell,
                         res_m,
@@ -4580,6 +4739,7 @@ class ConstrainedLocalReplanner:
         try:
             if (not self.have_odom) or self.drivable_grid is None:
                 return
+            self._maybe_commit_pending_used_local_trace()
             dg = self.drivable_grid
             rg = self.risk_grid
             stamp = rospy.Time.now()
