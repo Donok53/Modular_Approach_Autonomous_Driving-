@@ -4527,10 +4527,9 @@ class ConstrainedLocalReplanner:
         blocked_delta_cells = max(0, blocked_idx - start_idx)
         close_blocked_cells = max(3, int(math.ceil(1.0 / res_m)))
         backtrack_cells = self.avoidance_branch_backtrack_cells
-        orthogonal_detour = self._use_global_nominal_reference()
-        if orthogonal_detour:
-            backtrack_cells = min(backtrack_cells, 1)
-        elif blocked_delta_cells <= close_blocked_cells:
+        clip_to_rejoin_only = self._use_global_nominal_reference()
+        orthogonal_detour = False
+        if blocked_delta_cells <= close_blocked_cells:
             backtrack_cells = max(backtrack_cells, int(math.ceil(0.8 / res_m)))
 
         branch_start_idx = max(start_idx, blocked_idx - backtrack_cells)
@@ -4541,40 +4540,6 @@ class ConstrainedLocalReplanner:
             branch_start_idx -= 1
 
         branch_start = nominal_path[branch_start_idx]
-
-        if orthogonal_detour:
-            composed = self._build_box_avoidance_path(
-                dynamic_blocked,
-                nominal_path,
-                start_idx,
-                start_cell,
-                branch_start_idx,
-                branch_start,
-                blocked_idx,
-                dg,
-                res_m,
-                blocking_cells_world=blocking_cells_world,
-                blocking_points_world=blocking_points_world,
-            )
-            if composed is not None and len(composed) >= 2:
-                blind_zone_conflict = self._path_blind_zone_turn_conflict(
-                    composed, dg, now_sec=now_sec
-                )
-                if blind_zone_conflict is not None:
-                    rospy.loginfo_throttle(
-                        1.0,
-                        "constrained_local_replanner: rejecting box avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
-                        "left" if int(blind_zone_conflict["side"]) > 0 else "right",
-                        float(blind_zone_conflict["x"]),
-                        float(blind_zone_conflict["y"]),
-                        float(blind_zone_conflict["age_s"]),
-                        float(blind_zone_conflict["path_heading_deg"]),
-                    )
-                else:
-                    branch_history_points = self._sample_world_points(
-                        [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
-                    )
-                    return composed, branch_history_points
 
         rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
         if self.avoidance_rejoin_min_distance_m > 0.8:
@@ -4617,18 +4582,17 @@ class ConstrainedLocalReplanner:
                 if detour is None or len(detour) < 2:
                     continue
 
-                if not orthogonal_detour:
-                    detour = self._simplify_grid_path(
-                        detour,
-                        dynamic_blocked,
-                        float(dg.info.resolution),
-                        force=self.smooth_avoidance_line_of_sight,
-                    )
+                detour = self._simplify_grid_path(
+                    detour,
+                    dynamic_blocked,
+                    float(dg.info.resolution),
+                    force=self.smooth_avoidance_line_of_sight,
+                )
                 if len(detour) < 2:
                     continue
 
                 composed = []
-                if orthogonal_detour:
+                if clip_to_rejoin_only:
                     # In global-reference mode, show and follow only the temporary
                     # branch detour up to the rejoin point.  Do not append the
                     # remaining route to goal; once we rejoin, control should
@@ -4637,7 +4601,6 @@ class ConstrainedLocalReplanner:
                     prefix = self._collapse_straight_grid_runs(
                         nominal_path[start_idx:branch_start_idx + 1]
                     )
-                    detour = self._collapse_straight_grid_runs(detour)
                     self._append_path_segment(composed, [start_cell])
                     self._append_path_segment(composed, prefix)
                     self._append_path_segment(composed, detour[1:])
