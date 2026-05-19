@@ -2274,18 +2274,29 @@ class ConstrainedLocalReplanner:
             world_points[-1] = (float(end_xy[0]), float(end_xy[1]))
         return world_points
 
-    def _publish_grid_path(self, publisher, grid_path, dg, stamp, start_xy=None, end_xy=None):
+    def _publish_grid_path(
+        self,
+        publisher,
+        grid_path,
+        dg,
+        stamp,
+        start_xy=None,
+        end_xy=None,
+        anchor_start=True,
+    ):
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
-        resolved_start_xy = self._resolve_path_start_xy(start_xy)
+        resolved_start_xy = (
+            self._resolve_path_start_xy(start_xy) if anchor_start else start_xy
+        )
         world_points = self._grid_path_to_world_points(
             grid_path,
             dg,
             start_xy=resolved_start_xy,
             end_xy=end_xy,
         )
-        if resolved_start_xy is None:
+        if anchor_start and resolved_start_xy is None:
             world_points = self._trim_world_points_from_robot_front(world_points)
 
         if len(world_points) < 2:
@@ -2708,8 +2719,6 @@ class ConstrainedLocalReplanner:
         end_xy=None,
         record_history=True,
     ):
-        if start_xy is None and self.have_odom:
-            start_xy = (self.odom_x, self.odom_y)
         display_grid_path = self._collapse_straight_grid_runs(grid_path)
         sampled_points, frame_id = self._publish_grid_path(
             self.pub_local_path,
@@ -2718,6 +2727,7 @@ class ConstrainedLocalReplanner:
             stamp,
             start_xy=start_xy,
             end_xy=end_xy,
+            anchor_start=False,
         )
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
         self._publish_path_mode("follow_avoidance")

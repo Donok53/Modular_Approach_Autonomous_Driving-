@@ -2646,8 +2646,6 @@ class DWAControl:
             return True
         if self.path_sig == sig:
             return False
-        if source != "global":
-            return True
         if path_msg is None or self.path_msg is None:
             return True
         if (
