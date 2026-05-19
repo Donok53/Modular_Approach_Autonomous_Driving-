@@ -68,6 +68,7 @@
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="path_mode_topic" default="/planning/path_mode"/>
   <arg name="freeze_global_replan_during_local_mode" default="true"/>
+  <arg name="freeze_global_path_after_first_plan" default="true"/>
   <arg name="nominal_path_reference_mode" default="local"/>
   <arg name="active_path_topic" default="/planning/active_path"/>
   <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
@@ -308,7 +309,7 @@
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
   <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
-  <arg name="global_path_continuous_replan" default="true"/>
+  <arg name="global_path_continuous_replan" default="false"/>
   <arg name="global_path_goal_reached_replan_freeze_distance_m" default="0.35"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
   <arg name="global_path_replan_min_interval_s" default="$(eval '1.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.60')"/>
@@ -318,7 +319,7 @@
   <arg name="global_path_planner_loop_hz" default="10.0"/>
   <arg name="global_path_republish_period_s" default="0.20"/>
   <arg name="grid_snap_search_radius_cells" default="60"/>
-  <arg name="candidate_route_switching_enabled" default="true"/>
+  <arg name="candidate_route_switching_enabled" default="false"/>
   <arg name="candidate_route_switch_lookahead_m" default="20.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
   <arg name="candidate_route_switch_corridor_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
@@ -858,6 +859,7 @@
         <arg name="path_repub_period" value="$(arg global_path_republish_period_s)"/>
         <arg name="path_mode_topic" value="$(arg path_mode_topic)"/>
         <arg name="freeze_global_replan_during_local_mode" value="$(arg freeze_global_replan_during_local_mode)"/>
+        <arg name="freeze_global_path_after_first_plan" value="$(arg freeze_global_path_after_first_plan)"/>
         <arg name="grid_snap_search_radius_cells" value="$(arg grid_snap_search_radius_cells)"/>
         <arg name="candidate_route_switching_enabled" value="$(arg candidate_route_switching_enabled)"/>
         <arg name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
@@ -922,6 +924,7 @@
         <arg name="path_repub_period" value="$(arg global_path_republish_period_s)"/>
         <arg name="path_mode_topic" value="$(arg path_mode_topic)"/>
         <arg name="freeze_global_replan_during_local_mode" value="$(arg freeze_global_replan_during_local_mode)"/>
+        <arg name="freeze_global_path_after_first_plan" value="$(arg freeze_global_path_after_first_plan)"/>
         <arg name="grid_snap_search_radius_cells" value="$(arg grid_snap_search_radius_cells)"/>
         <arg name="candidate_route_switching_enabled" value="$(arg candidate_route_switching_enabled)"/>
         <arg name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>

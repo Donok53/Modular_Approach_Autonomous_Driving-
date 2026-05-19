@@ -132,6 +132,9 @@ class AStarPlanner:
         self.freeze_global_replan_during_local_mode = bool(
             rospy.get_param("~freeze_global_replan_during_local_mode", True)
         )
+        self.freeze_global_path_after_first_plan = bool(
+            rospy.get_param("~freeze_global_path_after_first_plan", True)
+        )
         self.current_nav_path_mode = "follow_global"
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
         self.grid_snap_search_radius_cells = max(
@@ -602,6 +605,17 @@ class AStarPlanner:
             "hold",
         )
 
+    def _global_path_locked_after_first_plan(self):
+        if not self.freeze_global_path_after_first_plan:
+            return False
+        if self.new_goal_flag:
+            return False
+        if not self._has_active_goal_context():
+            return False
+        if not self._last_plan_success or self._last_plan_stamp_s <= 0.0:
+            return False
+        return (self._last_world_path_signature is not None) or (self._last_path_nodes is not None)
+
     def _is_near_active_goal(self):
         if self.goal_reached_replan_freeze_distance_m <= 0.0:
             return False
@@ -633,6 +647,13 @@ class AStarPlanner:
             return False
         if self.new_goal_flag or self._last_plan_stamp_s <= 0.0:
             return True
+        if self._global_path_locked_after_first_plan():
+            if self.debug_log_enable:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "[astar] keeping global path fixed after first plan until goal/start changes",
+                )
+            return False
         if self._global_replan_frozen_by_local_mode():
             if self.debug_log_enable:
                 rospy.loginfo_throttle(
@@ -1242,10 +1263,15 @@ class AStarPlanner:
         p = Path()
         p.header.frame_id = "map"
         p.header.stamp = stamp
-        display_points = self._prepend_current_start_to_path_points(
-            self._prepare_display_path(world_points, simplify=simplify),
-            start_xy=self._display_front_anchor_xy(),
-        )
+        if self._global_path_locked_after_first_plan():
+            display_points = self._resolve_visualization_path(
+                world_points, simplify=simplify
+            )
+        else:
+            display_points = self._prepend_current_start_to_path_points(
+                self._prepare_display_path(world_points, simplify=simplify),
+                start_xy=self._display_front_anchor_xy(),
+            )
         display_yaws = self._apply_start_yaw_hint(self._path_yaws(display_points))
         for (x, y), yaw in zip(display_points, display_yaws):
             ps = PoseStamped()
@@ -2016,6 +2042,7 @@ class AStarPlanner:
         if (
             not changed
             and self.path_repub_period > 0.0
+            and not self._global_path_locked_after_first_plan()
             and not self._global_replan_frozen_by_local_mode()
         ):
             tnow = time.monotonic()
@@ -3219,10 +3246,13 @@ class AStarPlanner:
             world_points.append(self._xy_to_map(n.east, n.north))
             wgs_points.append((n.lat, n.lon))
 
-        display_points = self._prepend_current_start_to_path_points(
-            self._prepare_display_path(world_points),
-            start_xy=self._display_front_anchor_xy(),
-        )
+        if self._global_path_locked_after_first_plan():
+            display_points = self._resolve_visualization_path(world_points)
+        else:
+            display_points = self._prepend_current_start_to_path_points(
+                self._prepare_display_path(world_points),
+                start_xy=self._display_front_anchor_xy(),
+            )
         display_yaws = self._apply_start_yaw_hint(self._path_yaws(display_points))
         for (x, y), yaw in zip(display_points, display_yaws):
             ps = PoseStamped(); ps.header = p.header
@@ -3527,6 +3557,7 @@ class AStarPlanner:
         if (
             not changed
             and self.path_repub_period > 0.0
+            and not self._global_path_locked_after_first_plan()
             and not self._global_replan_frozen_by_local_mode()
         ):
             tnow = time.monotonic()
@@ -3714,7 +3745,7 @@ if __name__ == "__main__":
                         a.republish_world_path_keep_state(
                             world_path, stamp=rospy.Time.now()
                         )
-                elif candidate_world_paths:
+                elif candidate_world_paths and (not a._global_path_locked_after_first_plan()):
                     new_active_candidate_index, _ = a.select_best_candidate_world_path(
                         candidate_world_paths, active_index=active_candidate_index
                     )
@@ -3728,7 +3759,7 @@ if __name__ == "__main__":
                             selected_index=active_candidate_index,
                         )
                 a.publish_world_path_if_changed(world_path)
-                if candidate_world_paths:
+                if candidate_world_paths and (not a._global_path_locked_after_first_plan()):
                     a.publish_candidate_world_paths_if_needed(
                         candidate_world_paths,
                         stamp=rospy.Time.now(),
