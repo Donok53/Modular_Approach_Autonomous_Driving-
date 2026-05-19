@@ -30,6 +30,16 @@ class ConstrainedLocalReplanner:
         self.travel_history_path_topic = rospy.get_param(
             "~travel_history_path_topic", "/planning/travel_history_path"
         )
+        nominal_path_reference_mode = str(
+            rospy.get_param("~nominal_path_reference_mode", "local")
+        ).strip().lower()
+        if nominal_path_reference_mode not in ("local", "global"):
+            rospy.logwarn(
+                "constrained_local_replanner: unsupported nominal_path_reference_mode=%s, falling back to local",
+                nominal_path_reference_mode,
+            )
+            nominal_path_reference_mode = "local"
+        self.nominal_path_reference_mode = nominal_path_reference_mode
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.obstacle_pointcloud_topic = rospy.get_param(
             "~obstacle_pointcloud_topic", self.pointcloud_topic
@@ -503,7 +513,11 @@ class ConstrainedLocalReplanner:
         # global route should supply direction, while the local replanner owns
         # the short-horizon maneuvering path that the controller actually
         # tracks outdoors.
-        self.current_path_mode = "follow_local"
+        self.current_path_mode = (
+            "follow_global"
+            if self.nominal_path_reference_mode == "global"
+            else "follow_local"
+        )
         self.rejoin_mode_until_sec = 0.0
         self._last_explain_key = None
         self._last_explain_time = 0.0
@@ -594,12 +608,13 @@ class ConstrainedLocalReplanner:
         self._publish_path_mode(self.current_path_mode, force=True)
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
         rospy.loginfo(
-            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
+            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
             self.global_path_topic,
             self.drivable_grid_topic,
             self.dynamic_risk_grid_topic,
             self.local_path_topic,
             self.avoidance_path_topic,
+            self.nominal_path_reference_mode,
             "on" if self.use_direct_goal else "off",
             self.direct_goal_topic,
             self.robot_length_m,
@@ -685,6 +700,17 @@ class ConstrainedLocalReplanner:
         except rospy.ROSException:
             return
         rospy.loginfo("constrained_local_replanner: path_mode=%s", mode_str)
+
+    def _use_global_nominal_reference(self):
+        return self.nominal_path_reference_mode == "global"
+
+    def _publish_nominal_reference_path(self, world_points, frame_id, stamp):
+        if self._use_global_nominal_reference():
+            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+            self._publish_path_mode("follow_global")
+            return
+        self._publish_world_path(world_points, frame_id, stamp)
+        self._publish_path_mode("follow_local")
 
     def _arm_rejoin_mode(self, now_sec):
         if self.rejoin_mode_hold_s <= 1e-6:
@@ -4562,8 +4588,9 @@ class ConstrainedLocalReplanner:
                 elif avoidance_state == "clear":
                     self.local_blocked_since_sec = 0.0
                     self.local_clear_since_sec = 0.0
-                    self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
-                    self._publish_path_mode("follow_local")
+                    self._publish_nominal_reference_path(
+                        nominal_world, dg.header.frame_id, stamp
+                    )
                 return
 
             resumed_from_local_block = self.local_blocked_since_sec > 0.0
@@ -4605,7 +4632,9 @@ class ConstrainedLocalReplanner:
                 )
             self.local_blocked_since_sec = 0.0
             self.local_clear_since_sec = 0.0
-            self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
+            self._publish_nominal_reference_path(
+                nominal_world, dg.header.frame_id, stamp
+            )
             avoidance_state = self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")
             if avoidance_state == "avoidance":
                 self.rejoin_mode_until_sec = 0.0
@@ -4620,7 +4649,9 @@ class ConstrainedLocalReplanner:
             # because the mux stops using the fresh local segment that was just
             # built around the current pose.
             self.rejoin_mode_until_sec = 0.0
-            self._publish_path_mode("follow_local")
+            self._publish_path_mode(
+                "follow_global" if self._use_global_nominal_reference() else "follow_local"
+            )
             self._publish_debug_text(
                 self._build_debug_text(
                     "follow_nominal",
