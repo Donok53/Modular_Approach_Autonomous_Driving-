@@ -2879,17 +2879,17 @@ class ConstrainedLocalReplanner:
         dynamic_blocked,
         nominal_path,
         start_idx,
-        branch_start_idx,
-        branch_start,
+        start_cell,
         blocked_idx,
-        rejoin_idx,
-        rejoin_cell,
+        dg,
         res_m,
+        blocking_cells_world=None,
+        blocking_points_world=None,
     ):
         if blocked_idx < 0 or blocked_idx >= len(nominal_path):
             return None
 
-        ref_prev = nominal_path[max(branch_start_idx, blocked_idx - 1)]
+        ref_prev = nominal_path[max(start_idx, blocked_idx - 1)]
         ref_next = nominal_path[min(len(nominal_path) - 1, blocked_idx + 1)]
         dir_dx = int(ref_next[0]) - int(ref_prev[0])
         dir_dy = int(ref_next[1]) - int(ref_prev[1])
@@ -2901,112 +2901,162 @@ class ConstrainedLocalReplanner:
             step_y = 1 if dir_dy >= 0 else -1
 
         if step_x == 0 and step_y == 0:
-            dx = int(rejoin_cell[0]) - int(branch_start[0])
-            dy = int(rejoin_cell[1]) - int(branch_start[1])
-            if abs(dx) >= abs(dy):
-                step_x = 1 if dx >= 0 else -1
-                step_y = 0
-            else:
-                step_x = 0
-                step_y = 1 if dy >= 0 else -1
-        if step_x == 0 and step_y == 0:
             return None
 
-        lat_dirs = [(-step_y, step_x), (step_y, -step_x)]
-        base_offset_m = (
-            self.robot_half_width
-            + self.obstacle_block_margin_m
-            + min(self.avoidance_trigger_margin_m, 0.10)
-            + 0.02
+        obstacle_cells = []
+        for world_points in (blocking_cells_world, blocking_points_world):
+            if not world_points:
+                continue
+            for wx, wy in world_points:
+                gx, gy = self._world_to_grid(dg, wx, wy)
+                if self._in_bounds_blocked(dynamic_blocked, gx, gy):
+                    obstacle_cells.append((int(gx), int(gy)))
+
+        if not obstacle_cells:
+            lo = max(start_idx, blocked_idx - 1)
+            hi = min(len(nominal_path), blocked_idx + 2)
+            obstacle_cells.extend(
+                (int(gx), int(gy)) for gx, gy in nominal_path[lo:hi]
+            )
+        if not obstacle_cells:
+            return None
+
+        min_x = min(cell[0] for cell in obstacle_cells)
+        max_x = max(cell[0] for cell in obstacle_cells)
+        min_y = min(cell[1] for cell in obstacle_cells)
+        max_y = max(cell[1] for cell in obstacle_cells)
+
+        start_gx = int(start_cell[0])
+        start_gy = int(start_cell[1])
+        if not self._in_bounds_blocked(dynamic_blocked, start_gx, start_gy):
+            return None
+
+        lateral_clear_cells = max(
+            1,
+            int(
+                math.ceil(
+                    (
+                        self.robot_half_width
+                        + self.obstacle_block_margin_m
+                        + min(self.avoidance_trigger_margin_m, 0.10)
+                        + 0.05
+                    )
+                    / max(1e-3, res_m)
+                )
+            ),
         )
-        min_offset_cells = max(1, int(math.ceil(base_offset_m / max(1e-3, res_m))))
-        max_offset_cells = min_offset_cells + max(
-            2, int(math.ceil(0.30 / max(1e-3, res_m)))
+        approach_clear_cells = max(
+            1,
+            int(
+                math.ceil(
+                    (
+                        self.robot_length_m * 0.35
+                        + self.obstacle_block_margin_m
+                        + 0.05
+                    )
+                    / max(1e-3, res_m)
+                )
+            ),
         )
-        forward_clear_m = max(
-            0.60,
-            min(self.avoidance_rejoin_min_distance_m, 0.80),
-            self.robot_length_m * 0.55 + self.obstacle_block_margin_m,
-        )
-        min_forward_cells = max(1, int(math.ceil(forward_clear_m / max(1e-3, res_m))))
-        max_forward_cells = min_forward_cells + max(
-            2, int(math.ceil(0.20 / max(1e-3, res_m)))
+        forward_clear_cells = max(
+            approach_clear_cells + 1,
+            int(
+                math.ceil(
+                    (
+                        max(self.avoidance_rejoin_min_distance_m, self.robot_length_m * 0.9)
+                        + self.obstacle_block_margin_m
+                    )
+                    / max(1e-3, res_m)
+                )
+            ),
         )
 
-        prefix = [nominal_path[start_idx]]
-        if branch_start != nominal_path[start_idx]:
-            prefix.append(branch_start)
+        candidates = []
+        if step_x != 0:
+            lane_y = start_gy
+            if step_x > 0:
+                entry_x = max(start_gx, min_x - approach_clear_cells)
+                exit_x = max(entry_x + 1, max_x + forward_clear_cells)
+            else:
+                entry_x = min(start_gx, max_x + approach_clear_cells)
+                exit_x = min(entry_x - 1, min_x - forward_clear_cells)
+            side_values = [min_y - lateral_clear_cells, max_y + lateral_clear_cells]
+            side_values = sorted(side_values, key=lambda val: abs(val - lane_y))
+            for side_y in side_values:
+                candidates.append(
+                    [
+                        (start_gx, lane_y),
+                        (entry_x, lane_y),
+                        (entry_x, side_y),
+                        (exit_x, side_y),
+                        (exit_x, lane_y),
+                    ]
+                )
+        else:
+            lane_x = start_gx
+            if step_y > 0:
+                entry_y = max(start_gy, min_y - approach_clear_cells)
+                exit_y = max(entry_y + 1, max_y + forward_clear_cells)
+            else:
+                entry_y = min(start_gy, max_y + approach_clear_cells)
+                exit_y = min(entry_y - 1, min_y - forward_clear_cells)
+            side_values = [min_x - lateral_clear_cells, max_x + lateral_clear_cells]
+            side_values = sorted(side_values, key=lambda val: abs(val - lane_x))
+            for side_x in side_values:
+                candidates.append(
+                    [
+                        (lane_x, start_gy),
+                        (lane_x, entry_y),
+                        (side_x, entry_y),
+                        (side_x, exit_y),
+                        (lane_x, exit_y),
+                    ]
+                )
 
         best_path = None
-        best_len = None
-        for lat_dx, lat_dy in lat_dirs:
-            if lat_dx == 0 and lat_dy == 0:
+        best_cost = None
+        for raw_waypoints in candidates:
+            box_waypoints = []
+            for cell in raw_waypoints:
+                cell = (int(cell[0]), int(cell[1]))
+                if box_waypoints and cell == box_waypoints[-1]:
+                    continue
+                box_waypoints.append(cell)
+            if len(box_waypoints) < 2:
                 continue
-            for offset_cells in range(min_offset_cells, max_offset_cells + 1):
-                p1 = (
-                    int(branch_start[0]) + lat_dx * offset_cells,
-                    int(branch_start[1]) + lat_dy * offset_cells,
-                )
-                for forward_cells in range(min_forward_cells, max_forward_cells + 1):
-                    target_rejoin = (
-                        int(nominal_path[blocked_idx][0]) + step_x * forward_cells,
-                        int(nominal_path[blocked_idx][1]) + step_y * forward_cells,
-                    )
-                    best_rejoin = None
-                    best_rejoin_cost = None
-                    for cand_idx in range(max(blocked_idx + 1, rejoin_idx - 2), len(nominal_path)):
-                        cand = nominal_path[cand_idx]
-                        along = (
-                            (int(cand[0]) - int(branch_start[0])) * step_x
-                            + (int(cand[1]) - int(branch_start[1])) * step_y
-                        )
-                        if along < forward_cells:
-                            continue
-                        lateral_error = abs(int(cand[0]) - int(target_rejoin[0])) + abs(
-                            int(cand[1]) - int(target_rejoin[1])
-                        )
-                        if lateral_error > max(2, offset_cells):
-                            continue
-                        cost = (lateral_error, cand_idx)
-                        if best_rejoin_cost is None or cost < best_rejoin_cost:
-                            best_rejoin = cand
-                            best_rejoin_cost = cost
-                    if best_rejoin is None:
-                        best_rejoin = rejoin_cell
+            if any(
+                (not self._in_bounds_blocked(dynamic_blocked, wx, wy))
+                or dynamic_blocked[wy][wx]
+                for wx, wy in box_waypoints
+            ):
+                continue
+            clear = True
+            for seg_idx in range(len(box_waypoints) - 1):
+                if not self._has_line_of_sight(
+                    dynamic_blocked,
+                    box_waypoints[seg_idx],
+                    box_waypoints[seg_idx + 1],
+                ):
+                    clear = False
+                    break
+            if not clear:
+                continue
 
-                    if step_x != 0:
-                        p2 = (int(best_rejoin[0]), int(branch_start[1]) + lat_dy * offset_cells)
-                    else:
-                        p2 = (int(branch_start[0]) + lat_dx * offset_cells, int(best_rejoin[1]))
+            detour = self._compose_grid_path_from_waypoints(box_waypoints)
+            detour = self._collapse_straight_grid_runs(detour)
+            if len(detour) < 2:
+                continue
 
-                    box_waypoints = [branch_start, p1, p2, best_rejoin]
-                    if any(
-                        (not self._in_bounds_blocked(dynamic_blocked, wx, wy))
-                        or dynamic_blocked[wy][wx]
-                        for wx, wy in box_waypoints
-                    ):
-                        continue
-                    clear = True
-                    for idx in range(len(box_waypoints) - 1):
-                        if not self._has_line_of_sight(
-                            dynamic_blocked, box_waypoints[idx], box_waypoints[idx + 1]
-                        ):
-                            clear = False
-                            break
-                    if not clear:
-                        continue
-
-                    detour = self._compose_grid_path_from_waypoints(box_waypoints)
-                    composed = []
-                    self._append_path_segment(composed, [nominal_path[start_idx]])
-                    self._append_path_segment(composed, prefix)
-                    self._append_path_segment(composed, detour[1:])
-                    if len(composed) < 2:
-                        continue
-                    path_len = len(composed)
-                    if best_path is None or path_len < best_len:
-                        best_path = composed
-                        best_len = path_len
+            if step_x != 0:
+                lateral_extent = max(abs(box_waypoints[2][1] - start_gy), 0)
+                forward_extent = abs(box_waypoints[3][0] - box_waypoints[2][0])
+            else:
+                lateral_extent = max(abs(box_waypoints[2][0] - start_gx), 0)
+                forward_extent = abs(box_waypoints[3][1] - box_waypoints[2][1])
+            cost = (lateral_extent, forward_extent, len(detour))
+            if best_cost is None or cost < best_cost:
+                best_cost = cost
+                best_path = detour
 
         return best_path
 
@@ -4239,6 +4289,8 @@ class ConstrainedLocalReplanner:
         dg,
         now_sec=None,
         points_map=None,
+        blocking_cells_world=None,
+        blocking_points_world=None,
     ):
         if len(nominal_path) < 2:
             return None, None
@@ -4275,6 +4327,39 @@ class ConstrainedLocalReplanner:
             branch_start_idx -= 1
 
         branch_start = nominal_path[branch_start_idx]
+
+        if orthogonal_detour:
+            composed = self._build_box_avoidance_path(
+                dynamic_blocked,
+                nominal_path,
+                start_idx,
+                start_cell,
+                blocked_idx,
+                dg,
+                res_m,
+                blocking_cells_world=blocking_cells_world,
+                blocking_points_world=blocking_points_world,
+            )
+            if composed is not None and len(composed) >= 2:
+                blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                    composed, dg, now_sec=now_sec
+                )
+                if blind_zone_conflict is not None:
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: rejecting box avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
+                        "left" if int(blind_zone_conflict["side"]) > 0 else "right",
+                        float(blind_zone_conflict["x"]),
+                        float(blind_zone_conflict["y"]),
+                        float(blind_zone_conflict["age_s"]),
+                        float(blind_zone_conflict["path_heading_deg"]),
+                    )
+                else:
+                    branch_history_points = self._sample_world_points(
+                        [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
+                    )
+                    return composed, branch_history_points
+
         rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
         if self.avoidance_rejoin_min_distance_m > 0.8:
             rejoin_distance_candidates_m.append(
@@ -4306,37 +4391,6 @@ class ConstrainedLocalReplanner:
                 rx, ry = rejoin_cell
                 if not self._in_bounds_blocked(dynamic_blocked, rx, ry) or dynamic_blocked[ry][rx]:
                     continue
-                if orthogonal_detour:
-                    composed = self._build_box_avoidance_path(
-                        dynamic_blocked,
-                        nominal_path,
-                        start_idx,
-                        branch_start_idx,
-                        branch_start,
-                        blocked_idx,
-                        rejoin_idx,
-                        rejoin_cell,
-                        res_m,
-                    )
-                    if composed is not None and len(composed) >= 2:
-                        blind_zone_conflict = self._path_blind_zone_turn_conflict(
-                            composed, dg, now_sec=now_sec
-                        )
-                        if blind_zone_conflict is not None:
-                            rospy.loginfo_throttle(
-                                1.0,
-                                "constrained_local_replanner: rejecting box avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
-                                "left" if int(blind_zone_conflict["side"]) > 0 else "right",
-                                float(blind_zone_conflict["x"]),
-                                float(blind_zone_conflict["y"]),
-                                float(blind_zone_conflict["age_s"]),
-                                float(blind_zone_conflict["path_heading_deg"]),
-                            )
-                        else:
-                            branch_history_points = self._sample_world_points(
-                                [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
-                            )
-                            return composed, branch_history_points
                 detour = self._astar(
                     dynamic_blocked,
                     branch_start,
@@ -4680,6 +4734,8 @@ class ConstrainedLocalReplanner:
             # Use the same dynamic point source that triggered direct overlap so
             # near-goal tail ignores and branching start from a consistent index.
             points_map=dynamic_points_map if direct_points_enabled else None,
+            blocking_cells_world=blocking_cells,
+            blocking_points_world=blocking_points,
         )
         if avoid_path is None:
             rospy.logwarn_throttle(
