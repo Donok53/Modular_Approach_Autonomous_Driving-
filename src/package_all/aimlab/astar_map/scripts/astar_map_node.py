@@ -43,7 +43,7 @@ import rospy, math, sys, time, csv, colorsys, struct, heapq, traceback, xml.etre
 from geometry_msgs.msg import Point, PoseStamped, Quaternion, PoseWithCovarianceStamped
 from nav_msgs.msg import Path, Odometry, OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import ColorRGBA, Header, Int32MultiArray, Empty, Bool
+from std_msgs.msg import ColorRGBA, Header, Int32MultiArray, Empty, Bool, String
 from sensor_msgs.msg import PointCloud2, PointField
 from astar_map.msg import server_to_robot
 import utm
@@ -126,6 +126,13 @@ class AStarPlanner:
         self.path_blocked_topic = rospy.get_param(
             "~path_blocked_topic", "/astar/path_blocked"
         )
+        self.path_mode_topic = rospy.get_param(
+            "~path_mode_topic", "/planning/path_mode"
+        )
+        self.freeze_global_replan_during_local_mode = bool(
+            rospy.get_param("~freeze_global_replan_during_local_mode", True)
+        )
+        self.current_nav_path_mode = "follow_global"
         self.grid_unknown_is_occupied = bool(rospy.get_param("~grid_unknown_is_occupied", True))
         self.grid_snap_search_radius_cells = max(
             1, int(rospy.get_param("~grid_snap_search_radius_cells", 30))
@@ -426,6 +433,9 @@ class AStarPlanner:
         self.sub_start_from_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_goal_from_rviz = rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.callback_goal_from_rviz)
         self.sub_goal_from_server = rospy.Subscriber('/server_to_robot_topic', server_to_robot, self.callback_goal_from_server)
+        self.sub_path_mode = rospy.Subscriber(
+            self.path_mode_topic, String, self.path_mode_callback, queue_size=5
+        )
         self.sub_drivable_grid = None
         if self.use_drivable_grid_global:
             self.sub_drivable_grid = rospy.Subscriber(
@@ -576,6 +586,22 @@ class AStarPlanner:
             and self._goal_display_xy is not None
         )
 
+    def path_mode_callback(self, msg):
+        mode = str(getattr(msg, "data", "") or "").strip().lower()
+        if not mode:
+            mode = "hold"
+        self.current_nav_path_mode = mode
+
+    def _global_replan_frozen_by_local_mode(self):
+        if not self.freeze_global_replan_during_local_mode:
+            return False
+        return self.current_nav_path_mode in (
+            "follow_local",
+            "follow_avoidance",
+            "rejoin_global",
+            "hold",
+        )
+
     def _is_near_active_goal(self):
         if self.goal_reached_replan_freeze_distance_m <= 0.0:
             return False
@@ -607,6 +633,14 @@ class AStarPlanner:
             return False
         if self.new_goal_flag or self._last_plan_stamp_s <= 0.0:
             return True
+        if self._global_replan_frozen_by_local_mode():
+            if self.debug_log_enable:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "[astar] freezing global replans while local planner is active (path_mode=%s)",
+                    self.current_nav_path_mode,
+                )
+            return False
         if self._is_near_active_goal():
             if self.debug_log_enable:
                 rospy.loginfo_throttle(
@@ -1979,7 +2013,11 @@ class AStarPlanner:
         signature = self._world_path_signature(world_points)
         changed = self._last_world_path_signature != signature
         do_periodic = False
-        if not changed and self.path_repub_period > 0.0:
+        if (
+            not changed
+            and self.path_repub_period > 0.0
+            and not self._global_replan_frozen_by_local_mode()
+        ):
             tnow = time.monotonic()
             if (tnow - self._last_path_pub_t) >= self.path_repub_period:
                 do_periodic = True
@@ -3486,7 +3524,11 @@ class AStarPlanner:
         now = rospy.Time.now()
         changed = (self._last_path_nodes != path_nodes)
         do_periodic = False
-        if not changed and self.path_repub_period > 0.0:
+        if (
+            not changed
+            and self.path_repub_period > 0.0
+            and not self._global_replan_frozen_by_local_mode()
+        ):
             tnow = time.monotonic()
             if (tnow - self._last_path_pub_t) >= self.path_repub_period:
                 do_periodic = True; self._last_path_pub_t = tnow

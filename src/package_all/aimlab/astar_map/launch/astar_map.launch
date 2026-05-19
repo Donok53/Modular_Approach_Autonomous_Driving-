@@ -52,6 +52,8 @@
   <arg name="replan_path_start_deviation_m" default="0.90"/>
   <arg name="planner_loop_hz" default="8.0"/>
   <arg name="path_repub_period" default="0.20"/>
+  <arg name="path_mode_topic" default="/planning/path_mode"/>
+  <arg name="freeze_global_replan_during_local_mode" default="true"/>
   <arg name="candidate_route_switching_enabled" default="true"/>
   <arg name="candidate_route_switch_lookahead_m" default="6.0"/>
   <arg name="candidate_route_switch_start_ignore_m" default="0.35"/>
@@ -125,6 +127,8 @@
     <param name="replan_path_start_deviation_m" value="$(arg replan_path_start_deviation_m)"/>
     <param name="planner_loop_hz" value="$(arg planner_loop_hz)"/>
     <param name="path_repub_period" value="$(arg path_repub_period)"/>
+    <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
+    <param name="freeze_global_replan_during_local_mode" value="$(arg freeze_global_replan_during_local_mode)"/>
     <param name="candidate_route_switching_enabled" value="$(arg candidate_route_switching_enabled)"/>
     <param name="candidate_route_switch_lookahead_m" value="$(arg candidate_route_switch_lookahead_m)"/>
     <param name="candidate_route_switch_start_ignore_m" value="$(arg candidate_route_switch_start_ignore_m)"/>
