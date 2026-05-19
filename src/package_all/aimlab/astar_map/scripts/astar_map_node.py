@@ -1996,8 +1996,9 @@ class AStarPlanner:
         empty = Path()
         empty.header.frame_id = "map"
         empty.header.stamp = stamp
+        # Keep the latched display path alive so RViz can still show the last
+        # committed global route while replanning or temporary drops occur.
         self.pub_path.publish(empty)
-        self.pub_path_display.publish(empty)
         self.pub_path_wgs84.publish(empty)
         self.pub_path_node_id_list.publish(Int32MultiArray(data=[]))
         self._last_path_nodes = None

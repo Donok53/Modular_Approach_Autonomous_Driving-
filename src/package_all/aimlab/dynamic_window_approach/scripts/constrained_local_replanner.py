@@ -2115,7 +2115,7 @@ class ConstrainedLocalReplanner:
         )
         return False
 
-    def _astar(self, blocked, start, goal, allow_best_effort=False):
+    def _astar(self, blocked, start, goal, allow_best_effort=False, orthogonal_only=False):
         w = len(blocked[0]) if blocked else 0
         h = len(blocked)
         if w <= 0 or h <= 0:
@@ -2129,7 +2129,9 @@ class ConstrainedLocalReplanner:
         if blocked[sy][sx] or blocked[gy][gx]:
             return None
 
-        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        nbrs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        if not orthogonal_only:
+            nbrs.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
         pq = []
         heapq.heappush(pq, (self._heur(start, goal), 0.0, start))
         parent = {start: None}
@@ -2567,6 +2569,69 @@ class ConstrainedLocalReplanner:
                 frame_id,
             )
 
+    def _publish_global_mode_detour_path(
+        self,
+        grid_path,
+        dg,
+        stamp,
+        history_points=None,
+        start_xy=None,
+        end_xy=None,
+        record_history=True,
+    ):
+        if start_xy is None and self.have_odom:
+            start_xy = (self.odom_x, self.odom_y)
+        display_grid_path = self._collapse_straight_grid_runs(grid_path)
+        sampled_points, frame_id = self._publish_grid_path(
+            self.pub_local_path,
+            display_grid_path,
+            dg,
+            stamp,
+            start_xy=start_xy,
+            end_xy=end_xy,
+        )
+        self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
+        self._publish_path_mode("follow_local")
+        self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
+        self.last_avoidance_active_sec = stamp.to_sec()
+        if record_history:
+            self._record_path_history(
+                "avoidance",
+                history_points if history_points is not None else sampled_points,
+                frame_id,
+            )
+
+    def _publish_operational_detour_path(
+        self,
+        grid_path,
+        dg,
+        stamp,
+        history_points=None,
+        start_xy=None,
+        end_xy=None,
+        record_history=True,
+    ):
+        if self._use_global_nominal_reference():
+            self._publish_global_mode_detour_path(
+                grid_path,
+                dg,
+                stamp,
+                history_points=history_points,
+                start_xy=start_xy,
+                end_xy=end_xy,
+                record_history=record_history,
+            )
+            return
+        self._publish_avoidance_path(
+            grid_path,
+            dg,
+            stamp,
+            history_points=history_points,
+            start_xy=start_xy,
+            end_xy=end_xy,
+            record_history=record_history,
+        )
+
     def _publish_world_path(self, world_points, frame_id, stamp):
         world_points = self._trim_world_points_from_robot_front(world_points)
         out = Path()
@@ -2583,6 +2648,32 @@ class ConstrainedLocalReplanner:
             out.poses.append(ps)
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
+
+    @staticmethod
+    def _collapse_straight_grid_runs(grid_path):
+        if not grid_path:
+            return []
+        if len(grid_path) < 3:
+            return list(grid_path)
+
+        def _step_dir(a, b):
+            dx = int(b[0]) - int(a[0])
+            dy = int(b[1]) - int(a[1])
+            return (
+                0 if dx == 0 else (1 if dx > 0 else -1),
+                0 if dy == 0 else (1 if dy > 0 else -1),
+            )
+
+        collapsed = [grid_path[0]]
+        prev_dir = _step_dir(grid_path[0], grid_path[1])
+        for idx in range(1, len(grid_path) - 1):
+            curr = grid_path[idx]
+            next_dir = _step_dir(curr, grid_path[idx + 1])
+            if next_dir != prev_dir:
+                collapsed.append(curr)
+                prev_dir = next_dir
+        collapsed.append(grid_path[-1])
+        return collapsed
 
     @staticmethod
     def _dedupe_world_points(world_points):
@@ -2671,6 +2762,8 @@ class ConstrainedLocalReplanner:
             if self.avoidance_clear_count < self.avoidance_clear_confirm_cycles:
                 return
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
+        if self._use_global_nominal_reference():
+            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
         if self.avoidance_active:
             self.avoidance_active = False
             rospy.loginfo("constrained_local_replanner: avoidance path cleared")
@@ -2714,7 +2807,7 @@ class ConstrainedLocalReplanner:
         )
         if deviation_m > self.avoidance_reuse_max_deviation_m:
             return False
-        self._publish_avoidance_path(
+        self._publish_operational_detour_path(
             self.last_avoidance_grid_path,
             dg,
             stamp,
@@ -3761,6 +3854,7 @@ class ConstrainedLocalReplanner:
         # Try the normal rejoin spacing first, then relax it for close blockers so
         # the robot can still slip around obstacles that appear only a short
         # distance ahead instead of dropping straight into hold-stop.
+        orthogonal_detour = self._use_global_nominal_reference()
         for rejoin_distance_m in ordered_rejoin_distances:
             min_rejoin_cells = max(1, int(math.ceil(rejoin_distance_m / res_m)))
             first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
@@ -3775,16 +3869,18 @@ class ConstrainedLocalReplanner:
                     branch_start,
                     rejoin_cell,
                     allow_best_effort=False,
+                    orthogonal_only=orthogonal_detour,
                 )
                 if detour is None or len(detour) < 2:
                     continue
 
-                detour = self._simplify_grid_path(
-                    detour,
-                    dynamic_blocked,
-                    float(dg.info.resolution),
-                    force=self.smooth_avoidance_line_of_sight,
-                )
+                if not orthogonal_detour:
+                    detour = self._simplify_grid_path(
+                        detour,
+                        dynamic_blocked,
+                        float(dg.info.resolution),
+                        force=self.smooth_avoidance_line_of_sight,
+                    )
                 if len(detour) < 2:
                     continue
 
@@ -3916,7 +4012,7 @@ class ConstrainedLocalReplanner:
                 # logic is still active.  Otherwise the controller can fall back to the
                 # nominal local path too early and re-approach the obstacle corridor
                 # before the recent person / object evidence has really cleared.
-                self._publish_avoidance_path(
+                self._publish_operational_detour_path(
                     self.last_avoidance_grid_path,
                     dg,
                     stamp,
@@ -4080,7 +4176,7 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp, force=True)
             return "hold"
 
-        self._publish_avoidance_path(
+        self._publish_operational_detour_path(
             avoid_path,
             dg,
             stamp,
@@ -4354,9 +4450,10 @@ class ConstrainedLocalReplanner:
                     )
                     self.local_blocked_since_sec = 0.0
                     self.rejoin_mode_until_sec = 0.0
-                    self._publish_world_path(nominal_world, dg.header.frame_id, stamp)
+                    self._publish_nominal_reference_path(
+                        nominal_world, dg.header.frame_id, stamp
+                    )
                     self._clear_avoidance_path(dg.header.frame_id, stamp)
-                    self._publish_path_mode("follow_local")
                     self._publish_debug_text(
                         self._build_debug_text(
                             "follow_nominal_world",
