@@ -413,6 +413,12 @@ class ConstrainedLocalReplanner:
         self.pointcloud_block_confirm_points = max(
             1, int(rospy.get_param("~pointcloud_block_confirm_points", 2))
         )
+        self.avoidance_min_overlay_points = max(
+            1, int(rospy.get_param("~avoidance_min_overlay_points", 3))
+        )
+        self.avoidance_min_cluster_count = max(
+            1, int(rospy.get_param("~avoidance_min_cluster_count", 2))
+        )
         self.avoidance_hold_s = max(0.0, float(rospy.get_param("~avoidance_hold_s", 1.5)))
         self.avoidance_clear_confirm_cycles = max(
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
@@ -4424,6 +4430,13 @@ class ConstrainedLocalReplanner:
             start_cell=start_cell,
             max_check_m=self.avoidance_trigger_ahead_m,
         )
+        base_predicted_overlap = self._path_blocked_ahead(
+            nominal_path,
+            base_blocked,
+            start_cell,
+            float(dg.info.resolution),
+            max_check_m=self.avoidance_trigger_ahead_m,
+        )
         predicted_overlap = self._path_blocked_ahead(
             nominal_path,
             dynamic_blocked,
@@ -4446,14 +4459,38 @@ class ConstrainedLocalReplanner:
             )
 
         clustered_point_count = self.obstacle_cluster_count
+        overlay_evidence_confirmed = (
+            obstacle_count >= self.avoidance_min_overlay_points
+            and clustered_point_count >= self.avoidance_min_cluster_count
+        )
+        tracked_evidence_present = (
+            self.tracked_object_count > 0
+            or self.tracked_object_memory_count > 0
+        )
+        locked_static_evidence_present = self.obstacle_memory_locked_count > 0
+        obstacle_evidence_confirmed = (
+            overlay_evidence_confirmed
+            or tracked_evidence_present
+            or locked_static_evidence_present
+        )
+        if direct_points_enabled and direct_points_overlap and not obstacle_evidence_confirmed:
+            direct_points_overlap = False
+        if (
+            predicted_overlap
+            and not base_predicted_overlap
+            and not obstacle_evidence_confirmed
+        ):
+            predicted_overlap = False
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} direct_points_enabled={} tracked_avoidance={} direct_points_overlap={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} base_predicted_overlap={} direct_points_enabled={} tracked_avoidance={} direct_points_overlap={} overlay_confirmed={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
+                "yes" if base_predicted_overlap else "no",
                 "on" if direct_points_enabled else "off",
                 "on" if tracked_for_avoidance else "off",
                 "yes" if direct_points_overlap else "no",
+                "yes" if overlay_evidence_confirmed else "no",
                 self.obstacle_raw_point_count,
                 clustered_point_count,
                 self.known_map_filtered_count,

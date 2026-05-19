@@ -424,10 +424,14 @@
   <arg name="avoidance_trigger_ahead_m" default="$(arg local_replan_lookahead_m)"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
-  <arg name="risk_block_confirm_cells" default="2"/>
-  <arg name="pointcloud_block_confirm_points" default="1"/>
+  <arg name="risk_block_confirm_cells" default="3"/>
+  <arg name="pointcloud_block_confirm_points" default="3"/>
+  <arg name="avoidance_min_overlay_points" default="3"/>
+  <arg name="avoidance_min_cluster_count" default="2"/>
   <arg name="avoidance_hold_s" default="2.5"/>
   <arg name="avoidance_clear_confirm_cycles" default="16"/>
+  <arg name="avoidance_trigger_confirm_cycles" default="4"/>
+  <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
   <arg name="blocked_clear_hold_s" default="0.35"/>
   <arg name="avoidance_branch_backtrack_cells" default="6"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
@@ -1182,8 +1186,12 @@
       <arg name="forward_path_obstacle_rear_tolerance_m" value="$(arg forward_path_obstacle_rear_tolerance_m)"/>
       <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
       <arg name="pointcloud_block_confirm_points" value="$(arg pointcloud_block_confirm_points)"/>
+      <arg name="avoidance_min_overlay_points" value="$(arg avoidance_min_overlay_points)"/>
+      <arg name="avoidance_min_cluster_count" value="$(arg avoidance_min_cluster_count)"/>
       <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
       <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+      <arg name="avoidance_trigger_confirm_cycles" value="$(arg avoidance_trigger_confirm_cycles)"/>
+      <arg name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
       <arg name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
@@ -1443,8 +1451,12 @@
       <arg name="forward_path_obstacle_rear_tolerance_m" value="$(arg forward_path_obstacle_rear_tolerance_m)"/>
       <arg name="risk_block_confirm_cells" value="$(arg risk_block_confirm_cells)"/>
       <arg name="pointcloud_block_confirm_points" value="$(arg pointcloud_block_confirm_points)"/>
+      <arg name="avoidance_min_overlay_points" value="$(arg avoidance_min_overlay_points)"/>
+      <arg name="avoidance_min_cluster_count" value="$(arg avoidance_min_cluster_count)"/>
       <arg name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
       <arg name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
+      <arg name="avoidance_trigger_confirm_cycles" value="$(arg avoidance_trigger_confirm_cycles)"/>
+      <arg name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
       <arg name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
