@@ -417,6 +417,12 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_confirm_cycles = max(
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
         )
+        self.avoidance_trigger_confirm_cycles = max(
+            1, int(rospy.get_param("~avoidance_trigger_confirm_cycles", 2))
+        )
+        self.avoidance_trigger_confirm_max_gap_s = max(
+            0.0, float(rospy.get_param("~avoidance_trigger_confirm_max_gap_s", 0.6))
+        )
         self.blocked_clear_hold_s = max(
             0.0, float(rospy.get_param("~blocked_clear_hold_s", 0.35))
         )
@@ -509,6 +515,9 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
         self.last_avoidance_active_sec = 0.0
+        self.pending_avoidance_trigger_key = None
+        self.pending_avoidance_trigger_count = 0
+        self.pending_avoidance_trigger_stamp_sec = 0.0
         self.local_blocked_since_sec = 0.0
         self.local_clear_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
@@ -1892,6 +1901,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
         self.last_avoidance_active_sec = 0.0
+        self._reset_pending_avoidance_trigger()
         self.local_blocked_since_sec = 0.0
         self.local_clear_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
@@ -3091,6 +3101,7 @@ class ConstrainedLocalReplanner:
         if self.avoidance_active:
             self.avoidance_active = False
             rospy.loginfo("constrained_local_replanner: avoidance path cleared")
+        self._reset_pending_avoidance_trigger()
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
         self.avoidance_clear_count = 0
@@ -3191,6 +3202,62 @@ class ConstrainedLocalReplanner:
             len(self.last_avoidance_grid_path),
         )
         return True
+
+    def _reset_pending_avoidance_trigger(self):
+        self.pending_avoidance_trigger_key = None
+        self.pending_avoidance_trigger_count = 0
+        self.pending_avoidance_trigger_stamp_sec = 0.0
+
+    def _make_avoidance_trigger_key(
+        self,
+        trigger_reason,
+        blocking_cells,
+        blocking_points,
+        blind_zone_conflict=None,
+    ):
+        def _bucket(v):
+            return round(float(v) * 5.0) / 5.0
+
+        if blind_zone_conflict is not None:
+            return (
+                str(trigger_reason),
+                _bucket(blind_zone_conflict.get("x", 0.0)),
+                _bucket(blind_zone_conflict.get("y", 0.0)),
+            )
+        pts = blocking_points if blocking_points else blocking_cells
+        if pts:
+            sample = pts[: min(6, len(pts))]
+            cx = sum(float(p[0]) for p in sample) / float(len(sample))
+            cy = sum(float(p[1]) for p in sample) / float(len(sample))
+            return (str(trigger_reason), _bucket(cx), _bucket(cy))
+        return (str(trigger_reason),)
+
+    def _avoidance_trigger_confirmed(self, trigger_key, stamp):
+        if trigger_key is None:
+            self._reset_pending_avoidance_trigger()
+            return False
+        if self.avoidance_active or self.avoidance_trigger_confirm_cycles <= 1:
+            self.pending_avoidance_trigger_key = trigger_key
+            self.pending_avoidance_trigger_count = self.avoidance_trigger_confirm_cycles
+            self.pending_avoidance_trigger_stamp_sec = stamp.to_sec()
+            return True
+
+        now_sec = stamp.to_sec()
+        if (
+            self.pending_avoidance_trigger_stamp_sec > 0.0
+            and self.avoidance_trigger_confirm_max_gap_s > 0.0
+            and (now_sec - self.pending_avoidance_trigger_stamp_sec)
+            > self.avoidance_trigger_confirm_max_gap_s
+        ):
+            self._reset_pending_avoidance_trigger()
+
+        if trigger_key == self.pending_avoidance_trigger_key:
+            self.pending_avoidance_trigger_count += 1
+        else:
+            self.pending_avoidance_trigger_key = trigger_key
+            self.pending_avoidance_trigger_count = 1
+        self.pending_avoidance_trigger_stamp_sec = now_sec
+        return self.pending_avoidance_trigger_count >= self.avoidance_trigger_confirm_cycles
 
     def _debug_avoidance_log(self, message):
         if not self.debug_avoidance_logging:
@@ -4415,6 +4482,7 @@ class ConstrainedLocalReplanner:
                 trigger_reason = "blind_zone_turn_conflict"
 
         if trigger_reason is None:
+            self._avoidance_trigger_confirmed(None, stamp)
             self._clear_blocking_obstacle_markers(stamp)
             if self._use_global_nominal_reference():
                 self._clear_avoidance_path(frame_id, stamp, force=True)
@@ -4484,6 +4552,25 @@ class ConstrainedLocalReplanner:
                 point_margin_m,
                 max_check_m=self.avoidance_trigger_ahead_m,
             )
+
+        trigger_key = self._make_avoidance_trigger_key(
+            trigger_reason,
+            blocking_cells,
+            blocking_points,
+            blind_zone_conflict=blind_zone_conflict,
+        )
+        if not self._avoidance_trigger_confirmed(trigger_key, stamp):
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "avoid_pending",
+                    stamp,
+                    trigger_reason=trigger_reason,
+                    overlay_points=obstacle_count,
+                    path_len=len(nominal_path),
+                ),
+                stamp=stamp,
+            )
+            return "avoidance" if self.avoidance_active else "clear"
 
         if self._use_global_nominal_reference() and self._continue_active_avoidance_path(
             dg,
