@@ -968,7 +968,14 @@ class DWAControl:
             pass
 
     def _hard_stop_active(self):
-        return bool((self.enable_emergency_stop and self.emergency_blocked) or self.behavior_stop)
+        # A planned avoidance detour may continue through the outer emergency band
+        # when the controller has already verified the path bends around the obstacle.
+        emergency_hard_stop = (
+            self.enable_emergency_stop
+            and self.emergency_blocked
+            and (not self._emergency_bypass_active)
+        )
+        return bool(emergency_hard_stop or self.behavior_stop)
 
     def _publish_emergency_stop_state(self):
         hard_stop_active = self._hard_stop_active()
