@@ -2890,18 +2890,21 @@ class ConstrainedLocalReplanner:
         base_offset_m = (
             self.robot_half_width
             + self.obstacle_block_margin_m
-            + self.avoidance_trigger_margin_m
-            + 0.10
+            + min(self.avoidance_trigger_margin_m, 0.10)
+            + 0.02
         )
         min_offset_cells = max(1, int(math.ceil(base_offset_m / max(1e-3, res_m))))
-        max_offset_cells = min_offset_cells + max(3, int(math.ceil(0.8 / max(1e-3, res_m))))
+        max_offset_cells = min_offset_cells + max(
+            2, int(math.ceil(0.30 / max(1e-3, res_m)))
+        )
         forward_clear_m = max(
-            self.avoidance_rejoin_min_distance_m,
-            self.robot_length_m + self.obstacle_block_margin_m + 0.20,
+            0.60,
+            min(self.avoidance_rejoin_min_distance_m, 0.80),
+            self.robot_length_m * 0.55 + self.obstacle_block_margin_m,
         )
         min_forward_cells = max(1, int(math.ceil(forward_clear_m / max(1e-3, res_m))))
         max_forward_cells = min_forward_cells + max(
-            3, int(math.ceil(0.6 / max(1e-3, res_m)))
+            2, int(math.ceil(0.20 / max(1e-3, res_m)))
         )
 
         prefix = [nominal_path[start_idx]]
@@ -3133,6 +3136,49 @@ class ConstrainedLocalReplanner:
             "constrained_local_replanner: keeping previous avoidance path briefly | age=%.2fs dev=%.2fm",
             age_s,
             deviation_m,
+        )
+        return True
+
+    def _continue_active_avoidance_path(self, dg, dynamic_blocked, start_cell, stamp):
+        if (not self.avoidance_active) or self.last_avoidance_grid_path is None:
+            return False
+        if len(self.last_avoidance_grid_path) < 2:
+            return False
+        deviation_limit_m = max(0.25, min(0.55, self.avoidance_reuse_max_deviation_m))
+        deviation_m = self._grid_path_min_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        if deviation_m > deviation_limit_m:
+            return False
+        if self._path_blocked_ahead(
+            self.last_avoidance_grid_path,
+            dynamic_blocked,
+            start_cell,
+            float(dg.info.resolution),
+            max_check_m=self.lookahead_m,
+        ):
+            return False
+        if self._path_blind_zone_turn_conflict(
+            self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
+        ) is not None:
+            return False
+        self._publish_operational_detour_path(
+            self.last_avoidance_grid_path,
+            dg,
+            stamp,
+            start_xy=(self.odom_x, self.odom_y),
+            record_history=False,
+        )
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = stamp.to_sec()
+        rospy.loginfo_throttle(
+            1.0,
+            "constrained_local_replanner: reusing active avoidance path | dev=%.2fm cells=%d",
+            deviation_m,
+            len(self.last_avoidance_grid_path),
         )
         return True
 
@@ -4132,7 +4178,10 @@ class ConstrainedLocalReplanner:
         blocked_delta_cells = max(0, blocked_idx - start_idx)
         close_blocked_cells = max(3, int(math.ceil(1.0 / res_m)))
         backtrack_cells = self.avoidance_branch_backtrack_cells
-        if blocked_delta_cells <= close_blocked_cells:
+        orthogonal_detour = self._use_global_nominal_reference()
+        if orthogonal_detour:
+            backtrack_cells = min(backtrack_cells, 1)
+        elif blocked_delta_cells <= close_blocked_cells:
             backtrack_cells = max(backtrack_cells, int(math.ceil(0.8 / res_m)))
 
         branch_start_idx = max(start_idx, blocked_idx - backtrack_cells)
@@ -4165,7 +4214,6 @@ class ConstrainedLocalReplanner:
         # Try the normal rejoin spacing first, then relax it for close blockers so
         # the robot can still slip around obstacles that appear only a short
         # distance ahead instead of dropping straight into hold-stop.
-        orthogonal_detour = self._use_global_nominal_reference()
         for rejoin_distance_m in ordered_rejoin_distances:
             min_rejoin_cells = max(1, int(math.ceil(rejoin_distance_m / res_m)))
             first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
@@ -4358,34 +4406,37 @@ class ConstrainedLocalReplanner:
 
         if trigger_reason is None:
             self._clear_blocking_obstacle_markers(stamp)
-            self._clear_avoidance_path(frame_id, stamp)
-            if (
-                self.avoidance_active
-                and self.last_avoidance_grid_path is not None
-                and len(self.last_avoidance_grid_path) >= 2
-            ):
-                # Keep the last valid detour fresh while the clear-hold / clear-confirm
-                # logic is still active.  Otherwise the controller can fall back to the
-                # nominal local path too early and re-approach the obstacle corridor
-                # before the recent person / object evidence has really cleared.
-                self._publish_operational_detour_path(
-                    self.last_avoidance_grid_path,
-                    dg,
-                    stamp,
-                    start_xy=(self.odom_x, self.odom_y),
-                    record_history=False,
-                )
-                self._publish_debug_text(
-                    self._build_debug_text(
-                        "avoid_hold",
+            if self._use_global_nominal_reference():
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+            else:
+                self._clear_avoidance_path(frame_id, stamp)
+                if (
+                    self.avoidance_active
+                    and self.last_avoidance_grid_path is not None
+                    and len(self.last_avoidance_grid_path) >= 2
+                ):
+                    # Keep the last valid detour fresh while the clear-hold / clear-confirm
+                    # logic is still active.  Otherwise the controller can fall back to the
+                    # nominal local path too early and re-approach the obstacle corridor
+                    # before the recent person / object evidence has really cleared.
+                    self._publish_operational_detour_path(
+                        self.last_avoidance_grid_path,
+                        dg,
                         stamp,
-                        trigger_reason="recent_clear_hold",
-                        path_len=len(self.last_avoidance_grid_path),
-                        overlay_points=obstacle_count,
-                    ),
-                    stamp=stamp,
-                )
-                return "avoidance"
+                        start_xy=(self.odom_x, self.odom_y),
+                        record_history=False,
+                    )
+                    self._publish_debug_text(
+                        self._build_debug_text(
+                            "avoid_hold",
+                            stamp,
+                            trigger_reason="recent_clear_hold",
+                            path_len=len(self.last_avoidance_grid_path),
+                            overlay_points=obstacle_count,
+                        ),
+                        stamp=stamp,
+                    )
+                    return "avoidance"
             self._publish_debug_text(
                 self._build_debug_text(
                     "follow_nominal",
@@ -4423,6 +4474,26 @@ class ConstrainedLocalReplanner:
                 point_margin_m,
                 max_check_m=self.avoidance_trigger_ahead_m,
             )
+
+        if self._use_global_nominal_reference() and self._continue_active_avoidance_path(
+            dg,
+            dynamic_blocked,
+            start_cell,
+            stamp,
+        ):
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "avoid_reuse",
+                    stamp,
+                    trigger_reason=trigger_reason,
+                    path_len=len(self.last_avoidance_grid_path)
+                    if self.last_avoidance_grid_path is not None
+                    else 0,
+                    overlay_points=obstacle_count,
+                ),
+                stamp=stamp,
+            )
+            return "avoidance"
         source_summary = self._build_path_blocker_source_summary(
             nominal_path,
             dg,
