@@ -303,6 +303,7 @@
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
   <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
   <arg name="global_path_continuous_replan" default="true"/>
+  <arg name="global_path_goal_reached_replan_freeze_distance_m" default="0.15"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
   <arg name="global_path_replan_min_interval_s" default="$(eval '1.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.60')"/>
   <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
@@ -376,9 +377,9 @@
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
   <arg name="path_tracking_enforce_drivable_grid" default="false"/>
-  <arg name="goal_completion_stuck_distance_m" default="0.95"/>
-  <arg name="goal_completion_stuck_arc_m" default="0.55"/>
-  <arg name="goal_completion_stuck_hold_s" default="0.60"/>
+  <arg name="goal_completion_stuck_distance_m" default="1.10"/>
+  <arg name="goal_completion_stuck_arc_m" default="0.75"/>
+  <arg name="goal_completion_stuck_hold_s" default="0.35"/>
   <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
   <arg name="path_tracking_minor_replan_delta_m" default="0.20"/>
   <arg name="forward_motion_deadband" default="0.01"/>
@@ -830,6 +831,7 @@
         <arg name="preserve_user_goal_on_drivable_grid" value="$(arg preserve_user_goal_on_drivable_grid)"/>
         <arg name="preserve_user_goal_max_gap_m" value="$(arg preserve_user_goal_max_gap_m)"/>
         <arg name="continuous_replan" value="$(arg global_path_continuous_replan)"/>
+        <arg name="goal_reached_replan_freeze_distance_m" value="$(arg global_path_goal_reached_replan_freeze_distance_m)"/>
         <arg name="replan_min_start_shift_m" value="$(arg global_path_replan_min_start_shift_m)"/>
         <arg name="replan_min_interval_s" value="$(arg global_path_replan_min_interval_s)"/>
         <arg name="replan_path_validation_lookahead_m" value="$(arg global_path_replan_validation_lookahead_m)"/>
@@ -891,6 +893,7 @@
         <arg name="preserve_user_goal_on_drivable_grid" value="$(arg preserve_user_goal_on_drivable_grid)"/>
         <arg name="preserve_user_goal_max_gap_m" value="$(arg preserve_user_goal_max_gap_m)"/>
         <arg name="continuous_replan" value="$(arg global_path_continuous_replan)"/>
+        <arg name="goal_reached_replan_freeze_distance_m" value="$(arg global_path_goal_reached_replan_freeze_distance_m)"/>
         <arg name="replan_min_start_shift_m" value="$(arg global_path_replan_min_start_shift_m)"/>
         <arg name="replan_min_interval_s" value="$(arg global_path_replan_min_interval_s)"/>
         <arg name="replan_path_validation_lookahead_m" value="$(arg global_path_replan_validation_lookahead_m)"/>
