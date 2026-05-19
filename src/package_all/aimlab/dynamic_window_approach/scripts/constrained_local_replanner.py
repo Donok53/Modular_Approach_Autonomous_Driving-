@@ -3926,10 +3926,24 @@ class ConstrainedLocalReplanner:
                     continue
 
                 composed = []
-                self._append_path_segment(composed, [start_cell])
-                self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
-                self._append_path_segment(composed, detour[1:])
-                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+                if orthogonal_detour:
+                    # In global-reference mode, show and follow only the temporary
+                    # branch detour up to the rejoin point.  Do not append the
+                    # remaining route to goal; once we rejoin, control should
+                    # fall back to the global path and the local detour should
+                    # disappear from RViz.
+                    prefix = self._collapse_straight_grid_runs(
+                        nominal_path[start_idx:branch_start_idx + 1]
+                    )
+                    detour = self._collapse_straight_grid_runs(detour)
+                    self._append_path_segment(composed, [start_cell])
+                    self._append_path_segment(composed, prefix)
+                    self._append_path_segment(composed, detour[1:])
+                else:
+                    self._append_path_segment(composed, [start_cell])
+                    self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
+                    self._append_path_segment(composed, detour[1:])
+                    self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
 
                 blind_zone_conflict = self._path_blind_zone_turn_conflict(
                     composed, dg, now_sec=now_sec
@@ -3947,7 +3961,7 @@ class ConstrainedLocalReplanner:
                     continue
 
                 branch_history_points = self._sample_world_points(
-                    [self._grid_to_world(dg, gx, gy) for gx, gy in detour]
+                    [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
                 )
                 return composed, branch_history_points
 
