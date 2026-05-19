@@ -706,7 +706,7 @@ class ConstrainedLocalReplanner:
 
     def _publish_nominal_reference_path(self, world_points, frame_id, stamp):
         if self._use_global_nominal_reference():
-            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+            self._clear_local_path(frame_id, stamp)
             self._publish_path_mode("follow_global")
             return
         self._publish_world_path(world_points, frame_id, stamp)
@@ -1161,6 +1161,26 @@ class ConstrainedLocalReplanner:
         mx = self.odom_x + c * x - s * y
         my = self.odom_y + s * x + c * y
         return mx, my
+
+    def _robot_front_anchor_xy(self):
+        if not self.have_odom:
+            return None
+        return self._local_to_map(self.path_start_front_offset_m, 0.0)
+
+    def _resolve_path_start_xy(self, start_xy):
+        if not self.have_odom:
+            return start_xy
+        front_xy = self._robot_front_anchor_xy()
+        if front_xy is None:
+            return start_xy
+        if start_xy is None:
+            return front_xy
+        sx = float(start_xy[0])
+        sy = float(start_xy[1])
+        center_snap_tol_m = max(0.05, 0.5 * self.path_start_front_offset_m)
+        if math.hypot(sx - self.odom_x, sy - self.odom_y) <= center_snap_tol_m:
+            return front_xy
+        return (sx, sy)
 
     def _world_to_local(self, wx, wy):
         dx = float(wx) - self.odom_x
@@ -2241,13 +2261,15 @@ class ConstrainedLocalReplanner:
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+        resolved_start_xy = self._resolve_path_start_xy(start_xy)
         world_points = self._grid_path_to_world_points(
             grid_path,
             dg,
-            start_xy=start_xy,
+            start_xy=resolved_start_xy,
             end_xy=end_xy,
         )
-        world_points = self._trim_world_points_from_robot_front(world_points)
+        if resolved_start_xy is None:
+            world_points = self._trim_world_points_from_robot_front(world_points)
 
         if len(world_points) < 2:
             return
@@ -2634,7 +2656,12 @@ class ConstrainedLocalReplanner:
         )
 
     def _publish_world_path(self, world_points, frame_id, stamp):
-        world_points = self._trim_world_points_from_robot_front(world_points)
+        resolved_start_xy = self._resolve_path_start_xy(None)
+        if resolved_start_xy is not None and world_points:
+            world_points = list(world_points)
+            world_points[0] = (float(resolved_start_xy[0]), float(resolved_start_xy[1]))
+        else:
+            world_points = self._trim_world_points_from_robot_front(world_points)
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = frame_id if frame_id else "map"
@@ -2754,6 +2781,11 @@ class ConstrainedLocalReplanner:
         out.header.frame_id = frame_id if frame_id else "map"
         publisher.publish(out)
 
+    def _clear_local_path(self, frame_id, stamp, force=False):
+        if self._use_global_nominal_reference():
+            return
+        self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+
     def _clear_avoidance_path(self, frame_id, stamp, force=False):
         if self.avoidance_active and (not force):
             now_sec = stamp.to_sec()
@@ -2764,7 +2796,7 @@ class ConstrainedLocalReplanner:
                 return
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
         if self._use_global_nominal_reference():
-            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+            self._clear_local_path(frame_id, stamp, force=force)
         if self.avoidance_active:
             self.avoidance_active = False
             rospy.loginfo("constrained_local_replanner: avoidance path cleared")
@@ -4155,7 +4187,7 @@ class ConstrainedLocalReplanner:
             # When no avoidance branch exists, publish an empty local path so the
             # cmd_vel relay enters local hold instead of continuing along a stale
             # nominal path toward the detected obstacle.
-            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+            self._clear_local_path(frame_id, stamp)
             self._clear_avoidance_path(frame_id, stamp, force=True)
             return "hold"
 
@@ -4173,7 +4205,7 @@ class ConstrainedLocalReplanner:
             )
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return "avoidance"
-            self._publish_empty_path(self.pub_local_path, frame_id, stamp)
+            self._clear_local_path(frame_id, stamp)
             self._clear_avoidance_path(frame_id, stamp, force=True)
             return "hold"
 
@@ -4332,7 +4364,7 @@ class ConstrainedLocalReplanner:
         else:
             path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
         if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "direct"):
-            self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+            self._clear_local_path(dg.header.frame_id, stamp)
             self._clear_avoidance_path(dg.header.frame_id, stamp)
             self.rejoin_mode_until_sec = 0.0
             self._publish_path_mode("hold")
@@ -4422,7 +4454,7 @@ class ConstrainedLocalReplanner:
                 )
                 self.local_blocked_since_sec = 0.0
                 self.rejoin_mode_until_sec = 0.0
-                self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                self._clear_local_path(dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 self._publish_path_mode("hold")
                 self._publish_debug_text(
@@ -4473,7 +4505,7 @@ class ConstrainedLocalReplanner:
                 )
                 self.local_blocked_since_sec = 0.0
                 self.rejoin_mode_until_sec = 0.0
-                self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                self._clear_local_path(dg.header.frame_id, stamp)
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 self._publish_path_mode("hold")
                 self._publish_debug_text(
@@ -4653,7 +4685,7 @@ class ConstrainedLocalReplanner:
                         )
                 wait_s = now_sec - self.local_blocked_since_sec
                 if wait_s < self.blocked_stop_before_avoidance_s:
-                    self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                    self._clear_local_path(dg.header.frame_id, stamp)
                     self.rejoin_mode_until_sec = 0.0
                     self._publish_path_mode("hold")
                     self._publish_debug_text(
@@ -4703,7 +4735,7 @@ class ConstrainedLocalReplanner:
                         )
                     clear_wait_s = now_sec - self.local_clear_since_sec
                     if clear_wait_s < self.blocked_clear_hold_s:
-                        self._publish_empty_path(self.pub_local_path, dg.header.frame_id, stamp)
+                        self._clear_local_path(dg.header.frame_id, stamp)
                         self._clear_avoidance_path(dg.header.frame_id, stamp, force=True)
                         self.rejoin_mode_until_sec = 0.0
                         self._publish_path_mode("hold")

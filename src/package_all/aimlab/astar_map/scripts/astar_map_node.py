@@ -1020,18 +1020,33 @@ class AStarPlanner:
         d2 = (px - proj[0]) * (px - proj[0]) + (py - proj[1]) * (py - proj[1])
         return proj, t, d2
 
+    def _display_front_anchor_xy(self):
+        if self._display_start_xy is None:
+            return None
+        front_offset_m = max(0.0, 0.5 * self.robot_length_m + self.footprint_padding_m)
+        if front_offset_m <= 1e-6:
+            return tuple(self._display_start_xy)
+        yaw = float(self._display_start_yaw) if self._display_start_yaw is not None else 0.0
+        return (
+            float(self._display_start_xy[0]) + math.cos(yaw) * front_offset_m,
+            float(self._display_start_xy[1]) + math.sin(yaw) * front_offset_m,
+        )
+
     def _trim_world_path_from_current_start(self, world_points):
         pts = self._dedupe_world_points(world_points)
-        if len(pts) <= 1 or self._display_start_xy is None:
+        start_xy = self._display_front_anchor_xy()
+        if start_xy is None:
+            start_xy = self._display_start_xy
+        if len(pts) <= 1 or start_xy is None:
             return pts
 
         best_idx = 0
         best_t = 0.0
         best_proj = pts[0]
-        best_d2 = self._xy_distance(self._display_start_xy, pts[0]) ** 2
+        best_d2 = self._xy_distance(start_xy, pts[0]) ** 2
         for idx in range(len(pts) - 1):
             proj, t, d2 = self._project_point_to_segment(
-                self._display_start_xy, pts[idx], pts[idx + 1]
+                start_xy, pts[idx], pts[idx + 1]
             )
             if d2 < best_d2:
                 best_idx = idx
@@ -1059,11 +1074,18 @@ class AStarPlanner:
             pts = self._rdp(pts, self.path_simplify_epsilon_m)
         return self._resample_path(pts, self.published_path_spacing_m)
 
+    def _prepare_full_display_path(self, world_points, simplify=True):
+        if len(world_points) <= 1:
+            return list(world_points)
+        pts = self._dedupe_world_points(world_points)
+        if simplify and self.publish_smoothed_path and self.path_simplify_epsilon_m > 0.0:
+            pts = self._rdp(pts, self.path_simplify_epsilon_m)
+        return self._resample_path(pts, self.published_path_spacing_m)
+
     def _prepare_visualization_path(self, world_points, simplify=True):
-        pts = self._prepare_display_path(world_points, simplify=simplify)
-        if self._display_start_xy is not None:
-            if (not pts) or self._xy_distance(self._display_start_xy, pts[0]) > 0.05:
-                pts = [tuple(self._display_start_xy)] + pts
+        # Keep the RViz global-route visualization fixed to the committed route
+        # instead of trimming it from the moving robot pose each cycle.
+        pts = self._prepare_full_display_path(world_points, simplify=simplify)
         if self._goal_display_xy is not None:
             if (not pts) or self._xy_distance(self._goal_display_xy, pts[-1]) > 0.05:
                 pts = list(pts) + [tuple(self._goal_display_xy)]
@@ -1076,11 +1098,13 @@ class AStarPlanner:
         hinted[0] = float(self._display_start_yaw)
         return hinted
 
-    def _prepend_current_start_to_path_points(self, points):
+    def _prepend_current_start_to_path_points(self, points, start_xy=None):
         pts = list(points)
-        if self._display_start_xy is not None:
-            if (not pts) or self._xy_distance(self._display_start_xy, pts[0]) > 0.05:
-                pts = [tuple(self._display_start_xy)] + pts
+        if start_xy is None:
+            start_xy = self._display_start_xy
+        if start_xy is not None:
+            if (not pts) or self._xy_distance(start_xy, pts[0]) > 0.05:
+                pts = [tuple(start_xy)] + pts
         return self._dedupe_world_points(pts)
 
     @staticmethod
@@ -1167,7 +1191,8 @@ class AStarPlanner:
         p.header.frame_id = "map"
         p.header.stamp = stamp
         display_points = self._prepend_current_start_to_path_points(
-            self._prepare_display_path(world_points, simplify=simplify)
+            self._prepare_display_path(world_points, simplify=simplify),
+            start_xy=self._display_front_anchor_xy(),
         )
         display_yaws = self._apply_start_yaw_hint(self._path_yaws(display_points))
         for (x, y), yaw in zip(display_points, display_yaws):
@@ -3139,7 +3164,8 @@ class AStarPlanner:
             wgs_points.append((n.lat, n.lon))
 
         display_points = self._prepend_current_start_to_path_points(
-            self._prepare_display_path(world_points)
+            self._prepare_display_path(world_points),
+            start_xy=self._display_front_anchor_xy(),
         )
         display_yaws = self._apply_start_yaw_hint(self._path_yaws(display_points))
         for (x, y), yaw in zip(display_points, display_yaws):

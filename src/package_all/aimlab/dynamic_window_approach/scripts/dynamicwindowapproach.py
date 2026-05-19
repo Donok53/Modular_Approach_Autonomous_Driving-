@@ -1939,8 +1939,7 @@ class DWAControl:
             return None
 
         try:
-            pose_x = float(self.current_pose.pose.pose.position.x)
-            pose_y = float(self.current_pose.pose.pose.position.y)
+            pose_x, pose_y = self._tracking_anchor_xy()
             yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
             cos_yaw = math.cos(yaw)
             sin_yaw = math.sin(yaw)
@@ -2748,8 +2747,7 @@ class DWAControl:
         if len(self.path_pts) < 2:
             self.s_cur = 0.0
             return
-        px = float(self.current_pose.pose.pose.position.x)
-        py = float(self.current_pose.pose.pose.position.y)
+        px, py = self._tracking_anchor_xy()
         s_proj, _lat_err, _idx, _t = self._project_to_path(px, py)
         self.s_cur = max(0.0, min(self.s_total, s_proj))
 
@@ -2763,6 +2761,15 @@ class DWAControl:
         msg.header.stamp = rospy.Time.now()
         return msg
 
+    def _tracking_anchor_xy(self):
+        pose = self.current_pose.pose.pose.position
+        yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
+        front_offset = self.robot_half_length_m + self.footprint_padding_m
+        return (
+            float(pose.x) + math.cos(yaw) * front_offset,
+            float(pose.y) + math.sin(yaw) * front_offset,
+        )
+
     def _build_tracking_reference_path_msg(self):
         if len(self.path_pts) < 2:
             return self._empty_tracking_reference_path()
@@ -2772,8 +2779,7 @@ class DWAControl:
         msg.header.stamp = rospy.Time.now()
 
         try:
-            px = float(self.current_pose.pose.pose.position.x)
-            py = float(self.current_pose.pose.pose.position.y)
+            px, py = self._tracking_anchor_xy()
             s_min = max(0.0, self.s_cur - self.tracking_projection_back_window_m)
             s_max = min(self.s_total, self.s_cur + self.tracking_projection_forward_window_m)
             s_proj, _lat_err, _idx, _t = self._project_to_path(
@@ -3068,6 +3074,8 @@ class DWAControl:
         if not self.path_pts:
             return None, None, None, None, False, None, None
 
+        tracking_x, tracking_y = self._tracking_anchor_xy()
+
         obstacle_response_active = (
             str(self.behavior_reason).strip().lower() != "clear"
             or self._avoidance_mode_active()
@@ -3080,8 +3088,8 @@ class DWAControl:
         s_min = max(0.0, self.s_cur - self.tracking_projection_back_window_m)
         s_max = min(self.s_total, self.s_cur + self.tracking_projection_forward_window_m)
         s_proj, lat_err, idx, t = self._project_to_path(
-            pose_x,
-            pose_y,
+            tracking_x,
+            tracking_y,
             s_min=s_min,
             s_max=s_max,
         )
@@ -3108,7 +3116,7 @@ class DWAControl:
             min(self.lookahead_max_distance, preview_lookahead),
         )
         gx, gy = self.path_pts[-1]
-        dist_to_goal = math.hypot(gx - pose_x, gy - pose_y)
+        dist_to_goal = math.hypot(gx - tracking_x, gy - tracking_y)
         goal_align_active = (
             min(max(0.0, self.s_total - base_s), dist_to_goal)
             <= self.path_tracking_goal_align_window_m
