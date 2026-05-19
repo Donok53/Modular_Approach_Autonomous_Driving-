@@ -661,6 +661,23 @@ class DWAControl:
         self.path_tracking_stop_distance_m = max(
             0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.35))
         )
+        self.local_stop_turn_go_enabled = bool(
+            rospy.get_param("~local_stop_turn_go_enabled", True)
+        )
+        self.local_stop_turn_speed_cap = max(
+            0.05,
+            float(rospy.get_param("~local_stop_turn_speed_cap_mps", 0.26)),
+        )
+        self.local_stop_turn_align_rad = math.radians(
+            float(rospy.get_param("~local_stop_turn_align_deg", 6.0))
+        )
+        self.local_stop_turn_corner_trigger_rad = math.radians(
+            float(rospy.get_param("~local_stop_turn_corner_trigger_deg", 45.0))
+        )
+        self.local_stop_turn_corner_arrival_m = max(
+            0.05,
+            float(rospy.get_param("~local_stop_turn_corner_arrival_m", 0.22)),
+        )
         self.path_tracking_goal_align_window_m = max(
             self.goal_thresh_m,
             float(
@@ -758,6 +775,10 @@ class DWAControl:
         self._path_tracking_prev_desired_yaw = None
         self._path_tracking_filtered_lat_err = 0.0
         self._last_tracking_debug = {}
+        self._local_turn_rotate_kind = None
+        self._local_turn_rotate_seg_idx = -1
+        self._local_turn_rotate_heading = None
+        self._local_turn_rotate_advance_after = False
 
         # Internal path buffers
         self.global_path_msg = None
@@ -2723,7 +2744,128 @@ class DWAControl:
     def _should_smooth_tracking_path(self):
         # Keep orthogonal/local detours crisp so the controller does not round
         # the corner away from what the replanner explicitly published.
-        return not self._avoidance_mode_active()
+        return not (self._avoidance_mode_active() or self._local_stop_turn_go_active())
+
+    def _local_stop_turn_go_active(self):
+        return (
+            self.local_stop_turn_go_enabled
+            and self.active_path_source == "local"
+            and len(self.path_pts) >= 2
+        )
+
+    def _clear_local_turn_rotate_state(self):
+        self._local_turn_rotate_kind = None
+        self._local_turn_rotate_seg_idx = -1
+        self._local_turn_rotate_heading = None
+        self._local_turn_rotate_advance_after = False
+
+    def _segment_index_at_s(self, s_val):
+        if not self.seg_lens:
+            return 0
+        idx = 0
+        while idx + 1 < len(self.seg_lens) and self.cum_len[idx + 1] < (s_val - 1e-6):
+            idx += 1
+        return max(0, min(len(self.seg_lens) - 1, idx))
+
+    def _segment_heading_tangent(self, seg_idx):
+        if len(self.path_pts) < 2:
+            return 0.0, (1.0, 0.0)
+        seg_idx = max(0, min(len(self.path_pts) - 2, int(seg_idx)))
+        x0, y0 = self.path_pts[seg_idx]
+        x1, y1 = self.path_pts[seg_idx + 1]
+        dx = float(x1) - float(x0)
+        dy = float(y1) - float(y0)
+        seg_len = math.hypot(dx, dy)
+        if seg_len < 1e-9:
+            return 0.0, (1.0, 0.0)
+        return math.atan2(dy, dx), (dx / seg_len, dy / seg_len)
+
+    def _step_local_turn_rotate(self, yaw):
+        if self._local_turn_rotate_heading is None:
+            return None
+        desired_heading = float(self._local_turn_rotate_heading)
+        yaw_err = angdiff(desired_heading, yaw)
+        if abs(yaw_err) <= self.local_stop_turn_align_rad:
+            if (
+                self._local_turn_rotate_advance_after
+                and 0 <= self._local_turn_rotate_seg_idx < len(self.cum_len)
+            ):
+                self.s_cur = max(
+                    self.s_cur,
+                    min(self.s_total, self.cum_len[self._local_turn_rotate_seg_idx] + 1e-3),
+                )
+            done_kind = self._local_turn_rotate_kind or "turn"
+            self._clear_local_turn_rotate_state()
+            return {
+                "mode": "settle",
+                "reason": done_kind,
+                "desired_heading": desired_heading,
+            }
+
+        w_cmd = max(
+            -self.path_tracking_in_place_yaw_rate_max,
+            min(self.path_tracking_in_place_yaw_rate_max, self.rotate_kp * yaw_err),
+        )
+        return {
+            "mode": "rotate",
+            "kind": self._local_turn_rotate_kind or "turn",
+            "desired_heading": desired_heading,
+            "yaw_err": yaw_err,
+            "cmd": [0.0, w_cmd],
+        }
+
+    def _local_stop_turn_go_control(self, pose_x, pose_y, yaw, v_cap):
+        if not self._local_stop_turn_go_active():
+            self._clear_local_turn_rotate_state()
+            return None
+
+        rotate_step = self._step_local_turn_rotate(yaw)
+        if rotate_step is not None:
+            return rotate_step
+
+        seg_idx = self._segment_index_at_s(self.s_cur)
+        seg_heading, seg_t_hat = self._segment_heading_tangent(seg_idx)
+        heading_err = angdiff(seg_heading, yaw)
+        if abs(heading_err) > self.local_stop_turn_align_rad:
+            self._local_turn_rotate_kind = "align"
+            self._local_turn_rotate_seg_idx = seg_idx
+            self._local_turn_rotate_heading = seg_heading
+            self._local_turn_rotate_advance_after = False
+            return self._step_local_turn_rotate(yaw)
+
+        seg_end_s = self.cum_len[seg_idx + 1]
+        seg_end_xy = (
+            float(self.path_pts[seg_idx + 1][0]),
+            float(self.path_pts[seg_idx + 1][1]),
+        )
+        segment_remaining = max(0.0, seg_end_s - self.s_cur)
+        point_remaining = math.hypot(
+            seg_end_xy[0] - float(pose_x),
+            seg_end_xy[1] - float(pose_y),
+        )
+        corner_arrival = min(segment_remaining, point_remaining)
+
+        if seg_idx + 1 < len(self.seg_lens):
+            next_heading, _next_t_hat = self._segment_heading_tangent(seg_idx + 1)
+            turn_angle = abs(angdiff(next_heading, seg_heading))
+            if (
+                turn_angle >= self.local_stop_turn_corner_trigger_rad
+                and corner_arrival <= self.local_stop_turn_corner_arrival_m
+            ):
+                self._local_turn_rotate_kind = "corner"
+                self._local_turn_rotate_seg_idx = seg_idx + 1
+                self._local_turn_rotate_heading = next_heading
+                self._local_turn_rotate_advance_after = True
+                return self._step_local_turn_rotate(yaw)
+
+        return {
+            "mode": "drive",
+            "seg_idx": seg_idx,
+            "target_xy": seg_end_xy,
+            "t_hat": seg_t_hat,
+            "remaining_dist": max(segment_remaining, point_remaining),
+            "v_cap": min(v_cap, self.local_stop_turn_speed_cap),
+        }
 
     def _smooth_tracking_polyline(self, points):
         if len(points) < 3 or self.tracking_path_smoothing_passes <= 0:
@@ -2869,6 +3011,7 @@ class DWAControl:
             self._path_tracking_prev_desired_yaw = None
             self._path_tracking_filtered_lat_err = 0.0
             self._last_tracking_debug = {}
+            self._clear_local_turn_rotate_state()
             self._rot_mode = False
             self._rot_yaw_target = None
             if preserve_goal_reached:
@@ -2878,6 +3021,7 @@ class DWAControl:
                 self.reach_goal_flag = False
                 self.prev_goal_flag = False
         if path_msg is None or len(path_msg.poses) < 2:
+            self._clear_local_turn_rotate_state()
             self.path_pts = []
             self.seg_lens = []
             self.cum_len = [0.0]
@@ -3875,6 +4019,9 @@ class DWAControl:
     def _smooth_drive_command(self, target_cmd):
         if not self.cmd_smoothing_enabled:
             return target_cmd
+        if self._local_stop_turn_go_active():
+            self._last_cmd_smooth_stamp = rospy.Time.now()
+            return target_cmd
         now = rospy.Time.now()
         if self._last_cmd_smooth_stamp == rospy.Time(0):
             self._last_cmd_smooth_stamp = now
@@ -3994,6 +4141,7 @@ class DWAControl:
             # behavior-layer hard stop
             if self.behavior_stop:
                 self._rot_mode = False
+                self._clear_local_turn_rotate_state()
                 self._log_nav_reason(
                     "stop_behavior",
                     "reason=%s speed_limit=%.2f" % (self.behavior_reason, self.behavior_speed_limit),
@@ -4034,6 +4182,7 @@ class DWAControl:
                         ),
                         warn=True,
                     )
+                self._clear_local_turn_rotate_state()
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -4062,6 +4211,7 @@ class DWAControl:
                     ),
                     warn=True,
                 )
+                self._clear_local_turn_rotate_state()
                 self._publish_tracking_reference_path()
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
@@ -4072,6 +4222,7 @@ class DWAControl:
                 self._update_progress_and_target(px, py, yaw)
             if s_proj is None:
                 self._log_nav_reason("stop_no_target", "failed to compute target from current path", warn=True)
+                self._clear_local_turn_rotate_state()
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -4101,6 +4252,7 @@ class DWAControl:
                     ),
                     warn=True,
                 )
+                self._clear_local_turn_rotate_state()
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
@@ -4129,11 +4281,57 @@ class DWAControl:
                     "goal_reached",
                     "dist=%.2f arc=%.2f lat=%.2f" % (dist_to_goal, arc_rem, lat_err),
                 )
+                self._clear_local_turn_rotate_state()
                 self.publish_drive([0.0, 0.0])
                 if not self.prev_goal_flag:
                     rospy.loginfo("Goal reached!")
                 rate.sleep()
                 continue
+
+            # final-approach speed cap
+            final_window = self.final_approach_window_m
+            if dist_to_goal <= final_window:
+                v_cap = max(
+                    self.final_speed_min,
+                    min(self.max_speed, self.final_speed_k * max(dist_to_goal, 0.0)),
+                )
+            else:
+                v_cap = self.max_speed
+            v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
+            tracking_remaining_dist = dist_to_goal
+
+            local_control = self._local_stop_turn_go_control(px, py, yaw, v_cap)
+            if local_control is not None:
+                if local_control["mode"] == "rotate":
+                    self._rot_mode = False
+                    self._log_nav_reason(
+                        "local_turn_rotate",
+                        "kind=%s err=%.1fdeg target=%.1fdeg" % (
+                            local_control["kind"],
+                            math.degrees(local_control["yaw_err"]),
+                            math.degrees(local_control["desired_heading"]),
+                        ),
+                    )
+                    x = self.moving(x, local_control["cmd"])
+                    self.publish_drive(local_control["cmd"])
+                    rate.sleep()
+                    continue
+                if local_control["mode"] == "settle":
+                    self._log_nav_reason(
+                        "local_turn_settle",
+                        "reason=%s target=%.1fdeg" % (
+                            local_control["reason"],
+                            math.degrees(local_control["desired_heading"]),
+                        ),
+                    )
+                    self.publish_drive([0.0, 0.0])
+                    rate.sleep()
+                    continue
+                target_xy = local_control["target_xy"]
+                t_hat = local_control["t_hat"]
+                tracking_remaining_dist = local_control["remaining_dist"]
+                v_cap = min(v_cap, local_control["v_cap"])
+                self.visualize_target_point(target_xy)
 
             # rotate-only gating with path tangent
             desired = math.atan2(t_hat[1], t_hat[0])
@@ -4193,15 +4391,6 @@ class DWAControl:
                             ),
                         )
 
-            # final-approach speed cap
-            final_window = self.final_approach_window_m
-            if dist_to_goal <= final_window:
-                v_cap = max(self.final_speed_min,
-                            min(self.max_speed, self.final_speed_k * max(dist_to_goal, 0.0)))
-            else:
-                v_cap = self.max_speed
-            v_cap = min(v_cap, max(0.0, self.behavior_speed_limit))
-
             if self.path_tracking_only:
                 u, predicted = self.path_tracking_control(
                     x,
@@ -4209,7 +4398,7 @@ class DWAControl:
                     t_hat,
                     lat_err,
                     v_cap,
-                    dist_to_goal,
+                    tracking_remaining_dist,
                 )
             else:
                 u, predicted = self.dwa_control(x, target_xy, t_hat, lat_err)

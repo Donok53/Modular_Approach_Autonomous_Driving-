@@ -377,6 +377,11 @@
   <arg name="final_speed_k" default="0.95"/>
   <arg name="final_speed_min" default="0.20"/>
   <arg name="path_tracking_stop_distance_m" default="0.35"/>
+  <arg name="local_stop_turn_go_enabled" default="true"/>
+  <arg name="local_stop_turn_speed_cap_mps" default="0.26"/>
+  <arg name="local_stop_turn_align_deg" default="6.0"/>
+  <arg name="local_stop_turn_corner_trigger_deg" default="45.0"/>
+  <arg name="local_stop_turn_corner_arrival_m" default="0.22"/>
   <arg name="path_tracking_goal_yaw_rate_max_deg" default="18.0"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
@@ -1137,6 +1142,11 @@
       <arg name="final_speed_k" value="$(arg final_speed_k)"/>
       <arg name="final_speed_min" value="$(arg final_speed_min)"/>
       <arg name="path_tracking_stop_distance_m" value="$(arg path_tracking_stop_distance_m)"/>
+      <arg name="local_stop_turn_go_enabled" value="$(arg local_stop_turn_go_enabled)"/>
+      <arg name="local_stop_turn_speed_cap_mps" value="$(arg local_stop_turn_speed_cap_mps)"/>
+      <arg name="local_stop_turn_align_deg" value="$(arg local_stop_turn_align_deg)"/>
+      <arg name="local_stop_turn_corner_trigger_deg" value="$(arg local_stop_turn_corner_trigger_deg)"/>
+      <arg name="local_stop_turn_corner_arrival_m" value="$(arg local_stop_turn_corner_arrival_m)"/>
       <arg name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
       <arg name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
       <arg name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
