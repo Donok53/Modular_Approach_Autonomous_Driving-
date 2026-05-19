@@ -2714,6 +2714,118 @@ class ConstrainedLocalReplanner:
         return collapsed
 
     @staticmethod
+    def _trace_grid_segment_cells(start_cell, end_cell):
+        x0, y0 = int(start_cell[0]), int(start_cell[1])
+        x1, y1 = int(end_cell[0]), int(end_cell[1])
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        cells = []
+        while True:
+            cells.append((x0, y0))
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+        return cells
+
+    def _compose_grid_path_from_waypoints(self, waypoints):
+        if not waypoints:
+            return []
+        out = []
+        for idx in range(len(waypoints) - 1):
+            seg = self._trace_grid_segment_cells(waypoints[idx], waypoints[idx + 1])
+            self._append_path_segment(out, seg)
+        if not out:
+            out.append((int(waypoints[0][0]), int(waypoints[0][1])))
+        return out
+
+    def _build_box_avoidance_path(
+        self,
+        dynamic_blocked,
+        nominal_path,
+        start_idx,
+        branch_start_idx,
+        branch_start,
+        rejoin_idx,
+        rejoin_cell,
+        res_m,
+    ):
+        dx = int(rejoin_cell[0]) - int(branch_start[0])
+        dy = int(rejoin_cell[1]) - int(branch_start[1])
+        step_x = 0 if dx == 0 else (1 if dx > 0 else -1)
+        step_y = 0 if dy == 0 else (1 if dy > 0 else -1)
+        if step_x == 0 and step_y == 0:
+            return None
+
+        lat_dirs = [(-step_y, step_x), (step_y, -step_x)]
+        base_offset_m = (
+            self.robot_half_width
+            + self.obstacle_block_margin_m
+            + self.avoidance_trigger_margin_m
+            + 0.10
+        )
+        min_offset_cells = max(1, int(math.ceil(base_offset_m / max(1e-3, res_m))))
+        max_offset_cells = min_offset_cells + max(3, int(math.ceil(0.8 / max(1e-3, res_m))))
+
+        prefix = self._collapse_straight_grid_runs(
+            nominal_path[start_idx:branch_start_idx + 1]
+        )
+
+        best_path = None
+        best_len = None
+        for lat_dx, lat_dy in lat_dirs:
+            if lat_dx == 0 and lat_dy == 0:
+                continue
+            for offset_cells in range(min_offset_cells, max_offset_cells + 1):
+                p1 = (
+                    int(branch_start[0]) + lat_dx * offset_cells,
+                    int(branch_start[1]) + lat_dy * offset_cells,
+                )
+                p2 = (
+                    int(rejoin_cell[0]) + lat_dx * offset_cells,
+                    int(rejoin_cell[1]) + lat_dy * offset_cells,
+                )
+                box_waypoints = [branch_start, p1, p2, rejoin_cell]
+                if any(
+                    (not self._in_bounds_blocked(dynamic_blocked, wx, wy))
+                    or dynamic_blocked[wy][wx]
+                    for wx, wy in box_waypoints
+                ):
+                    continue
+                clear = True
+                for idx in range(len(box_waypoints) - 1):
+                    if not self._has_line_of_sight(
+                        dynamic_blocked, box_waypoints[idx], box_waypoints[idx + 1]
+                    ):
+                        clear = False
+                        break
+                if not clear:
+                    continue
+
+                detour = self._compose_grid_path_from_waypoints(box_waypoints)
+                composed = []
+                self._append_path_segment(composed, [nominal_path[start_idx]])
+                self._append_path_segment(composed, prefix)
+                self._append_path_segment(composed, detour[1:])
+                if len(composed) < 2:
+                    continue
+                path_len = len(composed)
+                if best_path is None or path_len < best_len:
+                    best_path = composed
+                    best_len = path_len
+
+        return best_path
+
+    @staticmethod
     def _dedupe_world_points(world_points):
         deduped = []
         for x, y in world_points:
@@ -3905,6 +4017,36 @@ class ConstrainedLocalReplanner:
                 rx, ry = rejoin_cell
                 if not self._in_bounds_blocked(dynamic_blocked, rx, ry) or dynamic_blocked[ry][rx]:
                     continue
+                if orthogonal_detour:
+                    composed = self._build_box_avoidance_path(
+                        dynamic_blocked,
+                        nominal_path,
+                        start_idx,
+                        branch_start_idx,
+                        branch_start,
+                        rejoin_idx,
+                        rejoin_cell,
+                        res_m,
+                    )
+                    if composed is not None and len(composed) >= 2:
+                        blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                            composed, dg, now_sec=now_sec
+                        )
+                        if blind_zone_conflict is not None:
+                            rospy.loginfo_throttle(
+                                1.0,
+                                "constrained_local_replanner: rejecting box avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
+                                "left" if int(blind_zone_conflict["side"]) > 0 else "right",
+                                float(blind_zone_conflict["x"]),
+                                float(blind_zone_conflict["y"]),
+                                float(blind_zone_conflict["age_s"]),
+                                float(blind_zone_conflict["path_heading_deg"]),
+                            )
+                        else:
+                            branch_history_points = self._sample_world_points(
+                                [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
+                            )
+                            return composed, branch_history_points
                 detour = self._astar(
                     dynamic_blocked,
                     branch_start,
