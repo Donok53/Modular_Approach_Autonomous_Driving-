@@ -447,6 +447,14 @@ class ConstrainedLocalReplanner:
         self.avoidance_rejoin_min_distance_m = max(
             0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
         )
+        # In global-nominal mode, we need to detect and branch around obstacles
+        # earlier than the short controller-facing lookahead, otherwise the
+        # robot keeps following the fixed global path until emergency stop.
+        self.avoidance_plan_horizon_m = max(
+            self.lookahead_m,
+            self.avoidance_trigger_ahead_m
+            + max(self.avoidance_rejoin_min_distance_m, self.robot_length_m * 1.5),
+        )
         self.rejoin_mode_hold_s = max(
             0.0, float(rospy.get_param("~rejoin_mode_hold_s", 1.0))
         )
@@ -5288,8 +5296,13 @@ class ConstrainedLocalReplanner:
                     stamp=stamp,
                 )
                 return
+            planning_horizon_m = (
+                self.avoidance_plan_horizon_m
+                if self._use_global_nominal_reference()
+                else self.lookahead_m
+            )
             i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
-            ig = self._accum_distance(pts, i0, self.lookahead_m)
+            ig = self._accum_distance(pts, i0, planning_horizon_m)
             start_xy = (self.odom_x, self.odom_y)
             goal_xy = pts[ig]
 
@@ -5378,7 +5391,7 @@ class ConstrainedLocalReplanner:
                 blocked,
                 start_cell,
                 dg,
-                max_check_m=self.lookahead_m,
+                max_check_m=planning_horizon_m,
                 include_pointcloud=self.use_pointcloud_static_blocking,
             )
             nominal_blocked = blocked_idx is not None
@@ -5436,7 +5449,7 @@ class ConstrainedLocalReplanner:
                     nominal_path,
                     dg,
                     start_cell,
-                    max_check_m=self.lookahead_m,
+                    max_check_m=planning_horizon_m,
                     point_margin_m=self.pointcloud_static_block_margin_m,
                     rg=rg,
                     blind_zone_conflict=blind_zone_conflict,
@@ -5469,21 +5482,21 @@ class ConstrainedLocalReplanner:
                         start_cell,
                         self.obstacle_points_map,
                         self.pointcloud_static_block_margin_m,
-                        max_check_m=self.lookahead_m,
+                        max_check_m=planning_horizon_m,
                     )
                 blocking_cells = self._collect_confirmed_blocked_path_world_points(
                     nominal_path,
                     blocked,
                     start_cell,
                     dg,
-                    max_check_m=self.lookahead_m,
+                    max_check_m=planning_horizon_m,
                 )
                 if source_summary is None:
                     source_summary = self._build_path_blocker_source_summary(
                         nominal_path,
                         dg,
                         start_cell,
-                        max_check_m=self.lookahead_m,
+                        max_check_m=planning_horizon_m,
                         point_margin_m=self.pointcloud_static_block_margin_m,
                         rg=rg,
                         blind_zone_conflict=blind_zone_conflict,
