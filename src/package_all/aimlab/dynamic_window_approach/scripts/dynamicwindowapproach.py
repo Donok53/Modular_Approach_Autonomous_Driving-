@@ -2567,7 +2567,8 @@ class DWAControl:
         for ps in path_msg.poses:
             p = ps.pose.position
             path_pts.append((float(p.x), float(p.y)))
-        path_pts = self._smooth_tracking_polyline(path_pts)
+        if self._should_smooth_tracking_path():
+            path_pts = self._smooth_tracking_polyline(path_pts)
 
         seg_lens = []
         cum_len = [0.0]
@@ -2705,7 +2706,8 @@ class DWAControl:
         for ps in self.path_msg.poses:
             p = ps.pose.position
             self.path_pts.append((p.x, p.y))
-        self.path_pts = self._smooth_tracking_polyline(self.path_pts)
+        if self._should_smooth_tracking_path():
+            self.path_pts = self._smooth_tracking_polyline(self.path_pts)
         # seg lengths & cumulative
         self.seg_lens = []
         self.cum_len = [0.0]
@@ -2719,6 +2721,11 @@ class DWAControl:
             self.cum_len.append(s)
         self.s_total = s
         self.s_cur = 0.0
+
+    def _should_smooth_tracking_path(self):
+        # Keep orthogonal/local detours crisp so the controller does not round
+        # the corner away from what the replanner explicitly published.
+        return not self._avoidance_mode_active()
 
     def _smooth_tracking_polyline(self, points):
         if len(points) < 3 or self.tracking_path_smoothing_passes <= 0:
@@ -3143,10 +3150,15 @@ class DWAControl:
                 target_seg_idx += 1
             segment_end_s = self.cum_len[target_seg_idx + 1]
             segment_step_scale = 0.65 if self.active_path_source == "global" else 0.8
+            segment_target_step_cap = max(0.05, self.path_tracking_target_step_m)
             if obstacle_response_active and self.active_path_source == "local":
-                segment_step_scale = min(segment_step_scale, 0.55)
+                if self._avoidance_mode_active():
+                    segment_step_scale = min(segment_step_scale, 0.35)
+                    segment_target_step_cap = min(segment_target_step_cap, 0.18)
+                else:
+                    segment_step_scale = min(segment_step_scale, 0.55)
             segment_target_step = min(
-                max(0.05, self.path_tracking_target_step_m),
+                segment_target_step_cap,
                 max(0.05, segment_step_scale * self.seg_lens[target_seg_idx]),
             )
             s_target = min(

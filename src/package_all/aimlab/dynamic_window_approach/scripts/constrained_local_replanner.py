@@ -4735,6 +4735,20 @@ class ConstrainedLocalReplanner:
                         )
                     clear_wait_s = now_sec - self.local_clear_since_sec
                     if clear_wait_s < self.blocked_clear_hold_s:
+                        if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
+                            self.rejoin_mode_until_sec = 0.0
+                            self._publish_debug_text(
+                                self._build_debug_text(
+                                    "clear_wait_follow",
+                                    stamp,
+                                    trigger_reason="nominal_path_clear",
+                                    wait_s=clear_wait_s,
+                                    path_len=len(nominal_path),
+                                ),
+                                stamp=stamp,
+                                force=True,
+                            )
+                            return
                         self._clear_local_path(dg.header.frame_id, stamp)
                         self._clear_avoidance_path(dg.header.frame_id, stamp, force=True)
                         self.rejoin_mode_until_sec = 0.0
