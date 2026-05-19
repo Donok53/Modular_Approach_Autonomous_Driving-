@@ -624,8 +624,9 @@
   <arg name="near_field_raw_stop_cell_size_m" default="0.12"/>
   <arg name="near_field_raw_stop_min_cells" default="1"/>
   <arg name="near_field_raw_stop_close_override_distance_m" default="$(arg avoidance_hard_stop_distance)"/>
-  <arg name="near_field_raw_stop_close_override_min_points" default="1"/>
-  <arg name="near_field_raw_stop_close_override_min_cells" default="1"/>
+  <arg name="near_field_raw_stop_close_override_half_width_m" default="0.12"/>
+  <arg name="near_field_raw_stop_close_override_min_points" default="3"/>
+  <arg name="near_field_raw_stop_close_override_min_cells" default="2"/>
   <arg name="near_field_raw_stop_downsample" default="1"/>
   <arg name="near_field_raw_stop_on_count" default="1"/>
   <arg name="near_field_raw_stop_off_count" default="3"/>
@@ -1320,6 +1321,7 @@
       <arg name="near_field_raw_stop_cell_size_m" value="$(arg near_field_raw_stop_cell_size_m)"/>
       <arg name="near_field_raw_stop_min_cells" value="$(arg near_field_raw_stop_min_cells)"/>
       <arg name="near_field_raw_stop_close_override_distance_m" value="$(arg near_field_raw_stop_close_override_distance_m)"/>
+      <arg name="near_field_raw_stop_close_override_half_width_m" value="$(arg near_field_raw_stop_close_override_half_width_m)"/>
       <arg name="near_field_raw_stop_close_override_min_points" value="$(arg near_field_raw_stop_close_override_min_points)"/>
       <arg name="near_field_raw_stop_close_override_min_cells" value="$(arg near_field_raw_stop_close_override_min_cells)"/>
       <arg name="near_field_raw_stop_downsample" value="$(arg near_field_raw_stop_downsample)"/>

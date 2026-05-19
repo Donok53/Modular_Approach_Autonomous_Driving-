@@ -277,11 +277,29 @@ class DWAControl:
                 )
             ),
         )
+        self.near_field_raw_stop_close_override_half_width_m = max(
+            0.05,
+            min(
+                self.near_field_raw_stop_half_width_m,
+                float(
+                    rospy.get_param(
+                        "~near_field_raw_stop_close_override_half_width_m",
+                        min(
+                            self.near_field_raw_stop_half_width_m,
+                            max(
+                                0.10,
+                                self.robot_half_width_m - 0.12,
+                            ),
+                        ),
+                    )
+                ),
+            ),
+        )
         self.near_field_raw_stop_close_override_min_points = max(
-            1, int(rospy.get_param("~near_field_raw_stop_close_override_min_points", 1))
+            1, int(rospy.get_param("~near_field_raw_stop_close_override_min_points", 3))
         )
         self.near_field_raw_stop_close_override_min_cells = max(
-            1, int(rospy.get_param("~near_field_raw_stop_close_override_min_cells", 1))
+            1, int(rospy.get_param("~near_field_raw_stop_close_override_min_cells", 2))
         )
         self.near_field_raw_stop_downsample = max(
             1, int(rospy.get_param("~near_field_raw_stop_downsample", 1))
@@ -1514,6 +1532,7 @@ class DWAControl:
             )
             if points is None:
                 occupied_cells = set()
+                close_override_cells = set()
                 i = 0
                 for x, y, z in point_cloud2.read_points(
                     msg, field_names=("x", "y", "z"), skip_nans=True
@@ -1527,6 +1546,16 @@ class DWAControl:
                     x, y, z = self._transform_point_xyz(
                         transform_mat, float(x), float(y), float(z)
                     )
+                    if (
+                        self.enable_self_filter
+                        and self._point_in_local_rect(
+                            x,
+                            y,
+                            self.self_filter_radius_x,
+                            self.self_filter_radius_y,
+                        )
+                    ):
+                        continue
                     if not (
                         self.near_field_raw_stop_min_x_m
                         <= x
@@ -1548,15 +1577,50 @@ class DWAControl:
                             int(math.floor(y / self.near_field_raw_stop_cell_size_m)),
                         )
                     )
+                    if abs(y) <= self.near_field_raw_stop_close_override_half_width_m:
+                        close_override_cells.add(
+                            (
+                                int(
+                                    math.floor(
+                                        x / self.near_field_raw_stop_cell_size_m
+                                    )
+                                ),
+                                int(
+                                    math.floor(
+                                        y / self.near_field_raw_stop_cell_size_m
+                                    )
+                                ),
+                            )
+                        )
                     if x < min_x:
                         min_x = x
                 hit_count = len(hit_points)
                 cell_count = len(occupied_cells)
                 close_xy_points = [(float(x), float(y)) for x, y, _ in hit_points]
+                close_override_hit_count = sum(
+                    1
+                    for _, y, _ in hit_points
+                    if abs(y) <= self.near_field_raw_stop_close_override_half_width_m
+                )
+                close_override_cell_count = len(close_override_cells)
+                close_override_min_x = min(
+                    (
+                        float(x)
+                        for x, y, _ in hit_points
+                        if abs(y) <= self.near_field_raw_stop_close_override_half_width_m
+                    ),
+                    default=float("inf"),
+                )
             else:
                 finite_mask = np.isfinite(points).all(axis=1)
                 points = points[finite_mask]
                 points = self._transform_points_xyz(transform_mat, points)
+                if self.enable_self_filter and points.size > 0:
+                    self_mask = (
+                        (np.abs(points[:, 0]) <= self.self_filter_radius_x)
+                        & (np.abs(points[:, 1]) <= self.self_filter_radius_y)
+                    )
+                    points = points[~self_mask]
                 roi_mask = (
                     (points[:, 0] >= self.near_field_raw_stop_min_x_m)
                     & (points[:, 0] <= self.near_field_raw_stop_max_x_m)
@@ -1576,21 +1640,49 @@ class DWAControl:
                     close_xy_points = [
                         (float(x), float(y)) for x, y in hit_points_arr[:, :2]
                     ]
+                    close_override_mask = (
+                        np.abs(hit_points_arr[:, 1])
+                        <= self.near_field_raw_stop_close_override_half_width_m
+                    )
+                    close_override_arr = hit_points_arr[close_override_mask]
+                    close_override_hit_count = int(close_override_arr.shape[0])
+                    if close_override_hit_count > 0:
+                        close_override_min_x = float(np.min(close_override_arr[:, 0]))
+                        close_override_cells = np.floor(
+                            close_override_arr[:, :2]
+                            / self.near_field_raw_stop_cell_size_m
+                        ).astype(np.int32)
+                        close_override_cell_count = int(
+                            np.unique(close_override_cells, axis=0).shape[0]
+                        )
+                    else:
+                        close_override_min_x = float("inf")
+                        close_override_cell_count = 0
                 else:
                     cell_count = 0
                     close_xy_points = []
+                    close_override_hit_count = 0
+                    close_override_cell_count = 0
+                    close_override_min_x = float("inf")
 
             min_front_clearance = (
                 min_x - footprint_front if math.isfinite(min_x) else float("inf")
+            )
+            close_override_front_clearance = (
+                close_override_min_x - footprint_front
+                if math.isfinite(close_override_min_x)
+                else float("inf")
             )
             detected = (
                 hit_count >= self.near_field_raw_stop_min_points
                 and cell_count >= self.near_field_raw_stop_min_cells
             )
             close_override_detected = (
-                hit_count >= self.near_field_raw_stop_close_override_min_points
-                and cell_count >= self.near_field_raw_stop_close_override_min_cells
-                and min_front_clearance
+                close_override_hit_count
+                >= self.near_field_raw_stop_close_override_min_points
+                and close_override_cell_count
+                >= self.near_field_raw_stop_close_override_min_cells
+                and close_override_front_clearance
                 <= self.near_field_raw_stop_close_override_distance_m
             )
             passable_gap_blocked = self._emergency_band_is_blocked(
