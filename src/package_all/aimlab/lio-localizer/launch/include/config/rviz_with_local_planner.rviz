@@ -707,6 +707,7 @@ Visualization Manager:
       Name: Current Robot Pose
       Namespaces:
         current_robot_pose_base: true
+        current_robot_pose_fill: true
         current_robot_pose_heading: true
       Queue Size: 5
       Value: true

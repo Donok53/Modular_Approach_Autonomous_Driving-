@@ -423,6 +423,7 @@ class PlanningOdomFilter:
             return
 
         markers = MarkerArray()
+        base_z = float(z) + self.pose_marker_z_offset_m
 
         base = Marker()
         base.header.stamp = stamp
@@ -433,40 +434,107 @@ class PlanningOdomFilter:
         base.action = Marker.ADD
         base.pose.position.x = float(x)
         base.pose.position.y = float(y)
-        base.pose.position.z = float(z) + self.pose_marker_z_offset_m
+        base.pose.position.z = base_z
         base.pose.orientation.w = 1.0
         base.scale.x = self.pose_marker_circle_diameter_m
         base.scale.y = self.pose_marker_circle_diameter_m
         base.scale.z = self.pose_marker_circle_height_m
         base.color.a = 0.95
-        base.color.r = 0.11
-        base.color.g = 0.67
-        base.color.b = 1.0
+        base.color.r = 0.07
+        base.color.g = 0.42
+        base.color.b = 0.96
         markers.markers.append(base)
 
-        arrow = Marker()
-        arrow.header.stamp = stamp
-        arrow.header.frame_id = frame_id
-        arrow.ns = "current_robot_pose_heading"
-        arrow.id = 2
-        arrow.type = Marker.ARROW
-        arrow.action = Marker.ADD
-        arrow.pose.position.x = float(x)
-        arrow.pose.position.y = float(y)
-        arrow.pose.position.z = float(z) + self.pose_marker_arrow_z_offset_m
+        fill = Marker()
+        fill.header.stamp = stamp
+        fill.header.frame_id = frame_id
+        fill.ns = "current_robot_pose_fill"
+        fill.id = 2
+        fill.type = Marker.CYLINDER
+        fill.action = Marker.ADD
+        fill.pose.position.x = float(x)
+        fill.pose.position.y = float(y)
+        fill.pose.position.z = base_z + 0.001
+        fill.pose.orientation.w = 1.0
+        fill.scale.x = self.pose_marker_circle_diameter_m * 0.78
+        fill.scale.y = self.pose_marker_circle_diameter_m * 0.78
+        fill.scale.z = self.pose_marker_circle_height_m * 1.08
+        fill.color.a = 0.98
+        fill.color.r = 0.33
+        fill.color.g = 0.66
+        fill.color.b = 1.0
+        markers.markers.append(fill)
+
+        pointer = Marker()
+        pointer.header.stamp = stamp
+        pointer.header.frame_id = frame_id
+        pointer.ns = "current_robot_pose_heading"
+        pointer.id = 3
+        pointer.type = Marker.TRIANGLE_LIST
+        pointer.action = Marker.ADD
+        pointer.pose.position.x = float(x)
+        pointer.pose.position.y = float(y)
+        pointer.pose.position.z = base_z + max(
+            0.004, self.pose_marker_circle_height_m * 0.80
+        )
         qx, qy, qz, qw = euler_to_quat(0.0, 0.0, yaw)
-        arrow.pose.orientation.x = qx
-        arrow.pose.orientation.y = qy
-        arrow.pose.orientation.z = qz
-        arrow.pose.orientation.w = qw
-        arrow.scale.x = self.pose_marker_arrow_length_m
-        arrow.scale.y = self.pose_marker_arrow_width_m
-        arrow.scale.z = self.pose_marker_arrow_height_m
-        arrow.color.a = 1.0
-        arrow.color.r = 1.0
-        arrow.color.g = 1.0
-        arrow.color.b = 1.0
-        markers.markers.append(arrow)
+        pointer.pose.orientation.x = qx
+        pointer.pose.orientation.y = qy
+        pointer.pose.orientation.z = qz
+        pointer.pose.orientation.w = qw
+        pointer.scale.x = 1.0
+        pointer.scale.y = 1.0
+        pointer.scale.z = 1.0
+        pointer.color.a = 1.0
+        pointer.color.r = 1.0
+        pointer.color.g = 1.0
+        pointer.color.b = 1.0
+
+        pointer_length = max(
+            self.pose_marker_circle_diameter_m * 0.42,
+            self.pose_marker_arrow_length_m * 0.58,
+        )
+        pointer_width = max(
+            self.pose_marker_circle_diameter_m * 0.19,
+            self.pose_marker_arrow_width_m * 0.52,
+        )
+        tip_x = pointer_length * 0.52
+        shoulder_x = pointer_length * 0.02
+        tail_x = -pointer_length * 0.30
+        wing_y = pointer_width * 0.62
+        inner_y = pointer_width * 0.18
+
+        def _p(px, py):
+            pt = Point()
+            pt.x = float(px)
+            pt.y = float(py)
+            pt.z = 0.0
+            return pt
+
+        tip = _p(tip_x, 0.0)
+        left_wing = _p(shoulder_x, wing_y)
+        left_inner = _p(0.0, inner_y)
+        tail = _p(tail_x, 0.0)
+        right_inner = _p(0.0, -inner_y)
+        right_wing = _p(shoulder_x, -wing_y)
+
+        pointer.points.extend(
+            [
+                tip,
+                left_wing,
+                left_inner,
+                tip,
+                left_inner,
+                right_inner,
+                tip,
+                right_inner,
+                right_wing,
+                left_inner,
+                tail,
+                right_inner,
+            ]
+        )
+        markers.markers.append(pointer)
 
         self.pub_pose_marker.publish(markers)
 
