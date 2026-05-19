@@ -4541,6 +4541,26 @@ class ConstrainedLocalReplanner:
 
         branch_start = nominal_path[branch_start_idx]
 
+        def _compose_detour_path(detour_cells, rejoin_idx=None):
+            composed = []
+            if clip_to_rejoin_only or rejoin_idx is None:
+                # In global-reference mode, or when we only have a best-effort
+                # partial branch, publish only the temporary branch segment.
+                prefix = self._collapse_straight_grid_runs(
+                    nominal_path[start_idx:branch_start_idx + 1]
+                )
+                self._append_path_segment(composed, [start_cell])
+                self._append_path_segment(composed, prefix)
+                self._append_path_segment(composed, detour_cells[1:])
+            else:
+                self._append_path_segment(composed, [start_cell])
+                self._append_path_segment(
+                    composed, nominal_path[start_idx:branch_start_idx + 1]
+                )
+                self._append_path_segment(composed, detour_cells[1:])
+                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+            return composed
+
         rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
         if self.avoidance_rejoin_min_distance_m > 0.8:
             rejoin_distance_candidates_m.append(
@@ -4563,6 +4583,8 @@ class ConstrainedLocalReplanner:
         # Try the normal rejoin spacing first, then relax it for close blockers so
         # the robot can still slip around obstacles that appear only a short
         # distance ahead instead of dropping straight into hold-stop.
+        best_effort_candidate = None
+        best_effort_score = None
         for rejoin_distance_m in ordered_rejoin_distances:
             min_rejoin_cells = max(1, int(math.ceil(rejoin_distance_m / res_m)))
             first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
@@ -4579,56 +4601,91 @@ class ConstrainedLocalReplanner:
                     allow_best_effort=False,
                     orthogonal_only=orthogonal_detour,
                 )
-                if detour is None or len(detour) < 2:
+                if detour is not None and len(detour) >= 2:
+                    detour = self._simplify_grid_path(
+                        detour,
+                        dynamic_blocked,
+                        float(dg.info.resolution),
+                        force=self.smooth_avoidance_line_of_sight,
+                    )
+                    if len(detour) >= 2:
+                        composed = _compose_detour_path(detour, rejoin_idx=rejoin_idx)
+                        blind_zone_conflict = self._path_blind_zone_turn_conflict(
+                            composed, dg, now_sec=now_sec
+                        )
+                        if blind_zone_conflict is not None:
+                            rospy.loginfo_throttle(
+                                1.0,
+                                "constrained_local_replanner: rejecting avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
+                                "left" if int(blind_zone_conflict["side"]) > 0 else "right",
+                                float(blind_zone_conflict["x"]),
+                                float(blind_zone_conflict["y"]),
+                                float(blind_zone_conflict["age_s"]),
+                                float(blind_zone_conflict["path_heading_deg"]),
+                            )
+                        else:
+                            branch_history_points = self._sample_world_points(
+                                [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
+                            )
+                            return composed, branch_history_points
+
+                if not self.allow_best_effort_path:
                     continue
 
-                detour = self._simplify_grid_path(
-                    detour,
+                partial_detour = self._astar(
+                    dynamic_blocked,
+                    branch_start,
+                    rejoin_cell,
+                    allow_best_effort=True,
+                    orthogonal_only=orthogonal_detour,
+                )
+                if partial_detour is None or len(partial_detour) < 2:
+                    continue
+
+                partial_detour = self._simplify_grid_path(
+                    partial_detour,
                     dynamic_blocked,
                     float(dg.info.resolution),
                     force=self.smooth_avoidance_line_of_sight,
                 )
-                if len(detour) < 2:
+                if len(partial_detour) < 2:
                     continue
 
-                composed = []
-                if clip_to_rejoin_only:
-                    # In global-reference mode, show and follow only the temporary
-                    # branch detour up to the rejoin point.  Do not append the
-                    # remaining route to goal; once we rejoin, control should
-                    # fall back to the global path and the local detour should
-                    # disappear from RViz.
-                    prefix = self._collapse_straight_grid_runs(
-                        nominal_path[start_idx:branch_start_idx + 1]
-                    )
-                    self._append_path_segment(composed, [start_cell])
-                    self._append_path_segment(composed, prefix)
-                    self._append_path_segment(composed, detour[1:])
-                else:
-                    self._append_path_segment(composed, [start_cell])
-                    self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
-                    self._append_path_segment(composed, detour[1:])
-                    self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+                partial_end = partial_detour[-1]
+                if partial_end == branch_start:
+                    continue
 
+                progress_cells = self._heur(branch_start, partial_end)
+                remaining_gap_cells = self._heur(partial_end, rejoin_cell)
+                min_progress_cells = max(2.0, 0.35 * float(min_rejoin_cells))
+                if progress_cells + 1e-6 < min_progress_cells:
+                    continue
+
+                composed = _compose_detour_path(partial_detour, rejoin_idx=None)
                 blind_zone_conflict = self._path_blind_zone_turn_conflict(
                     composed, dg, now_sec=now_sec
                 )
                 if blind_zone_conflict is not None:
-                    rospy.loginfo_throttle(
-                        1.0,
-                        "constrained_local_replanner: rejecting avoidance branch into blind zone | side=%s obstacle=(%.2f,%.2f) age=%.2fs heading=%.1fdeg",
-                        "left" if int(blind_zone_conflict["side"]) > 0 else "right",
-                        float(blind_zone_conflict["x"]),
-                        float(blind_zone_conflict["y"]),
-                        float(blind_zone_conflict["age_s"]),
-                        float(blind_zone_conflict["path_heading_deg"]),
-                    )
                     continue
 
-                branch_history_points = self._sample_world_points(
-                    [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
+                candidate_score = (
+                    remaining_gap_cells,
+                    -progress_cells,
+                    -float(len(partial_detour)),
                 )
-                return composed, branch_history_points
+                if best_effort_score is None or candidate_score < best_effort_score:
+                    best_effort_score = candidate_score
+                    best_effort_candidate = composed
+
+        if best_effort_candidate is not None:
+            rospy.loginfo_throttle(
+                1.0,
+                "constrained_local_replanner: using best-effort avoidance branch (exact rejoin path unavailable)"
+            )
+            branch_history_points = self._sample_world_points(
+                [self._grid_to_world(dg, gx, gy) for gx, gy in best_effort_candidate]
+            )
+            return best_effort_candidate, branch_history_points
 
         return None, None
 
@@ -4720,6 +4777,13 @@ class ConstrainedLocalReplanner:
             obstacle_count >= self.avoidance_min_overlay_points
             and clustered_point_count >= self.avoidance_min_cluster_count
         )
+        point_evidence_present = (
+            direct_points_enabled
+            and len(blocking_points) >= self.pointcloud_block_confirm_points
+        )
+        grid_evidence_present = (
+            len(blocking_cells) >= self.risk_block_confirm_cells
+        )
         tracked_evidence_present = (
             self.tracked_object_count > 0
             or self.tracked_object_memory_count > 0
@@ -4727,6 +4791,8 @@ class ConstrainedLocalReplanner:
         locked_static_evidence_present = len(relevant_static_entries) > 0
         obstacle_evidence_confirmed = (
             overlay_evidence_confirmed
+            or point_evidence_present
+            or grid_evidence_present
             or tracked_evidence_present
             or locked_static_evidence_present
         )
