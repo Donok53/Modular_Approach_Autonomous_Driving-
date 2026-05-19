@@ -77,6 +77,7 @@
   <arg name="travel_history_path_topic" default=""/>
   <arg name="localization_history_topic" default=""/>
   <arg name="localization_history_path_topic" default=""/>
+  <arg name="current_robot_pose_marker_topic" default="/planning/current_robot_pose_marker"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="enable_explainability_bridge" default="true"/>
   <arg name="explainability_publish_hz" default="5.0"/>
@@ -1409,6 +1410,7 @@
       <arg name="travel_history_path_topic" value="$(arg travel_history_path_topic)"/>
       <arg name="localization_history_topic" value="$(arg localization_history_topic)"/>
       <arg name="localization_history_path_topic" value="$(arg localization_history_path_topic)"/>
+      <arg name="current_robot_pose_marker_topic" value="$(arg current_robot_pose_marker_topic)"/>
       <arg name="enable_cloud_tracker" value="$(arg enable_cloud_tracker)"/>
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_tracked_objects_marker_viz" value="$(arg enable_tracked_objects_marker_viz)"/>

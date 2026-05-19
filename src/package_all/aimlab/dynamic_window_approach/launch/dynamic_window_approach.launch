@@ -25,6 +25,7 @@
     <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.32"/>
     <arg name="localization_history_topic" default=""/>
     <arg name="localization_history_path_topic" default=""/>
+    <arg name="current_robot_pose_marker_topic" default="/planning/current_robot_pose_marker"/>
 
     <group if="$(arg enable_pose_filter)">
         <node pkg="dynamic_window_approach" type="planning_odom_filter.py" name="planning_odom_filter" output="screen" respawn="false">
@@ -52,6 +53,7 @@
             <param name="max_straight_lateral_correction_mps" value="$(arg pose_filter_max_straight_lateral_correction_mps)"/>
             <param name="history_marker_topic" value="$(arg localization_history_topic)"/>
             <param name="history_path_topic" value="$(arg localization_history_path_topic)"/>
+            <param name="pose_marker_topic" value="$(arg current_robot_pose_marker_topic)"/>
         </node>
     </group>
     <arg name="pointcloud_topic" default="/ouster/points"/>

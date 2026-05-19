@@ -7,7 +7,7 @@ from collections import deque
 import rospy
 from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import Odometry, Path
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 def clamp(value, low, high):
@@ -120,6 +120,30 @@ class PlanningOdomFilter:
         self.history_path_topic = str(
             rospy.get_param("~history_path_topic", "/planning/localization_history_path")
         ).strip()
+        self.pose_marker_topic = str(
+            rospy.get_param("~pose_marker_topic", "/planning/current_robot_pose_marker")
+        ).strip()
+        self.pose_marker_circle_diameter_m = max(
+            0.10, float(rospy.get_param("~pose_marker_circle_diameter_m", 0.58))
+        )
+        self.pose_marker_circle_height_m = max(
+            0.01, float(rospy.get_param("~pose_marker_circle_height_m", 0.035))
+        )
+        self.pose_marker_arrow_length_m = max(
+            0.10, float(rospy.get_param("~pose_marker_arrow_length_m", 0.46))
+        )
+        self.pose_marker_arrow_width_m = max(
+            0.05, float(rospy.get_param("~pose_marker_arrow_width_m", 0.18))
+        )
+        self.pose_marker_arrow_height_m = max(
+            0.03, float(rospy.get_param("~pose_marker_arrow_height_m", 0.06))
+        )
+        self.pose_marker_z_offset_m = float(
+            rospy.get_param("~pose_marker_z_offset_m", 0.10)
+        )
+        self.pose_marker_arrow_z_offset_m = float(
+            rospy.get_param("~pose_marker_arrow_z_offset_m", 0.14)
+        )
         self.history_max_points = max(
             2, int(rospy.get_param("~history_max_points", 3000))
         )
@@ -161,6 +185,7 @@ class PlanningOdomFilter:
         self.pub = rospy.Publisher(self.output_topic, Odometry, queue_size=20)
         self.pub_history_marker = None
         self.pub_history_path = None
+        self.pub_pose_marker = None
         if self.history_marker_topic:
             self.pub_history_marker = rospy.Publisher(
                 self.history_marker_topic, Marker, queue_size=2, latch=True
@@ -168,6 +193,10 @@ class PlanningOdomFilter:
         if self.history_path_topic:
             self.pub_history_path = rospy.Publisher(
                 self.history_path_topic, Path, queue_size=2, latch=True
+            )
+        if self.pose_marker_topic:
+            self.pub_pose_marker = rospy.Publisher(
+                self.pose_marker_topic, MarkerArray, queue_size=2, latch=True
             )
         self.sub = rospy.Subscriber(
             self.input_topic, Odometry, self.odom_callback, queue_size=50
@@ -184,12 +213,13 @@ class PlanningOdomFilter:
             )
 
         rospy.loginfo(
-            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f",
+            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s pose_marker=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f",
             self.input_topic,
             self.twist_topic if self.twist_topic else "-",
             self.twist_linear_frame,
             self.output_topic,
             self.history_path_topic if self.history_path_topic else "-",
+            self.pose_marker_topic if self.pose_marker_topic else "-",
             self.twist_timeout_s,
             self.output_child_frame_id if self.output_child_frame_id else "<inherit>",
             self.forward_tau_s,
@@ -330,6 +360,9 @@ class PlanningOdomFilter:
         out.twist.twist.angular.z = self.fwz
         self.pub.publish(out)
         frame_id = str(out.header.frame_id).strip() or "map"
+        self._publish_pose_marker(
+            out.header.stamp, frame_id, pred_x, pred_y, pred_z, pred_yaw
+        )
         self._record_history_point(pred_x, pred_y, frame_id, out.header.stamp)
 
     def _timer_callback(self, _event):
@@ -384,6 +417,58 @@ class PlanningOdomFilter:
             pose.pose.orientation.w = 1.0
             path.poses.append(pose)
         self.pub_history_path.publish(path)
+
+    def _publish_pose_marker(self, stamp, frame_id, x, y, z, yaw):
+        if self.pub_pose_marker is None:
+            return
+
+        markers = MarkerArray()
+
+        base = Marker()
+        base.header.stamp = stamp
+        base.header.frame_id = frame_id
+        base.ns = "current_robot_pose_base"
+        base.id = 1
+        base.type = Marker.CYLINDER
+        base.action = Marker.ADD
+        base.pose.position.x = float(x)
+        base.pose.position.y = float(y)
+        base.pose.position.z = float(z) + self.pose_marker_z_offset_m
+        base.pose.orientation.w = 1.0
+        base.scale.x = self.pose_marker_circle_diameter_m
+        base.scale.y = self.pose_marker_circle_diameter_m
+        base.scale.z = self.pose_marker_circle_height_m
+        base.color.a = 0.95
+        base.color.r = 0.11
+        base.color.g = 0.67
+        base.color.b = 1.0
+        markers.markers.append(base)
+
+        arrow = Marker()
+        arrow.header.stamp = stamp
+        arrow.header.frame_id = frame_id
+        arrow.ns = "current_robot_pose_heading"
+        arrow.id = 2
+        arrow.type = Marker.ARROW
+        arrow.action = Marker.ADD
+        arrow.pose.position.x = float(x)
+        arrow.pose.position.y = float(y)
+        arrow.pose.position.z = float(z) + self.pose_marker_arrow_z_offset_m
+        qx, qy, qz, qw = euler_to_quat(0.0, 0.0, yaw)
+        arrow.pose.orientation.x = qx
+        arrow.pose.orientation.y = qy
+        arrow.pose.orientation.z = qz
+        arrow.pose.orientation.w = qw
+        arrow.scale.x = self.pose_marker_arrow_length_m
+        arrow.scale.y = self.pose_marker_arrow_width_m
+        arrow.scale.z = self.pose_marker_arrow_height_m
+        arrow.color.a = 1.0
+        arrow.color.r = 1.0
+        arrow.color.g = 1.0
+        arrow.color.b = 1.0
+        markers.markers.append(arrow)
+
+        self.pub_pose_marker.publish(markers)
 
     def _record_history_point(self, x, y, frame_id, stamp):
         if frame_id and frame_id != self.history_frame_id:

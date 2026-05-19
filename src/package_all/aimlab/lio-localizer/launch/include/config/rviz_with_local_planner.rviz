@@ -234,9 +234,9 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: true
+      Enabled: false
       Keep: 1
-      Name: Current Robot Pose
+      Name: Current Robot Pose (legacy)
       Position Tolerance: 0.10000000149011612
       Queue Size: 10
       Shape:
@@ -251,7 +251,7 @@ Visualization Manager:
         Value: Arrow
       Topic: /lio_localizer/odometry/planning
       Unreliable: false
-      Value: true
+      Value: false
     - Class: rviz/TF
       Enabled: false
       Filter (blacklist): ""
@@ -699,6 +699,15 @@ Visualization Manager:
       Name: near_field_stop
       Namespaces:
         near_field_raw_stop: true
+      Queue Size: 5
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /planning/current_robot_pose_marker
+      Name: Current Robot Pose
+      Namespaces:
+        current_robot_pose_base: true
+        current_robot_pose_heading: true
       Queue Size: 5
       Value: true
     - Alpha: 1
