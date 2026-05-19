@@ -2615,6 +2615,44 @@ class DWAControl:
             cum_len.append(s_total)
         return path_pts, seg_lens, cum_len, s_total
 
+    @staticmethod
+    def _goal_xy_from_path_msg(path_msg):
+        if path_msg is None or not path_msg.poses:
+            return None
+        goal = path_msg.poses[-1].pose.position
+        return (float(goal.x), float(goal.y))
+
+    def _should_preserve_goal_reached_on_path_refresh(self, next_path_msg):
+        if not self.reach_goal_flag:
+            return False
+        current_goal_xy = self._goal_xy_from_path_msg(self.path_msg)
+        next_goal_xy = self._goal_xy_from_path_msg(next_path_msg)
+        if current_goal_xy is None or next_goal_xy is None:
+            return False
+
+        completion_window = max(self.goal_thresh_m, self.path_tracking_stop_distance_m)
+        goal_refresh_tolerance = max(
+            completion_window,
+            self.path_tracking_minor_replan_delta_m,
+        )
+        if (
+            math.hypot(
+                next_goal_xy[0] - current_goal_xy[0],
+                next_goal_xy[1] - current_goal_xy[1],
+            )
+            > goal_refresh_tolerance
+        ):
+            return False
+
+        pose = self.current_pose.pose.pose.position
+        return (
+            math.hypot(
+                float(pose.x) - next_goal_xy[0],
+                float(pose.y) - next_goal_xy[1],
+            )
+            <= completion_window
+        )
+
     def _interp_geometry_xy_at_s(self, path_pts, seg_lens, cum_len, s_total, s):
         if len(path_pts) < 2:
             return 0.0, 0.0
@@ -2715,8 +2753,6 @@ class DWAControl:
             self.cum_len.append(s)
         self.s_total = s
         self.s_cur = 0.0
-        self.reach_goal_flag = False
-        self.prev_goal_flag = False
 
     def _smooth_tracking_polyline(self, points):
         if len(points) < 3 or self.tracking_path_smoothing_passes <= 0:
@@ -2822,6 +2858,9 @@ class DWAControl:
     def _activate_path(self, path_msg, sig, source):
         path_changed = sig != self.path_sig
         goal_changed = False
+        preserve_goal_reached = self._should_preserve_goal_reached_on_path_refresh(
+            path_msg
+        )
         if (
             path_changed
             and source == self.active_path_source
@@ -2854,6 +2893,12 @@ class DWAControl:
             self._last_tracking_debug = {}
             self._rot_mode = False
             self._rot_yaw_target = None
+            if preserve_goal_reached:
+                self.reach_goal_flag = True
+                self.prev_goal_flag = True
+            else:
+                self.reach_goal_flag = False
+                self.prev_goal_flag = False
         if path_msg is None or len(path_msg.poses) < 2:
             self.path_pts = []
             self.seg_lens = []

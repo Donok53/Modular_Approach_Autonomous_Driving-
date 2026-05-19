@@ -303,7 +303,7 @@
   <arg name="preserve_user_goal_on_drivable_grid" default="true"/>
   <arg name="preserve_user_goal_max_gap_m" default="2.00"/>
   <arg name="global_path_continuous_replan" default="true"/>
-  <arg name="global_path_goal_reached_replan_freeze_distance_m" default="0.15"/>
+  <arg name="global_path_goal_reached_replan_freeze_distance_m" default="0.35"/>
   <arg name="global_path_replan_min_start_shift_m" default="0.30"/>
   <arg name="global_path_replan_min_interval_s" default="$(eval '1.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.60')"/>
   <arg name="global_path_replan_validation_lookahead_m" default="22.0"/>
@@ -368,9 +368,9 @@
   <arg name="path_tracking_tangent_window_m" default="0.75"/>
   <arg name="path_tracking_crawl_speed" default="0.42"/>
   <arg name="path_tracking_large_yaw_crawl_speed" default="0.34"/>
-  <arg name="final_approach_window_m" default="0.0"/>
+  <arg name="final_approach_window_m" default="0.80"/>
   <arg name="final_speed_k" default="0.95"/>
-  <arg name="final_speed_min" default="0.34"/>
+  <arg name="final_speed_min" default="0.20"/>
   <arg name="path_tracking_stop_distance_m" default="0.35"/>
   <arg name="path_tracking_goal_yaw_rate_max_deg" default="18.0"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
