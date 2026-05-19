@@ -2942,8 +2942,11 @@ class DWAControl:
             return
 
         if self.current_path_mode == "hold":
-            if self.path_msg is not None or self.active_path_source != "none":
-                self._activate_path(None, None, "none")
+            # Keep the last active path latched while the replanner requests a
+            # temporary hold.  Clearing the active path here makes the
+            # tracking-reference path disappear and forces the controller into
+            # the generic stop_no_path branch even though the stop reason is
+            # really "hold".
             return
 
         if self.use_muxed_active_path:
@@ -4076,6 +4079,35 @@ class DWAControl:
                         ),
                         warn=True,
                     )
+                self.publish_drive([0.0, 0.0])
+                rate.sleep()
+                continue
+
+            if self.current_path_mode == "hold":
+                hold_s = 0.0
+                if self._hold_mode_enter_sec > 0.0:
+                    hold_s = max(
+                        0.0, rospy.Time.now().to_sec() - self._hold_mode_enter_sec
+                    )
+                self._rot_mode = False
+                self._log_nav_reason(
+                    "stop_hold",
+                    "src=%s active=%s hold=%.2fs path_pts=%d local_pts=%d global_pts=%d"
+                    % (
+                        self.active_path_source,
+                        self.current_path_mode,
+                        hold_s,
+                        len(self.path_pts),
+                        len(self.local_path_msg.poses)
+                        if self.local_path_msg is not None
+                        else 0,
+                        len(self.global_path_msg.poses)
+                        if self.global_path_msg is not None
+                        else 0,
+                    ),
+                    warn=True,
+                )
+                self._publish_tracking_reference_path()
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
                 continue
