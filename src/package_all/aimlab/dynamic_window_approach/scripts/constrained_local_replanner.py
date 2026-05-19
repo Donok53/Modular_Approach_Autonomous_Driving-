@@ -3796,7 +3796,27 @@ class ConstrainedLocalReplanner:
             if far_limit_m is not None and progress_m > far_limit_m:
                 continue
             filtered.append((float(wx), float(wy)))
-        return filtered
+        if filtered:
+            return filtered
+
+        # Fallback: if the forward projection is slightly misaligned with the
+        # current path heading, do not drop nearby obstacle evidence entirely.
+        # Keep close-by points with a looser rear tolerance so the replanner can
+        # still spawn a local detour instead of missing the obstacle outright.
+        fallback = []
+        rear_allow_m = max(0.25, self.forward_path_obstacle_rear_tolerance_m * 4.0)
+        for wx, wy in points_map:
+            progress_m = (
+                (float(wx) - self.odom_x) * ux + (float(wy) - self.odom_y) * uy
+            )
+            if progress_m < (-rear_allow_m):
+                continue
+            if far_limit_m is not None:
+                dist_m = math.hypot(float(wx) - self.odom_x, float(wy) - self.odom_y)
+                if dist_m > far_limit_m:
+                    continue
+            fallback.append((float(wx), float(wy)))
+        return fallback
 
     def _path_blocked_ahead(self, path, blocked, start_cell, grid_resolution_m, max_check_m=None):
         if not path:
