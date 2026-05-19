@@ -73,26 +73,11 @@ class DWAControl:
         self.pose_topic = rospy.get_param("~pose_topic", "/lio_sam/mapping/odometry")
         self.global_path_topic = rospy.get_param("~global_path_topic", "/astar/path")
         self.local_path_topic = rospy.get_param("~local_path_topic", "/planning/local_path")
-        self.avoidance_path_topic = rospy.get_param("~avoidance_path_topic", "/planning/avoidance_path")
         self.path_mode_topic = rospy.get_param("~path_mode_topic", "/planning/path_mode")
-        self.active_path_topic = rospy.get_param("~active_path_topic", "/planning/active_path")
         self.follow_global_path_only = bool(
             rospy.get_param("~follow_global_path_only", False)
         )
         self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
-        self.avoidance_path_timeout_s = float(
-            rospy.get_param("~avoidance_path_timeout_s", max(0.5, self.local_path_timeout_s))
-        )
-        self.use_muxed_active_path = (
-            bool(rospy.get_param("~use_muxed_active_path", True))
-            and not self.follow_global_path_only
-        )
-        self.active_path_timeout_s = float(
-            rospy.get_param(
-                "~active_path_timeout_s",
-                max(0.5, self.avoidance_path_timeout_s),
-            )
-        )
         self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
         self.use_drivable_grid = bool(rospy.get_param("~use_drivable_grid", True))
@@ -780,12 +765,6 @@ class DWAControl:
         self.local_path_msg = None
         self.local_path_sig = None
         self.local_path_stamp = rospy.Time(0)
-        self.avoidance_path_msg = None
-        self.avoidance_path_sig = None
-        self.avoidance_path_stamp = rospy.Time(0)
-        self.active_path_msg = None
-        self.active_path_sig = None
-        self.active_path_stamp = rospy.Time(0)
         self.active_path_source = "none"
         self.path_msg = None
         self.path_sig = None
@@ -844,24 +823,9 @@ class DWAControl:
         # ===== ROS I/O =====
         self.sub_path_global = rospy.Subscriber(self.global_path_topic, Path, self.path_callback_global, queue_size=5)
         self.sub_path_local = None
-        self.sub_path_avoidance = None
         if not self.follow_global_path_only:
             self.sub_path_local = rospy.Subscriber(
                 self.local_path_topic, Path, self.path_callback_local, queue_size=5
-            )
-            self.sub_path_avoidance = rospy.Subscriber(
-                self.avoidance_path_topic,
-                Path,
-                self.path_callback_avoidance,
-                queue_size=5,
-            )
-        self.sub_path_active = None
-        if self.use_muxed_active_path:
-            self.sub_path_active = rospy.Subscriber(
-                self.active_path_topic,
-                Path,
-                self.path_callback_active,
-                queue_size=5,
             )
         self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
@@ -1965,8 +1929,11 @@ class DWAControl:
         return True
 
     # ------------------------------- obstacle stop -------------------------------
+    def _avoidance_mode_active(self):
+        return self.current_path_mode == "follow_avoidance"
+
     def _active_path_preview_local_xy(self, preview_m=None):
-        if self.active_path_source not in ("local", "avoidance"):
+        if self.active_path_source != "local":
             return None
         if len(self.path_pts) < 2:
             return None
@@ -2342,7 +2309,7 @@ class DWAControl:
             return False
         if self.current_path_mode == "hold":
             return False
-        if self.active_path_source not in ("local", "avoidance"):
+        if self.active_path_source != "local":
             return False
         if len(self.path_pts) < 2:
             return False
@@ -2576,7 +2543,7 @@ class DWAControl:
             return False
         if obstacle_response_active:
             return False
-        if self.active_path_source in ("local", "avoidance"):
+        if self.active_path_source == "local":
             return False
         return True
 
@@ -2920,16 +2887,6 @@ class DWAControl:
         self.local_path_sig = self._path_signature(path_msg)
         self.local_path_stamp = rospy.Time.now()
 
-    def path_callback_avoidance(self, path_msg):
-        self.avoidance_path_msg = path_msg
-        self.avoidance_path_sig = self._path_signature(path_msg)
-        self.avoidance_path_stamp = rospy.Time.now()
-
-    def path_callback_active(self, path_msg):
-        self.active_path_msg = path_msg
-        self.active_path_sig = self._path_signature(path_msg)
-        self.active_path_stamp = rospy.Time.now()
-
     def _refresh_active_path(self):
         now = rospy.Time.now()
         if self.follow_global_path_only:
@@ -2949,47 +2906,30 @@ class DWAControl:
             # really "hold".
             return
 
-        if self.use_muxed_active_path:
-            active_fresh = (
-                self.active_path_stamp.to_sec() > 0.0
-                and (now - self.active_path_stamp).to_sec() <= self.active_path_timeout_s
-            )
-            if active_fresh:
-                if self.active_path_msg is not None and len(self.active_path_msg.poses) >= 2:
-                    if self._incoming_path_requires_activation(self.active_path_msg, self.active_path_sig, "active"):
-                        self._activate_path(self.active_path_msg, self.active_path_sig, "active")
-                elif self.path_msg is not None or self.active_path_source != "none":
-                    self._activate_path(None, None, "none")
-                return
-
-            if self.path_msg is not None or self.active_path_source != "none":
-                self._activate_path(None, None, "none")
-            return
-
-        use_avoidance = (
-            self.avoidance_path_msg is not None
-            and len(self.avoidance_path_msg.poses) >= 2
-            and (now - self.avoidance_path_stamp).to_sec() <= self.avoidance_path_timeout_s
-        )
-        if use_avoidance:
-            if self._incoming_path_requires_activation(self.avoidance_path_msg, self.avoidance_path_sig, "avoidance"):
-                self._activate_path(self.avoidance_path_msg, self.avoidance_path_sig, "avoidance")
-            return
-
         use_local = (
             self.local_path_msg is not None
             and len(self.local_path_msg.poses) >= 2
             and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
         )
-        if use_local:
-            if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
-                self._activate_path(self.local_path_msg, self.local_path_sig, "local")
-            return
 
-        if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
-            if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
-                self._activate_path(self.global_path_msg, self.global_path_sig, "global")
-            return
+        if self.current_path_mode in ("follow_local", "follow_avoidance", "rejoin_global"):
+            if use_local:
+                if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
+                    self._activate_path(self.local_path_msg, self.local_path_sig, "local")
+                return
+            if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
+                if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
+                    self._activate_path(self.global_path_msg, self.global_path_sig, "global")
+                return
+        else:
+            if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
+                if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
+                    self._activate_path(self.global_path_msg, self.global_path_sig, "global")
+                return
+            if use_local:
+                if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
+                    self._activate_path(self.local_path_msg, self.local_path_sig, "local")
+                return
 
         if self.path_msg is not None:
             self._activate_path(None, None, "none")
@@ -3130,7 +3070,7 @@ class DWAControl:
 
         obstacle_response_active = (
             str(self.behavior_reason).strip().lower() != "clear"
-            or self.active_path_source == "avoidance"
+            or self._avoidance_mode_active()
             or (
                 math.isfinite(self.front_obstacle_clearance)
                 and self.front_obstacle_clearance <= self.obstacle_response_clearance_m
@@ -3155,7 +3095,7 @@ class DWAControl:
         if (
             obstacle_response_active
             and (not self.follow_global_path_only)
-            and self.active_path_source in ("local", "avoidance")
+            and self.active_path_source == "local"
         ):
             preview_lookahead_min = max(
                 0.80, self.lookahead_distance * self.obstacle_response_lookahead_scale
@@ -3195,7 +3135,7 @@ class DWAControl:
                 target_seg_idx += 1
             segment_end_s = self.cum_len[target_seg_idx + 1]
             segment_step_scale = 0.65 if self.active_path_source == "global" else 0.8
-            if obstacle_response_active and self.active_path_source in ("local", "avoidance"):
+            if obstacle_response_active and self.active_path_source == "local":
                 segment_step_scale = min(segment_step_scale, 0.55)
             segment_target_step = min(
                 max(0.05, self.path_tracking_target_step_m),
@@ -3239,7 +3179,7 @@ class DWAControl:
             return False
         if not math.isfinite(self.front_obstacle_clearance):
             return False
-        active_avoidance = self.active_path_source == "avoidance"
+        active_avoidance = self._avoidance_mode_active()
         min_bypass_clearance = (
             (
                 self.active_avoidance_bypass_clearance_m
@@ -3350,7 +3290,7 @@ class DWAControl:
         obstacle_response_active = (
             str(self.behavior_reason).strip().lower() != "clear"
             or self._emergency_bypass_active
-            or self.active_path_source == "avoidance"
+            or self._avoidance_mode_active()
             or (
                 math.isfinite(self.front_obstacle_clearance)
                 and self.front_obstacle_clearance <= self.obstacle_response_clearance_m
@@ -3970,15 +3910,12 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s avoidance=%s active=%s path_mode=%s global_only=%s active_mux=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
+            "DWA node started | pose=%s global=%s local=%s path_mode=%s global_only=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
-            self.avoidance_path_topic,
-            self.active_path_topic,
             self.path_mode_topic,
             "on" if self.follow_global_path_only else "off",
-            "on" if self.use_muxed_active_path else "off",
             self.behavior_cmd_topic,
             self.cmd_vel_topic,
             self.emergency_stop_topic,

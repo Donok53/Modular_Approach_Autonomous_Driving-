@@ -2553,13 +2553,14 @@ class ConstrainedLocalReplanner:
             start_xy = (self.odom_x, self.odom_y)
         self._publish_path_mode("follow_avoidance")
         sampled_points, frame_id = self._publish_grid_path(
-            self.pub_avoidance_path,
+            self.pub_local_path,
             grid_path,
             dg,
             stamp,
             start_xy=start_xy,
             end_xy=end_xy,
         )
+        self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
         self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
         self.last_avoidance_active_sec = stamp.to_sec()
         if record_history:
@@ -2591,7 +2592,7 @@ class ConstrainedLocalReplanner:
             end_xy=end_xy,
         )
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
-        self._publish_path_mode("follow_local")
+        self._publish_path_mode("follow_avoidance")
         self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
         self.last_avoidance_active_sec = stamp.to_sec()
         if record_history:
