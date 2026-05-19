@@ -378,10 +378,10 @@
   <arg name="final_speed_min" default="0.20"/>
   <arg name="path_tracking_stop_distance_m" default="0.35"/>
   <arg name="local_stop_turn_go_enabled" default="true"/>
-  <arg name="local_stop_turn_speed_cap_mps" default="0.26"/>
-  <arg name="local_stop_turn_align_deg" default="6.0"/>
+  <arg name="local_stop_turn_speed_cap_mps" default="0.18"/>
+  <arg name="local_stop_turn_align_deg" default="4.0"/>
   <arg name="local_stop_turn_corner_trigger_deg" default="45.0"/>
-  <arg name="local_stop_turn_corner_arrival_m" default="0.22"/>
+  <arg name="local_stop_turn_corner_arrival_m" default="0.32"/>
   <arg name="path_tracking_goal_yaw_rate_max_deg" default="18.0"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
@@ -458,7 +458,7 @@
   <arg name="static_obstacle_memory_locked_keep_range_m" default="4.5"/>
   <arg name="static_obstacle_memory_blind_zone_radius_m" default="1.40"/>
   <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="5.0"/>
-  <arg name="known_map_subtraction_enabled" default="false"/>
+  <arg name="known_map_subtraction_enabled" default="true"/>
   <arg name="known_map_subtraction_radius_m" default="0.30"/>
   <arg name="local_blind_zone_guard_enabled" default="true"/>
   <arg name="local_blind_zone_guard_radius_m" default="1.20"/>

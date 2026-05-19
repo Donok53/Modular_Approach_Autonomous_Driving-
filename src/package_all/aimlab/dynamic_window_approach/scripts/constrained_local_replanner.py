@@ -521,6 +521,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_solution_sec = 0.0
         self.last_avoidance_active_sec = 0.0
+        self.active_avoidance_obstacle_key = None
         self.pending_avoidance_trigger_key = None
         self.pending_avoidance_trigger_count = 0
         self.pending_avoidance_trigger_stamp_sec = 0.0
@@ -1044,6 +1045,149 @@ class ConstrainedLocalReplanner:
             wx, wy = self._memory_entry_position(entry)
             points.append((wx, wy))
         return points
+
+    def _relevant_static_memory_entries(
+        self,
+        blocking_points_world=None,
+        blocking_cells_world=None,
+    ):
+        source_points = []
+        if blocking_points_world:
+            source_points.extend(
+                (float(wx), float(wy)) for wx, wy in list(blocking_points_world)
+            )
+        if blocking_cells_world:
+            source_points.extend(
+                (float(wx), float(wy)) for wx, wy in list(blocking_cells_world)
+            )
+        if not source_points:
+            return []
+
+        confirmed_entries = [
+            entry
+            for entry in self.obstacle_memory_points
+            if self._is_confirmed_static_obstacle_entry(entry)
+        ]
+        if not confirmed_entries:
+            return []
+
+        match_radius_m = max(
+            self.static_obstacle_memory_merge_radius_m * 2.5,
+            self.pointcloud_cluster_resolution_m * 2.5,
+            self.obstacle_block_margin_m + 0.20,
+        )
+        match_radius_sq = match_radius_m * match_radius_m
+        matched = []
+        for entry in confirmed_entries:
+            wx, wy = self._memory_entry_position(entry)
+            best_d2 = None
+            for sx, sy in source_points:
+                d2 = (float(wx) - float(sx)) * (float(wx) - float(sx)) + (
+                    float(wy) - float(sy)
+                ) * (float(wy) - float(sy))
+                if best_d2 is None or d2 < best_d2:
+                    best_d2 = d2
+            if best_d2 is None or best_d2 > match_radius_sq:
+                continue
+            matched.append((best_d2, entry))
+        if not matched:
+            return []
+
+        matched.sort(
+            key=lambda item: (
+                item[0],
+                -self._memory_entry_hits(item[1]),
+                -self._memory_entry_last_seen(item[1]),
+            )
+        )
+        primary_entry = matched[0][1]
+        primary_x, primary_y = self._memory_entry_position(primary_entry)
+        group_radius_m = max(
+            self.static_obstacle_memory_merge_radius_m * 3.0,
+            self.pointcloud_cluster_resolution_m * 3.0,
+            0.40,
+        )
+        group_radius_sq = group_radius_m * group_radius_m
+        grouped = []
+        seen_ids = set()
+        for _best_d2, entry in matched:
+            wx, wy = self._memory_entry_position(entry)
+            d2 = (float(wx) - float(primary_x)) * (float(wx) - float(primary_x)) + (
+                float(wy) - float(primary_y)
+            ) * (float(wy) - float(primary_y))
+            if d2 > group_radius_sq:
+                continue
+            entry_id = int(entry.get("id", -1)) if isinstance(entry, dict) else -1
+            if entry_id >= 0 and entry_id in seen_ids:
+                continue
+            if entry_id >= 0:
+                seen_ids.add(entry_id)
+            grouped.append(entry)
+        grouped.sort(
+            key=lambda entry: int(entry.get("id", -1)) if isinstance(entry, dict) else -1
+        )
+        return grouped
+
+    def _stable_avoidance_obstacle_points(
+        self,
+        blocking_cells_world=None,
+        blocking_points_world=None,
+    ):
+        matched_entries = self._relevant_static_memory_entries(
+            blocking_points_world=blocking_points_world,
+            blocking_cells_world=blocking_cells_world,
+        )
+
+        stable_points = []
+        obstacle_key = None
+        if matched_entries:
+            stable_points.extend(
+                self._memory_points_from_entries(matched_entries, confirmed_only=False)
+            )
+            raw_candidates = []
+            if blocking_points_world:
+                raw_candidates.extend(list(blocking_points_world))
+            if blocking_cells_world:
+                raw_candidates.extend(list(blocking_cells_world))
+            attach_radius_m = max(
+                self.static_obstacle_memory_merge_radius_m * 2.0,
+                self.pointcloud_cluster_resolution_m * 2.0,
+                0.30,
+            )
+            attach_radius_sq = attach_radius_m * attach_radius_m
+            for wx, wy in raw_candidates:
+                for ex, ey in stable_points:
+                    d2 = (float(wx) - float(ex)) * (float(wx) - float(ex)) + (
+                        float(wy) - float(ey)
+                    ) * (float(wy) - float(ey))
+                    if d2 <= attach_radius_sq:
+                        stable_points.append((float(wx), float(wy)))
+                        break
+            entry_ids = [
+                int(entry.get("id", -1))
+                for entry in matched_entries
+                if isinstance(entry, dict) and int(entry.get("id", -1)) >= 0
+            ]
+            if entry_ids:
+                obstacle_key = ("static", tuple(sorted(entry_ids)))
+
+        if not stable_points:
+            if blocking_points_world:
+                stable_points.extend(
+                    (float(wx), float(wy)) for wx, wy in list(blocking_points_world)
+                )
+            if blocking_cells_world:
+                stable_points.extend(
+                    (float(wx), float(wy)) for wx, wy in list(blocking_cells_world)
+                )
+            if stable_points:
+                sample = stable_points[: min(6, len(stable_points))]
+                cx = sum(float(wx) for wx, _wy in sample) / float(len(sample))
+                cy = sum(float(wy) for _wx, wy in sample) / float(len(sample))
+                obstacle_key = ("raw", round(cx * 5.0) / 5.0, round(cy * 5.0) / 5.0)
+
+        stable_points = self._dedupe_world_points(stable_points)
+        return obstacle_key, stable_points, matched_entries
 
     def _clear_blocking_obstacle_markers(self, stamp=None):
         if self.pub_blocking_obstacles is None or rospy.is_shutdown():
@@ -2880,6 +3024,8 @@ class ConstrainedLocalReplanner:
         nominal_path,
         start_idx,
         start_cell,
+        branch_start_idx,
+        branch_start_cell,
         blocked_idx,
         dg,
         res_m,
@@ -2903,17 +3049,20 @@ class ConstrainedLocalReplanner:
         if step_x == 0 and step_y == 0:
             return None
 
+        _obstacle_key, stable_obstacle_points, _matched_entries = (
+            self._stable_avoidance_obstacle_points(
+                blocking_cells_world=blocking_cells_world,
+                blocking_points_world=blocking_points_world,
+            )
+        )
         obstacle_cells = []
-        for world_points in (blocking_cells_world, blocking_points_world):
-            if not world_points:
-                continue
-            for wx, wy in world_points:
-                gx, gy = self._world_to_grid(dg, wx, wy)
-                if self._in_bounds_blocked(dynamic_blocked, gx, gy):
-                    obstacle_cells.append((int(gx), int(gy)))
+        for wx, wy in stable_obstacle_points:
+            gx, gy = self._world_to_grid(dg, wx, wy)
+            if self._in_bounds_blocked(dynamic_blocked, gx, gy):
+                obstacle_cells.append((int(gx), int(gy)))
 
         if not obstacle_cells:
-            lo = max(start_idx, blocked_idx - 1)
+            lo = max(branch_start_idx, blocked_idx - 1)
             hi = min(len(nominal_path), blocked_idx + 2)
             obstacle_cells.extend(
                 (int(gx), int(gy)) for gx, gy in nominal_path[lo:hi]
@@ -2926,9 +3075,9 @@ class ConstrainedLocalReplanner:
         min_y = min(cell[1] for cell in obstacle_cells)
         max_y = max(cell[1] for cell in obstacle_cells)
 
-        start_gx = int(start_cell[0])
-        start_gy = int(start_cell[1])
-        if not self._in_bounds_blocked(dynamic_blocked, start_gx, start_gy):
+        branch_gx = int(branch_start_cell[0])
+        branch_gy = int(branch_start_cell[1])
+        if not self._in_bounds_blocked(dynamic_blocked, branch_gx, branch_gy):
             return None
 
         lateral_clear_base_cells = max(
@@ -2996,12 +3145,12 @@ class ConstrainedLocalReplanner:
 
         candidates = []
         if step_x != 0:
-            lane_y = start_gy
+            lane_y = branch_gy
             for approach_clear_cells in approach_clear_candidates:
                 if step_x > 0:
-                    entry_x = max(start_gx, min_x - approach_clear_cells)
+                    entry_x = max(branch_gx, min_x - approach_clear_cells)
                 else:
-                    entry_x = min(start_gx, max_x + approach_clear_cells)
+                    entry_x = min(branch_gx, max_x + approach_clear_cells)
                 for forward_clear_cells in forward_clear_candidates:
                     if step_x > 0:
                         exit_x = max(entry_x + 1, max_x + forward_clear_cells)
@@ -3016,7 +3165,7 @@ class ConstrainedLocalReplanner:
                     for side_y in side_values:
                         candidates.append(
                             [
-                                (start_gx, lane_y),
+                                (branch_gx, lane_y),
                                 (entry_x, lane_y),
                                 (entry_x, side_y),
                                 (exit_x, side_y),
@@ -3024,12 +3173,12 @@ class ConstrainedLocalReplanner:
                             ]
                         )
         else:
-            lane_x = start_gx
+            lane_x = branch_gx
             for approach_clear_cells in approach_clear_candidates:
                 if step_y > 0:
-                    entry_y = max(start_gy, min_y - approach_clear_cells)
+                    entry_y = max(branch_gy, min_y - approach_clear_cells)
                 else:
-                    entry_y = min(start_gy, max_y + approach_clear_cells)
+                    entry_y = min(branch_gy, max_y + approach_clear_cells)
                 for forward_clear_cells in forward_clear_candidates:
                     if step_y > 0:
                         exit_y = max(entry_y + 1, max_y + forward_clear_cells)
@@ -3044,7 +3193,7 @@ class ConstrainedLocalReplanner:
                     for side_x in side_values:
                         candidates.append(
                             [
-                                (lane_x, start_gy),
+                                (lane_x, branch_gy),
                                 (lane_x, entry_y),
                                 (side_x, entry_y),
                                 (side_x, exit_y),
@@ -3087,10 +3236,10 @@ class ConstrainedLocalReplanner:
                 continue
 
             if step_x != 0:
-                lateral_extent = max(abs(box_waypoints[2][1] - start_gy), 0)
+                lateral_extent = max(abs(box_waypoints[2][1] - branch_gy), 0)
                 forward_extent = abs(box_waypoints[3][0] - box_waypoints[2][0])
             else:
-                lateral_extent = max(abs(box_waypoints[2][0] - start_gx), 0)
+                lateral_extent = max(abs(box_waypoints[2][0] - branch_gx), 0)
                 forward_extent = abs(box_waypoints[3][1] - box_waypoints[2][1])
             cost = (lateral_extent, forward_extent, len(detour))
             if best_cost is None or cost < best_cost:
@@ -3199,6 +3348,7 @@ class ConstrainedLocalReplanner:
         self._reset_pending_avoidance_trigger()
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
+        self.active_avoidance_obstacle_key = None
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
@@ -3255,12 +3405,29 @@ class ConstrainedLocalReplanner:
         )
         return True
 
-    def _continue_active_avoidance_path(self, dg, dynamic_blocked, start_cell, stamp):
+    def _continue_active_avoidance_path(
+        self,
+        dg,
+        dynamic_blocked,
+        start_cell,
+        stamp,
+        trigger_key=None,
+    ):
         if (not self.avoidance_active) or self.last_avoidance_grid_path is None:
             return False
         if len(self.last_avoidance_grid_path) < 2:
             return False
         deviation_limit_m = max(0.25, min(0.55, self.avoidance_reuse_max_deviation_m))
+        if (
+            trigger_key is not None
+            and self.active_avoidance_obstacle_key is not None
+            and trigger_key == self.active_avoidance_obstacle_key
+        ):
+            deviation_limit_m = max(
+                deviation_limit_m,
+                self.robot_length_m * 1.40,
+                self.robot_width_m * 2.0,
+            )
         deviation_m = self._grid_path_min_distance_to_xy(
             self.last_avoidance_grid_path,
             dg,
@@ -3319,6 +3486,14 @@ class ConstrainedLocalReplanner:
                 _bucket(blind_zone_conflict.get("x", 0.0)),
                 _bucket(blind_zone_conflict.get("y", 0.0)),
             )
+        obstacle_key, _stable_points, _matched_entries = (
+            self._stable_avoidance_obstacle_points(
+                blocking_cells_world=blocking_cells,
+                blocking_points_world=blocking_points,
+            )
+        )
+        if obstacle_key is not None:
+            return (str(trigger_reason), obstacle_key)
         pts = blocking_points if blocking_points else blocking_cells
         if pts:
             sample = pts[: min(6, len(pts))]
@@ -4373,6 +4548,8 @@ class ConstrainedLocalReplanner:
                 nominal_path,
                 start_idx,
                 start_cell,
+                branch_start_idx,
+                branch_start,
                 blocked_idx,
                 dg,
                 res_m,
@@ -4537,19 +4714,43 @@ class ConstrainedLocalReplanner:
             float(dg.info.resolution),
             max_check_m=self.avoidance_trigger_ahead_m,
         )
-        direct_points_overlap = False
         direct_points_enabled = (
             self.use_pointcloud_avoidance_trigger
             or tracked_for_avoidance
         )
-        if (not predicted_overlap) and direct_points_enabled:
-            direct_points_overlap = self._path_blocked_by_obstacles(
+        blocking_points = []
+        blocking_cells = []
+        point_margin_m = self.obstacle_block_margin_m
+        if predicted_overlap:
+            blocking_cells = self._collect_confirmed_blocked_path_world_points(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                max_check_m=self.avoidance_trigger_ahead_m,
+            )
+        if direct_points_enabled:
+            point_margin_m = (
+                self.obstacle_block_margin_m
+                if predicted_overlap
+                else (self.obstacle_block_margin_m + self.avoidance_trigger_margin_m)
+            )
+            blocking_points = self._collect_path_overlap_points(
                 nominal_path,
                 dg,
                 start_cell,
-                points_map=dynamic_points_map,
+                dynamic_points_map,
+                point_margin_m,
                 max_check_m=self.avoidance_trigger_ahead_m,
             )
+        direct_points_overlap = (
+            direct_points_enabled
+            and len(blocking_points) >= self.pointcloud_block_confirm_points
+        )
+        relevant_static_entries = self._relevant_static_memory_entries(
+            blocking_points_world=blocking_points,
+            blocking_cells_world=blocking_cells,
+        )
 
         clustered_point_count = self.obstacle_cluster_count
         overlay_evidence_confirmed = (
@@ -4560,7 +4761,7 @@ class ConstrainedLocalReplanner:
             self.tracked_object_count > 0
             or self.tracked_object_memory_count > 0
         )
-        locked_static_evidence_present = self.obstacle_memory_locked_count > 0
+        locked_static_evidence_present = len(relevant_static_entries) > 0
         obstacle_evidence_confirmed = (
             overlay_evidence_confirmed
             or tracked_evidence_present
@@ -4657,32 +4858,6 @@ class ConstrainedLocalReplanner:
             )
             return "avoidance" if self.avoidance_active else "clear"
 
-        blocking_points = []
-        blocking_cells = []
-        point_margin_m = self.obstacle_block_margin_m
-        if predicted_overlap:
-            blocking_cells = self._collect_confirmed_blocked_path_world_points(
-                nominal_path,
-                dynamic_blocked,
-                start_cell,
-                dg,
-                max_check_m=self.avoidance_trigger_ahead_m,
-            )
-        if predicted_overlap or direct_points_overlap:
-            point_margin_m = (
-                self.obstacle_block_margin_m
-                if predicted_overlap
-                else (self.obstacle_block_margin_m + self.avoidance_trigger_margin_m)
-            )
-            blocking_points = self._collect_path_overlap_points(
-                nominal_path,
-                dg,
-                start_cell,
-                dynamic_points_map,
-                point_margin_m,
-                max_check_m=self.avoidance_trigger_ahead_m,
-            )
-
         trigger_key = self._make_avoidance_trigger_key(
             trigger_reason,
             blocking_cells,
@@ -4707,6 +4882,7 @@ class ConstrainedLocalReplanner:
             dynamic_blocked,
             start_cell,
             stamp,
+            trigger_key=trigger_key,
         ):
             self._publish_debug_text(
                 self._build_debug_text(
@@ -4871,6 +5047,7 @@ class ConstrainedLocalReplanner:
             )
         self.last_avoidance_trigger_reason = trigger_reason
         self.last_avoidance_direction = avoid_direction
+        self.active_avoidance_obstacle_key = trigger_key
         self.avoidance_active = True
         self._publish_debug_text(
             self._build_debug_text(
