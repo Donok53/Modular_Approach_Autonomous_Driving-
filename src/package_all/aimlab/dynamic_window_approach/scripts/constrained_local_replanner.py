@@ -3417,12 +3417,13 @@ class ConstrainedLocalReplanner:
             return False
         if len(self.last_avoidance_grid_path) < 2:
             return False
-        deviation_limit_m = max(0.25, min(0.55, self.avoidance_reuse_max_deviation_m))
-        if (
+        same_obstacle_episode = (
             trigger_key is not None
             and self.active_avoidance_obstacle_key is not None
             and trigger_key == self.active_avoidance_obstacle_key
-        ):
+        )
+        deviation_limit_m = max(0.25, min(0.55, self.avoidance_reuse_max_deviation_m))
+        if same_obstacle_episode:
             deviation_limit_m = max(
                 deviation_limit_m,
                 self.robot_length_m * 1.40,
@@ -3436,13 +3437,14 @@ class ConstrainedLocalReplanner:
         )
         if deviation_m > deviation_limit_m:
             return False
-        if self._path_blocked_ahead(
+        path_still_blocked = self._path_blocked_ahead(
             self.last_avoidance_grid_path,
             dynamic_blocked,
             start_cell,
             float(dg.info.resolution),
             max_check_m=self.lookahead_m,
-        ):
+        )
+        if path_still_blocked and (not same_obstacle_episode):
             return False
         if self._path_blind_zone_turn_conflict(
             self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
@@ -3459,9 +3461,11 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_publish_sec = stamp.to_sec()
         rospy.loginfo_throttle(
             1.0,
-            "constrained_local_replanner: reusing active avoidance path | dev=%.2fm cells=%d",
+            "constrained_local_replanner: reusing active avoidance path | dev=%.2fm cells=%d blocked=%s same_obstacle=%s",
             deviation_m,
             len(self.last_avoidance_grid_path),
+            "yes" if path_still_blocked else "no",
+            "yes" if same_obstacle_episode else "no",
         )
         return True
 
