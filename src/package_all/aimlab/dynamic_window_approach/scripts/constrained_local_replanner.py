@@ -2792,8 +2792,6 @@ class ConstrainedLocalReplanner:
         publisher.publish(out)
 
     def _clear_local_path(self, frame_id, stamp, force=False):
-        if self._use_global_nominal_reference():
-            return
         self._publish_empty_path(self.pub_local_path, frame_id, stamp)
 
     def _clear_avoidance_path(self, frame_id, stamp, force=False):

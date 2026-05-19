@@ -568,7 +568,7 @@ Visualization Manager:
       Unreliable: false
       Value: false
     - Alpha: 1
-      Buffer Length: 80
+      Buffer Length: 1
       Class: rviz/Path
       Color: 0; 170; 255
       Enabled: true
