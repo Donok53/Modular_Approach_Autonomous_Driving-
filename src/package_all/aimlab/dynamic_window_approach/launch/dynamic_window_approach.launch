@@ -23,6 +23,8 @@
     <arg name="pose_filter_turning_yaw_rate_threshold_rps" default="0.20"/>
     <arg name="pose_filter_turning_yaw_error_deg" default="10.0"/>
     <arg name="pose_filter_max_straight_lateral_correction_mps" default="0.32"/>
+    <arg name="localization_history_topic" default=""/>
+    <arg name="localization_history_path_topic" default=""/>
 
     <group if="$(arg enable_pose_filter)">
         <node pkg="dynamic_window_approach" type="planning_odom_filter.py" name="planning_odom_filter" output="screen" respawn="false">
@@ -48,6 +50,8 @@
             <param name="turning_yaw_rate_threshold_rps" value="$(arg pose_filter_turning_yaw_rate_threshold_rps)"/>
             <param name="turning_yaw_error_deg" value="$(arg pose_filter_turning_yaw_error_deg)"/>
             <param name="max_straight_lateral_correction_mps" value="$(arg pose_filter_max_straight_lateral_correction_mps)"/>
+            <param name="history_marker_topic" value="$(arg localization_history_topic)"/>
+            <param name="history_path_topic" value="$(arg localization_history_path_topic)"/>
         </node>
     </group>
     <arg name="pointcloud_topic" default="/ouster/points"/>
@@ -97,7 +101,8 @@
     <arg name="tracking_reference_topic" default="/planning/tracking_reference_path"/>
     <arg name="use_local_path_fallback" default="false"/>
     <arg name="path_history_topic" default="/planning/path_history"/>
-    <arg name="travel_history_topic" default="/planning/travel_history"/>
+    <arg name="travel_history_topic" default=""/>
+    <arg name="travel_history_path_topic" default=""/>
     <arg name="behavior_cmd_topic" default="/planning/behavior_cmd"/>
     <arg name="cmd_vel_topic" default="/cmd_vel"/>
     <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
@@ -708,6 +713,7 @@
             <param name="nominal_path_reference_mode" value="$(arg nominal_path_reference_mode)"/>
             <param name="path_history_topic" value="$(arg path_history_topic)"/>
             <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
+            <param name="travel_history_path_topic" value="$(arg travel_history_path_topic)"/>
             <param name="pointcloud_topic" value="$(arg pointcloud_topic)"/>
             <param name="obstacle_pointcloud_topic" value="$(arg obstacle_pointcloud_topic)"/>
             <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>

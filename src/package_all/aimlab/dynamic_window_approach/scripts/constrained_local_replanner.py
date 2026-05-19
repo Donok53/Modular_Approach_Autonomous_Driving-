@@ -550,12 +550,16 @@ class ConstrainedLocalReplanner:
         self.pub_path_history = rospy.Publisher(
             self.path_history_topic, MarkerArray, queue_size=2, latch=True
         )
-        self.pub_travel_history = rospy.Publisher(
-            self.travel_history_topic, Marker, queue_size=2, latch=True
-        )
-        self.pub_travel_history_path = rospy.Publisher(
-            self.travel_history_path_topic, Path, queue_size=2, latch=True
-        )
+        self.pub_travel_history = None
+        self.pub_travel_history_path = None
+        if self.travel_history_topic:
+            self.pub_travel_history = rospy.Publisher(
+                self.travel_history_topic, Marker, queue_size=2, latch=True
+            )
+        if self.travel_history_path_topic:
+            self.pub_travel_history_path = rospy.Publisher(
+                self.travel_history_path_topic, Path, queue_size=2, latch=True
+            )
         self.pub_explainability = rospy.Publisher(
             self.explainability_topic, ExplainabilityEvent, queue_size=20
         )
@@ -2469,6 +2473,8 @@ class ConstrainedLocalReplanner:
         self.pub_path_history.publish(markers)
 
     def _publish_travel_history_marker(self):
+        if self.pub_travel_history is None:
+            return
         marker = Marker()
         marker.header.stamp = rospy.Time.now()
         marker.header.frame_id = "map"
@@ -2503,6 +2509,8 @@ class ConstrainedLocalReplanner:
         )
 
     def _publish_travel_history_path(self):
+        if self.pub_travel_history_path is None:
+            return
         path = Path()
         path.header.stamp = rospy.Time.now()
         path.header.frame_id = "map"
@@ -2517,6 +2525,8 @@ class ConstrainedLocalReplanner:
         self.pub_travel_history_path.publish(path)
 
     def _record_travel_history_point(self, x, y):
+        if self.pub_travel_history is None and self.pub_travel_history_path is None:
+            return
         x = float(x)
         y = float(y)
         if self.travel_history_points:

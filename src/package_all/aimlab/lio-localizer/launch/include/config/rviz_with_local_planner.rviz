@@ -236,18 +236,18 @@ Visualization Manager:
         Value: true
       Enabled: true
       Keep: 1
-      Name: Planning Odometry
+      Name: Current Robot Pose
       Position Tolerance: 0.10000000149011612
       Queue Size: 10
       Shape:
         Alpha: 1
-        Axes Length: 1
-        Axes Radius: 0.10000000149011612
-        Color: 170; 0; 255
-        Head Length: 0.30000001192092896
-        Head Radius: 0.10000000149011612
-        Shaft Length: 1
-        Shaft Radius: 0.05000000074505806
+        Axes Length: 1.2000000476837158
+        Axes Radius: 0.12000000476837158
+        Color: 255; 220; 0
+        Head Length: 0.44999998807907104
+        Head Radius: 0.15000000596046448
+        Shaft Length: 1.100000023841858
+        Shaft Radius: 0.07999999821186066
         Value: Arrow
       Topic: /lio_localizer/odometry/planning
       Unreliable: false
@@ -705,7 +705,7 @@ Visualization Manager:
       Buffer Length: 1
       Class: rviz/Path
       Color: 0; 120; 255
-      Enabled: true
+      Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
@@ -724,7 +724,7 @@ Visualization Manager:
       Shaft Length: 0.10000000149011612
       Topic: /planning/localization_history_path
       Unreliable: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
