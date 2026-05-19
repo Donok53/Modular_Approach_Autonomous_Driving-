@@ -2931,7 +2931,7 @@ class ConstrainedLocalReplanner:
         if not self._in_bounds_blocked(dynamic_blocked, start_gx, start_gy):
             return None
 
-        lateral_clear_cells = max(
+        lateral_clear_base_cells = max(
             1,
             int(
                 math.ceil(
@@ -2945,7 +2945,7 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
-        approach_clear_cells = max(
+        approach_clear_base_cells = max(
             1,
             int(
                 math.ceil(
@@ -2958,8 +2958,8 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
-        forward_clear_cells = max(
-            approach_clear_cells + 1,
+        forward_clear_base_cells = max(
+            approach_clear_base_cells + 1,
             int(
                 math.ceil(
                     (
@@ -2970,48 +2970,87 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        lateral_clear_candidates = sorted(
+            {
+                lateral_clear_base_cells,
+                lateral_clear_base_cells + 1,
+                lateral_clear_base_cells + 2,
+                lateral_clear_base_cells + 4,
+            }
+        )
+        approach_clear_candidates = sorted(
+            {
+                approach_clear_base_cells,
+                approach_clear_base_cells + 1,
+                approach_clear_base_cells + 2,
+            }
+        )
+        forward_clear_candidates = sorted(
+            {
+                forward_clear_base_cells,
+                forward_clear_base_cells + 1,
+                forward_clear_base_cells + 2,
+                forward_clear_base_cells + 4,
+            }
+        )
 
         candidates = []
         if step_x != 0:
             lane_y = start_gy
-            if step_x > 0:
-                entry_x = max(start_gx, min_x - approach_clear_cells)
-                exit_x = max(entry_x + 1, max_x + forward_clear_cells)
-            else:
-                entry_x = min(start_gx, max_x + approach_clear_cells)
-                exit_x = min(entry_x - 1, min_x - forward_clear_cells)
-            side_values = [min_y - lateral_clear_cells, max_y + lateral_clear_cells]
-            side_values = sorted(side_values, key=lambda val: abs(val - lane_y))
-            for side_y in side_values:
-                candidates.append(
-                    [
-                        (start_gx, lane_y),
-                        (entry_x, lane_y),
-                        (entry_x, side_y),
-                        (exit_x, side_y),
-                        (exit_x, lane_y),
-                    ]
-                )
+            for approach_clear_cells in approach_clear_candidates:
+                if step_x > 0:
+                    entry_x = max(start_gx, min_x - approach_clear_cells)
+                else:
+                    entry_x = min(start_gx, max_x + approach_clear_cells)
+                for forward_clear_cells in forward_clear_candidates:
+                    if step_x > 0:
+                        exit_x = max(entry_x + 1, max_x + forward_clear_cells)
+                    else:
+                        exit_x = min(entry_x - 1, min_x - forward_clear_cells)
+                    side_values = []
+                    for lateral_clear_cells in lateral_clear_candidates:
+                        side_values.extend(
+                            [min_y - lateral_clear_cells, max_y + lateral_clear_cells]
+                        )
+                    side_values = sorted(set(side_values), key=lambda val: abs(val - lane_y))
+                    for side_y in side_values:
+                        candidates.append(
+                            [
+                                (start_gx, lane_y),
+                                (entry_x, lane_y),
+                                (entry_x, side_y),
+                                (exit_x, side_y),
+                                (exit_x, lane_y),
+                            ]
+                        )
         else:
             lane_x = start_gx
-            if step_y > 0:
-                entry_y = max(start_gy, min_y - approach_clear_cells)
-                exit_y = max(entry_y + 1, max_y + forward_clear_cells)
-            else:
-                entry_y = min(start_gy, max_y + approach_clear_cells)
-                exit_y = min(entry_y - 1, min_y - forward_clear_cells)
-            side_values = [min_x - lateral_clear_cells, max_x + lateral_clear_cells]
-            side_values = sorted(side_values, key=lambda val: abs(val - lane_x))
-            for side_x in side_values:
-                candidates.append(
-                    [
-                        (lane_x, start_gy),
-                        (lane_x, entry_y),
-                        (side_x, entry_y),
-                        (side_x, exit_y),
-                        (lane_x, exit_y),
-                    ]
-                )
+            for approach_clear_cells in approach_clear_candidates:
+                if step_y > 0:
+                    entry_y = max(start_gy, min_y - approach_clear_cells)
+                else:
+                    entry_y = min(start_gy, max_y + approach_clear_cells)
+                for forward_clear_cells in forward_clear_candidates:
+                    if step_y > 0:
+                        exit_y = max(entry_y + 1, max_y + forward_clear_cells)
+                    else:
+                        exit_y = min(entry_y - 1, min_y - forward_clear_cells)
+                    side_values = []
+                    for lateral_clear_cells in lateral_clear_candidates:
+                        side_values.extend(
+                            [min_x - lateral_clear_cells, max_x + lateral_clear_cells]
+                        )
+                    side_values = sorted(set(side_values), key=lambda val: abs(val - lane_x))
+                    for side_x in side_values:
+                        candidates.append(
+                            [
+                                (lane_x, start_gy),
+                                (lane_x, entry_y),
+                                (side_x, entry_y),
+                                (side_x, exit_y),
+                                (lane_x, exit_y),
+                            ]
+                        )
 
         best_path = None
         best_cost = None
