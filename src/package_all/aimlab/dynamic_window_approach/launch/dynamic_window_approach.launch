@@ -453,6 +453,7 @@
     <arg name="emergency_bypass_bearing_deg" default="6.0"/>
     <arg name="emergency_bypass_yaw_err_deg" default="8.0"/>
     <arg name="emergency_bypass_clearance_margin_m" default="0.00"/>
+    <arg name="active_avoidance_bypass_clearance_m" default="0.22"/>
     <arg name="emergency_bypass_goal_window_m" default="0.60"/>
     <arg name="emergency_bypass_speed_limit_mps" default="0.32"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -964,6 +965,7 @@
         <param name="emergency_bypass_bearing_deg" value="$(arg emergency_bypass_bearing_deg)"/>
         <param name="emergency_bypass_yaw_err_deg" value="$(arg emergency_bypass_yaw_err_deg)"/>
         <param name="emergency_bypass_clearance_margin_m" value="$(arg emergency_bypass_clearance_margin_m)"/>
+        <param name="active_avoidance_bypass_clearance_m" value="$(arg active_avoidance_bypass_clearance_m)"/>
         <param name="emergency_bypass_goal_window_m" value="$(arg emergency_bypass_goal_window_m)"/>
         <param name="emergency_bypass_speed_limit_mps" value="$(arg emergency_bypass_speed_limit_mps)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>

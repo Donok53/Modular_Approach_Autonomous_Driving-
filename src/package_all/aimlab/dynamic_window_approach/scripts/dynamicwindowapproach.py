@@ -335,6 +335,18 @@ class DWAControl:
             0.0,
             float(rospy.get_param("~emergency_bypass_clearance_margin_m", 0.03)),
         )
+        self.active_avoidance_bypass_clearance_m = max(
+            0.05,
+            min(
+                self.avoidance_hard_stop_distance,
+                float(
+                    rospy.get_param(
+                        "~active_avoidance_bypass_clearance_m",
+                        max(0.10, self.avoidance_hard_stop_distance - 0.10),
+                    )
+                ),
+            ),
+        )
         self.emergency_bypass_goal_window_m = max(
             0.0,
             float(rospy.get_param("~emergency_bypass_goal_window_m", 0.60)),
@@ -3080,8 +3092,14 @@ class DWAControl:
             return False
         if not math.isfinite(self.front_obstacle_clearance):
             return False
+        active_avoidance = self.active_path_source == "avoidance"
         min_bypass_clearance = (
-            self.avoidance_hard_stop_distance + self.emergency_bypass_clearance_margin_m
+            (
+                self.active_avoidance_bypass_clearance_m
+                if active_avoidance
+                else self.avoidance_hard_stop_distance
+            )
+            + self.emergency_bypass_clearance_margin_m
         )
         if self.front_obstacle_clearance <= min_bypass_clearance:
             return False
@@ -3101,7 +3119,8 @@ class DWAControl:
 
         target_local_x, target_local_y = _to_local(target_xy[0], target_xy[1])
         base_s = max(self.s_cur, s_proj)
-        preview_s = min(self.s_total, base_s + self.emergency_bypass_preview_m)
+        preview_distance = self.emergency_bypass_preview_m * (1.35 if active_avoidance else 1.0)
+        preview_s = min(self.s_total, base_s + preview_distance)
         preview_x, preview_y, preview_t_hat = self._interp_xy_smoothed_tangent_at_s(preview_s)
         preview_local_x, preview_local_y = _to_local(preview_x, preview_y)
         preview_path_yaw = math.atan2(preview_t_hat[1], preview_t_hat[0])
@@ -3124,10 +3143,17 @@ class DWAControl:
             return False
 
         lateral_detour = max(abs(target_local_y), abs(preview_local_y))
+        lateral_threshold = self.emergency_bypass_target_lateral_m
+        bearing_threshold = self.emergency_bypass_bearing_rad
+        yaw_err_threshold = self.emergency_bypass_yaw_err_rad
+        if active_avoidance:
+            lateral_threshold = max(0.03, lateral_threshold * 0.75)
+            bearing_threshold = max(math.radians(2.0), bearing_threshold * 0.75)
+            yaw_err_threshold = max(math.radians(3.0), yaw_err_threshold * 0.75)
         return (
-            lateral_detour >= self.emergency_bypass_target_lateral_m
-            or abs(preview_bearing) >= self.emergency_bypass_bearing_rad
-            or abs(preview_yaw_err) >= self.emergency_bypass_yaw_err_rad
+            lateral_detour >= lateral_threshold
+            or abs(preview_bearing) >= bearing_threshold
+            or abs(preview_yaw_err) >= yaw_err_threshold
         )
 
     def _near_goal_completion_allowed(self, dist_to_goal, arc_rem, lat_err):
