@@ -39,6 +39,12 @@ class ConstrainedLocalReplanner:
                 nominal_path_reference_mode,
             )
             nominal_path_reference_mode = "local"
+        if nominal_path_reference_mode == "global":
+            rospy.logwarn(
+                "constrained_local_replanner: nominal_path_reference_mode=global is deprecated; "
+                "using always-on local nominal tracking instead"
+            )
+            nominal_path_reference_mode = "local"
         self.nominal_path_reference_mode = nominal_path_reference_mode
         self.pointcloud_topic = rospy.get_param("~pointcloud_topic", "/ouster/points")
         self.obstacle_pointcloud_topic = rospy.get_param(
@@ -746,10 +752,10 @@ class ConstrainedLocalReplanner:
         return self.nominal_path_reference_mode == "global"
 
     def _publish_nominal_reference_path(self, world_points, frame_id, stamp):
-        if self._use_global_nominal_reference():
-            self._clear_local_path(frame_id, stamp)
-            self._publish_path_mode("follow_global")
-            return
+        # Keep a rolling local nominal path alive at all times.  The fixed
+        # global path remains the long-horizon guide, but the controller should
+        # always track a short local segment that can bend early around
+        # obstacles.
         self._publish_world_path(world_points, frame_id, stamp)
         self._publish_path_mode("follow_local")
 
@@ -5296,15 +5302,13 @@ class ConstrainedLocalReplanner:
                     stamp=stamp,
                 )
                 return
-            planning_horizon_m = (
-                self.avoidance_plan_horizon_m
-                if self._use_global_nominal_reference()
-                else self.lookahead_m
-            )
             i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
-            ig = self._accum_distance(pts, i0, planning_horizon_m)
+            nominal_horizon_m = self.lookahead_m
+            planning_horizon_m = max(nominal_horizon_m, self.avoidance_plan_horizon_m)
+            nominal_ig = self._accum_distance(pts, i0, nominal_horizon_m)
+            planning_ig = self._accum_distance(pts, i0, planning_horizon_m)
             start_xy = (self.odom_x, self.odom_y)
-            goal_xy = pts[ig]
+            goal_xy = pts[planning_ig]
 
             sx, sy = self._world_to_grid(dg, start_xy[0], start_xy[1])
             gx, gy = self._world_to_grid(dg, goal_xy[0], goal_xy[1])
@@ -5331,7 +5335,7 @@ class ConstrainedLocalReplanner:
                 )
                 return
             nominal_path, nominal_world, nominal_fail_reason = self._build_nominal_local_path(
-                pts, i0, ig, dg
+                pts, i0, nominal_ig, dg
             )
             if nominal_path is None or nominal_world is None:
                 nominal_world_remain_m = self._world_path_length(nominal_world)
@@ -5385,9 +5389,20 @@ class ConstrainedLocalReplanner:
                     force=True,
                 )
                 return
+            planning_path, planning_world, planning_fail_reason = self._build_nominal_local_path(
+                pts, i0, planning_ig, dg
+            )
+            if planning_path is None or planning_world is None:
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: failed to build long-horizon planning segment from global path (reason=%s); falling back to nominal horizon",
+                    planning_fail_reason if planning_fail_reason else "unknown",
+                )
+                planning_path = nominal_path
+                planning_world = nominal_world
 
             blocked_idx = self._first_blocked_path_index(
-                nominal_path,
+                planning_path,
                 blocked,
                 start_cell,
                 dg,
@@ -5409,7 +5424,7 @@ class ConstrainedLocalReplanner:
                         radius_override_m=self.near_goal_relaxed_path_blocking_radius_m,
                     )
                 if self._should_ignore_near_goal_block(
-                    nominal_path,
+                    planning_path,
                     blocked_idx,
                     start_cell,
                     dg,
@@ -5423,14 +5438,14 @@ class ConstrainedLocalReplanner:
                     nominal_blocked = False
                 if nominal_blocked:
                     blind_zone_conflict = self._path_blind_zone_turn_conflict(
-                        nominal_path, dg, now_sec=stamp.to_sec()
+                        planning_path, dg, now_sec=stamp.to_sec()
                     )
                     if blind_zone_conflict is not None:
                         blocked_reason = "blind_zone_turn_conflict"
             else:
                 blocked_reason = "nominal_path_blocked"
                 blind_zone_conflict = self._path_blind_zone_turn_conflict(
-                    nominal_path, dg, now_sec=stamp.to_sec()
+                    planning_path, dg, now_sec=stamp.to_sec()
                 )
                 if blind_zone_conflict is not None:
                     nominal_blocked = True
@@ -5446,7 +5461,7 @@ class ConstrainedLocalReplanner:
                     )
             if nominal_blocked:
                 source_summary = self._build_path_blocker_source_summary(
-                    nominal_path,
+                    planning_path,
                     dg,
                     start_cell,
                     max_check_m=planning_horizon_m,
@@ -5457,7 +5472,7 @@ class ConstrainedLocalReplanner:
                 if (
                     blocked_reason == "nominal_path_blocked"
                     and self._should_ignore_grid_only_nominal_block(
-                        nominal_path,
+                        planning_path,
                         start_cell,
                         dg,
                         rg,
@@ -5477,7 +5492,7 @@ class ConstrainedLocalReplanner:
                 blocking_points = []
                 if self.use_pointcloud_static_blocking:
                     blocking_points = self._collect_path_overlap_points(
-                        nominal_path,
+                        planning_path,
                         dg,
                         start_cell,
                         self.obstacle_points_map,
@@ -5485,7 +5500,7 @@ class ConstrainedLocalReplanner:
                         max_check_m=planning_horizon_m,
                     )
                 blocking_cells = self._collect_confirmed_blocked_path_world_points(
-                    nominal_path,
+                    planning_path,
                     blocked,
                     start_cell,
                     dg,
@@ -5493,7 +5508,7 @@ class ConstrainedLocalReplanner:
                 )
                 if source_summary is None:
                     source_summary = self._build_path_blocker_source_summary(
-                        nominal_path,
+                        planning_path,
                         dg,
                         start_cell,
                         max_check_m=planning_horizon_m,
@@ -5561,7 +5576,7 @@ class ConstrainedLocalReplanner:
                             stamp,
                             trigger_reason=blocked_reason,
                             wait_s=wait_s,
-                            path_len=len(nominal_path),
+                            path_len=len(planning_path),
                         ),
                         stamp=stamp,
                         force=True,
@@ -5571,7 +5586,7 @@ class ConstrainedLocalReplanner:
                     self._clear_avoidance_path(dg.header.frame_id, stamp)
                     return
                 avoidance_state = self._update_avoidance_path(
-                    nominal_path,
+                    planning_path,
                     blocked,
                     start_cell,
                     goal_cell,
@@ -5646,7 +5661,7 @@ class ConstrainedLocalReplanner:
             self._publish_nominal_reference_path(
                 nominal_world, dg.header.frame_id, stamp
             )
-            avoidance_state = self._update_avoidance_path(nominal_path, blocked, start_cell, goal_cell, dg, stamp, "local")
+            avoidance_state = self._update_avoidance_path(planning_path, blocked, start_cell, goal_cell, dg, stamp, "local")
             if avoidance_state == "avoidance":
                 self.rejoin_mode_until_sec = 0.0
                 return

@@ -3067,23 +3067,25 @@ class DWAControl:
             and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
         )
 
+        # In the default navigation architecture, the controller always tracks
+        # a short rolling local path.  The fixed global path is the guide; the
+        # local path is the actual control reference and should be preferred
+        # whenever it is fresh.
+        if use_local:
+            if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
+                self._activate_path(self.local_path_msg, self.local_path_sig, "local")
+            return
+
         if self.current_path_mode in ("follow_local", "follow_avoidance", "rejoin_global"):
-            if use_local:
-                if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
-                    self._activate_path(self.local_path_msg, self.local_path_sig, "local")
-                return
-            if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
-                if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
-                    self._activate_path(self.global_path_msg, self.global_path_sig, "global")
-                return
+            # Keep the current local control reference latched instead of
+            # falling back to the long global guide.  The replanner is expected
+            # to refresh local continuously; if it momentarily hiccups, we do
+            # not want control to jump back onto the full global path.
+            return
         else:
             if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
                 if self._incoming_path_requires_activation(self.global_path_msg, self.global_path_sig, "global"):
                     self._activate_path(self.global_path_msg, self.global_path_sig, "global")
-                return
-            if use_local:
-                if self._incoming_path_requires_activation(self.local_path_msg, self.local_path_sig, "local"):
-                    self._activate_path(self.local_path_msg, self.local_path_sig, "local")
                 return
 
         if self.path_msg is not None:
