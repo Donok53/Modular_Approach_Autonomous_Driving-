@@ -152,9 +152,9 @@
     <arg name="lookahead_error_gain" default="0.80"/>
     <arg name="lookahead_max_distance" default="3.50"/>
     <arg name="obstacle_response_clearance_m" default="1.80"/>
-    <arg name="obstacle_response_lookahead_scale" default="0.72"/>
-    <arg name="obstacle_response_tracking_kp_scale" default="1.30"/>
-    <arg name="obstacle_response_yaw_rate_scale" default="1.25"/>
+    <arg name="obstacle_response_lookahead_scale" default="1.10"/>
+    <arg name="obstacle_response_tracking_kp_scale" default="1.15"/>
+    <arg name="obstacle_response_yaw_rate_scale" default="1.08"/>
     <arg name="snap_lat_err" default="0.20"/>
     <arg name="snap_target_ahead_m" default="2.20"/>
     <arg name="tracking_projection_back_window_m" default="0.35"/>
@@ -180,7 +180,7 @@
     <arg name="path_tracking_heading_filter_gain" default="0.35"/>
     <arg name="path_tracking_goal_bearing_gain" default="0.50"/>
     <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
-    <arg name="path_tracking_target_step_m" default="0.25"/>
+    <arg name="path_tracking_target_step_m" default="0.32"/>
     <arg name="path_tracking_tangent_window_m" default="0.75"/>
     <arg name="path_tracking_crawl_speed" default="0.42"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.34"/>

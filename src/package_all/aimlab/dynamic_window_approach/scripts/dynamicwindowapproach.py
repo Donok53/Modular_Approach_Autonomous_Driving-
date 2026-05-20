@@ -520,7 +520,7 @@ class DWAControl:
         self.obstacle_response_lookahead_scale = max(
             0.45,
             min(
-                1.0,
+                1.60,
                 float(rospy.get_param("~obstacle_response_lookahead_scale", 0.72)),
             ),
         )
@@ -2742,9 +2742,11 @@ class DWAControl:
         self.s_cur = 0.0
 
     def _should_smooth_tracking_path(self):
-        # Keep orthogonal/local detours crisp so the controller does not round
-        # the corner away from what the replanner explicitly published.
-        return not (self._avoidance_mode_active() or self._local_stop_turn_go_active())
+        # With local path as the primary control reference, a small amount of
+        # smoothing helps avoid overly tight cornering that can clip obstacles
+        # or cause the robot to get hung up mid-turn.  Only the explicit
+        # stop-turn-go mode needs the raw unsmoothed polyline.
+        return not self._local_stop_turn_go_active()
 
     def _local_stop_turn_go_active(self):
         return (
@@ -3257,7 +3259,8 @@ class DWAControl:
             and self.active_path_source == "local"
         ):
             preview_lookahead_min = max(
-                0.80, self.lookahead_distance * self.obstacle_response_lookahead_scale
+                self.lookahead_distance,
+                self.lookahead_distance * self.obstacle_response_lookahead_scale,
             )
         preview_lookahead = preview_lookahead_min
         preview_lookahead += self.lookahead_speed_gain * max(0.0, abs(self.last_cmd.linear.x))
@@ -3293,14 +3296,15 @@ class DWAControl:
             if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
                 target_seg_idx += 1
             segment_end_s = self.cum_len[target_seg_idx + 1]
-            segment_step_scale = 0.65 if self.active_path_source == "global" else 0.8
+            segment_step_scale = 0.65 if self.active_path_source == "global" else 0.95
             segment_target_step_cap = max(0.05, self.path_tracking_target_step_m)
             if obstacle_response_active and self.active_path_source == "local":
                 if self._avoidance_mode_active():
-                    segment_step_scale = min(segment_step_scale, 0.35)
-                    segment_target_step_cap = min(segment_target_step_cap, 0.18)
+                    segment_step_scale = max(segment_step_scale, 1.10)
+                    segment_target_step_cap = max(segment_target_step_cap, 0.35)
                 else:
-                    segment_step_scale = min(segment_step_scale, 0.55)
+                    segment_step_scale = max(segment_step_scale, 1.00)
+                    segment_target_step_cap = max(segment_target_step_cap, 0.30)
             segment_target_step = min(
                 segment_target_step_cap,
                 max(0.05, segment_step_scale * self.seg_lens[target_seg_idx]),
@@ -3548,6 +3552,9 @@ class DWAControl:
         yaw_rate_limit = self.path_tracking_yaw_rate_max * (
             self.obstacle_response_yaw_rate_scale if obstacle_response_active else 1.0
         )
+        if self.active_path_source == "local":
+            tracking_kp *= 0.88
+            yaw_rate_limit *= 0.82
         if abs_err >= self.path_tracking_stop_yaw:
             w_target = tracking_kp * yaw_err
             if need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0:
