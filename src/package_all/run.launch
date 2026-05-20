@@ -427,11 +427,11 @@
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.32"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
-  <arg name="pointcloud_static_block_margin_m" default="0.08"/>
+  <arg name="pointcloud_static_block_margin_m" default="0.10"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="2"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.22"/>
+  <arg name="obstacle_block_margin_m" default="0.25"/>
   <arg name="avoidance_trigger_margin_m" default="0.22"/>
   <arg name="avoidance_trigger_ahead_m" default="$(eval max(float(arg('local_replan_lookahead_m')), 12.0))"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
@@ -447,7 +447,7 @@
   <arg name="blocked_clear_hold_s" default="0.35"/>
   <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
   <arg name="avoidance_branch_backtrack_cells" default="6"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
   <arg name="near_goal_block_ignore_distance_m" default="1.20"/>
   <arg name="near_goal_tail_block_ignore_distance_m" default="0.60"/>
