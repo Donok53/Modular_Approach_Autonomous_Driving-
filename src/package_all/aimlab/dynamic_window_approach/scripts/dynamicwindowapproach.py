@@ -563,6 +563,22 @@ class DWAControl:
         self.tracking_path_smoothing_passes = max(
             0, int(rospy.get_param("~tracking_path_smoothing_passes", 2))
         )
+        self.local_tracking_smoothing_enabled = bool(
+            rospy.get_param("~local_tracking_smoothing_enabled", False)
+        )
+        self.local_tracking_preview_m = max(
+            0.25, float(rospy.get_param("~local_tracking_preview_m", 0.85))
+        )
+        self.local_tracking_segment_step_scale = max(
+            0.20, float(rospy.get_param("~local_tracking_segment_step_scale", 0.65))
+        )
+        self.local_tracking_target_step_cap_m = max(
+            0.05, float(rospy.get_param("~local_tracking_target_step_cap_m", 0.22))
+        )
+        self.local_tracking_obstacle_speed_cap_mps = max(
+            0.05,
+            float(rospy.get_param("~local_tracking_obstacle_speed_cap_mps", 0.42)),
+        )
         self.path_tracking_only = bool(rospy.get_param("~path_tracking_only", True))
         self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 0.92))
         self.path_tracking_yaw_rate_max = math.radians(
@@ -2742,10 +2758,8 @@ class DWAControl:
         self.s_cur = 0.0
 
     def _should_smooth_tracking_path(self):
-        # With local path as the primary control reference, a small amount of
-        # smoothing helps avoid overly tight cornering that can clip obstacles
-        # or cause the robot to get hung up mid-turn.  Only the explicit
-        # stop-turn-go mode needs the raw unsmoothed polyline.
+        if self.active_path_source == "local":
+            return self.local_tracking_smoothing_enabled and (not self._local_stop_turn_go_active())
         return not self._local_stop_turn_go_active()
 
     def _local_stop_turn_go_active(self):
@@ -3262,6 +3276,11 @@ class DWAControl:
                 self.lookahead_distance,
                 self.lookahead_distance * self.obstacle_response_lookahead_scale,
             )
+        if self.active_path_source == "local":
+            preview_lookahead_min = min(
+                preview_lookahead_min,
+                max(0.25, self.local_tracking_preview_m),
+            )
         preview_lookahead = preview_lookahead_min
         preview_lookahead += self.lookahead_speed_gain * max(0.0, abs(self.last_cmd.linear.x))
         preview_lookahead += self.lookahead_error_gain * abs(lat_err)
@@ -3298,13 +3317,15 @@ class DWAControl:
             segment_end_s = self.cum_len[target_seg_idx + 1]
             segment_step_scale = 0.65 if self.active_path_source == "global" else 0.95
             segment_target_step_cap = max(0.05, self.path_tracking_target_step_m)
-            if obstacle_response_active and self.active_path_source == "local":
-                if self._avoidance_mode_active():
-                    segment_step_scale = max(segment_step_scale, 1.10)
-                    segment_target_step_cap = max(segment_target_step_cap, 0.35)
-                else:
-                    segment_step_scale = max(segment_step_scale, 1.00)
-                    segment_target_step_cap = max(segment_target_step_cap, 0.30)
+            if self.active_path_source == "local":
+                segment_step_scale = min(
+                    segment_step_scale,
+                    self.local_tracking_segment_step_scale,
+                )
+                segment_target_step_cap = min(
+                    segment_target_step_cap,
+                    self.local_tracking_target_step_cap_m,
+                )
             segment_target_step = min(
                 segment_target_step_cap,
                 max(0.05, segment_step_scale * self.seg_lens[target_seg_idx]),
@@ -3499,7 +3520,9 @@ class DWAControl:
             )
             goal_align_ratio = max(0.0, min(1.0, goal_align_ratio))
         goal_bearing_gain = self.path_tracking_goal_bearing_gain
-        if obstacle_response_active:
+        if self.active_path_source == "local":
+            goal_bearing_gain *= 0.20
+        elif obstacle_response_active:
             goal_bearing_gain *= 1.20
         goal_heading_weight = 0.0
         if remaining_dist <= max(self.lookahead_distance, 0.8):
@@ -3522,12 +3545,15 @@ class DWAControl:
         # Only add a very small point-bearing bias near the final goal so the
         # robot does not peel away from the selected route during normal travel.
         desired_yaw_raw = path_yaw_raw + goal_heading_weight * goal_bearing_err - cte_correction
+        heading_filter_gain = self.path_tracking_heading_filter_gain
+        if self.active_path_source == "local":
+            heading_filter_gain = min(1.0, heading_filter_gain * 1.35)
         if self._path_tracking_prev_desired_yaw is None:
             desired_yaw = desired_yaw_raw
         else:
             desired_yaw = wrap_angle(
                 self._path_tracking_prev_desired_yaw +
-                self.path_tracking_heading_filter_gain *
+                heading_filter_gain *
                 angdiff(desired_yaw_raw, self._path_tracking_prev_desired_yaw)
             )
         self._path_tracking_prev_desired_yaw = desired_yaw
@@ -3544,6 +3570,8 @@ class DWAControl:
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         if self._emergency_bypass_active:
             v_limit = min(v_limit, self.emergency_bypass_speed_limit_mps)
+        if self.active_path_source == "local" and obstacle_response_active:
+            v_limit = min(v_limit, self.local_tracking_obstacle_speed_cap_mps)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
         tracking_kp = self.path_tracking_kp * (
