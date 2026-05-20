@@ -453,6 +453,23 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        self.avoidance_compact_replan_window_s = max(
+            0.0,
+            float(rospy.get_param("~avoidance_compact_replan_window_s", 3.0)),
+        )
+        self.avoidance_compact_branch_backtrack_cells = max(
+            0,
+            int(rospy.get_param("~avoidance_compact_branch_backtrack_cells", 2)),
+        )
+        self.avoidance_compact_rejoin_min_distance_m = max(
+            0.30,
+            float(
+                rospy.get_param(
+                    "~avoidance_compact_rejoin_min_distance_m",
+                    min(0.90, self.avoidance_rejoin_min_distance_m),
+                )
+            ),
+        )
         self.allow_avoidance_reuse_on_no_solution = bool(
             rospy.get_param("~allow_avoidance_reuse_on_no_solution", False)
         )
@@ -3519,6 +3536,11 @@ class ConstrainedLocalReplanner:
             and self.active_avoidance_obstacle_key is not None
             and trigger_key == self.active_avoidance_obstacle_key
         )
+        different_obstacle_episode = (
+            trigger_key is not None
+            and self.active_avoidance_obstacle_key is not None
+            and trigger_key != self.active_avoidance_obstacle_key
+        )
         deviation_limit_m = max(0.25, min(0.55, self.avoidance_reuse_max_deviation_m))
         if same_obstacle_episode:
             deviation_limit_m = max(
@@ -3541,6 +3563,8 @@ class ConstrainedLocalReplanner:
             float(dg.info.resolution),
             max_check_m=self.lookahead_m,
         )
+        if different_obstacle_episode:
+            return False
         if path_still_blocked and (not same_obstacle_episode):
             return False
         if self._path_blind_zone_turn_conflict(
@@ -4650,7 +4674,19 @@ class ConstrainedLocalReplanner:
         backtrack_cells = self.avoidance_branch_backtrack_cells
         clip_to_rejoin_only = self._use_global_nominal_reference()
         orthogonal_detour = False
-        if blocked_delta_cells <= close_blocked_cells:
+        recent_avoidance_active = (
+            now_sec is not None
+            and self.avoidance_compact_replan_window_s > 0.0
+            and self.last_avoidance_active_sec > 0.0
+            and (float(now_sec) - float(self.last_avoidance_active_sec))
+            <= self.avoidance_compact_replan_window_s
+        )
+        if recent_avoidance_active:
+            backtrack_cells = min(
+                backtrack_cells,
+                self.avoidance_compact_branch_backtrack_cells,
+            )
+        elif blocked_delta_cells <= close_blocked_cells:
             backtrack_cells = max(backtrack_cells, int(math.ceil(0.8 / res_m)))
 
         branch_start_idx = max(start_idx, blocked_idx - backtrack_cells)
@@ -4683,6 +4719,14 @@ class ConstrainedLocalReplanner:
             return composed
 
         rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
+        if recent_avoidance_active:
+            rejoin_distance_candidates_m.insert(
+                0,
+                min(
+                    self.avoidance_rejoin_min_distance_m,
+                    self.avoidance_compact_rejoin_min_distance_m,
+                ),
+            )
         if self.avoidance_rejoin_min_distance_m > 0.8:
             rejoin_distance_candidates_m.append(
                 max(0.8, self.avoidance_rejoin_min_distance_m * 0.75)

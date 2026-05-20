@@ -256,6 +256,9 @@
     <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
     <arg name="blocked_clear_hold_s" default="0.35"/>
     <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
+    <arg name="avoidance_compact_replan_window_s" default="3.0"/>
+    <arg name="avoidance_compact_branch_backtrack_cells" default="2"/>
+    <arg name="avoidance_compact_rejoin_min_distance_m" default="0.90"/>
     <arg name="avoidance_branch_backtrack_cells" default="6"/>
     <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
     <arg name="rejoin_mode_hold_s" default="1.0"/>
@@ -812,6 +815,9 @@
             <param name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
             <param name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
             <param name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
+            <param name="avoidance_compact_replan_window_s" value="$(arg avoidance_compact_replan_window_s)"/>
+            <param name="avoidance_compact_branch_backtrack_cells" value="$(arg avoidance_compact_branch_backtrack_cells)"/>
+            <param name="avoidance_compact_rejoin_min_distance_m" value="$(arg avoidance_compact_rejoin_min_distance_m)"/>
             <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
             <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
             <param name="rejoin_mode_hold_s" value="$(arg rejoin_mode_hold_s)"/>
