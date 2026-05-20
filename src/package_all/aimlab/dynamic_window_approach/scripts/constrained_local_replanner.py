@@ -444,6 +444,15 @@ class ConstrainedLocalReplanner:
         self.avoidance_reuse_max_deviation_m = max(
             0.0, float(rospy.get_param("~avoidance_reuse_max_deviation_m", 0.8))
         )
+        self.avoidance_keep_until_endpoint_distance_m = max(
+            0.10,
+            float(
+                rospy.get_param(
+                    "~avoidance_keep_until_endpoint_distance_m",
+                    max(0.70, self.robot_length_m * 1.15),
+                )
+            ),
+        )
         self.allow_avoidance_reuse_on_no_solution = bool(
             rospy.get_param("~allow_avoidance_reuse_on_no_solution", False)
         )
@@ -543,6 +552,8 @@ class ConstrainedLocalReplanner:
         self.local_clear_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
+        self.global_path_signature = None
+        self.global_nominal_progress_idx = 0
         # Default to following the replanner's nominal local segment.  The
         # global route should supply direction, while the local replanner owns
         # the short-horizon maneuvering path that the controller actually
@@ -1337,6 +1348,11 @@ class ConstrainedLocalReplanner:
         self._record_travel_history_point(self.odom_x, self.odom_y)
 
     def global_path_callback(self, msg):
+        pts = self._path_points(msg)
+        sig = self._path_signature_from_points(pts)
+        if sig != self.global_path_signature:
+            self.global_nominal_progress_idx = 0
+            self.global_path_signature = sig
         self.global_path = msg
 
     def drivable_grid_callback(self, msg):
@@ -2070,6 +2086,7 @@ class ConstrainedLocalReplanner:
         self.local_clear_since_sec = 0.0
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
+        self.global_nominal_progress_idx = 0
         self.obstacle_memory_points = []
         self.obstacle_memory_count = 0
         self.obstacle_memory_locked_count = 0
@@ -2104,6 +2121,17 @@ class ConstrainedLocalReplanner:
             goal_y,
         )
         return [(self.odom_x, self.odom_y), (goal_x, goal_y)]
+
+    def _nominal_global_start_index(self, points):
+        if not points:
+            self.global_nominal_progress_idx = 0
+            return 0
+        nearest_i = self._nearest_idx(points, self.odom_x, self.odom_y)
+        max_idx = max(0, len(points) - 2)
+        start_i = max(int(self.global_nominal_progress_idx), int(nearest_i))
+        start_i = max(0, min(max_idx, start_i))
+        self.global_nominal_progress_idx = start_i
+        return start_i
 
     @staticmethod
     def _nearest_idx(points, x, y):
@@ -3378,6 +3406,61 @@ class ConstrainedLocalReplanner:
             if d < best:
                 best = d
         return best
+
+    def _grid_path_endpoint_distance_to_xy(self, grid_path, dg, x, y):
+        if not grid_path:
+            return float("inf")
+        wx, wy = self._grid_to_world(dg, grid_path[-1][0], grid_path[-1][1])
+        return math.hypot(float(wx) - float(x), float(wy) - float(y))
+
+    def _hold_active_avoidance_until_endpoint(self, dg, stamp, clear_reason="clear"):
+        if (not self.avoidance_active) or self.last_avoidance_grid_path is None:
+            return False
+        if len(self.last_avoidance_grid_path) < 2:
+            return False
+        endpoint_dist_m = self._grid_path_endpoint_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        if endpoint_dist_m <= self.avoidance_keep_until_endpoint_distance_m:
+            return False
+        deviation_limit_m = max(
+            0.45,
+            self.avoidance_reuse_max_deviation_m,
+            self.robot_length_m * 1.6,
+            self.robot_width_m * 2.2,
+        )
+        deviation_m = self._grid_path_min_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        if deviation_m > deviation_limit_m:
+            return False
+        if self._path_blind_zone_turn_conflict(
+            self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
+        ) is not None:
+            return False
+        self._publish_operational_detour_path(
+            self.last_avoidance_grid_path,
+            dg,
+            stamp,
+            start_xy=(self.odom_x, self.odom_y),
+            record_history=False,
+        )
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = stamp.to_sec()
+        rospy.loginfo_throttle(
+            1.0,
+            "constrained_local_replanner: keeping active avoidance until detour end | end=%.2fm dev=%.2fm reason=%s",
+            endpoint_dist_m,
+            deviation_m,
+            str(clear_reason),
+        )
+        return True
 
     def _republish_last_avoidance_path(self, dg, stamp):
         if not self.allow_avoidance_reuse_on_no_solution:
@@ -4882,6 +4965,24 @@ class ConstrainedLocalReplanner:
         if trigger_reason is None:
             self._avoidance_trigger_confirmed(None, stamp)
             self._clear_blocking_obstacle_markers(stamp)
+            if (not self._use_global_nominal_reference()) and self._hold_active_avoidance_until_endpoint(
+                dg,
+                stamp,
+                clear_reason="nominal_path_clear",
+            ):
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "avoid_hold",
+                        stamp,
+                        trigger_reason="detour_endpoint_pending",
+                        path_len=len(self.last_avoidance_grid_path)
+                        if self.last_avoidance_grid_path is not None
+                        else 0,
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                )
+                return "avoidance"
             if self._use_global_nominal_reference():
                 self._clear_avoidance_path(frame_id, stamp, force=True)
             else:
@@ -4944,7 +5045,7 @@ class ConstrainedLocalReplanner:
             )
             return "avoidance" if self.avoidance_active else "clear"
 
-        if self._use_global_nominal_reference() and self._continue_active_avoidance_path(
+        if self._continue_active_avoidance_path(
             dg,
             dynamic_blocked,
             start_cell,
@@ -5294,6 +5395,7 @@ class ConstrainedLocalReplanner:
 
             pts = self._global_path_points()
             if len(pts) < 2:
+                self.global_nominal_progress_idx = 0
                 self._clear_avoidance_path(dg.header.frame_id, stamp)
                 self.rejoin_mode_until_sec = 0.0
                 self._publish_path_mode("hold")
@@ -5302,7 +5404,7 @@ class ConstrainedLocalReplanner:
                     stamp=stamp,
                 )
                 return
-            i0 = self._nearest_idx(pts, self.odom_x, self.odom_y)
+            i0 = self._nominal_global_start_index(pts)
             nominal_horizon_m = self.lookahead_m
             planning_horizon_m = max(nominal_horizon_m, self.avoidance_plan_horizon_m)
             nominal_ig = self._accum_distance(pts, i0, nominal_horizon_m)
@@ -5647,14 +5749,16 @@ class ConstrainedLocalReplanner:
                             force=True,
                         )
                         return
-                rospy.loginfo("constrained_local_replanner: nominal path clear; resuming global path tracking")
+                rospy.loginfo(
+                    "constrained_local_replanner: nominal path clear; resuming nominal local tracking"
+                )
                 self._publish_explainability(
                     event_type="LOCAL_REPLAN_END",
                     stamp=stamp,
                     trigger_reason="nominal_path_clear",
-                    action_taken="resume_global",
+                    action_taken="resume_nominal_local",
                     local_planning_active=False,
-                    summary_text="Nominal local path is clear again, so local replanning ended and global path tracking resumed.",
+                    summary_text="Nominal local path is clear again, so the replanner ended the active detour and returned control to the rolling nominal local path.",
                 )
             self.local_blocked_since_sec = 0.0
             self.local_clear_since_sec = 0.0

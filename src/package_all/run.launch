@@ -440,6 +440,7 @@
   <arg name="avoidance_trigger_confirm_cycles" default="1"/>
   <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
   <arg name="blocked_clear_hold_s" default="0.35"/>
+  <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
   <arg name="avoidance_branch_backtrack_cells" default="6"/>
   <arg name="avoidance_rejoin_min_distance_m" default="1.4"/>
   <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
@@ -1211,6 +1212,7 @@
       <arg name="avoidance_trigger_confirm_cycles" value="$(arg avoidance_trigger_confirm_cycles)"/>
       <arg name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
       <arg name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
+      <arg name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
@@ -1476,6 +1478,7 @@
       <arg name="avoidance_trigger_confirm_cycles" value="$(arg avoidance_trigger_confirm_cycles)"/>
       <arg name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
       <arg name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
+      <arg name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
