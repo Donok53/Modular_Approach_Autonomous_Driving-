@@ -197,6 +197,8 @@
   <arg name="near_field_raw_overlay_min_z_span_m" default="0.12"/>
   <arg name="near_field_raw_overlay_ttl_s" default="0.60"/>
   <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
+  <arg name="use_raw_near_obstacle_hits" default="$(arg near_field_raw_overlay_enabled)"/>
+  <arg name="raw_near_obstacle_hold_s" default="$(arg near_field_raw_overlay_ttl_s)"/>
   <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
   <arg name="near_field_raw_debug_cloud_topic" default="/planning/near_field_raw_debug_cloud"/>
   <arg name="near_field_raw_debug_min_x_m" default="-1.2"/>
@@ -1021,6 +1023,8 @@
       <arg name="near_field_raw_overlay_min_z_span_m" value="$(arg near_field_raw_overlay_min_z_span_m)"/>
       <arg name="near_field_raw_overlay_ttl_s" value="$(arg near_field_raw_overlay_ttl_s)"/>
       <arg name="near_field_raw_overlay_hit_cloud_topic" value="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
+      <arg name="use_raw_near_obstacle_hits" value="$(arg use_raw_near_obstacle_hits)"/>
+      <arg name="raw_near_obstacle_hold_s" value="$(arg raw_near_obstacle_hold_s)"/>
       <arg name="near_field_raw_debug_cloud_enabled" value="$(arg near_field_raw_debug_cloud_enabled)"/>
       <arg name="near_field_raw_debug_cloud_topic" value="$(arg near_field_raw_debug_cloud_topic)"/>
       <arg name="near_field_raw_debug_min_x_m" value="$(arg near_field_raw_debug_min_x_m)"/>

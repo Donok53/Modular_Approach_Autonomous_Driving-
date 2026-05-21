@@ -50,6 +50,15 @@ class ConstrainedLocalReplanner:
         self.obstacle_pointcloud_topic = rospy.get_param(
             "~obstacle_pointcloud_topic", self.pointcloud_topic
         )
+        self.use_raw_near_obstacle_hits = bool(
+            rospy.get_param("~use_raw_near_obstacle_hits", True)
+        )
+        self.raw_near_obstacle_hits_topic = str(
+            rospy.get_param(
+                "~raw_near_obstacle_hits_topic",
+                "/planning/near_field_raw_overlay_hits",
+            )
+        ).strip()
         self.tracked_objects_topic = rospy.get_param(
             "~tracked_objects_topic", "/perception/tracked_objects"
         )
@@ -225,6 +234,15 @@ class ConstrainedLocalReplanner:
         )
         self.pointcloud_visibility_hold_s = max(
             0.0, float(rospy.get_param("~pointcloud_visibility_hold_s", 0.45))
+        )
+        self.raw_near_obstacle_hold_s = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~raw_near_obstacle_hold_s",
+                    self.pointcloud_visibility_hold_s,
+                )
+            ),
         )
         self.static_obstacle_memory_enabled = bool(
             rospy.get_param("~static_obstacle_memory_enabled", True)
@@ -536,6 +554,10 @@ class ConstrainedLocalReplanner:
         self.current_obstacle_points_stamp_sec = 0.0
         self.last_nonempty_current_obstacle_points_map = []
         self.last_nonempty_current_obstacle_points_stamp_sec = 0.0
+        self.raw_near_obstacle_points_map = []
+        self.raw_near_obstacle_points_stamp_sec = 0.0
+        self.last_nonempty_raw_near_obstacle_points_map = []
+        self.last_nonempty_raw_near_obstacle_points_stamp_sec = 0.0
         self.obstacle_points_map = []
         self.obstacle_raw_point_count = 0
         self.obstacle_cluster_count = 0
@@ -672,6 +694,14 @@ class ConstrainedLocalReplanner:
             self.cloud_callback,
             queue_size=1,
         )
+        self.sub_raw_near_obstacle_hits = None
+        if self.use_raw_near_obstacle_hits and self.raw_near_obstacle_hits_topic:
+            self.sub_raw_near_obstacle_hits = rospy.Subscriber(
+                self.raw_near_obstacle_hits_topic,
+                PointCloud2,
+                self.raw_near_obstacle_hits_callback,
+                queue_size=1,
+            )
         self.sub_direct_goal = None
         if self.use_direct_goal:
             self.sub_direct_goal = rospy.Subscriber(self.direct_goal_topic, PoseStamped, self.direct_goal_callback, queue_size=2)
@@ -706,6 +736,12 @@ class ConstrainedLocalReplanner:
                 self.global_pointcloud_overlay_max_range_m,
                 self.global_pointcloud_overlay_lookahead_m,
                 self.global_pointcloud_overlay_corridor_margin_m,
+            )
+        if self.use_raw_near_obstacle_hits and self.raw_near_obstacle_hits_topic:
+            rospy.loginfo(
+                "constrained_local_replanner raw-near obstacle hits | topic=%s hold=%.2fs",
+                self.raw_near_obstacle_hits_topic,
+                self.raw_near_obstacle_hold_s,
             )
         if self.local_blind_zone_guard_enabled:
             rospy.loginfo(
@@ -1412,6 +1448,28 @@ class ConstrainedLocalReplanner:
         s = math.sin(self.odom_yaw)
         return c * dx + s * dy, (-s) * dx + c * dy
 
+    @staticmethod
+    def _normalized_frame_id(frame_id):
+        return str(frame_id or "").strip().lstrip("/")
+
+    def _known_map_frame_ids(self):
+        frame_ids = {"map"}
+        if self.drivable_grid is not None:
+            frame_id = self._normalized_frame_id(self.drivable_grid.header.frame_id)
+            if frame_id:
+                frame_ids.add(frame_id)
+        if self.global_path is not None:
+            frame_id = self._normalized_frame_id(self.global_path.header.frame_id)
+            if frame_id:
+                frame_ids.add(frame_id)
+        return frame_ids
+
+    def _xy_message_point_to_map(self, msg, x, y):
+        frame_id = self._normalized_frame_id(getattr(msg.header, "frame_id", ""))
+        if frame_id and frame_id in self._known_map_frame_ids():
+            return float(x), float(y)
+        return self._local_to_map(x, y)
+
     def _pointcloud_cluster_cell(self, x, y):
         res = max(1e-3, self.pointcloud_cluster_resolution_m)
         return (int(math.floor(x / res)), int(math.floor(y / res)))
@@ -1795,27 +1853,67 @@ class ConstrainedLocalReplanner:
             self.static_obstacle_memory_merge_radius_m,
         )
 
-    def _effective_current_obstacle_points_map(self, now_sec=None):
-        current_points = list(self.current_obstacle_points_map)
+    def _effective_raw_near_obstacle_points_map(self, now_sec=None):
+        current_points = list(self.raw_near_obstacle_points_map)
         if current_points:
             return current_points
-        if self.pointcloud_visibility_hold_s <= 0.0:
+        if self.raw_near_obstacle_hold_s <= 0.0:
             return []
         if now_sec is None:
             now_sec = rospy.Time.now().to_sec()
-        age_s = now_sec - self.last_nonempty_current_obstacle_points_stamp_sec
+        age_s = now_sec - self.last_nonempty_raw_near_obstacle_points_stamp_sec
         if (
-            self.last_nonempty_current_obstacle_points_stamp_sec > 0.0
-            and age_s <= self.pointcloud_visibility_hold_s
+            self.last_nonempty_raw_near_obstacle_points_stamp_sec > 0.0
+            and age_s <= self.raw_near_obstacle_hold_s
         ):
             self._debug_avoidance_log(
-                "constrained_local_replanner: reusing recent current obstacle points during lidar dropout | age={:.2f}s pts={}".format(
+                "constrained_local_replanner: reusing recent raw-near obstacle hits | age={:.2f}s pts={}".format(
                     max(0.0, age_s),
-                    len(self.last_nonempty_current_obstacle_points_map),
+                    len(self.last_nonempty_raw_near_obstacle_points_map),
                 )
             )
-            return list(self.last_nonempty_current_obstacle_points_map)
+            return list(self.last_nonempty_raw_near_obstacle_points_map)
         return []
+
+    def _effective_current_obstacle_points_map(self, now_sec=None):
+        if now_sec is None:
+            now_sec = rospy.Time.now().to_sec()
+        current_points = list(self.current_obstacle_points_map)
+        if (
+            (not current_points)
+            and self.pointcloud_visibility_hold_s > 0.0
+        ):
+            age_s = now_sec - self.last_nonempty_current_obstacle_points_stamp_sec
+            if (
+                self.last_nonempty_current_obstacle_points_stamp_sec > 0.0
+                and age_s <= self.pointcloud_visibility_hold_s
+            ):
+                self._debug_avoidance_log(
+                    "constrained_local_replanner: reusing recent current obstacle points during lidar dropout | age={:.2f}s pts={}".format(
+                        max(0.0, age_s),
+                        len(self.last_nonempty_current_obstacle_points_map),
+                    )
+                )
+                current_points = list(self.last_nonempty_current_obstacle_points_map)
+
+        raw_near_points = self._effective_raw_near_obstacle_points_map(now_sec=now_sec)
+        if not raw_near_points:
+            return current_points
+        return self._merge_point_sets(
+            current_points,
+            raw_near_points,
+            self.pointcloud_cluster_resolution_m,
+        )
+
+    def _refresh_merged_obstacle_points_map(self, now_sec=None, remembered_points=None):
+        if now_sec is None:
+            now_sec = rospy.Time.now().to_sec()
+        if remembered_points is None:
+            remembered_points = self._prune_obstacle_memory(now_sec)
+        self.obstacle_points_map = self._merge_obstacle_memory_points(
+            self._effective_current_obstacle_points_map(now_sec=now_sec),
+            remembered_points,
+        )
 
     def _combined_dynamic_obstacle_points(self, include_tracked=True):
         current_points = self._effective_current_obstacle_points_map()
@@ -2073,8 +2171,9 @@ class ConstrainedLocalReplanner:
                 memory_candidates_map.append((wx, wy))
 
             remembered_points = self._update_obstacle_memory(memory_candidates_map, stamp_sec)
-            self.obstacle_points_map = self._merge_obstacle_memory_points(
-                current_points_map, remembered_points
+            self._refresh_merged_obstacle_points_map(
+                now_sec=stamp_sec,
+                remembered_points=remembered_points,
             )
             global_overlay_candidates = self._select_global_overlay_candidate_points(
                 current_points_map
@@ -2085,6 +2184,48 @@ class ConstrainedLocalReplanner:
             self._publish_recognized_obstacle_markers(msg.header.stamp)
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner cloud error: %s", str(e))
+
+    def raw_near_obstacle_hits_callback(self, msg):
+        if not self.have_odom:
+            return
+        try:
+            cluster_counts = {}
+            cluster_sums = {}
+            for p in point_cloud2.read_points(
+                msg, field_names=("x", "y", "z"), skip_nans=True
+            ):
+                x = float(p[0])
+                y = float(p[1])
+                if (not math.isfinite(x)) or (not math.isfinite(y)):
+                    continue
+                wx, wy = self._xy_message_point_to_map(msg, x, y)
+                if self._is_known_map_static_obstacle(wx, wy):
+                    continue
+                cell = self._pointcloud_cluster_cell(wx, wy)
+                cluster_counts[cell] = cluster_counts.get(cell, 0) + 1
+                sx, sy = cluster_sums.get(cell, (0.0, 0.0))
+                cluster_sums[cell] = (sx + wx, sy + wy)
+
+            points_map = []
+            for cell, count in cluster_counts.items():
+                sx, sy = cluster_sums[cell]
+                points_map.append((sx / float(count), sy / float(count)))
+
+            stamp_sec = msg.header.stamp.to_sec()
+            if stamp_sec <= 0.0:
+                stamp_sec = rospy.Time.now().to_sec()
+            self.raw_near_obstacle_points_map = list(points_map)
+            self.raw_near_obstacle_points_stamp_sec = stamp_sec
+            if points_map:
+                self.last_nonempty_raw_near_obstacle_points_map = list(points_map)
+                self.last_nonempty_raw_near_obstacle_points_stamp_sec = stamp_sec
+            self._refresh_merged_obstacle_points_map(now_sec=stamp_sec)
+        except Exception as e:
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner raw-near obstacle hit error: %s",
+                str(e),
+            )
 
     def _pointcloud_corridor_half_width_m(self, margin_m):
         return max(
