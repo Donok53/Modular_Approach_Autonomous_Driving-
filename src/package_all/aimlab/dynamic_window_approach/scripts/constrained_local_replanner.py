@@ -462,9 +462,6 @@ class ConstrainedLocalReplanner:
         self.avoidance_rejoin_min_distance_m = max(
             0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
         )
-        self.avoidance_rejoin_tail_distance_m = max(
-            0.5, float(rospy.get_param("~avoidance_rejoin_tail_distance_m", 1.8))
-        )
         self.avoidance_same_side_commitment_enabled = bool(
             rospy.get_param("~avoidance_same_side_commitment_enabled", True)
         )
@@ -2919,9 +2916,7 @@ class ConstrainedLocalReplanner:
             end_xy=end_xy,
         )
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
-        self.last_avoidance_grid_path = (
-            list(publish_grid_path) if publish_grid_path is not None else None
-        )
+        self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
         self.last_avoidance_active_sec = stamp.to_sec()
         if record_history:
             self._record_path_history(
@@ -3560,12 +3555,7 @@ class ConstrainedLocalReplanner:
             float(dg.info.resolution),
             max_check_m=self.lookahead_m,
         )
-        # If the currently active detour is still blocked, force a fresh
-        # short-horizon replan instead of clinging to the stale branch.  This
-        # is especially important when a second obstacle appears mid-detour:
-        # reusing the old path makes the robot keep turning long after a much
-        # smaller re-optimization would be possible.
-        if path_still_blocked:
+        if path_still_blocked and (not same_obstacle_episode):
             return False
         if self._path_blind_zone_turn_conflict(
             self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
@@ -4419,31 +4409,6 @@ class ConstrainedLocalReplanner:
             remain_m += self._heur(path[idx], path[idx + 1]) * scale
         return remain_m
 
-    def _local_avoidance_rejoin_tail(self, nominal_path, dg, rejoin_idx):
-        if (
-            nominal_path is None
-            or dg is None
-            or rejoin_idx is None
-            or rejoin_idx + 1 >= len(nominal_path)
-        ):
-            return []
-        scale = max(1e-3, float(dg.info.resolution))
-        max_tail_m = max(
-            self.avoidance_rejoin_tail_distance_m,
-            self.robot_length_m * 2.0,
-        )
-        tail = []
-        accum_m = 0.0
-        prev = nominal_path[rejoin_idx]
-        for idx in range(rejoin_idx + 1, len(nominal_path)):
-            cell = nominal_path[idx]
-            tail.append(cell)
-            accum_m += self._heur(prev, cell) * scale
-            prev = cell
-            if accum_m >= max_tail_m:
-                break
-        return tail
-
     def _get_active_local_blind_zone_memory(self, now_sec=None):
         if (
             (not self.local_blind_zone_guard_enabled)
@@ -4737,10 +4702,7 @@ class ConstrainedLocalReplanner:
                     composed, nominal_path[start_idx:branch_start_idx + 1]
                 )
                 self._append_path_segment(composed, detour_cells[1:])
-                self._append_path_segment(
-                    composed,
-                    self._local_avoidance_rejoin_tail(nominal_path, dg, rejoin_idx),
-                )
+                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
             return composed
 
         rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
