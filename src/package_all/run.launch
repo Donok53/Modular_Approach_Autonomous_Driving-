@@ -108,9 +108,7 @@
   <arg name="published_path_spacing_m" default="0.25"/>
   <arg name="path_history_max_paths" default="12"/>
   <arg name="local_replan_hz" default="$(eval '5.0' if str(arg('localization_environment')).lower() == 'outdoor' else '3.0')"/>
-  <arg name="local_replan_lookahead_m" default="$(eval '5.0' if str(arg('localization_environment')).lower() == 'outdoor' else '4.0')"/>
-  <arg name="global_path_use_dynamic_risk_grid" default="false"/>
-  <arg name="global_path_use_obstacle_overlay" default="false"/>
+  <arg name="local_replan_lookahead_m" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '6.0')"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.60"/>
   <arg name="enable_avoidance_path" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
@@ -831,9 +829,9 @@
         <arg name="osm_file" value="$(arg auto_osm_file)"/>
         <arg name="ref_file" value="$(arg astar_ref_file)"/>
         <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
-        <arg name="use_dynamic_risk_grid_global" value="$(arg global_path_use_dynamic_risk_grid)"/>
+        <arg name="use_dynamic_risk_grid_global" value="$(arg use_dynamic_risk_grid)"/>
         <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
-        <arg name="use_global_obstacle_overlay" value="$(arg global_path_use_obstacle_overlay)"/>
+        <arg name="use_global_obstacle_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
         <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
         <arg name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
         <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
@@ -896,9 +894,9 @@
         <arg name="osm_file" value="$(arg default_osm_file)"/>
         <arg name="ref_file" value="$(arg astar_ref_file)"/>
         <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
-        <arg name="use_dynamic_risk_grid_global" value="$(arg global_path_use_dynamic_risk_grid)"/>
+        <arg name="use_dynamic_risk_grid_global" value="$(arg use_dynamic_risk_grid)"/>
         <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
-        <arg name="use_global_obstacle_overlay" value="$(arg global_path_use_obstacle_overlay)"/>
+        <arg name="use_global_obstacle_overlay" value="$(arg enable_global_pointcloud_overlay)"/>
         <arg name="global_obstacle_overlay_topic" value="$(arg global_obstacle_overlay_topic)"/>
         <arg name="global_obstacle_overlay_threshold" value="$(arg global_obstacle_overlay_threshold)"/>
         <arg name="path_blocked_topic" value="$(arg path_blocked_topic)"/>
