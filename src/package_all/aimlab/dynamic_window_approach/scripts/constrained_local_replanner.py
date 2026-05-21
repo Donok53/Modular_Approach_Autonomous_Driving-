@@ -492,6 +492,47 @@ class ConstrainedLocalReplanner:
         self.avoidance_local_collapse_straights = bool(
             rospy.get_param("~avoidance_local_collapse_straights", True)
         )
+        self.short_curved_avoidance_enabled = bool(
+            rospy.get_param("~short_curved_avoidance_enabled", True)
+        )
+        self.short_curved_avoidance_preview_m = max(
+            1.2,
+            float(
+                rospy.get_param(
+                    "~short_curved_avoidance_preview_m",
+                    max(
+                        self.avoidance_rejoin_min_distance_m + self.robot_length_m * 2.0,
+                        3.2,
+                    ),
+                )
+            ),
+        )
+        self.short_curved_avoidance_tail_m = max(
+            0.4,
+            float(
+                rospy.get_param(
+                    "~short_curved_avoidance_tail_m",
+                    max(self.robot_length_m * 1.6, 1.0),
+                )
+            ),
+        )
+        self.short_curved_avoidance_smooth_passes = max(
+            1, int(rospy.get_param("~short_curved_avoidance_smooth_passes", 2))
+        )
+        self.short_curved_avoidance_max_curvature = max(
+            0.1,
+            float(rospy.get_param("~short_curved_avoidance_max_curvature", 1.35)),
+        )
+        self.short_curved_avoidance_max_heading_delta_rad = math.radians(
+            max(
+                5.0,
+                float(
+                    rospy.get_param(
+                        "~short_curved_avoidance_max_heading_delta_deg", 55.0
+                    )
+                ),
+            )
+        )
         # In global-nominal mode, we need to detect and branch around obstacles
         # earlier than the short controller-facing lookahead, otherwise the
         # robot keeps following the fixed global path until emergency stop.
@@ -579,6 +620,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
+        self.last_avoidance_world_path = None
         self.last_avoidance_solution_sec = 0.0
         self.last_avoidance_active_sec = 0.0
         self.active_avoidance_obstacle_key = None
@@ -2264,6 +2306,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
+        self.last_avoidance_world_path = None
         self.last_avoidance_solution_sec = 0.0
         self.last_avoidance_active_sec = 0.0
         self._reset_pending_avoidance_trigger()
@@ -3093,6 +3136,9 @@ class ConstrainedLocalReplanner:
         )
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
         self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
+        self.last_avoidance_world_path = (
+            list(sampled_points) if sampled_points is not None else None
+        )
         self.last_avoidance_active_sec = stamp.to_sec()
         if record_history:
             self._record_path_history(
@@ -3124,6 +3170,9 @@ class ConstrainedLocalReplanner:
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
         self._publish_path_mode("follow_avoidance")
         self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
+        self.last_avoidance_world_path = (
+            list(sampled_points) if sampled_points is not None else None
+        )
         self.last_avoidance_active_sec = stamp.to_sec()
         self._arm_pending_used_local_trace(
             history_points if history_points is not None else sampled_points,
@@ -3166,6 +3215,49 @@ class ConstrainedLocalReplanner:
             end_xy=end_xy,
             record_history=record_history,
         )
+
+    def _world_points_to_grid_path(self, world_points, dg):
+        if not world_points:
+            return []
+        out = []
+        last_cell = None
+        for wx, wy in world_points:
+            gx, gy = self._world_to_grid(dg, wx, wy)
+            if not self._in_bounds(dg, gx, gy):
+                return []
+            cell = (int(gx), int(gy))
+            if cell != last_cell:
+                out.append(cell)
+                last_cell = cell
+        return out
+
+    def _publish_world_avoidance_path(
+        self,
+        world_points,
+        dg,
+        stamp,
+        history_points=None,
+        record_history=True,
+    ):
+        if world_points is None or len(world_points) < 2:
+            return
+        frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+        sampled_points = self._sample_world_points(world_points)
+        grid_path = self._world_points_to_grid_path(sampled_points, dg)
+        if len(grid_path) < 2:
+            return
+        self._publish_path_mode("follow_avoidance")
+        self._publish_world_path(world_points, frame_id, stamp)
+        self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
+        self.last_avoidance_grid_path = list(grid_path)
+        self.last_avoidance_world_path = list(sampled_points)
+        self.last_avoidance_active_sec = stamp.to_sec()
+        if record_history:
+            self._record_path_history(
+                "avoidance",
+                history_points if history_points is not None else sampled_points,
+                frame_id,
+            )
 
     def _publish_world_path(self, world_points, frame_id, stamp):
         resolved_start_xy = self._resolve_path_start_xy(None)
@@ -3263,6 +3355,7 @@ class ConstrainedLocalReplanner:
         res_m,
         blocking_cells_world=None,
         blocking_points_world=None,
+        preferred_direction=None,
     ):
         if blocked_idx < 0 or blocked_idx >= len(nominal_path):
             return None
@@ -3473,12 +3566,270 @@ class ConstrainedLocalReplanner:
             else:
                 lateral_extent = max(abs(box_waypoints[2][0] - branch_gx), 0)
                 forward_extent = abs(box_waypoints[3][1] - box_waypoints[2][1])
-            cost = (lateral_extent, forward_extent, len(detour))
+            candidate_direction, _candidate_offset = self._infer_avoid_direction(
+                dg, detour
+            )
+            side_penalty = 0
+            if (
+                self.avoidance_same_side_commitment_enabled
+                and preferred_direction in ("left", "right")
+                and candidate_direction not in (preferred_direction, "none")
+            ):
+                side_penalty = 1
+            cost = (side_penalty, lateral_extent, forward_extent, len(detour))
             if best_cost is None or cost < best_cost:
                 best_cost = cost
                 best_path = detour
 
         return best_path
+
+    def _path_index_after_distance(self, path, start_idx, dg, target_dist_m):
+        if not path:
+            return 0
+        idx = max(0, min(int(start_idx), len(path) - 1))
+        if target_dist_m <= 1e-6 or idx >= len(path) - 1:
+            return idx
+
+        remain_m = 0.0
+        scale = max(1e-3, float(dg.info.resolution))
+        while idx + 1 < len(path):
+            remain_m += self._heur(path[idx], path[idx + 1]) * scale
+            idx += 1
+            if remain_m >= target_dist_m:
+                break
+        return idx
+
+    def _chaikin_smooth_world_points(self, world_points, passes=1):
+        if len(world_points) < 3 or passes <= 0:
+            return [(float(x), float(y)) for x, y in world_points]
+
+        smoothed = [(float(x), float(y)) for x, y in world_points]
+        for _ in range(int(passes)):
+            if len(smoothed) < 3:
+                break
+            next_points = [smoothed[0]]
+            for idx in range(len(smoothed) - 1):
+                x0, y0 = smoothed[idx]
+                x1, y1 = smoothed[idx + 1]
+                q = (0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1)
+                r = (0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1)
+                next_points.append(q)
+                next_points.append(r)
+            next_points.append(smoothed[-1])
+            smoothed = self._dedupe_world_points(next_points)
+        return smoothed
+
+    def _curved_world_path_metrics(self, world_points):
+        sampled_points = self._sample_world_points(world_points)
+        max_curvature = 0.0
+        max_heading_delta = 0.0
+        prev_yaw = None
+        for idx in range(len(sampled_points) - 1):
+            x0, y0 = sampled_points[idx]
+            x1, y1 = sampled_points[idx + 1]
+            seg_len = math.hypot(float(x1) - float(x0), float(y1) - float(y0))
+            if seg_len <= 1e-6:
+                continue
+            yaw = math.atan2(float(y1) - float(y0), float(x1) - float(x0))
+            if prev_yaw is not None:
+                heading_delta = abs(self._angle_diff(yaw, prev_yaw))
+                max_heading_delta = max(max_heading_delta, heading_delta)
+                max_curvature = max(
+                    max_curvature, heading_delta / max(seg_len, 1e-3)
+                )
+            prev_yaw = yaw
+        return sampled_points, max_curvature, max_heading_delta
+
+    def _candidate_world_path_is_safe(
+        self,
+        world_points,
+        dynamic_blocked,
+        dg,
+        start_cell,
+        now_sec=None,
+    ):
+        world_points = self._dedupe_world_points(world_points)
+        if len(world_points) < 2:
+            return None, None, None
+
+        sampled_points, max_curvature, max_heading_delta = (
+            self._curved_world_path_metrics(world_points)
+        )
+        if len(sampled_points) < 2:
+            return None, None, None
+        if max_curvature > self.short_curved_avoidance_max_curvature:
+            return None, None, None
+        if max_heading_delta > self.short_curved_avoidance_max_heading_delta_rad:
+            return None, None, None
+
+        for idx, (wx, wy) in enumerate(sampled_points):
+            if idx == 0:
+                continue
+            lx, _ly = self._world_to_local(wx, wy)
+            if lx < -0.10:
+                return None, None, None
+
+        grid_path = self._world_points_to_grid_path(sampled_points, dg)
+        if len(grid_path) < 2:
+            return None, None, None
+
+        for gx, gy in grid_path:
+            if (not self._in_bounds_blocked(dynamic_blocked, gx, gy)) or dynamic_blocked[gy][gx]:
+                return None, None, None
+        for idx in range(len(grid_path) - 1):
+            if not self._has_line_of_sight(
+                dynamic_blocked, grid_path[idx], grid_path[idx + 1]
+            ):
+                return None, None, None
+        if self._path_blind_zone_turn_conflict(
+            grid_path, dg, now_sec=now_sec
+        ) is not None:
+            return None, None, None
+        if self._path_blocked_ahead(
+            grid_path,
+            dynamic_blocked,
+            start_cell,
+            float(dg.info.resolution),
+            max_check_m=self.short_curved_avoidance_preview_m,
+        ):
+            return None, None, None
+
+        return sampled_points, grid_path, {
+            "max_curvature": float(max_curvature),
+            "max_heading_delta_deg": float(math.degrees(max_heading_delta)),
+        }
+
+    def _build_short_curved_avoidance_path(
+        self,
+        nominal_path,
+        dynamic_blocked,
+        start_cell,
+        dg,
+        blocked_idx=None,
+        blocking_cells_world=None,
+        blocking_points_world=None,
+        preferred_direction=None,
+        now_sec=None,
+    ):
+        if (not self.short_curved_avoidance_enabled) or len(nominal_path) < 2:
+            return None, None, None, None
+
+        preferred_direction = (
+            str(preferred_direction).strip().lower()
+            if preferred_direction is not None
+            else None
+        )
+        if preferred_direction not in ("left", "right"):
+            preferred_direction = None
+
+        start_idx = self._nearest_path_cell_index(nominal_path, start_cell)
+        if blocked_idx is None:
+            blocked_idx = self._first_blocked_path_index(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                max_check_m=self.avoidance_trigger_ahead_m,
+                include_pointcloud=self.use_pointcloud_avoidance_trigger,
+            )
+        if blocked_idx is None:
+            return None, None, None, None
+
+        res_m = max(1e-3, float(dg.info.resolution))
+        blocked_delta_cells = max(0, blocked_idx - start_idx)
+        close_blocked_cells = max(3, int(math.ceil(1.0 / res_m)))
+        backtrack_cells = self.avoidance_branch_backtrack_cells
+        if blocked_delta_cells <= close_blocked_cells:
+            backtrack_cells = max(backtrack_cells, int(math.ceil(0.8 / res_m)))
+
+        branch_start_idx = max(start_idx, blocked_idx - backtrack_cells)
+        while branch_start_idx > start_idx:
+            bx, by = nominal_path[branch_start_idx]
+            if self._in_bounds_blocked(dynamic_blocked, bx, by) and not dynamic_blocked[by][bx]:
+                break
+            branch_start_idx -= 1
+        branch_start_cell = nominal_path[branch_start_idx]
+
+        box_path = self._build_box_avoidance_path(
+            dynamic_blocked,
+            nominal_path,
+            start_idx,
+            start_cell,
+            branch_start_idx,
+            branch_start_cell,
+            blocked_idx,
+            dg,
+            res_m,
+            blocking_cells_world=blocking_cells_world,
+            blocking_points_world=blocking_points_world,
+            preferred_direction=preferred_direction,
+        )
+        if box_path is None or len(box_path) < 2:
+            return None, None, None, None
+
+        preview_end_idx = self._path_index_after_distance(
+            nominal_path, start_idx, dg, self.short_curved_avoidance_preview_m
+        )
+        rejoin_idx = self._nearest_path_cell_index(nominal_path, box_path[-1])
+        tail_end_idx = max(
+            preview_end_idx,
+            self._path_index_after_distance(
+                nominal_path, rejoin_idx, dg, self.short_curved_avoidance_tail_m
+            ),
+        )
+
+        composed = []
+        self._append_path_segment(composed, [start_cell])
+        self._append_path_segment(composed, nominal_path[start_idx:branch_start_idx + 1])
+        self._append_path_segment(composed, box_path[1:])
+
+        rejoin_cell = nominal_path[rejoin_idx]
+        if composed[-1] != rejoin_cell:
+            connector = self._trace_grid_segment_cells(composed[-1], rejoin_cell)
+            self._append_path_segment(composed, connector[1:])
+        if tail_end_idx > rejoin_idx:
+            self._append_path_segment(
+                composed, nominal_path[rejoin_idx + 1 : tail_end_idx + 1]
+            )
+        composed = self._collapse_straight_grid_runs(composed)
+        if len(composed) < 3:
+            return None, None, None, None
+
+        start_xy = self._resolve_path_start_xy((self.odom_x, self.odom_y))
+        world_points = self._grid_path_to_world_points(
+            composed,
+            dg,
+            start_xy=start_xy,
+        )
+        world_points = self._dedupe_world_points(world_points)
+        if len(world_points) < 3:
+            return None, None, None, None
+
+        best_candidate = None
+        for smooth_passes in range(self.short_curved_avoidance_smooth_passes, 0, -1):
+            candidate_world = self._chaikin_smooth_world_points(
+                world_points, passes=smooth_passes
+            )
+            sampled_points, grid_path, metrics = self._candidate_world_path_is_safe(
+                candidate_world,
+                dynamic_blocked,
+                dg,
+                start_cell,
+                now_sec=now_sec,
+            )
+            if sampled_points is None or grid_path is None:
+                continue
+            best_candidate = (
+                candidate_world,
+                grid_path,
+                sampled_points,
+                metrics,
+            )
+            break
+
+        if best_candidate is None:
+            return None, None, None, None
+        return best_candidate
 
     @staticmethod
     def _dedupe_world_points(world_points):
@@ -3584,6 +3935,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = 0.0
         self.last_avoidance_grid_path = None
+        self.last_avoidance_world_path = None
         self.last_avoidance_solution_sec = 0.0
 
     def _grid_path_min_distance_to_xy(self, grid_path, dg, x, y):
@@ -3602,6 +3954,26 @@ class ConstrainedLocalReplanner:
             return float("inf")
         wx, wy = self._grid_to_world(dg, grid_path[-1][0], grid_path[-1][1])
         return math.hypot(float(wx) - float(x), float(wy) - float(y))
+
+    def _publish_stored_avoidance_path(self, dg, stamp, record_history=False):
+        if self.last_avoidance_world_path is not None and len(self.last_avoidance_world_path) >= 2:
+            self._publish_world_avoidance_path(
+                self.last_avoidance_world_path,
+                dg,
+                stamp,
+                record_history=record_history,
+            )
+            return True
+        if self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
+            self._publish_operational_detour_path(
+                self.last_avoidance_grid_path,
+                dg,
+                stamp,
+                start_xy=(self.odom_x, self.odom_y),
+                record_history=record_history,
+            )
+            return True
+        return False
 
     def _hold_active_avoidance_until_endpoint(self, dg, stamp, clear_reason="clear"):
         if (not self.avoidance_active) or self.last_avoidance_grid_path is None:
@@ -3634,13 +4006,8 @@ class ConstrainedLocalReplanner:
             self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
         ) is not None:
             return False
-        self._publish_operational_detour_path(
-            self.last_avoidance_grid_path,
-            dg,
-            stamp,
-            start_xy=(self.odom_x, self.odom_y),
-            record_history=False,
-        )
+        if not self._publish_stored_avoidance_path(dg, stamp, record_history=False):
+            return False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
         rospy.loginfo_throttle(
@@ -3674,13 +4041,8 @@ class ConstrainedLocalReplanner:
         )
         if deviation_m > self.avoidance_reuse_max_deviation_m:
             return False
-        self._publish_operational_detour_path(
-            self.last_avoidance_grid_path,
-            dg,
-            stamp,
-            start_xy=(self.odom_x, self.odom_y),
-            record_history=False,
-        )
+        if not self._publish_stored_avoidance_path(dg, stamp, record_history=False):
+            return False
         self.avoidance_active = True
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
@@ -3737,13 +4099,8 @@ class ConstrainedLocalReplanner:
             self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
         ) is not None:
             return False
-        self._publish_operational_detour_path(
-            self.last_avoidance_grid_path,
-            dg,
-            stamp,
-            start_xy=(self.odom_x, self.odom_y),
-            record_history=False,
-        )
+        if not self._publish_stored_avoidance_path(dg, stamp, record_history=False):
+            return False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
         rospy.loginfo_throttle(
@@ -5287,11 +5644,9 @@ class ConstrainedLocalReplanner:
                     # logic is still active.  Otherwise the controller can fall back to the
                     # nominal local path too early and re-approach the obstacle corridor
                     # before the recent person / object evidence has really cleared.
-                    self._publish_operational_detour_path(
-                        self.last_avoidance_grid_path,
+                    self._publish_stored_avoidance_path(
                         dg,
                         stamp,
-                        start_xy=(self.odom_x, self.odom_y),
                         record_history=False,
                     )
                     self._publish_debug_text(
@@ -5392,23 +5747,60 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp)
             return "avoidance" if self.avoidance_active else "clear"
 
-        avoid_path, branch_history_points = self._build_branch_avoidance_path(
-            nominal_path,
-            dynamic_blocked,
-            start_cell,
-            dg,
-            now_sec=stamp.to_sec(),
-            # Use the same dynamic point source that triggered direct overlap so
-            # near-goal tail ignores and branching start from a consistent index.
-            points_map=dynamic_points_map if direct_points_enabled else None,
-            blocking_cells_world=blocking_cells,
-            blocking_points_world=blocking_points,
-            preferred_direction=preferred_direction,
-        )
+        avoid_solution_kind = "branch"
+        curved_world_path = None
+        curved_metrics = None
+        avoid_path = None
+        branch_history_points = None
+        if self.short_curved_avoidance_enabled:
+            (
+                curved_world_path,
+                avoid_path,
+                branch_history_points,
+                curved_metrics,
+            ) = self._build_short_curved_avoidance_path(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                blocked_idx=blocked_idx,
+                blocking_cells_world=blocking_cells,
+                blocking_points_world=blocking_points,
+                preferred_direction=preferred_direction,
+                now_sec=stamp.to_sec(),
+            )
+            if curved_world_path is not None and avoid_path is not None:
+                avoid_solution_kind = "short_curved"
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: using short curved avoidance path | cells=%d pts=%d max_curv=%.2f max_heading_step=%.1fdeg",
+                    len(avoid_path),
+                    len(branch_history_points) if branch_history_points is not None else 0,
+                    float(curved_metrics.get("max_curvature", 0.0))
+                    if curved_metrics is not None
+                    else 0.0,
+                    float(curved_metrics.get("max_heading_delta_deg", 0.0))
+                    if curved_metrics is not None
+                    else 0.0,
+                )
+        if avoid_path is None:
+            avoid_path, branch_history_points = self._build_branch_avoidance_path(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                now_sec=stamp.to_sec(),
+                # Use the same dynamic point source that triggered direct overlap so
+                # near-goal tail ignores and branching start from a consistent index.
+                points_map=dynamic_points_map if direct_points_enabled else None,
+                blocking_cells_world=blocking_cells,
+                blocking_points_world=blocking_points,
+                preferred_direction=preferred_direction,
+            )
         if avoid_path is None:
             rospy.logwarn_throttle(
                 1.0,
-                "constrained_local_replanner: obstacle detected on %s path (%s) but no branch-rejoin avoidance found",
+                "constrained_local_replanner: obstacle detected on %s path (%s) but no short curved or branch-rejoin avoidance was valid",
                 label,
                 trigger_reason,
             )
@@ -5435,11 +5827,9 @@ class ConstrainedLocalReplanner:
                 force=True,
             )
             if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
-                self._publish_operational_detour_path(
-                    self.last_avoidance_grid_path,
+                self._publish_stored_avoidance_path(
                     dg,
                     stamp,
-                    start_xy=(self.odom_x, self.odom_y),
                     record_history=False,
                 )
                 self.avoidance_clear_count = 0
@@ -5472,11 +5862,9 @@ class ConstrainedLocalReplanner:
                 force=True,
             )
             if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
-                self._publish_operational_detour_path(
-                    self.last_avoidance_grid_path,
+                self._publish_stored_avoidance_path(
                     dg,
                     stamp,
-                    start_xy=(self.odom_x, self.odom_y),
                     record_history=False,
                 )
                 self.avoidance_clear_count = 0
@@ -5493,13 +5881,21 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp, force=True)
             return "hold"
 
-        self._publish_operational_detour_path(
-            avoid_path,
-            dg,
-            stamp,
-            history_points=branch_history_points,
-            start_xy=(self.odom_x, self.odom_y),
-        )
+        if avoid_solution_kind == "short_curved" and curved_world_path is not None:
+            self._publish_world_avoidance_path(
+                curved_world_path,
+                dg,
+                stamp,
+                history_points=branch_history_points,
+            )
+        else:
+            self._publish_operational_detour_path(
+                avoid_path,
+                dg,
+                stamp,
+                history_points=branch_history_points,
+                start_xy=(self.odom_x, self.odom_y),
+            )
         avoid_direction, lateral_offset = self._infer_avoid_direction(dg, avoid_path)
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
@@ -5524,9 +5920,10 @@ class ConstrainedLocalReplanner:
             )
         if not self.avoidance_active:
             rospy.loginfo(
-                "constrained_local_replanner: avoidance path active | base=%s reason=%s obstacle_points=%d cells=%d",
+                "constrained_local_replanner: avoidance path active | base=%s reason=%s solution=%s obstacle_points=%d cells=%d",
                 label,
                 trigger_reason,
+                avoid_solution_kind,
                 clustered_point_count,
                 len(avoid_path),
             )
