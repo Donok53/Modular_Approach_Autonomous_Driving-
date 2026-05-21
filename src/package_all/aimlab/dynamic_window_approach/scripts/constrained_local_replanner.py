@@ -614,11 +614,8 @@ class ConstrainedLocalReplanner:
         self._last_debug_text = ""
         self._last_debug_text_time = 0.0
         self._last_debug_screen_time = 0.0
-        self.last_nonempty_local_path = None
 
-        self.pub_local_path = rospy.Publisher(
-            self.local_path_topic, Path, queue_size=2, latch=True
-        )
+        self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
         self.pub_path_mode = rospy.Publisher(self.path_mode_topic, String, queue_size=4, latch=True)
         self.pub_path_history = rospy.Publisher(
@@ -778,38 +775,6 @@ class ConstrainedLocalReplanner:
         except rospy.ROSException:
             return
         rospy.loginfo("constrained_local_replanner: path_mode=%s", mode_str)
-
-    def _remember_local_path(self, path_msg):
-        if path_msg is None or len(path_msg.poses) < 2:
-            return
-        self.last_nonempty_local_path = path_msg
-
-    def _republish_last_local_path(self, frame_id, stamp, reason="keep_last"):
-        if self.last_nonempty_local_path is None:
-            return False
-        out = Path()
-        out.header.stamp = stamp
-        out.header.frame_id = (
-            frame_id
-            if frame_id
-            else self.last_nonempty_local_path.header.frame_id
-            if self.last_nonempty_local_path.header.frame_id
-            else "map"
-        )
-        out.poses = self.last_nonempty_local_path.poses
-        for ps in out.poses:
-            ps.header = out.header
-        if len(out.poses) < 2:
-            return False
-        self.pub_local_path.publish(out)
-        self._remember_local_path(out)
-        rospy.loginfo_throttle(
-            1.0,
-            "constrained_local_replanner: reusing last local path (reason=%s poses=%d)",
-            str(reason),
-            len(out.poses),
-        )
-        return True
 
     def _use_global_nominal_reference(self):
         return self.nominal_path_reference_mode == "global"
@@ -2139,7 +2104,6 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_trigger_reason = ""
         self.last_avoidance_direction = "none"
         self.global_nominal_progress_idx = 0
-        self.last_nonempty_local_path = None
         self.obstacle_memory_points = []
         self.obstacle_memory_count = 0
         self.obstacle_memory_locked_count = 0
@@ -2570,14 +2534,6 @@ class ConstrainedLocalReplanner:
             out.poses.append(ps)
         if len(out.poses) >= 2:
             publisher.publish(out)
-            if publisher is self.pub_local_path:
-                self._remember_local_path(out)
-                rospy.loginfo_throttle(
-                    1.0,
-                    "constrained_local_replanner: local_path published (%d poses, frame=%s)",
-                    len(out.poses),
-                    out.header.frame_id,
-                )
         return sampled_points, out.header.frame_id
 
     def _sample_world_points(self, world_points):
@@ -3059,13 +3015,6 @@ class ConstrainedLocalReplanner:
             out.poses.append(ps)
         if len(out.poses) >= 2:
             self.pub_local_path.publish(out)
-            self._remember_local_path(out)
-            rospy.loginfo_throttle(
-                1.0,
-                "constrained_local_replanner: local_path published in world frame (%d poses, frame=%s)",
-                len(out.poses),
-                out.header.frame_id,
-            )
 
     @staticmethod
     def _collapse_straight_grid_runs(grid_path):
@@ -3473,15 +3422,7 @@ class ConstrainedLocalReplanner:
         publisher.publish(out)
 
     def _clear_local_path(self, frame_id, stamp, force=False):
-        if (
-            (not force)
-            and (not self._use_global_nominal_reference())
-            and self._republish_last_local_path(frame_id, stamp, reason="clear_requested")
-        ):
-            return
         self._publish_empty_path(self.pub_local_path, frame_id, stamp)
-        if force:
-            self.last_nonempty_local_path = None
         if self._use_global_nominal_reference():
             self._reset_pending_used_local_trace()
 
