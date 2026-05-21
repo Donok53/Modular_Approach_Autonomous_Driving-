@@ -3379,6 +3379,42 @@ class ConstrainedLocalReplanner:
             return None, sampled_points, "degenerate_grid"
         return grid_path, sampled_points, ""
 
+    def _publish_world_only_nominal_fallback(
+        self,
+        pts,
+        i0,
+        ig,
+        frame_id,
+        stamp,
+        *,
+        reason,
+        trigger_reason="nominal_world_fallback",
+    ):
+        segment_world = self._build_nominal_world_segment(pts, i0, ig)
+        if segment_world is None or len(segment_world) < 2:
+            return False
+        self.local_blocked_since_sec = 0.0
+        self.local_clear_since_sec = 0.0
+        self.rejoin_mode_until_sec = 0.0
+        self._publish_nominal_reference_path(segment_world, frame_id, stamp)
+        self._clear_avoidance_path(frame_id, stamp, force=True)
+        self._publish_debug_text(
+            self._build_debug_text(
+                "follow_nominal_world_fallback",
+                stamp,
+                trigger_reason=trigger_reason,
+                path_len=len(segment_world),
+            ),
+            stamp=stamp,
+            force=True,
+        )
+        rospy.logwarn_throttle(
+            1.0,
+            "constrained_local_replanner: using world-only nominal local fallback (reason=%s)",
+            str(reason),
+        )
+        return True
+
     def _publish_empty_path(self, publisher, frame_id, stamp):
         out = Path()
         out.header.stamp = stamp
@@ -5469,6 +5505,16 @@ class ConstrainedLocalReplanner:
                     str((sx, sy)),
                     str((gx, gy)),
                 )
+                if self._publish_world_only_nominal_fallback(
+                    pts,
+                    i0,
+                    nominal_ig,
+                    dg.header.frame_id,
+                    stamp,
+                    reason="snap_failed",
+                    trigger_reason="snap_failed",
+                ):
+                    return
                 self.local_blocked_since_sec = 0.0
                 self.rejoin_mode_until_sec = 0.0
                 self._clear_local_path(dg.header.frame_id, stamp)
@@ -5514,6 +5560,16 @@ class ConstrainedLocalReplanner:
                         stamp=stamp,
                         force=True,
                     )
+                    return
+                if self._publish_world_only_nominal_fallback(
+                    pts,
+                    i0,
+                    nominal_ig,
+                    dg.header.frame_id,
+                    stamp,
+                    reason=nominal_fail_reason if nominal_fail_reason else "unknown",
+                    trigger_reason="nominal_segment_invalid",
+                ):
                     return
                 rospy.logwarn_throttle(
                     1.0,
