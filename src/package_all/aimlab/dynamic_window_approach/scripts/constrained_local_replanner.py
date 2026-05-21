@@ -223,6 +223,9 @@ class ConstrainedLocalReplanner:
         self.pointcloud_min_cluster_points = max(
             1, int(rospy.get_param("~pointcloud_min_cluster_points", 4))
         )
+        self.pointcloud_visibility_hold_s = max(
+            0.0, float(rospy.get_param("~pointcloud_visibility_hold_s", 0.45))
+        )
         self.static_obstacle_memory_enabled = bool(
             rospy.get_param("~static_obstacle_memory_enabled", True)
         )
@@ -530,6 +533,9 @@ class ConstrainedLocalReplanner:
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
         self.current_obstacle_points_map = []
+        self.current_obstacle_points_stamp_sec = 0.0
+        self.last_nonempty_current_obstacle_points_map = []
+        self.last_nonempty_current_obstacle_points_stamp_sec = 0.0
         self.obstacle_points_map = []
         self.obstacle_raw_point_count = 0
         self.obstacle_cluster_count = 0
@@ -956,7 +962,9 @@ class ConstrainedLocalReplanner:
         markers.markers.append(delete_all)
 
         scale = self.recognized_obstacles_marker_scale_m
-        current_static_points = list(self.current_obstacle_points_map)
+        current_static_points = self._effective_current_obstacle_points_map(
+            marker_stamp.to_sec()
+        )
         static_memory_points = self._memory_points_from_entries(
             self.obstacle_memory_points, confirmed_only=True
         )
@@ -1787,16 +1795,39 @@ class ConstrainedLocalReplanner:
             self.static_obstacle_memory_merge_radius_m,
         )
 
+    def _effective_current_obstacle_points_map(self, now_sec=None):
+        current_points = list(self.current_obstacle_points_map)
+        if current_points:
+            return current_points
+        if self.pointcloud_visibility_hold_s <= 0.0:
+            return []
+        if now_sec is None:
+            now_sec = rospy.Time.now().to_sec()
+        age_s = now_sec - self.last_nonempty_current_obstacle_points_stamp_sec
+        if (
+            self.last_nonempty_current_obstacle_points_stamp_sec > 0.0
+            and age_s <= self.pointcloud_visibility_hold_s
+        ):
+            self._debug_avoidance_log(
+                "constrained_local_replanner: reusing recent current obstacle points during lidar dropout | age={:.2f}s pts={}".format(
+                    max(0.0, age_s),
+                    len(self.last_nonempty_current_obstacle_points_map),
+                )
+            )
+            return list(self.last_nonempty_current_obstacle_points_map)
+        return []
+
     def _combined_dynamic_obstacle_points(self, include_tracked=True):
+        current_points = self._effective_current_obstacle_points_map()
         tracked_points = self.tracked_object_points_map if include_tracked else []
         if not tracked_points:
-            return list(self.current_obstacle_points_map)
+            return current_points
         merge_radius_m = max(
             self.pointcloud_cluster_resolution_m,
             self.near_field_object_memory_merge_radius_m,
         )
         return self._merge_point_sets(
-            self.current_obstacle_points_map,
+            current_points,
             tracked_points,
             merge_radius_m,
         )
@@ -2022,6 +2053,10 @@ class ConstrainedLocalReplanner:
             stamp_sec = msg.header.stamp.to_sec()
             if stamp_sec <= 0.0:
                 stamp_sec = rospy.Time.now().to_sec()
+            self.current_obstacle_points_stamp_sec = stamp_sec
+            if current_points_map:
+                self.last_nonempty_current_obstacle_points_map = list(current_points_map)
+                self.last_nonempty_current_obstacle_points_stamp_sec = stamp_sec
 
             memory_candidates_map = []
             max_range_sq = self.static_obstacle_memory_max_range_m * self.static_obstacle_memory_max_range_m
@@ -4255,7 +4290,7 @@ class ConstrainedLocalReplanner:
                 path,
                 dg,
                 start_cell,
-                self.current_obstacle_points_map,
+                self._effective_current_obstacle_points_map(),
                 point_margin_m,
                 max_check_m=max_check_m,
             )
