@@ -1253,58 +1253,10 @@ class ConstrainedLocalReplanner:
         )
         return grouped
 
-    def _connected_world_point_group(
-        self,
-        world_points,
-        seed_point=None,
-        join_radius_m=None,
-    ):
-        points = self._dedupe_world_points(world_points)
-        if not points:
-            return []
-
-        if join_radius_m is None:
-            join_radius_m = max(
-                self.static_obstacle_memory_merge_radius_m * 2.5,
-                self.pointcloud_cluster_resolution_m * 3.0,
-                self.obstacle_block_margin_m + self.avoidance_trigger_margin_m + 0.12,
-                0.45,
-            )
-        join_radius_sq = float(join_radius_m) * float(join_radius_m)
-
-        if seed_point is None:
-            seed_idx = 0
-        else:
-            sx, sy = float(seed_point[0]), float(seed_point[1])
-            seed_idx = min(
-                range(len(points)),
-                key=lambda idx: (float(points[idx][0]) - sx) * (float(points[idx][0]) - sx)
-                + (float(points[idx][1]) - sy) * (float(points[idx][1]) - sy),
-            )
-
-        grouped_indices = {int(seed_idx)}
-        frontier = [int(seed_idx)]
-        while frontier:
-            idx = frontier.pop()
-            px, py = points[idx]
-            for cand_idx, (cx, cy) in enumerate(points):
-                if cand_idx in grouped_indices:
-                    continue
-                d2 = (float(cx) - float(px)) * (float(cx) - float(px)) + (
-                    float(cy) - float(py)
-                ) * (float(cy) - float(py))
-                if d2 > join_radius_sq:
-                    continue
-                grouped_indices.add(cand_idx)
-                frontier.append(cand_idx)
-
-        return [points[idx] for idx in sorted(grouped_indices)]
-
     def _stable_avoidance_obstacle_points(
         self,
         blocking_cells_world=None,
         blocking_points_world=None,
-        focus_point_world=None,
     ):
         matched_entries = self._relevant_static_memory_entries(
             blocking_points_world=blocking_points_world,
@@ -1345,19 +1297,15 @@ class ConstrainedLocalReplanner:
                 obstacle_key = ("static", tuple(sorted(entry_ids)))
 
         if not stable_points:
-            if blocking_cells_world:
-                stable_points.extend(
-                    (float(wx), float(wy)) for wx, wy in list(blocking_cells_world)
-                )
             if blocking_points_world:
                 stable_points.extend(
                     (float(wx), float(wy)) for wx, wy in list(blocking_points_world)
                 )
-            if stable_points:
-                stable_points = self._connected_world_point_group(
-                    stable_points,
-                    seed_point=focus_point_world,
+            if blocking_cells_world:
+                stable_points.extend(
+                    (float(wx), float(wy)) for wx, wy in list(blocking_cells_world)
                 )
+            if stable_points:
                 sample = stable_points[: min(6, len(stable_points))]
                 cx = sum(float(wx) for wx, _wy in sample) / float(len(sample))
                 cy = sum(float(wy) for _wx, wy in sample) / float(len(sample))
@@ -3435,11 +3383,6 @@ class ConstrainedLocalReplanner:
             self._stable_avoidance_obstacle_points(
                 blocking_cells_world=blocking_cells_world,
                 blocking_points_world=blocking_points_world,
-                focus_point_world=self._grid_to_world(
-                    dg,
-                    nominal_path[blocked_idx][0],
-                    nominal_path[blocked_idx][1],
-                ),
             )
         )
         obstacle_cells = []
@@ -4236,11 +4179,6 @@ class ConstrainedLocalReplanner:
             self._stable_avoidance_obstacle_points(
                 blocking_cells_world=blocking_cells,
                 blocking_points_world=blocking_points,
-                focus_point_world=(
-                    blocking_cells[0]
-                    if blocking_cells
-                    else (blocking_points[0] if blocking_points else None)
-                ),
             )
         )
         if obstacle_key is not None:
