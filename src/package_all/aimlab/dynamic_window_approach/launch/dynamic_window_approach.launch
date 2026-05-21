@@ -243,8 +243,8 @@
     <arg name="global_obstacle_overlay_downsample" default="1"/>
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
     <arg name="obstacle_block_margin_m" default="0.28"/>
-    <arg name="avoidance_trigger_margin_m" default="0.22"/>
-    <arg name="avoidance_trigger_ahead_m" default="12.0"/>
+    <arg name="avoidance_trigger_margin_m" default="0.28"/>
+    <arg name="avoidance_trigger_ahead_m" default="14.0"/>
     <arg name="forward_path_obstacle_filter_enabled" default="true"/>
     <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
     <arg name="risk_block_confirm_cells" default="1"/>
@@ -257,7 +257,7 @@
     <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
     <arg name="blocked_clear_hold_s" default="0.35"/>
     <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
-    <arg name="avoidance_branch_backtrack_cells" default="6"/>
+    <arg name="avoidance_branch_backtrack_cells" default="8"/>
     <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
     <arg name="avoidance_same_side_commitment_enabled" default="true"/>
     <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
