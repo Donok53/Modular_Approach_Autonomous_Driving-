@@ -2595,6 +2595,66 @@ class ConstrainedLocalReplanner:
         )
         return self.cached_direct_goal_cell
 
+    def _build_direct_goal_planning_blocked(
+        self,
+        dg,
+        rg,
+        strict_blocked,
+        start_cell,
+        goal_cell,
+    ):
+        if not strict_blocked:
+            return strict_blocked, "strict"
+
+        def _cell_is_blocked(mask, cell):
+            gx, gy = int(cell[0]), int(cell[1])
+            return (not self._in_bounds_blocked(mask, gx, gy)) or mask[gy][gx]
+
+        relaxed_needed = _cell_is_blocked(strict_blocked, start_cell) or _cell_is_blocked(
+            strict_blocked, goal_cell
+        )
+        relaxed_radius_m = min(
+            float(self.path_blocking_radius_m),
+            float(self.relaxed_snap_path_blocking_radius_m),
+        )
+
+        if relaxed_needed and relaxed_radius_m + 1e-6 < float(self.path_blocking_radius_m):
+            relaxed_blocked = self._inflate_blocked(
+                dg, rg, radius_override_m=relaxed_radius_m
+            )
+            if not _cell_is_blocked(relaxed_blocked, start_cell) and not _cell_is_blocked(
+                relaxed_blocked, goal_cell
+            ):
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: direct-goal planning using relaxed inflated grid (radius %.2f -> %.2f start=%s goal=%s)",
+                    float(self.path_blocking_radius_m),
+                    float(relaxed_radius_m),
+                    str(tuple(start_cell)),
+                    str(tuple(goal_cell)),
+                )
+                return relaxed_blocked, "relaxed"
+
+        planning_blocked = [row[:] for row in strict_blocked]
+        cleared = []
+        for cell in (start_cell, goal_cell):
+            gx, gy = int(cell[0]), int(cell[1])
+            if (
+                self._in_bounds_blocked(planning_blocked, gx, gy)
+                and planning_blocked[gy][gx]
+                and (not self._is_blocked_cell(dg, rg, gx, gy))
+            ):
+                planning_blocked[gy][gx] = False
+                cleared.append((gx, gy))
+        if cleared:
+            rospy.loginfo_throttle(
+                1.0,
+                "constrained_local_replanner: direct-goal planning keeping raw free cells on strict grid %s",
+                str(cleared),
+            )
+            return planning_blocked, "strict_keep"
+        return strict_blocked, "strict"
+
     @staticmethod
     def _heur(a, b):
         return math.hypot(float(b[0] - a[0]), float(b[1] - a[1]))
@@ -6156,6 +6216,14 @@ class ConstrainedLocalReplanner:
             self._publish_path_mode("hold")
             return True
 
+        planning_blocked, planning_mode = self._build_direct_goal_planning_blocked(
+            dg,
+            rg,
+            blocked,
+            start_cell,
+            goal_cell,
+        )
+
         if (
             self.freeze_path_on_first_plan
             and self.frozen_direct_grid_path
@@ -6174,7 +6242,7 @@ class ConstrainedLocalReplanner:
             )
             avoidance_state = self._update_avoidance_path(
                 self.frozen_direct_grid_path,
-                blocked,
+                planning_blocked,
                 start_cell,
                 frozen_goal_cell,
                 dg,
@@ -6189,7 +6257,7 @@ class ConstrainedLocalReplanner:
             return True
 
         path = self._astar(
-            blocked,
+            planning_blocked,
             start_cell,
             goal_cell,
             allow_best_effort=self.allow_best_effort_path,
@@ -6197,7 +6265,8 @@ class ConstrainedLocalReplanner:
         if path is None:
             rospy.logwarn_throttle(
                 1.0,
-                "constrained_local_replanner: no direct-goal path (start=%s goal=%s snapped_start=%s snapped_goal=%s)",
+                "constrained_local_replanner: no direct-goal path (mode=%s start=%s goal=%s snapped_start=%s snapped_goal=%s)",
+                planning_mode,
                 str((sx, sy)),
                 str((gx, gy)),
                 str(start_cell),
@@ -6209,10 +6278,14 @@ class ConstrainedLocalReplanner:
             return True
         # If the direct goal is visible on the blocked grid, prefer a single
         # straight segment over the staircase-like A* cell path.
-        if path[-1] == goal_cell and self._has_line_of_sight(blocked, start_cell, goal_cell):
+        if path[-1] == goal_cell and self._has_line_of_sight(
+            planning_blocked, start_cell, goal_cell
+        ):
             path = [start_cell, goal_cell]
         else:
-            path = self._simplify_grid_path(path, blocked, float(dg.info.resolution))
+            path = self._simplify_grid_path(
+                path, planning_blocked, float(dg.info.resolution)
+            )
         if not self._best_effort_path_is_acceptable(goal_cell, path, dg, "direct"):
             self._clear_local_path(dg.header.frame_id, stamp)
             self._clear_avoidance_path(dg.header.frame_id, stamp)
@@ -6221,7 +6294,15 @@ class ConstrainedLocalReplanner:
             return True
 
         if not self._should_publish_path(goal_cell, path):
-            avoidance_state = self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
+            avoidance_state = self._update_avoidance_path(
+                path,
+                planning_blocked,
+                start_cell,
+                goal_cell,
+                dg,
+                stamp,
+                "direct",
+            )
             self.rejoin_mode_until_sec = 0.0
             if avoidance_state == "hold":
                 self._publish_path_mode("hold")
@@ -6253,7 +6334,15 @@ class ConstrainedLocalReplanner:
             start_xy=start_xy,
             end_xy=goal_xy if path[-1] == goal_cell else None,
         )
-        avoidance_state = self._update_avoidance_path(path, blocked, start_cell, goal_cell, dg, stamp, "direct")
+        avoidance_state = self._update_avoidance_path(
+            path,
+            planning_blocked,
+            start_cell,
+            goal_cell,
+            dg,
+            stamp,
+            "direct",
+        )
         self.rejoin_mode_until_sec = 0.0
         if avoidance_state == "hold":
             self._publish_path_mode("hold")

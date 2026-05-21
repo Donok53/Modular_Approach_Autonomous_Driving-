@@ -99,8 +99,8 @@
   <arg name="crossing_portal_status_topic" default="/planning/crossing_portal_status"/>
   <arg name="crossing_portal_publish_hz" default="5.0"/>
   <arg name="crossing_portal_direct_goal_timeout_s" default="1.0"/>
-  <arg name="crossing_portal_direct_goal_refresh_distance_m" default="0.20"/>
-  <arg name="crossing_portal_direct_goal_refresh_yaw_deg" default="8.0"/>
+  <arg name="crossing_portal_direct_goal_refresh_distance_m" default="0.35"/>
+  <arg name="crossing_portal_direct_goal_refresh_yaw_deg" default="14.0"/>
   <arg name="freeze_path_on_first_plan" default="true"/>
   <arg name="smooth_path_line_of_sight" default="true"/>
   <arg name="smooth_avoidance_line_of_sight" default="true"/>
@@ -429,13 +429,13 @@
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.32"/>
   <arg name="use_pointcloud_static_blocking" default="true"/>
-  <arg name="pointcloud_static_block_margin_m" default="0.13"/>
+  <arg name="pointcloud_static_block_margin_m" default="0.15"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="2"/>
   <arg name="pointcloud_visibility_hold_s" default="0.25"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.20"/>
-  <arg name="avoidance_trigger_margin_m" default="0.12"/>
+  <arg name="obstacle_block_margin_m" default="0.22"/>
+  <arg name="avoidance_trigger_margin_m" default="0.16"/>
   <arg name="avoidance_trigger_ahead_m" default="$(eval max(float(arg('local_replan_lookahead_m')), 10.0))"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
@@ -449,8 +449,8 @@
   <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
   <arg name="blocked_clear_hold_s" default="0.35"/>
   <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
-  <arg name="avoidance_branch_backtrack_cells" default="8"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
+  <arg name="avoidance_branch_backtrack_cells" default="10"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="1.8"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
   <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
   <arg name="avoidance_local_collapse_straights" default="true"/>
