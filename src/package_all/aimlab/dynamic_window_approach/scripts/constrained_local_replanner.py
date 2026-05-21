@@ -4286,12 +4286,16 @@ class ConstrainedLocalReplanner:
         blocking_points,
         blind_zone_conflict=None,
     ):
+        normalized_reason = str(trigger_reason).strip().lower()
+        if normalized_reason in ("predicted_overlap", "dynamic_points_overlap"):
+            normalized_reason = "overlap"
+
         def _bucket(v):
-            return round(float(v) * 5.0) / 5.0
+            return round(float(v) * 2.5) / 2.5
 
         if blind_zone_conflict is not None:
             return (
-                str(trigger_reason),
+                normalized_reason,
                 _bucket(blind_zone_conflict.get("x", 0.0)),
                 _bucket(blind_zone_conflict.get("y", 0.0)),
             )
@@ -4302,14 +4306,14 @@ class ConstrainedLocalReplanner:
             )
         )
         if obstacle_key is not None:
-            return (str(trigger_reason), obstacle_key)
+            return (normalized_reason, obstacle_key)
         pts = blocking_points if blocking_points else blocking_cells
         if pts:
             sample = pts[: min(6, len(pts))]
             cx = sum(float(p[0]) for p in sample) / float(len(sample))
             cy = sum(float(p[1]) for p in sample) / float(len(sample))
-            return (str(trigger_reason), _bucket(cx), _bucket(cy))
-        return (str(trigger_reason),)
+            return (normalized_reason, _bucket(cx), _bucket(cy))
+        return (normalized_reason,)
 
     def _avoidance_trigger_confirmed(self, trigger_key, stamp):
         if trigger_key is None:

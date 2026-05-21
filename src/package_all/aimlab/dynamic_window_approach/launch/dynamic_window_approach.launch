@@ -260,6 +260,8 @@
     <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
     <arg name="blocked_clear_hold_s" default="0.35"/>
     <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
+    <arg name="avoidance_reuse_on_failure_s" default="2.0"/>
+    <arg name="avoidance_reuse_max_deviation_m" default="0.80"/>
     <arg name="avoidance_branch_backtrack_cells" default="8"/>
     <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
     <arg name="avoidance_same_side_commitment_enabled" default="true"/>
@@ -823,6 +825,8 @@
             <param name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
             <param name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
             <param name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
+            <param name="avoidance_reuse_on_failure_s" value="$(arg avoidance_reuse_on_failure_s)"/>
+            <param name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
             <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
             <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
             <param name="avoidance_same_side_commitment_enabled" value="$(arg avoidance_same_side_commitment_enabled)"/>
