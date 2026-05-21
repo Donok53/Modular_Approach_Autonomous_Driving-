@@ -50,6 +50,7 @@ def _point_distance_xy(a, b):
 
 class ExplainabilityTopicBridge:
     def __init__(self):
+        self.state_lock = threading.RLock()
         self.publish_hz = max(0.2, float(rospy.get_param("~publish_hz", 5.0)))
         self.manifest_publish_period_s = max(
             1.0, float(rospy.get_param("~manifest_publish_period_s", 10.0))
@@ -308,21 +309,23 @@ class ExplainabilityTopicBridge:
 
     def _store_cb(self, key):
         def cb(msg):
-            self.latest[key] = msg
-            self.latest_stamp[key] = self._message_stamp(msg)
+            with self.state_lock:
+                self.latest[key] = msg
+                self.latest_stamp[key] = self._message_stamp(msg)
 
         return cb
 
     def _path_cb(self, msg):
-        new_points = self._path_points(msg)
-        self.latest_path_change = self._path_change_summary(
-            self.previous_path_points, new_points
-        )
-        if self.latest_path_change["changed"]:
-            self.path_change_seq += 1
-        self.previous_path_points = new_points
-        self.latest["global_path"] = msg
-        self.latest_stamp["global_path"] = self._message_stamp(msg)
+        with self.state_lock:
+            new_points = self._path_points(msg)
+            self.latest_path_change = self._path_change_summary(
+                self.previous_path_points, new_points
+            )
+            if self.latest_path_change["changed"]:
+                self.path_change_seq += 1
+            self.previous_path_points = new_points
+            self.latest["global_path"] = msg
+            self.latest_stamp["global_path"] = self._message_stamp(msg)
 
     def _message_stamp(self, msg):
         header = getattr(msg, "header", None)
@@ -536,48 +539,49 @@ class ExplainabilityTopicBridge:
         return item
 
     def _publish_snapshot(self, _event):
-        now_sec = rospy.Time.now().to_sec()
-        snapshot = {
-            "schema": "autonomy_explainability_bridge/PlannerSnapshot@1",
-            "stamp": _round(now_sec, 3),
-            "wall_time": _round(time.time(), 3),
-            "time_basis": "stamp uses ROS time; with rosbag --clock this matches bag time",
-            "node": rospy.get_name(),
-            "freshness": {
-                key: self._topic_status(key, now_sec)
-                for key in (
-                    "pose",
-                    "cmd_vel",
-                    "behavior_cmd",
-                    "explainability",
-                    "emergency_stop",
-                    "global_obstacle_caution",
-                    "path_blocked",
-                    "global_path",
-                    "candidate_paths",
-                    "tracking_reference",
-                    "path_mode",
-                    "active_path",
-                    "local_path",
-                    "avoidance_path",
-                    "global_obstacle_overlay",
-                    "global_obstacle_overlay_boxes",
-                    "near_field_raw_overlay_hits",
-                    "near_field_stop_hits",
-                    "tracked_objects",
-                )
-            },
-            "robot": self._robot_summary(),
-            "decision": self._decision_summary(),
-            "control": self._control_summary(),
-            "planning": self._planning_summary(),
-            "obstacle_evidence": self._obstacle_summary(),
-            "explainability": self._explainability_summary(),
-        }
-        self.snapshot_pub.publish(
-            String(data=json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
-        )
-        self._maybe_publish_event(snapshot)
+        with self.state_lock:
+            now_sec = rospy.Time.now().to_sec()
+            snapshot = {
+                "schema": "autonomy_explainability_bridge/PlannerSnapshot@1",
+                "stamp": _round(now_sec, 3),
+                "wall_time": _round(time.time(), 3),
+                "time_basis": "stamp uses ROS time; with rosbag --clock this matches bag time",
+                "node": rospy.get_name(),
+                "freshness": {
+                    key: self._topic_status(key, now_sec)
+                    for key in (
+                        "pose",
+                        "cmd_vel",
+                        "behavior_cmd",
+                        "explainability",
+                        "emergency_stop",
+                        "global_obstacle_caution",
+                        "path_blocked",
+                        "global_path",
+                        "candidate_paths",
+                        "tracking_reference",
+                        "path_mode",
+                        "active_path",
+                        "local_path",
+                        "avoidance_path",
+                        "global_obstacle_overlay",
+                        "global_obstacle_overlay_boxes",
+                        "near_field_raw_overlay_hits",
+                        "near_field_stop_hits",
+                        "tracked_objects",
+                    )
+                },
+                "robot": self._robot_summary(),
+                "decision": self._decision_summary(),
+                "control": self._control_summary(),
+                "planning": self._planning_summary(),
+                "obstacle_evidence": self._obstacle_summary(),
+                "explainability": self._explainability_summary(),
+            }
+            self.snapshot_pub.publish(
+                String(data=json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
+            )
+            self._maybe_publish_event(snapshot)
 
     def _maybe_publish_event(self, snapshot):
         signature = self._event_signature(snapshot)
@@ -1068,7 +1072,7 @@ class ExplainabilityTopicBridge:
                 },
                 "distance_from_robot_m": _round(distance),
                 "bearing_from_robot_rad": _round(bearing, 4),
-                "locked_color_hint": bool(marker.color.g > 0.4),
+                "locked_color_hint": bool(marker.color.a >= 0.5),
             }
             if nearest is None:
                 nearest = item
