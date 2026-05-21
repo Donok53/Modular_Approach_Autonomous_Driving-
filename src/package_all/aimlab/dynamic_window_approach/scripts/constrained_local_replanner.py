@@ -154,6 +154,15 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        self.relaxed_snap_path_blocking_radius_m = max(
+            0.05,
+            float(
+                rospy.get_param(
+                    "~relaxed_snap_path_blocking_radius_m",
+                    0.5 * self.robot_width_m + self.footprint_padding_m + 0.02,
+                )
+            ),
+        )
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
@@ -2527,12 +2536,63 @@ class ConstrainedLocalReplanner:
                 return best
         return None
 
-    def _resolve_direct_goal_cell(self, blocked, raw_goal_cell):
+    def _resolve_snap_cell(
+        self,
+        dg,
+        rg,
+        blocked,
+        raw_cell,
+        *,
+        allow_raw_cell=False,
+    ):
+        snapped = self._nearest_free_cell(blocked, raw_cell)
+        if snapped is not None:
+            return snapped
+
+        relaxed_radius_m = min(
+            float(self.path_blocking_radius_m),
+            float(self.relaxed_snap_path_blocking_radius_m),
+        )
+        if relaxed_radius_m + 1e-6 < float(self.path_blocking_radius_m):
+            relaxed_blocked = self._inflate_blocked(
+                dg, rg, radius_override_m=relaxed_radius_m
+            )
+            snapped = self._nearest_free_cell(relaxed_blocked, raw_cell)
+            if snapped is not None:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: relaxed snap cell %s -> %s (radius %.2f -> %.2f)",
+                    str(tuple(raw_cell)),
+                    str(tuple(snapped)),
+                    float(self.path_blocking_radius_m),
+                    float(relaxed_radius_m),
+                )
+                return snapped
+
+        if allow_raw_cell:
+            gx, gy = int(raw_cell[0]), int(raw_cell[1])
+            if not self._is_blocked_cell(dg, rg, gx, gy):
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: using raw start cell %s despite inflated snap blockage",
+                    str((gx, gy)),
+                )
+                return (gx, gy)
+
+        return None
+
+    def _resolve_direct_goal_cell(self, dg, rg, blocked, raw_goal_cell):
         if self.cached_direct_goal_cell is not None:
             cgx, cgy = self.cached_direct_goal_cell
             if self._in_bounds_blocked(blocked, cgx, cgy) and not blocked[cgy][cgx]:
                 return self.cached_direct_goal_cell
-        self.cached_direct_goal_cell = self._nearest_free_cell(blocked, raw_goal_cell)
+        self.cached_direct_goal_cell = self._resolve_snap_cell(
+            dg,
+            rg,
+            blocked,
+            raw_goal_cell,
+            allow_raw_cell=False,
+        )
         return self.cached_direct_goal_cell
 
     @staticmethod
@@ -6076,8 +6136,14 @@ class ConstrainedLocalReplanner:
         gx, gy = self._world_to_grid(dg, goal_xy[0], goal_xy[1])
 
         blocked = self._inflate_blocked(dg, rg)
-        start_cell = self._nearest_free_cell(blocked, (sx, sy))
-        goal_cell = self._resolve_direct_goal_cell(blocked, (gx, gy))
+        start_cell = self._resolve_snap_cell(
+            dg,
+            rg,
+            blocked,
+            (sx, sy),
+            allow_raw_cell=True,
+        )
+        goal_cell = self._resolve_direct_goal_cell(dg, rg, blocked, (gx, gy))
         if start_cell is None or goal_cell is None:
             rospy.logwarn_throttle(
                 1.0,
@@ -6232,8 +6298,20 @@ class ConstrainedLocalReplanner:
             gx, gy = self._world_to_grid(dg, goal_xy[0], goal_xy[1])
 
             blocked = self._inflate_blocked(dg, rg)
-            start_cell = self._nearest_free_cell(blocked, (sx, sy))
-            goal_cell = self._nearest_free_cell(blocked, (gx, gy))
+            start_cell = self._resolve_snap_cell(
+                dg,
+                rg,
+                blocked,
+                (sx, sy),
+                allow_raw_cell=True,
+            )
+            goal_cell = self._resolve_snap_cell(
+                dg,
+                rg,
+                blocked,
+                (gx, gy),
+                allow_raw_cell=False,
+            )
             if start_cell is None or goal_cell is None:
                 rospy.logwarn_throttle(
                     1.0,
