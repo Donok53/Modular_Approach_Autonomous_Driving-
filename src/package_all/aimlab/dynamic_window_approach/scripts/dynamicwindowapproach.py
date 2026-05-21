@@ -3093,10 +3093,29 @@ class DWAControl:
             return
 
         if self.current_path_mode in ("follow_local", "follow_avoidance", "rejoin_global"):
-            # Keep the current local control reference latched instead of
-            # falling back to the long global guide.  The replanner is expected
-            # to refresh local continuously; if it momentarily hiccups, we do
-            # not want control to jump back onto the full global path.
+            # The replanner owns the rolling local control path in these
+            # modes, so we normally keep the last local reference latched
+            # instead of bouncing back to the long global guide.  The one
+            # exception is startup / replanner warmup: if no active path has
+            # ever been latched yet, temporarily bootstrap from the fixed
+            # global guide so the robot can begin moving before the first
+            # fresh local segment arrives.
+            bootstrap_from_global = (
+                self.path_msg is None
+                or self.active_path_source == "none"
+                or self.path_sig is None
+            )
+            if (
+                bootstrap_from_global
+                and self.global_path_msg is not None
+                and len(self.global_path_msg.poses) >= 2
+            ):
+                if self._incoming_path_requires_activation(
+                    self.global_path_msg, self.global_path_sig, "global"
+                ):
+                    self._activate_path(
+                        self.global_path_msg, self.global_path_sig, "global"
+                    )
             return
         else:
             if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
