@@ -477,6 +477,11 @@ class ConstrainedLocalReplanner:
         self.allow_avoidance_reuse_on_no_solution = bool(
             rospy.get_param("~allow_avoidance_reuse_on_no_solution", False)
         )
+        self.allow_nominal_local_fallback_on_no_solution = bool(
+            rospy.get_param(
+                "~allow_nominal_local_fallback_on_no_solution", True
+            )
+        )
         self.avoidance_branch_backtrack_cells = max(
             0, int(rospy.get_param("~avoidance_branch_backtrack_cells", 2))
         )
@@ -3855,6 +3860,42 @@ class ConstrainedLocalReplanner:
         self._publish_world_path(sampled_points, dg.header.frame_id, stamp)
         return True
 
+    def _should_follow_nominal_local_on_no_solution(
+        self,
+        label,
+        trigger_reason,
+        source_summary=None,
+        now_sec=None,
+    ):
+        if not self.allow_nominal_local_fallback_on_no_solution:
+            return False
+        if self._use_global_nominal_reference():
+            return False
+
+        label_str = str(label or "").strip().lower()
+        if label_str not in ("local", "local_hold"):
+            return False
+
+        reason = str(trigger_reason or "").strip().lower()
+        if reason not in ("predicted_overlap", "dynamic_points_overlap"):
+            return False
+
+        if source_summary is not None:
+            if str(source_summary.get("blind_zone", "none")).strip().lower() != "none":
+                return False
+            if int(source_summary.get("risk", 0)) > 0:
+                return False
+            if int(source_summary.get("tracked_current", 0)) > 0:
+                return False
+            if int(source_summary.get("tracked_memory", 0)) > 0:
+                return False
+
+        if self.tracked_object_count > 0 or self.tracked_object_memory_count > 0:
+            return False
+        if self._effective_raw_near_obstacle_points_map(now_sec=now_sec):
+            return False
+        return True
+
     def _build_nominal_world_segment(self, pts, i0, ig):
         if not pts:
             return None
@@ -5798,6 +5839,58 @@ class ConstrainedLocalReplanner:
                 preferred_direction=preferred_direction,
             )
         if avoid_path is None:
+            if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
+                self._publish_stored_avoidance_path(
+                    dg,
+                    stamp,
+                    record_history=False,
+                )
+                self.avoidance_clear_count = 0
+                self.last_avoidance_publish_sec = stamp.to_sec()
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: keeping current avoidance path during no-solution hold | reason=%s",
+                    trigger_reason,
+                )
+                return "hold"
+            if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
+                return "avoidance"
+            if self._should_follow_nominal_local_on_no_solution(
+                label,
+                trigger_reason,
+                source_summary=source_summary,
+                now_sec=stamp.to_sec(),
+            ):
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: obstacle detected on %s path (%s) but no valid avoidance branch was found; continuing nominal local path until a stronger stop trigger appears",
+                    label,
+                    trigger_reason,
+                )
+                self._publish_explainability(
+                    event_type="LOCAL_REPLAN_NO_SOLUTION",
+                    stamp=stamp,
+                    trigger_reason=trigger_reason,
+                    action_taken="follow_nominal_local",
+                    local_planning_active=True,
+                    stop_commanded=False,
+                    summary_text=(
+                        "Local replanning detected '{}' on the {} path but could not find a valid avoidance branch, so it kept the rolling nominal local path while near-field stop remained clear."
+                    ).format(trigger_reason, label),
+                )
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "avoid_nominal_fallback",
+                        stamp,
+                        trigger_reason=trigger_reason,
+                        path_len=len(nominal_path),
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                return "nominal_fallback"
             rospy.logwarn_throttle(
                 1.0,
                 "constrained_local_replanner: obstacle detected on %s path (%s) but no short curved or branch-rejoin avoidance was valid",
@@ -5826,22 +5919,6 @@ class ConstrainedLocalReplanner:
                 stamp=stamp,
                 force=True,
             )
-            if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
-                self._publish_stored_avoidance_path(
-                    dg,
-                    stamp,
-                    record_history=False,
-                )
-                self.avoidance_clear_count = 0
-                self.last_avoidance_publish_sec = stamp.to_sec()
-                rospy.loginfo_throttle(
-                    1.0,
-                    "constrained_local_replanner: keeping current avoidance path during no-solution hold | reason=%s",
-                    trigger_reason,
-                )
-                return "hold"
-            if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
-                return "avoidance"
             # When no avoidance branch exists, publish an empty local path so the
             # cmd_vel relay enters local hold instead of continuing along a stale
             # nominal path toward the detected obstacle.
@@ -5850,17 +5927,6 @@ class ConstrainedLocalReplanner:
             return "hold"
 
         if len(avoid_path) < 2:
-            self._publish_debug_text(
-                self._build_debug_text(
-                    "avoid_too_short",
-                    stamp,
-                    trigger_reason=trigger_reason,
-                    path_len=len(avoid_path),
-                    overlay_points=obstacle_count,
-                ),
-                stamp=stamp,
-                force=True,
-            )
             if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
                 self._publish_stored_avoidance_path(
                     dg,
@@ -5877,6 +5943,42 @@ class ConstrainedLocalReplanner:
                 return "hold"
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return "avoidance"
+            if self._should_follow_nominal_local_on_no_solution(
+                label,
+                trigger_reason,
+                source_summary=source_summary,
+                now_sec=stamp.to_sec(),
+            ):
+                rospy.logwarn_throttle(
+                    1.0,
+                    "constrained_local_replanner: avoidance candidate on %s path (%s) was too short; continuing nominal local path instead of clearing control reference",
+                    label,
+                    trigger_reason,
+                )
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "avoid_nominal_fallback",
+                        stamp,
+                        trigger_reason=trigger_reason,
+                        path_len=len(avoid_path),
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                return "nominal_fallback"
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "avoid_too_short",
+                    stamp,
+                    trigger_reason=trigger_reason,
+                    path_len=len(avoid_path),
+                    overlay_points=obstacle_count,
+                ),
+                stamp=stamp,
+                force=True,
+            )
             self._clear_local_path(frame_id, stamp)
             self._clear_avoidance_path(frame_id, stamp, force=True)
             return "hold"
@@ -6413,9 +6515,10 @@ class ConstrainedLocalReplanner:
                 self.rejoin_mode_until_sec = 0.0
                 if avoidance_state == "hold":
                     self._publish_path_mode("hold")
-                elif avoidance_state == "clear":
-                    self.local_blocked_since_sec = 0.0
-                    self.local_clear_since_sec = 0.0
+                elif avoidance_state in ("clear", "nominal_fallback"):
+                    if avoidance_state == "clear":
+                        self.local_blocked_since_sec = 0.0
+                        self.local_clear_since_sec = 0.0
                     self._publish_nominal_reference_path(
                         nominal_world, dg.header.frame_id, stamp
                     )
