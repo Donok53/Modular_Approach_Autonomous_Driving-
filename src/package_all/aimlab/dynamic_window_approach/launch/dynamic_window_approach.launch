@@ -144,6 +144,7 @@
     <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
     <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
     <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+    <arg name="relaxed_snap_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
     <arg name="path_tracking_only" default="true"/>
     <arg name="path_tracking_speed_cap" default="0.90"/>
     <arg name="path_tracking_steer_filter_gain" default="0.55"/>
@@ -843,6 +844,7 @@
             <param name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
             <param name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
             <param name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
+            <param name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
         </node>
         </group>
     </group>
