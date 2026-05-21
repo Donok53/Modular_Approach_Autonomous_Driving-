@@ -5149,6 +5149,22 @@ class ConstrainedLocalReplanner:
                 stamp=stamp,
                 force=True,
             )
+            if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
+                self._publish_operational_detour_path(
+                    self.last_avoidance_grid_path,
+                    dg,
+                    stamp,
+                    start_xy=(self.odom_x, self.odom_y),
+                    record_history=False,
+                )
+                self.avoidance_clear_count = 0
+                self.last_avoidance_publish_sec = stamp.to_sec()
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: keeping current avoidance path during no-solution hold | reason=%s",
+                    trigger_reason,
+                )
+                return "hold"
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return "avoidance"
             # When no avoidance branch exists, publish an empty local path so the
@@ -5170,6 +5186,22 @@ class ConstrainedLocalReplanner:
                 stamp=stamp,
                 force=True,
             )
+            if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
+                self._publish_operational_detour_path(
+                    self.last_avoidance_grid_path,
+                    dg,
+                    stamp,
+                    start_xy=(self.odom_x, self.odom_y),
+                    record_history=False,
+                )
+                self.avoidance_clear_count = 0
+                self.last_avoidance_publish_sec = stamp.to_sec()
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: keeping current avoidance path during short-path hold | reason=%s",
+                    trigger_reason,
+                )
+                return "hold"
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return "avoidance"
             self._clear_local_path(frame_id, stamp)
