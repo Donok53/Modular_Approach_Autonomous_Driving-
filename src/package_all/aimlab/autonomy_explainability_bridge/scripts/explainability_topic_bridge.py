@@ -5,7 +5,11 @@ import threading
 import time
 
 import rospy
-from dynamic_window_approach.msg import BehaviorCommand, TrackedObjectArray
+from dynamic_window_approach.msg import (
+    BehaviorCommand,
+    ExplainabilityEvent,
+    TrackedObjectArray,
+)
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from sensor_msgs import point_cloud2
@@ -74,6 +78,9 @@ class ExplainabilityTopicBridge:
             "behavior_cmd": rospy.get_param(
                 "~behavior_cmd_topic", "/planning/behavior_cmd"
             ),
+            "explainability": rospy.get_param(
+                "~explainability_topic", "/planning/explainability"
+            ),
             "emergency_stop": rospy.get_param(
                 "~emergency_stop_topic", "/planning/emergency_stop"
             ),
@@ -88,6 +95,7 @@ class ExplainabilityTopicBridge:
             "tracking_reference": rospy.get_param(
                 "~tracking_reference_topic", "/planning/tracking_reference_path"
             ),
+            "path_mode": rospy.get_param("~path_mode_topic", "/planning/path_mode"),
             "active_path": rospy.get_param("~active_path_topic", "/planning/active_path"),
             "local_path": rospy.get_param("~local_path_topic", "/planning/local_path"),
             "avoidance_path": rospy.get_param(
@@ -185,6 +193,12 @@ class ExplainabilityTopicBridge:
             queue_size=10,
         )
         rospy.Subscriber(
+            self.topics["explainability"],
+            ExplainabilityEvent,
+            self._store_cb("explainability"),
+            queue_size=20,
+        )
+        rospy.Subscriber(
             self.topics["emergency_stop"],
             Bool,
             self._store_cb("emergency_stop"),
@@ -216,6 +230,12 @@ class ExplainabilityTopicBridge:
             Path,
             self._store_cb("tracking_reference"),
             queue_size=5,
+        )
+        rospy.Subscriber(
+            self.topics["path_mode"],
+            String,
+            self._store_cb("path_mode"),
+            queue_size=10,
         )
         rospy.Subscriber(
             self.topics["active_path"], Path, self._store_cb("active_path"), queue_size=5
@@ -452,6 +472,12 @@ class ExplainabilityTopicBridge:
                 "DWA가 추종 중인 reference path.",
             ),
             self._topic_contract(
+                "path_mode",
+                "std_msgs/String",
+                "local_planner_mode",
+                "local replanner가 controller에 요청한 모드. hold/follow_local/follow_avoidance 등.",
+            ),
+            self._topic_contract(
                 "path_blocked",
                 "std_msgs/Bool",
                 "global_path_blocked_state",
@@ -462,6 +488,12 @@ class ExplainabilityTopicBridge:
                 "dynamic_window_approach/BehaviorCommand",
                 "behavior_speed_stop_command",
                 "planning_slowdown_manager의 stop/speed_limit/reason.",
+            ),
+            self._topic_contract(
+                "explainability",
+                "dynamic_window_approach/ExplainabilityEvent",
+                "planner_decision_rationale",
+                "planner/control/behavior layer가 판단 이유를 event 단위로 남기는 explainability stream.",
             ),
             self._topic_contract(
                 "emergency_stop",
@@ -517,11 +549,17 @@ class ExplainabilityTopicBridge:
                     "pose",
                     "cmd_vel",
                     "behavior_cmd",
+                    "explainability",
                     "emergency_stop",
                     "global_obstacle_caution",
                     "path_blocked",
                     "global_path",
                     "candidate_paths",
+                    "tracking_reference",
+                    "path_mode",
+                    "active_path",
+                    "local_path",
+                    "avoidance_path",
                     "global_obstacle_overlay",
                     "global_obstacle_overlay_boxes",
                     "near_field_raw_overlay_hits",
@@ -534,6 +572,7 @@ class ExplainabilityTopicBridge:
             "control": self._control_summary(),
             "planning": self._planning_summary(),
             "obstacle_evidence": self._obstacle_summary(),
+            "explainability": self._explainability_summary(),
         }
         self.snapshot_pub.publish(
             String(data=json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
@@ -576,8 +615,12 @@ class ExplainabilityTopicBridge:
             "control": snapshot.get("control", {}),
             "planning": {
                 "global_path": snapshot.get("planning", {}).get("global_path", {}),
+                "path_mode": snapshot.get("planning", {}).get("path_mode", {}),
+                "local_path": snapshot.get("planning", {}).get("local_path", {}),
+                "avoidance_path": snapshot.get("planning", {}).get("avoidance_path", {}),
                 "path_change": snapshot.get("planning", {}).get("path_change", {}),
             },
+            "explainability": snapshot.get("explainability", {}),
             "obstacle_evidence": {
                 "global_overlay_boxes": snapshot.get("obstacle_evidence", {}).get(
                     "global_overlay_boxes", {}
@@ -600,8 +643,12 @@ class ExplainabilityTopicBridge:
         control = snapshot.get("control", {})
         planning = snapshot.get("planning", {})
         obstacle = snapshot.get("obstacle_evidence", {})
+        explainability = snapshot.get("explainability", {})
         path = planning.get("global_path", {})
         path_change = planning.get("path_change", {})
+        path_mode = planning.get("path_mode", {})
+        local_path = planning.get("local_path", {})
+        avoidance_path = planning.get("avoidance_path", {})
         boxes = obstacle.get("global_overlay_boxes", {})
         raw_hits = obstacle.get("near_field_raw_overlay_hits", {})
         stop_hits = obstacle.get("near_field_stop_hits", {})
@@ -620,6 +667,22 @@ class ExplainabilityTopicBridge:
             "global_path_points": path.get("points"),
             "path_change_seq": path_change.get("seq"),
             "path_change_direction": path_change.get("latest", {}).get("direction"),
+            "path_mode": path_mode.get("value"),
+            "local_path_active": bool(
+                local_path.get("received") and (local_path.get("points") or 0) >= 2
+            ),
+            "avoidance_path_active": bool(
+                avoidance_path.get("received")
+                and (avoidance_path.get("points") or 0) >= 2
+            ),
+            "explainability_source": explainability.get("source_node"),
+            "explainability_event_type": explainability.get("event_type"),
+            "explainability_decision_layer": explainability.get("decision_layer"),
+            "explainability_trigger_reason": explainability.get("trigger_reason"),
+            "explainability_action_taken": explainability.get("action_taken"),
+            "explainability_stop": explainability.get("stop_commanded"),
+            "explainability_slowdown": explainability.get("slowdown_commanded"),
+            "explainability_summary_text": explainability.get("summary_text"),
             "overlay_box_count": boxes.get("box_count"),
             "near_raw_hit_present": (raw_hits.get("reported_points") or 0) > 0,
             "near_stop_hit_present": (stop_hits.get("reported_points") or 0) > 0,
@@ -628,6 +691,22 @@ class ExplainabilityTopicBridge:
     def _event_label(self, snapshot, changed_fields):
         decision = snapshot.get("decision", {})
         behavior = decision.get("behavior", {})
+        explainability = snapshot.get("explainability", {})
+        explainability_changed = any(
+            field.startswith("explainability_") for field in changed_fields
+        )
+        if explainability_changed and explainability.get("received"):
+            decision_layer = str(explainability.get("decision_layer") or "").strip()
+            event_type = str(explainability.get("event_type") or "").strip()
+            if decision_layer == "local_replanner":
+                return "local_replan_event"
+            if decision_layer == "behavior_layer":
+                return "behavior_explainability_event"
+            if decision_layer == "control_safety_layer":
+                return "control_safety_event"
+            if event_type:
+                return event_type.lower()
+            return "explainability_event"
         if decision.get("emergency_stop", {}).get("value") is True:
             return "emergency_stop"
         if behavior.get("stop") is True:
@@ -636,7 +715,12 @@ class ExplainabilityTopicBridge:
             return "global_obstacle_caution"
         if decision.get("path_blocked", {}).get("value") is True:
             return "path_blocked"
-        if "path_change_seq" in changed_fields:
+        if (
+            "path_change_seq" in changed_fields
+            or "path_mode" in changed_fields
+            or "local_path_active" in changed_fields
+            or "avoidance_path_active" in changed_fields
+        ):
             return "path_update"
         if "motion_state" in changed_fields or "steering_direction" in changed_fields:
             return "control_update"
@@ -697,11 +781,57 @@ class ExplainabilityTopicBridge:
             "path_blocked": self._bool_value("path_blocked"),
         }
 
+    def _explainability_summary(self):
+        msg = self.latest.get("explainability")
+        if msg is None:
+            return {
+                "received": False,
+                "topic": self.topics.get("explainability", ""),
+            }
+        return {
+            "received": True,
+            "topic": self.topics.get("explainability", ""),
+            "source_node": str(getattr(msg, "source_node", "")),
+            "event_type": str(getattr(msg, "event_type", "")),
+            "decision_layer": str(getattr(msg, "decision_layer", "")),
+            "trigger_reason": str(getattr(msg, "trigger_reason", "")),
+            "action_taken": str(getattr(msg, "action_taken", "")),
+            "avoid_direction": str(getattr(msg, "avoid_direction", "")),
+            "local_planning_active": bool(
+                getattr(msg, "local_planning_active", False)
+            ),
+            "stop_commanded": bool(getattr(msg, "stop_commanded", False)),
+            "slowdown_commanded": bool(getattr(msg, "slowdown_commanded", False)),
+            "speed_before_mps": _round(getattr(msg, "speed_before_mps", None)),
+            "speed_after_mps": _round(getattr(msg, "speed_after_mps", None)),
+            "speed_limit_mps": _round(getattr(msg, "speed_limit_mps", None)),
+            "closest_obstacle_dist_m": _round(
+                getattr(msg, "closest_obstacle_dist_m", None)
+            ),
+            "obstacle_lateral_offset_m": _round(
+                getattr(msg, "obstacle_lateral_offset_m", None)
+            ),
+            "ttc_s": _round(getattr(msg, "ttc_s", None)),
+            "tracked_object_id": int(getattr(msg, "tracked_object_id", -1)),
+            "tracked_object_label": str(getattr(msg, "tracked_object_label", "")),
+            "summary_text": str(getattr(msg, "summary_text", "")),
+        }
+
     def _bool_value(self, key):
         msg = self.latest.get(key)
         if msg is None:
             return {"received": False, "value": None, "topic": self.topics.get(key, "")}
         return {"received": True, "value": bool(msg.data), "topic": self.topics.get(key, "")}
+
+    def _string_value(self, key):
+        msg = self.latest.get(key)
+        if msg is None:
+            return {"received": False, "value": None, "topic": self.topics.get(key, "")}
+        return {
+            "received": True,
+            "value": str(getattr(msg, "data", "")),
+            "topic": self.topics.get(key, ""),
+        }
 
     def _control_summary(self):
         msg = self.latest.get("cmd_vel")
@@ -758,6 +888,7 @@ class ExplainabilityTopicBridge:
             "tracking_reference": self._path_summary(
                 tracking, self.topics["tracking_reference"]
             ),
+            "path_mode": self._string_value("path_mode"),
             "active_path": self._path_summary(active_path, self.topics["active_path"]),
             "local_path": self._path_summary(local_path, self.topics["local_path"]),
             "avoidance_path": self._path_summary(

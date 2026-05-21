@@ -53,6 +53,7 @@ roslaunch autonomy_explainability_bridge explainability_bridge.launch
 | Topic | Type | 의미 |
 | --- | --- | --- |
 | `/planning/behavior_cmd` | `dynamic_window_approach/BehaviorCommand` | `stop`, `speed_limit`, `reason` |
+| `/planning/explainability` | `dynamic_window_approach/ExplainabilityEvent` | planner/control/behavior layer가 판단 이유를 event 형태로 publish |
 | `/planning/emergency_stop` | `std_msgs/Bool` | DWA 최종 emergency stop 여부 |
 | `/astar/path_blocked` | `std_msgs/Bool` | A* 기준 현재 global path blocked 여부 |
 | `/planning/global_obstacle_caution` | `std_msgs/Bool` | global obstacle overlay 기반 slowdown caution |
@@ -81,6 +82,7 @@ roslaunch autonomy_explainability_bridge explainability_bridge.launch
 | `/astar/path` | `nav_msgs/Path` | 현재 선택된 global path |
 | `/astar/candidate_paths` | `visualization_msgs/MarkerArray` | A* candidate path 시각화 |
 | `/planning/tracking_reference_path` | `nav_msgs/Path` | DWA가 실제 추종 중인 reference path |
+| `/planning/path_mode` | `std_msgs/String` | local replanner가 요청한 mode (`hold`, `follow_local`, `follow_avoidance` 등) |
 | `/planning/active_path` | `nav_msgs/Path` | optional active path |
 | `/planning/local_path` | `nav_msgs/Path` | optional local path |
 | `/planning/avoidance_path` | `nav_msgs/Path` | optional avoidance path |
@@ -107,6 +109,9 @@ roslaunch autonomy_explainability_bridge explainability_bridge.launch
 | `decision.path_blocked` | `/astar/path_blocked` 요약 |
 | `control` | `/cmd_vel` 기반 실제 조향/회전 방향 |
 | `planning.global_path` | `/astar/path` 포인트 수, 길이, 시작/끝 |
+| `planning.path_mode` | `/planning/path_mode` 현재 값 |
+| `planning.local_path`, `planning.avoidance_path` | local/avoidance path 포인트 수, 길이, 시작/끝 |
+| `explainability` | 최신 `/planning/explainability` event 요약. source node, trigger reason, action taken, summary 포함 |
 | `planning.path_change` | 이전 path 대비 lateral shift 방향 |
 | `obstacle_evidence.global_overlay` | overlay grid 크기와 occupied cell 수 |
 | `obstacle_evidence.global_overlay_boxes` | box 수, 가장 가까운 box 위치/거리 |
@@ -129,6 +134,7 @@ roslaunch autonomy_explainability_bridge explainability_bridge.launch
 | `decision` | 해당 순간의 behavior/emergency/caution/path_blocked |
 | `control` | 해당 순간의 `/cmd_vel` 요약 |
 | `planning` | global path와 path change 요약 |
+| `explainability` | 해당 순간의 최신 planner/control/behavior explainability event |
 | `obstacle_evidence` | obstacle box와 near-field hit 요약 |
 
 ## 설명 생성 시 추천 문장 구조
