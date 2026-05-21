@@ -3058,6 +3058,15 @@ class DWAControl:
         self.local_path_sig = self._path_signature(path_msg)
         self.local_path_stamp = rospy.Time.now()
 
+    def _local_path_is_fresh(self, now=None):
+        if self.local_path_msg is None or len(self.local_path_msg.poses) < 2:
+            return False
+        if self.local_path_stamp.to_sec() <= 0.0:
+            return False
+        if now is None:
+            now = rospy.Time.now()
+        return (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
+
     def _refresh_active_path(self):
         now = rospy.Time.now()
         if self.follow_global_path_only:
@@ -3077,11 +3086,7 @@ class DWAControl:
             # really "hold".
             return
 
-        use_local = (
-            self.local_path_msg is not None
-            and len(self.local_path_msg.poses) >= 2
-            and (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
-        )
+        use_local = self._local_path_is_fresh(now=now)
 
         # In the default navigation architecture, the controller always tracks
         # a short rolling local path.  The fixed global path is the guide; the
@@ -3093,10 +3098,13 @@ class DWAControl:
             return
 
         if self.current_path_mode in ("follow_local", "follow_avoidance", "rejoin_global"):
-            # Keep the current local control reference latched instead of
-            # falling back to the long global guide.  The replanner is expected
-            # to refresh local continuously; if it momentarily hiccups, we do
-            # not want control to jump back onto the full global path.
+            # Once the replanner stops providing a fresh local control path,
+            # do not keep chasing the last latched segment or fall back to the
+            # long global guide.  That stale reference is what can trigger
+            # rotate-only / local corner-rotate behavior with no valid current
+            # path on screen.
+            if self.path_msg is not None or self.active_path_source != "none":
+                self._activate_path(None, None, "none")
             return
         else:
             if self.global_path_msg is not None and len(self.global_path_msg.poses) >= 2:
@@ -4219,6 +4227,8 @@ class DWAControl:
                         ),
                         warn=True,
                     )
+                self._rot_mode = False
+                self._rot_yaw_target = None
                 self._clear_local_turn_rotate_state()
                 self.publish_drive([0.0, 0.0])
                 rate.sleep()
