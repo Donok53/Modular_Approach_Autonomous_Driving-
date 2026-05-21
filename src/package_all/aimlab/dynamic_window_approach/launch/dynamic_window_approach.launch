@@ -234,7 +234,7 @@
     <arg name="reverse_recovery_rear_half_width_m" default="0.42"/>
     <arg name="reverse_recovery_rear_min_points" default="2"/>
     <arg name="reverse_recovery_rear_drivable_margin_m" default="0.05"/>
-    <arg name="avoidance_hard_stop_distance" default="0.45"/>
+    <arg name="avoidance_hard_stop_distance" default="0.30"/>
     <arg name="use_pointcloud_static_blocking" default="true"/>
     <arg name="pointcloud_static_block_margin_m" default="0.13"/>
     <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
@@ -444,9 +444,9 @@
     <arg name="emergency_bin_size_m" default="0.10"/>
     <arg name="emergency_min_close_points" default="2"/>
     <arg name="emergency_immediate_contact_min_points" default="1"/>
-    <arg name="emergency_passable_width_m" default="0.68"/>
-    <arg name="block_on_count" default="1"/>
-    <arg name="block_off_count" default="4"/>
+    <arg name="emergency_passable_width_m" default="$(eval max(float(arg('robot_width_m')) + 0.04, float(arg('robot_width_m')) + 2.0 * float(arg('footprint_padding_m')) - 0.06))"/>
+    <arg name="block_on_count" default="2"/>
+    <arg name="block_off_count" default="3"/>
     <arg name="obstacle_consider_side_m" default="0.80"/>
     <arg name="obstacle_consider_back_m" default="-0.15"/>
     <arg name="enable_self_filter" default="true"/>
@@ -470,8 +470,8 @@
     <arg name="near_field_raw_stop_close_override_min_points" default="3"/>
     <arg name="near_field_raw_stop_close_override_min_cells" default="2"/>
     <arg name="near_field_raw_stop_downsample" default="1"/>
-    <arg name="near_field_raw_stop_on_count" default="1"/>
-    <arg name="near_field_raw_stop_off_count" default="3"/>
+    <arg name="near_field_raw_stop_on_count" default="2"/>
+    <arg name="near_field_raw_stop_off_count" default="2"/>
     <arg name="near_field_raw_stop_timeout_s" default="0.35"/>
     <arg name="near_field_raw_stop_hold_s" default="0.45"/>
     <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
@@ -483,7 +483,7 @@
     <arg name="emergency_bypass_bearing_deg" default="6.0"/>
     <arg name="emergency_bypass_yaw_err_deg" default="8.0"/>
     <arg name="emergency_bypass_clearance_margin_m" default="0.00"/>
-    <arg name="active_avoidance_bypass_clearance_m" default="0.22"/>
+    <arg name="active_avoidance_bypass_clearance_m" default="0.16"/>
     <arg name="emergency_bypass_goal_window_m" default="0.60"/>
     <arg name="emergency_bypass_speed_limit_mps" default="0.32"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>

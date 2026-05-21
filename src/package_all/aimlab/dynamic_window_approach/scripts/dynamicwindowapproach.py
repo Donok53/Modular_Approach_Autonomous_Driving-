@@ -799,6 +799,7 @@ class DWAControl:
         # Internal path buffers
         self.global_path_msg = None
         self.global_path_sig = None
+        self.global_goal_xy = None
         self.local_path_msg = None
         self.local_path_sig = None
         self.local_path_stamp = rospy.Time(0)
@@ -2626,8 +2627,22 @@ class DWAControl:
         goal = path_msg.poses[-1].pose.position
         return (float(goal.x), float(goal.y))
 
+    def _navigation_goal_xy(self):
+        if self.global_goal_xy is not None:
+            return self.global_goal_xy
+        return self._goal_xy_from_path_msg(self.path_msg)
+
+    def _distance_to_navigation_goal(self, x, y, active_goal_xy):
+        if self.active_path_source == "local":
+            nav_goal_xy = self._navigation_goal_xy()
+            if nav_goal_xy is not None:
+                return math.hypot(nav_goal_xy[0] - float(x), nav_goal_xy[1] - float(y))
+        return math.hypot(active_goal_xy[0] - float(x), active_goal_xy[1] - float(y))
+
     def _should_preserve_goal_reached_on_path_refresh(self, next_path_msg):
         if not self.reach_goal_flag:
+            return False
+        if self.active_path_source == "local":
             return False
         current_goal_xy = self._goal_xy_from_path_msg(self.path_msg)
         next_goal_xy = self._goal_xy_from_path_msg(next_path_msg)
@@ -3052,6 +3067,7 @@ class DWAControl:
     def path_callback_global(self, path_msg):
         self.global_path_msg = path_msg
         self.global_path_sig = self._path_signature(path_msg)
+        self.global_goal_xy = self._goal_xy_from_path_msg(path_msg)
 
     def path_callback_local(self, path_msg):
         self.local_path_msg = path_msg
@@ -3296,8 +3312,15 @@ class DWAControl:
             preview_lookahead_min,
             min(self.lookahead_max_distance, preview_lookahead),
         )
-        gx, gy = self.path_pts[-1]
-        dist_to_goal = math.hypot(gx - tracking_x, gy - tracking_y)
+        active_goal_xy = (
+            float(self.path_pts[-1][0]),
+            float(self.path_pts[-1][1]),
+        )
+        dist_to_goal = self._distance_to_navigation_goal(
+            tracking_x,
+            tracking_y,
+            active_goal_xy,
+        )
         goal_align_active = (
             min(max(0.0, self.s_total - base_s), dist_to_goal)
             <= self.path_tracking_goal_align_window_m
