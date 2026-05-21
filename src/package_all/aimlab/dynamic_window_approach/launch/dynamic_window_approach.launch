@@ -160,7 +160,7 @@
     <arg name="tracking_projection_back_window_m" default="0.35"/>
     <arg name="tracking_projection_forward_window_m" default="1.20"/>
     <arg name="tracking_path_smoothing_passes" default="2"/>
-    <arg name="local_tracking_smoothing_enabled" default="false"/>
+    <arg name="local_tracking_smoothing_enabled" default="true"/>
     <arg name="local_tracking_preview_m" default="0.85"/>
     <arg name="local_tracking_segment_step_scale" default="0.65"/>
     <arg name="local_tracking_target_step_cap_m" default="0.22"/>
@@ -258,6 +258,10 @@
     <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
     <arg name="avoidance_branch_backtrack_cells" default="6"/>
     <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
+    <arg name="avoidance_rejoin_tail_distance_m" default="1.8"/>
+    <arg name="avoidance_same_side_commitment_enabled" default="true"/>
+    <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
+    <arg name="avoidance_local_collapse_straights" default="true"/>
     <arg name="rejoin_mode_hold_s" default="1.0"/>
     <arg name="blocked_stop_before_avoidance_s" default="0.0"/>
     <arg name="near_goal_block_ignore_distance_m" default="1.0"/>
@@ -814,6 +818,10 @@
             <param name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
             <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
             <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+            <param name="avoidance_rejoin_tail_distance_m" value="$(arg avoidance_rejoin_tail_distance_m)"/>
+            <param name="avoidance_same_side_commitment_enabled" value="$(arg avoidance_same_side_commitment_enabled)"/>
+            <param name="avoidance_memory_only_trigger_enabled" value="$(arg avoidance_memory_only_trigger_enabled)"/>
+            <param name="avoidance_local_collapse_straights" value="$(arg avoidance_local_collapse_straights)"/>
             <param name="rejoin_mode_hold_s" value="$(arg rejoin_mode_hold_s)"/>
             <param name="blocked_stop_before_avoidance_s" value="$(arg blocked_stop_before_avoidance_s)"/>
             <param name="near_goal_block_ignore_distance_m" value="$(arg near_goal_block_ignore_distance_m)"/>

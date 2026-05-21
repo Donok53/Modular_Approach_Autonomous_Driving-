@@ -462,6 +462,18 @@ class ConstrainedLocalReplanner:
         self.avoidance_rejoin_min_distance_m = max(
             0.3, float(rospy.get_param("~avoidance_rejoin_min_distance_m", 1.0))
         )
+        self.avoidance_rejoin_tail_distance_m = max(
+            0.5, float(rospy.get_param("~avoidance_rejoin_tail_distance_m", 1.8))
+        )
+        self.avoidance_same_side_commitment_enabled = bool(
+            rospy.get_param("~avoidance_same_side_commitment_enabled", True)
+        )
+        self.avoidance_memory_only_trigger_enabled = bool(
+            rospy.get_param("~avoidance_memory_only_trigger_enabled", False)
+        )
+        self.avoidance_local_collapse_straights = bool(
+            rospy.get_param("~avoidance_local_collapse_straights", True)
+        )
         # In global-nominal mode, we need to detect and branch around obstacles
         # earlier than the short controller-facing lookahead, otherwise the
         # robot keeps following the fixed global path until emergency stop.
@@ -2892,17 +2904,24 @@ class ConstrainedLocalReplanner:
     def _publish_avoidance_path(self, grid_path, dg, stamp, history_points=None, start_xy=None, end_xy=None, record_history=True):
         if start_xy is None and self.have_odom:
             start_xy = (self.odom_x, self.odom_y)
+        publish_grid_path = (
+            self._collapse_straight_grid_runs(grid_path)
+            if self.avoidance_local_collapse_straights
+            else list(grid_path)
+        )
         self._publish_path_mode("follow_avoidance")
         sampled_points, frame_id = self._publish_grid_path(
             self.pub_local_path,
-            grid_path,
+            publish_grid_path,
             dg,
             stamp,
             start_xy=start_xy,
             end_xy=end_xy,
         )
         self._publish_empty_path(self.pub_avoidance_path, frame_id, stamp)
-        self.last_avoidance_grid_path = list(grid_path) if grid_path is not None else None
+        self.last_avoidance_grid_path = (
+            list(publish_grid_path) if publish_grid_path is not None else None
+        )
         self.last_avoidance_active_sec = stamp.to_sec()
         if record_history:
             self._record_path_history(
@@ -3541,7 +3560,12 @@ class ConstrainedLocalReplanner:
             float(dg.info.resolution),
             max_check_m=self.lookahead_m,
         )
-        if path_still_blocked and (not same_obstacle_episode):
+        # If the currently active detour is still blocked, force a fresh
+        # short-horizon replan instead of clinging to the stale branch.  This
+        # is especially important when a second obstacle appears mid-detour:
+        # reusing the old path makes the robot keep turning long after a much
+        # smaller re-optimization would be possible.
+        if path_still_blocked:
             return False
         if self._path_blind_zone_turn_conflict(
             self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
@@ -4395,6 +4419,31 @@ class ConstrainedLocalReplanner:
             remain_m += self._heur(path[idx], path[idx + 1]) * scale
         return remain_m
 
+    def _local_avoidance_rejoin_tail(self, nominal_path, dg, rejoin_idx):
+        if (
+            nominal_path is None
+            or dg is None
+            or rejoin_idx is None
+            or rejoin_idx + 1 >= len(nominal_path)
+        ):
+            return []
+        scale = max(1e-3, float(dg.info.resolution))
+        max_tail_m = max(
+            self.avoidance_rejoin_tail_distance_m,
+            self.robot_length_m * 2.0,
+        )
+        tail = []
+        accum_m = 0.0
+        prev = nominal_path[rejoin_idx]
+        for idx in range(rejoin_idx + 1, len(nominal_path)):
+            cell = nominal_path[idx]
+            tail.append(cell)
+            accum_m += self._heur(prev, cell) * scale
+            prev = cell
+            if accum_m >= max_tail_m:
+                break
+        return tail
+
     def _get_active_local_blind_zone_memory(self, now_sec=None):
         if (
             (not self.local_blind_zone_guard_enabled)
@@ -4626,9 +4675,18 @@ class ConstrainedLocalReplanner:
         points_map=None,
         blocking_cells_world=None,
         blocking_points_world=None,
+        preferred_direction=None,
     ):
         if len(nominal_path) < 2:
             return None, None
+
+        preferred_direction = (
+            str(preferred_direction).strip().lower()
+            if preferred_direction is not None
+            else None
+        )
+        if preferred_direction not in ("left", "right"):
+            preferred_direction = None
 
         start_idx = self._nearest_path_cell_index(nominal_path, start_cell)
         blocked_idx = self._first_blocked_path_index(
@@ -4679,7 +4737,10 @@ class ConstrainedLocalReplanner:
                     composed, nominal_path[start_idx:branch_start_idx + 1]
                 )
                 self._append_path_segment(composed, detour_cells[1:])
-                self._append_path_segment(composed, nominal_path[rejoin_idx + 1:])
+                self._append_path_segment(
+                    composed,
+                    self._local_avoidance_rejoin_tail(nominal_path, dg, rejoin_idx),
+                )
             return composed
 
         rejoin_distance_candidates_m = [self.avoidance_rejoin_min_distance_m]
@@ -4704,6 +4765,8 @@ class ConstrainedLocalReplanner:
         # Try the normal rejoin spacing first, then relax it for close blockers so
         # the robot can still slip around obstacles that appear only a short
         # distance ahead instead of dropping straight into hold-stop.
+        exact_fallback_candidate = None
+        exact_fallback_history = None
         best_effort_candidate = None
         best_effort_score = None
         for rejoin_distance_m in ordered_rejoin_distances:
@@ -4748,6 +4811,18 @@ class ConstrainedLocalReplanner:
                             branch_history_points = self._sample_world_points(
                                 [self._grid_to_world(dg, gx, gy) for gx, gy in composed]
                             )
+                            candidate_direction, _candidate_offset = self._infer_avoid_direction(
+                                dg, composed
+                            )
+                            if (
+                                self.avoidance_same_side_commitment_enabled
+                                and preferred_direction is not None
+                                and candidate_direction not in (preferred_direction, "none")
+                            ):
+                                if exact_fallback_candidate is None:
+                                    exact_fallback_candidate = composed
+                                    exact_fallback_history = branch_history_points
+                                continue
                             return composed, branch_history_points
 
                 if not self.allow_best_effort_path:
@@ -4789,7 +4864,19 @@ class ConstrainedLocalReplanner:
                 if blind_zone_conflict is not None:
                     continue
 
+                candidate_direction, _candidate_offset = self._infer_avoid_direction(
+                    dg, composed
+                )
+                side_penalty = 0
+                if (
+                    self.avoidance_same_side_commitment_enabled
+                    and preferred_direction is not None
+                    and candidate_direction not in (preferred_direction, "none")
+                ):
+                    side_penalty = 1
+
                 candidate_score = (
+                    side_penalty,
                     remaining_gap_cells,
                     -progress_cells,
                     -float(len(partial_detour)),
@@ -4797,6 +4884,9 @@ class ConstrainedLocalReplanner:
                 if best_effort_score is None or candidate_score < best_effort_score:
                     best_effort_score = candidate_score
                     best_effort_candidate = composed
+
+        if exact_fallback_candidate is not None:
+            return exact_fallback_candidate, exact_fallback_history
 
         if best_effort_candidate is not None:
             rospy.loginfo_throttle(
@@ -4810,7 +4900,16 @@ class ConstrainedLocalReplanner:
 
         return None, None
 
-    def _update_avoidance_path(self, nominal_path, base_blocked, start_cell, goal_cell, dg, stamp, label):
+    def _update_avoidance_path(
+        self,
+        nominal_path,
+        base_blocked,
+        start_cell,
+        goal_cell,
+        dg,
+        stamp,
+        label,
+    ):
         frame_id = dg.header.frame_id if dg.header.frame_id else "map"
         if not self.enable_avoidance_path or len(nominal_path) < 2:
             self._clear_avoidance_path(frame_id, stamp)
@@ -4962,6 +5061,60 @@ class ConstrainedLocalReplanner:
             if blind_zone_conflict is not None:
                 trigger_reason = "blind_zone_turn_conflict"
 
+        trigger_key = None
+        same_obstacle_episode = False
+        preferred_direction = None
+        if trigger_reason is not None:
+            trigger_key = self._make_avoidance_trigger_key(
+                trigger_reason,
+                blocking_cells,
+                blocking_points,
+                blind_zone_conflict=blind_zone_conflict,
+            )
+            same_obstacle_episode = (
+                trigger_key is not None
+                and self.active_avoidance_obstacle_key is not None
+                and trigger_key == self.active_avoidance_obstacle_key
+            )
+            if same_obstacle_episode and self.last_avoidance_direction in ("left", "right"):
+                preferred_direction = self.last_avoidance_direction
+            if (
+                trigger_reason in ("predicted_overlap", "dynamic_points_overlap")
+                and blind_zone_conflict is None
+                and (not self.avoidance_memory_only_trigger_enabled)
+            ):
+                blocker_source_summary = self._build_path_blocker_source_summary(
+                    nominal_path,
+                    dg,
+                    start_cell,
+                    max_check_m=self.avoidance_trigger_ahead_m,
+                    point_margin_m=(
+                        self.obstacle_block_margin_m + self.avoidance_trigger_margin_m
+                    ),
+                )
+                memory_only_trigger = (
+                    int(blocker_source_summary.get("grid_occ", 0)) <= 0
+                    and int(blocker_source_summary.get("risk", 0)) <= 0
+                    and int(blocker_source_summary.get("pc_current", 0)) <= 0
+                    and int(blocker_source_summary.get("tracked_current", 0)) <= 0
+                    and (
+                        int(blocker_source_summary.get("pc_memory", 0)) > 0
+                        or int(blocker_source_summary.get("tracked_memory", 0)) > 0
+                    )
+                )
+                if memory_only_trigger and (not same_obstacle_episode):
+                    self._debug_avoidance_log(
+                        "constrained_local_replanner: suppressing memory-only avoidance trigger | reason={} pc_mem={} tracked_mem={}".format(
+                            trigger_reason,
+                            int(blocker_source_summary.get("pc_memory", 0)),
+                            int(blocker_source_summary.get("tracked_memory", 0)),
+                        )
+                    )
+                    trigger_reason = None
+                    trigger_key = None
+                    same_obstacle_episode = False
+                    preferred_direction = None
+
         if trigger_reason is None:
             self._avoidance_trigger_confirmed(None, stamp)
             self._clear_blocking_obstacle_markers(stamp)
@@ -5025,13 +5178,6 @@ class ConstrainedLocalReplanner:
                 stamp=stamp,
             )
             return "avoidance" if self.avoidance_active else "clear"
-
-        trigger_key = self._make_avoidance_trigger_key(
-            trigger_reason,
-            blocking_cells,
-            blocking_points,
-            blind_zone_conflict=blind_zone_conflict,
-        )
         if not self._avoidance_trigger_confirmed(trigger_key, stamp):
             self._publish_debug_text(
                 self._build_debug_text(
@@ -5119,6 +5265,7 @@ class ConstrainedLocalReplanner:
             points_map=dynamic_points_map if direct_points_enabled else None,
             blocking_cells_world=blocking_cells,
             blocking_points_world=blocking_points,
+            preferred_direction=preferred_direction,
         )
         if avoid_path is None:
             rospy.logwarn_throttle(
