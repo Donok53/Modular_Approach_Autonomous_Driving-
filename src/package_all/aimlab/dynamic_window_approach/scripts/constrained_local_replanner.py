@@ -5521,30 +5521,13 @@ class ConstrainedLocalReplanner:
 
     def on_timer(self, _evt):
         try:
-            if not self.have_odom:
+            if (not self.have_odom) or self.drivable_grid is None:
                 return
             self._maybe_commit_pending_used_local_trace()
-            stamp = rospy.Time.now()
             dg = self.drivable_grid
             rg = self.risk_grid
+            stamp = rospy.Time.now()
             self._clear_blocking_obstacle_markers(stamp)
-
-            if dg is None:
-                pts = self._global_path_points()
-                if len(pts) >= 2:
-                    i0 = self._nominal_global_start_index(pts)
-                    nominal_ig = self._accum_distance(pts, i0, self.lookahead_m)
-                    if self._publish_world_only_nominal_fallback(
-                        pts,
-                        i0,
-                        nominal_ig,
-                        "map",
-                        stamp,
-                        reason="no_drivable_grid",
-                        trigger_reason="no_drivable_grid",
-                    ):
-                        return
-                return
 
             if self.use_direct_goal and self._plan_direct_goal(dg, rg, stamp):
                 return
@@ -5565,11 +5548,6 @@ class ConstrainedLocalReplanner:
             planning_horizon_m = max(nominal_horizon_m, self.avoidance_plan_horizon_m)
             nominal_ig = self._accum_distance(pts, i0, nominal_horizon_m)
             planning_ig = self._accum_distance(pts, i0, planning_horizon_m)
-            nominal_preview_world = self._build_nominal_world_segment(pts, i0, nominal_ig)
-            if nominal_preview_world is not None and len(nominal_preview_world) >= 2:
-                self._publish_nominal_reference_path(
-                    nominal_preview_world, dg.header.frame_id, stamp
-                )
             start_xy = (self.odom_x, self.odom_y)
             goal_xy = pts[planning_ig]
 
