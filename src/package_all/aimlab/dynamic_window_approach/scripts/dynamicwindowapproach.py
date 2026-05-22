@@ -78,6 +78,15 @@ class DWAControl:
             rospy.get_param("~follow_global_path_only", False)
         )
         self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
+        self.local_path_signature_start_resolution_m = max(
+            0.01,
+            float(
+                rospy.get_param(
+                    "~local_path_signature_start_resolution_m",
+                    0.10,
+                )
+            ),
+        )
         self.behavior_cmd_topic = rospy.get_param("~behavior_cmd_topic", "/planning/behavior_cmd")
         self.drivable_grid_topic = rospy.get_param("~drivable_grid_topic", "/lio_sam/drivable_area/grid")
         self.use_drivable_grid = bool(rospy.get_param("~use_drivable_grid", True))
@@ -2641,8 +2650,15 @@ class DWAControl:
         p0 = path_msg.poses[0 if include_start else min(1, n - 1)].pose.position
         p_mid = path_msg.poses[n // 2].pose.position
         p1 = path_msg.poses[-1].pose.position
+        if include_start:
+            start_res = self.local_path_signature_start_resolution_m
+            p0_x = round(round(float(p0.x) / start_res) * start_res, 3)
+            p0_y = round(round(float(p0.y) / start_res) * start_res, 3)
+        else:
+            p0_x = round(p0.x, 3)
+            p0_y = round(p0.y, 3)
         return (n,
-                round(p0.x, 3), round(p0.y, 3),
+                p0_x, p0_y,
                 round(p_mid.x, 3), round(p_mid.y, 3),
                 round(p1.x, 3), round(p1.y, 3))
 

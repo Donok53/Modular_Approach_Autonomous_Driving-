@@ -66,6 +66,7 @@
   <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="local_path_timeout_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '4.00')"/>
+  <arg name="local_path_signature_start_resolution_m" default="0.10"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="path_mode_topic" default="/planning/path_mode"/>
   <arg name="freeze_global_replan_during_local_mode" default="true"/>
@@ -401,7 +402,7 @@
   <arg name="local_stop_turn_corner_trigger_deg" default="45.0"/>
   <arg name="local_stop_turn_corner_arrival_m" default="0.32"/>
   <arg name="path_tracking_goal_yaw_rate_max_deg" default="18.0"/>
-  <arg name="local_tracking_stop_turn_only_yaw_deg" default="120.0"/>
+  <arg name="local_tracking_stop_turn_only_yaw_deg" default="170.0"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
@@ -1061,6 +1062,7 @@
       <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="local_path_timeout_s" value="$(arg local_path_timeout_s)"/>
+      <arg name="local_path_signature_start_resolution_m" value="$(arg local_path_signature_start_resolution_m)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
       <arg name="path_mode_topic" value="$(arg path_mode_topic)"/>
       <arg name="nominal_path_reference_mode" value="$(arg nominal_path_reference_mode)"/>
