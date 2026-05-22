@@ -98,6 +98,8 @@
     <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
     <arg name="path_mode_topic" default="/planning/path_mode"/>
     <arg name="nominal_path_reference_mode" default="local"/>
+    <arg name="nominal_start_heading_penalty_m" default="1.25"/>
+    <arg name="nominal_start_heading_search_ahead_m" default="5.0"/>
     <arg name="active_path_topic" default="/planning/active_path"/>
     <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
     <arg name="tracking_reference_topic" default="/planning/tracking_reference_path"/>
@@ -739,6 +741,8 @@
             <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
             <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
             <param name="nominal_path_reference_mode" value="$(arg nominal_path_reference_mode)"/>
+            <param name="nominal_start_heading_penalty_m" value="$(arg nominal_start_heading_penalty_m)"/>
+            <param name="nominal_start_heading_search_ahead_m" value="$(arg nominal_start_heading_search_ahead_m)"/>
             <param name="path_history_topic" value="$(arg path_history_topic)"/>
             <param name="travel_history_topic" value="$(arg travel_history_topic)"/>
             <param name="travel_history_path_topic" value="$(arg travel_history_path_topic)"/>
