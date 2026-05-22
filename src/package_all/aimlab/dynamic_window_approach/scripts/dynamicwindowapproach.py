@@ -734,6 +734,20 @@ class DWAControl:
                 ),
             ),
         )
+        self.local_tracking_stop_turn_only_yaw = min(
+            math.pi,
+            max(
+                self.path_tracking_stop_yaw,
+                math.radians(
+                    float(
+                        rospy.get_param(
+                            "~local_tracking_stop_turn_only_yaw_deg",
+                            120.0,
+                        )
+                    )
+                ),
+            ),
+        )
         self.path_tracking_drivable_ignore_start_distance_m = max(
             0.0,
             float(
@@ -3644,7 +3658,15 @@ class DWAControl:
             yaw_rate_limit *= 0.82
         if abs_err >= self.path_tracking_stop_yaw:
             w_target = tracking_kp * yaw_err
-            if need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0:
+            allow_large_yaw_crawl = (
+                need_progress and self.path_tracking_large_yaw_crawl_speed > 0.0
+            )
+            if (
+                self.active_path_source == "local"
+                and abs_err >= self.local_tracking_stop_turn_only_yaw
+            ):
+                allow_large_yaw_crawl = False
+            if allow_large_yaw_crawl:
                 v_cmd = min(v_limit, self.path_tracking_large_yaw_crawl_speed)
                 w_limit = yaw_rate_limit
             else:
