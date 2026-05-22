@@ -358,6 +358,7 @@
   <arg name="local_tracking_preview_m" default="0.85"/>
   <arg name="local_tracking_segment_step_scale" default="0.65"/>
   <arg name="local_tracking_target_step_cap_m" default="0.22"/>
+  <arg name="local_tracking_tangent_window_m" default="0.20"/>
   <arg name="local_tracking_obstacle_speed_cap_mps" default="0.42"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '48.0' if str(arg('real_mode')).lower() == 'true' else '48.0')"/>
   <arg name="path_tracking_in_place_yaw_rate_max_deg" default="26.0"/>
@@ -1145,6 +1146,7 @@
       <arg name="local_tracking_preview_m" value="$(arg local_tracking_preview_m)"/>
       <arg name="local_tracking_segment_step_scale" value="$(arg local_tracking_segment_step_scale)"/>
       <arg name="local_tracking_target_step_cap_m" value="$(arg local_tracking_target_step_cap_m)"/>
+      <arg name="local_tracking_tangent_window_m" value="$(arg local_tracking_tangent_window_m)"/>
       <arg name="local_tracking_obstacle_speed_cap_mps" value="$(arg local_tracking_obstacle_speed_cap_mps)"/>
       <arg name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
       <arg name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>

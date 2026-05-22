@@ -662,6 +662,18 @@ class DWAControl:
                 )
             ),
         )
+        self.local_tracking_tangent_window_m = max(
+            0.0,
+            min(
+                self.path_tracking_tangent_window_m,
+                float(
+                    rospy.get_param(
+                        "~local_tracking_tangent_window_m",
+                        min(self.path_tracking_tangent_window_m, 0.20),
+                    )
+                ),
+            ),
+        )
         self.path_tracking_crawl_speed = max(
             0.0, float(rospy.get_param("~path_tracking_crawl_speed", 0.12))
         )
@@ -3240,10 +3252,17 @@ class DWAControl:
 
     def _interp_xy_smoothed_tangent_at_s(self, s):
         x, y, t_hat = self._interp_xy_tangent_at_s(s)
-        if len(self.path_pts) < 3 or self.path_tracking_tangent_window_m <= 1e-3:
+        if len(self.path_pts) < 3:
             return x, y, t_hat
 
         window = self.path_tracking_tangent_window_m
+        if self.active_path_source == "local":
+            window = min(window, self.local_tracking_tangent_window_m)
+            if self.local_tracking_target_step_cap_m > 1e-3:
+                window = min(window, 1.5 * self.local_tracking_target_step_cap_m)
+        if window <= 1e-3:
+            return x, y, t_hat
+
         s_back = max(0.0, min(self.s_total, s - 0.35 * window))
         s_fwd = max(0.0, min(self.s_total, s + 0.65 * window))
         if (s_fwd - s_back) < 1e-3:
@@ -3597,6 +3616,15 @@ class DWAControl:
             "goal_bearing_err_deg": math.degrees(goal_bearing_err),
             "cte_correction_deg": math.degrees(cte_correction),
             "filtered_lat_err": self._path_tracking_filtered_lat_err,
+            "tangent_window_m": (
+                min(
+                    self.path_tracking_tangent_window_m,
+                    self.local_tracking_tangent_window_m,
+                    1.5 * self.local_tracking_target_step_cap_m,
+                )
+                if self.active_path_source == "local"
+                else self.path_tracking_tangent_window_m
+            ),
         }
         v_limit = min(v_cap, self.path_tracking_speed_cap)
         if self._emergency_bypass_active:
