@@ -2463,6 +2463,9 @@ class ConstrainedLocalReplanner:
         fallback_score = float("inf")
         fallback_dist = float("inf")
         fallback_dot = 1.0
+        fallback_heading_i = progress_i
+        fallback_heading_dot = -2.0
+        fallback_heading_dist = float("inf")
         penalty_m = self.nominal_start_heading_penalty_m
         min_heading_dot = self.nominal_start_min_heading_dot
 
@@ -2510,6 +2513,16 @@ class ConstrainedLocalReplanner:
                 fallback_i = i
                 fallback_dist = dist
                 fallback_dot = heading_dot
+            if (
+                heading_dot > fallback_heading_dot + 1e-6
+                or (
+                    abs(heading_dot - fallback_heading_dot) <= 1e-6
+                    and dist < fallback_heading_dist
+                )
+            ):
+                fallback_heading_i = i
+                fallback_heading_dot = heading_dot
+                fallback_heading_dist = dist
             if heading_dot < min_heading_dot:
                 continue
             if score < best_score:
@@ -2520,9 +2533,14 @@ class ConstrainedLocalReplanner:
 
         used_fallback = best_i is None
         if used_fallback:
-            best_i = fallback_i
-            best_dist = fallback_dist
-            best_dot = fallback_dot
+            if fallback_heading_dot > fallback_dot:
+                best_i = fallback_heading_i
+                best_dist = fallback_heading_dist
+                best_dot = fallback_heading_dot
+            else:
+                best_i = fallback_i
+                best_dist = fallback_dist
+                best_dot = fallback_dot
         start_i = max(0, min(max_idx, best_i))
         if start_i != nearest_i or start_i < progress_i or best_dot < min_heading_dot:
             rospy.loginfo_throttle(

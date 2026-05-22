@@ -78,6 +78,15 @@ class DWAControl:
             rospy.get_param("~follow_global_path_only", False)
         )
         self.local_path_timeout_s = float(rospy.get_param("~local_path_timeout_s", 4.0))
+        self.local_path_source_timeout_s = max(
+            0.05,
+            float(
+                rospy.get_param(
+                    "~local_path_source_timeout_s",
+                    self.local_path_timeout_s,
+                )
+            ),
+        )
         self.local_path_signature_start_resolution_m = max(
             0.01,
             float(
@@ -861,6 +870,7 @@ class DWAControl:
         self.local_path_msg = None
         self.local_path_sig = None
         self.local_path_stamp = rospy.Time(0)
+        self.local_path_source_stamp = rospy.Time(0)
         self.active_path_source = "none"
         self.path_msg = None
         self.path_sig = None
@@ -3144,9 +3154,14 @@ class DWAControl:
         self.global_goal_xy = self._goal_xy_from_path_msg(path_msg)
 
     def path_callback_local(self, path_msg):
+        now = rospy.Time.now()
         self.local_path_msg = path_msg
         self.local_path_sig = self._path_signature(path_msg, include_start=True)
-        self.local_path_stamp = rospy.Time.now()
+        self.local_path_stamp = now
+        source_stamp = path_msg.header.stamp if path_msg is not None else rospy.Time(0)
+        if source_stamp.to_sec() <= 0.0:
+            source_stamp = now
+        self.local_path_source_stamp = source_stamp
 
     def _local_path_is_fresh(self, now=None):
         if self.local_path_msg is None or len(self.local_path_msg.poses) < 2:
@@ -3155,7 +3170,13 @@ class DWAControl:
             return False
         if now is None:
             now = rospy.Time.now()
-        return (now - self.local_path_stamp).to_sec() <= self.local_path_timeout_s
+        receipt_age_s = (now - self.local_path_stamp).to_sec()
+        if receipt_age_s > self.local_path_timeout_s:
+            return False
+        if self.local_path_source_stamp.to_sec() <= 0.0:
+            return True
+        source_age_s = (now - self.local_path_source_stamp).to_sec()
+        return source_age_s <= self.local_path_source_timeout_s
 
     def _refresh_active_path(self):
         now = rospy.Time.now()
@@ -4353,11 +4374,17 @@ class DWAControl:
                     )
                 else:
                     local_age = (rospy.Time.now() - self.local_path_stamp).to_sec() if self.local_path_stamp.to_sec() > 0.0 else -1.0
+                    local_source_age = (
+                        (rospy.Time.now() - self.local_path_source_stamp).to_sec()
+                        if self.local_path_source_stamp.to_sec() > 0.0
+                        else -1.0
+                    )
                     self._log_nav_reason(
                         "stop_no_path",
-                        "active=%s local_age=%.2fs global_pts=%d local_pts=%d" % (
+                        "active=%s local_age=%.2fs source_age=%.2fs global_pts=%d local_pts=%d" % (
                             self.active_path_source,
                             local_age,
+                            local_source_age,
                             len(self.global_path_msg.poses) if self.global_path_msg else 0,
                             len(self.local_path_msg.poses) if self.local_path_msg else 0,
                         ),

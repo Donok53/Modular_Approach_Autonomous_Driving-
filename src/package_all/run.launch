@@ -66,6 +66,7 @@
   <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="local_path_timeout_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '4.00')"/>
+  <arg name="local_path_source_timeout_s" default="$(eval '0.85' if str(arg('localization_environment')).lower() == 'outdoor' else arg('local_path_timeout_s'))"/>
   <arg name="local_path_signature_start_resolution_m" default="0.10"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="path_mode_topic" default="/planning/path_mode"/>
@@ -74,7 +75,7 @@
   <arg name="nominal_path_reference_mode" default="local"/>
   <arg name="nominal_start_heading_penalty_m" default="$(eval '1.50' if str(arg('localization_environment')).lower() == 'outdoor' else '1.00')"/>
   <arg name="nominal_start_heading_search_ahead_m" default="$(eval '5.0' if str(arg('localization_environment')).lower() == 'outdoor' else '3.0')"/>
-  <arg name="nominal_start_min_heading_dot" default="0.05"/>
+  <arg name="nominal_start_min_heading_dot" default="$(eval '0.18' if str(arg('localization_environment')).lower() == 'outdoor' else '0.05')"/>
   <arg name="nominal_start_backtrack_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.60')"/>
   <arg name="active_path_topic" default="/planning/active_path"/>
   <arg name="active_path_viz_topic" default="/planning/active_path_viz"/>
@@ -361,9 +362,9 @@
   <arg name="tracking_projection_forward_window_m" default="1.20"/>
   <arg name="tracking_path_smoothing_passes" default="2"/>
   <arg name="local_tracking_smoothing_enabled" default="false"/>
-  <arg name="local_tracking_preview_m" default="0.85"/>
+  <arg name="local_tracking_preview_m" default="$(eval '1.10' if str(arg('localization_environment')).lower() == 'outdoor' else '0.85')"/>
   <arg name="local_tracking_segment_step_scale" default="0.65"/>
-  <arg name="local_tracking_target_step_cap_m" default="0.22"/>
+  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.38' if str(arg('localization_environment')).lower() == 'outdoor' else '0.22')"/>
   <arg name="local_tracking_tangent_window_m" default="0.20"/>
   <arg name="local_tracking_obstacle_speed_cap_mps" default="0.42"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '48.0' if str(arg('real_mode')).lower() == 'true' else '48.0')"/>
@@ -384,8 +385,8 @@
   <arg name="path_tracking_cte_filter_gain" default="0.28"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="15.0"/>
   <arg name="path_tracking_heading_filter_gain" default="0.35"/>
-  <arg name="local_tracking_heading_filter_gain" default="1.0"/>
-  <arg name="local_tracking_heading_filter_reset_deg" default="35.0"/>
+  <arg name="local_tracking_heading_filter_gain" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
+  <arg name="local_tracking_heading_filter_reset_deg" default="$(eval '90.0' if str(arg('localization_environment')).lower() == 'outdoor' else '35.0')"/>
   <arg name="path_tracking_goal_bearing_gain" default="0.50"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="0.32"/>
@@ -1062,6 +1063,7 @@
       <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
       <arg name="local_path_timeout_s" value="$(arg local_path_timeout_s)"/>
+      <arg name="local_path_source_timeout_s" value="$(arg local_path_source_timeout_s)"/>
       <arg name="local_path_signature_start_resolution_m" value="$(arg local_path_signature_start_resolution_m)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
       <arg name="path_mode_topic" value="$(arg path_mode_topic)"/>
