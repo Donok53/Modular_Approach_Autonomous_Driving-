@@ -103,6 +103,13 @@ class ConstrainedLocalReplanner:
             0.0,
             float(rospy.get_param("~nominal_start_heading_search_ahead_m", 5.0)),
         )
+        self.nominal_start_min_heading_dot = max(
+            -1.0,
+            min(1.0, float(rospy.get_param("~nominal_start_min_heading_dot", 0.05))),
+        )
+        self.nominal_start_backtrack_m = max(
+            0.0, float(rospy.get_param("~nominal_start_backtrack_m", 1.0))
+        )
         self.window_margin_m = max(1.0, float(rospy.get_param("~window_margin_m", 12.0)))
         legacy_robot_radius = max(0.05, float(rospy.get_param("~robot_radius_m", 0.45)))
         self.robot_width_m = max(
@@ -2383,7 +2390,18 @@ class ConstrainedLocalReplanner:
         nearest_i = max(0, min(max_idx, self._nearest_idx(points, self.odom_x, self.odom_y)))
         progress_i = max(0, min(max_idx, int(self.global_nominal_progress_idx)))
 
-        search_end = progress_i
+        search_start = progress_i
+        if self.nominal_start_backtrack_m > 1e-6 and nearest_i < progress_i:
+            back_i = progress_i
+            back_dist = 0.0
+            while back_i > 0 and back_dist < self.nominal_start_backtrack_m:
+                x0, y0 = points[back_i - 1]
+                x1, y1 = points[back_i]
+                back_dist += math.hypot(float(x1) - float(x0), float(y1) - float(y0))
+                back_i -= 1
+            search_start = max(back_i, nearest_i)
+
+        search_end = search_start
         travelled = 0.0
         horizon_m = self.nominal_start_heading_search_ahead_m
         while search_end < max_idx and (horizon_m <= 1e-6 or travelled < horizon_m):
@@ -2391,17 +2409,22 @@ class ConstrainedLocalReplanner:
             x1, y1 = points[search_end + 1]
             travelled += math.hypot(float(x1) - float(x0), float(y1) - float(y0))
             search_end += 1
-        search_end = max(progress_i, min(max_idx, search_end))
+        search_end = max(search_start, min(max_idx, search_end))
 
         yaw_c = math.cos(self.odom_yaw)
         yaw_s = math.sin(self.odom_yaw)
-        best_i = progress_i
+        best_i = None
         best_score = float("inf")
         best_dist = float("inf")
         best_dot = 1.0
+        fallback_i = progress_i
+        fallback_score = float("inf")
+        fallback_dist = float("inf")
+        fallback_dot = 1.0
         penalty_m = self.nominal_start_heading_penalty_m
+        min_heading_dot = self.nominal_start_min_heading_dot
 
-        for i in range(progress_i, search_end + 1):
+        for i in range(search_start, search_end + 1):
             x0, y0 = points[i]
             x1, y1 = points[i + 1]
             sx = float(x1) - float(x0)
@@ -2439,23 +2462,39 @@ class ConstrainedLocalReplanner:
             # first local path segment when they point sideways or backwards.
             heading_penalty = 0.5 * penalty_m * max(0.0, 1.0 - heading_dot)
             score = dist2 + heading_penalty * heading_penalty
+            dist = math.sqrt(max(0.0, dist2))
+            if score < fallback_score:
+                fallback_score = score
+                fallback_i = i
+                fallback_dist = dist
+                fallback_dot = heading_dot
+            if heading_dot < min_heading_dot:
+                continue
             if score < best_score:
                 best_score = score
                 best_i = i
-                best_dist = math.sqrt(max(0.0, dist2))
+                best_dist = dist
                 best_dot = heading_dot
 
+        used_fallback = best_i is None
+        if used_fallback:
+            best_i = fallback_i
+            best_dist = fallback_dist
+            best_dot = fallback_dot
         start_i = max(0, min(max_idx, best_i))
-        if start_i != nearest_i:
+        if start_i != nearest_i or start_i < progress_i or best_dot < min_heading_dot:
             rospy.loginfo_throttle(
                 1.0,
-                "constrained_local_replanner: heading-aware nominal start idx=%d nearest=%d progress=%d search_end=%d dist=%.2fm dot=%.2f",
+                "constrained_local_replanner: heading-aware nominal start idx=%d nearest=%d progress=%d search=%d..%d dist=%.2fm dot=%.2f min_dot=%.2f fallback=%s",
                 start_i,
                 nearest_i,
                 progress_i,
+                search_start,
                 search_end,
                 best_dist,
                 best_dot,
+                min_heading_dot,
+                "yes" if used_fallback else "no",
             )
         self.global_nominal_progress_idx = start_i
         return start_i
