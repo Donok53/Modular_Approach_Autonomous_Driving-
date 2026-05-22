@@ -3,6 +3,8 @@
 
 import heapq
 import math
+import zlib
+from array import array
 from collections import deque
 
 import rospy
@@ -609,6 +611,10 @@ class ConstrainedLocalReplanner:
         self.global_path = None
         self.drivable_grid = None
         self.risk_grid = None
+        self.drivable_grid_signature = None
+        self.risk_grid_signature = None
+        self._inflated_blocked_cache = {}
+        self._inflated_blocked_cache_max_entries = 6
         self.direct_goal = None
         self.direct_goal_stamp_sec = 0.0
         self.cached_direct_goal_cell = None
@@ -1479,10 +1485,46 @@ class ConstrainedLocalReplanner:
         self.global_path = msg
 
     def drivable_grid_callback(self, msg):
+        next_sig = self._grid_signature(msg)
+        if next_sig != self.drivable_grid_signature:
+            self._inflated_blocked_cache.clear()
+        self.drivable_grid_signature = next_sig
         self.drivable_grid = msg
 
     def risk_grid_callback(self, msg):
+        next_sig = self._grid_signature(msg)
+        if next_sig != self.risk_grid_signature:
+            self._inflated_blocked_cache.clear()
+        self.risk_grid_signature = next_sig
         self.risk_grid = msg
+
+    @staticmethod
+    def _grid_data_crc(data):
+        try:
+            if hasattr(data, "tobytes"):
+                raw = data.tobytes()
+            else:
+                raw = array("b", data).tobytes()
+            return zlib.crc32(raw) & 0xFFFFFFFF
+        except Exception:
+            crc = 0
+            for value in data:
+                crc = zlib.crc32(bytes((int(value) & 0xFF,)), crc)
+            return crc & 0xFFFFFFFF
+
+    def _grid_signature(self, msg):
+        if msg is None:
+            return None
+        info = msg.info
+        origin = info.origin.position
+        return (
+            int(info.width),
+            int(info.height),
+            round(float(info.resolution), 6),
+            round(float(origin.x), 4),
+            round(float(origin.y), 4),
+            self._grid_data_crc(msg.data),
+        )
 
     def _local_to_map(self, x, y):
         c = math.cos(self.odom_yaw)
@@ -2602,6 +2644,19 @@ class ConstrainedLocalReplanner:
             if radius_override_m is None
             else float(radius_override_m),
         )
+        risk_sig = None
+        if rg is not None and int(rg.info.width) == w and int(rg.info.height) == h:
+            risk_sig = self.risk_grid_signature
+        cache_key = (
+            self.drivable_grid_signature,
+            risk_sig,
+            round(float(inflate_m), 4),
+            int(self.risk_threshold),
+        )
+        cached = self._inflated_blocked_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         inflate_cells = max(1, int(math.ceil(inflate_m / max(1e-3, res))))
         base = [[False for _ in range(w)] for _ in range(h)]
         for y in range(h):
@@ -2627,6 +2682,9 @@ class ConstrainedLocalReplanner:
                         ny = y + dy
                         if 0 <= nx < w and 0 <= ny < h:
                             out[ny][nx] = True
+        if len(self._inflated_blocked_cache) >= self._inflated_blocked_cache_max_entries:
+            self._inflated_blocked_cache.clear()
+        self._inflated_blocked_cache[cache_key] = out
         return out
 
     def _nearest_free_cell(self, blocked, cell):

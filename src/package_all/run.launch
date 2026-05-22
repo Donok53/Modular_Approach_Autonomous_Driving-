@@ -65,6 +65,7 @@
   <arg name="path_blocked_topic" default="/astar/path_blocked"/>
   <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
+  <arg name="local_path_timeout_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '4.00')"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="path_mode_topic" default="/planning/path_mode"/>
   <arg name="freeze_global_replan_during_local_mode" default="true"/>
@@ -1059,6 +1060,7 @@
       <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
       <arg name="behavior_cmd_topic" value="$(arg behavior_cmd_topic)"/>
       <arg name="local_path_topic" value="$(arg local_path_topic)"/>
+      <arg name="local_path_timeout_s" value="$(arg local_path_timeout_s)"/>
       <arg name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
       <arg name="path_mode_topic" value="$(arg path_mode_topic)"/>
       <arg name="nominal_path_reference_mode" value="$(arg nominal_path_reference_mode)"/>

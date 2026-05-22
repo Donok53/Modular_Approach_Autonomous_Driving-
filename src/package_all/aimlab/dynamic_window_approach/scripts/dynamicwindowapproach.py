@@ -2634,11 +2634,11 @@ class DWAControl:
         return True
 
     # ------------------------------ path handling --------------------------------
-    def _path_signature(self, path_msg):
+    def _path_signature(self, path_msg, include_start=False):
         if not path_msg or not path_msg.poses:
             return None
         n = len(path_msg.poses)
-        p0 = path_msg.poses[min(1, n - 1)].pose.position
+        p0 = path_msg.poses[0 if include_start else min(1, n - 1)].pose.position
         p_mid = path_msg.poses[n // 2].pose.position
         p1 = path_msg.poses[-1].pose.position
         return (n,
@@ -2745,10 +2745,12 @@ class DWAControl:
     def _incoming_path_requires_activation(self, path_msg, sig, source):
         if source != self.active_path_source:
             return True
-        if self.path_sig == sig:
-            return False
         if path_msg is None or self.path_msg is None:
             return True
+        if source == "local":
+            return self.path_sig != sig
+        if self.path_sig == sig:
+            return False
         if (
             self.path_tracking_minor_replan_delta_m <= 0.0
             or len(self.path_pts) < 2
@@ -3076,9 +3078,16 @@ class DWAControl:
                 math.hypot(float(new_goal.x) - float(old_goal.x), float(new_goal.y) - float(old_goal.y))
                 > self.path_tracking_reset_goal_delta_m
             )
+        rolling_local_refresh = (
+            source == "local"
+            and self.active_path_source == "local"
+            and path_msg is not None
+            and self.path_msg is not None
+            and not goal_changed
+        )
         reset_tracking = (
             source != self.active_path_source
-            or sig != self.path_sig
+            or (sig != self.path_sig and not rolling_local_refresh)
             or path_msg is None
             or self.path_msg is None
             or goal_changed
@@ -3120,7 +3129,7 @@ class DWAControl:
 
     def path_callback_local(self, path_msg):
         self.local_path_msg = path_msg
-        self.local_path_sig = self._path_signature(path_msg)
+        self.local_path_sig = self._path_signature(path_msg, include_start=True)
         self.local_path_stamp = rospy.Time.now()
 
     def _local_path_is_fresh(self, now=None):

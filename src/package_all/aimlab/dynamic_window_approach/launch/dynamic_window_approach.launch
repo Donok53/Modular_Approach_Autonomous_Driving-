@@ -95,6 +95,7 @@
     <arg name="grid_unknown_is_occupied" default="true"/>
     <arg name="global_path_topic" default="/astar/path"/>
     <arg name="local_path_topic" default="/planning/local_path"/>
+    <arg name="local_path_timeout_s" default="4.0"/>
     <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
     <arg name="path_mode_topic" default="/planning/path_mode"/>
     <arg name="nominal_path_reference_mode" default="local"/>
@@ -869,6 +870,7 @@
         <param name="pose_topic" value="$(arg controller_pose_topic)"/>
         <param name="global_path_topic" value="$(arg global_path_topic)"/>
         <param name="local_path_topic" value="$(arg local_path_topic)"/>
+        <param name="local_path_timeout_s" value="$(arg local_path_timeout_s)"/>
         <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
         <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
         <param name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
