@@ -643,6 +643,29 @@ class DWAControl:
             1.0,
             max(0.05, float(rospy.get_param("~path_tracking_heading_filter_gain", 0.35))),
         )
+        self.local_tracking_heading_filter_gain = min(
+            1.0,
+            max(
+                0.05,
+                float(
+                    rospy.get_param(
+                        "~local_tracking_heading_filter_gain",
+                        1.0,
+                    )
+                ),
+            ),
+        )
+        self.local_tracking_heading_filter_reset = math.radians(
+            max(
+                0.0,
+                float(
+                    rospy.get_param(
+                        "~local_tracking_heading_filter_reset_deg",
+                        35.0,
+                    )
+                ),
+            )
+        )
         self.path_tracking_goal_bearing_gain = min(
             1.0,
             max(0.0, float(rospy.get_param("~path_tracking_goal_bearing_gain", 0.50))),
@@ -3611,7 +3634,22 @@ class DWAControl:
         desired_yaw_raw = path_yaw_raw + goal_heading_weight * goal_bearing_err - cte_correction
         heading_filter_gain = self.path_tracking_heading_filter_gain
         if self.active_path_source == "local":
-            heading_filter_gain = min(1.0, heading_filter_gain * 1.35)
+            heading_filter_gain = self.local_tracking_heading_filter_gain
+            if (
+                self._path_tracking_prev_desired_yaw is not None
+                and self.local_tracking_heading_filter_reset > 1e-6
+                and abs(
+                    angdiff(
+                        desired_yaw_raw,
+                        self._path_tracking_prev_desired_yaw,
+                    )
+                )
+                >= self.local_tracking_heading_filter_reset
+            ):
+                # Local paths are short rolling control references.  When a
+                # refreshed local segment points a new way, stale filtered
+                # heading causes the robot to kick right/left before settling.
+                self._path_tracking_prev_desired_yaw = None
         if self._path_tracking_prev_desired_yaw is None:
             desired_yaw = desired_yaw_raw
         else:

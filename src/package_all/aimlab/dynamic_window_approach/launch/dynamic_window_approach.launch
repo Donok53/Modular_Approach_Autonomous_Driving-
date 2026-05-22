@@ -187,6 +187,8 @@
     <arg name="path_tracking_cte_filter_gain" default="0.28"/>
     <arg name="path_tracking_cte_yaw_cap_deg" default="15.0"/>
     <arg name="path_tracking_heading_filter_gain" default="0.35"/>
+    <arg name="local_tracking_heading_filter_gain" default="1.0"/>
+    <arg name="local_tracking_heading_filter_reset_deg" default="35.0"/>
     <arg name="path_tracking_goal_bearing_gain" default="0.50"/>
     <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
     <arg name="path_tracking_target_step_m" default="0.32"/>
@@ -925,6 +927,8 @@
         <param name="path_tracking_cte_filter_gain" value="$(arg path_tracking_cte_filter_gain)"/>
         <param name="path_tracking_cte_yaw_cap_deg" value="$(arg path_tracking_cte_yaw_cap_deg)"/>
         <param name="path_tracking_heading_filter_gain" value="$(arg path_tracking_heading_filter_gain)"/>
+        <param name="local_tracking_heading_filter_gain" value="$(arg local_tracking_heading_filter_gain)"/>
+        <param name="local_tracking_heading_filter_reset_deg" value="$(arg local_tracking_heading_filter_reset_deg)"/>
         <param name="path_tracking_goal_bearing_gain" value="$(arg path_tracking_goal_bearing_gain)"/>
         <param name="path_tracking_goal_bearing_cap_deg" value="$(arg path_tracking_goal_bearing_cap_deg)"/>
         <param name="path_tracking_target_step_m" value="$(arg path_tracking_target_step_m)"/>
