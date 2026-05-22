@@ -21,6 +21,7 @@
   <arg name="max_fit_error" default="0.08"/>
   <arg name="long_threshold" default="1.5"/>
   <arg name="line_search_angle" default="0.20"/>
+  <arg name="n_threads" default="4"/>
 
   <arg name="flat_max_slope" default="0.45"/>
   <arg name="flat_max_start_height" default="0.32"/>
@@ -50,6 +51,7 @@
         output="screen"
         respawn="false">
     <rosparam command="load" file="$(find lidar_obstacle_perception_experimental)/config/linefit_segmentation_params.yaml"/>
+    <param name="n_threads" value="$(arg n_threads)"/>
     <param name="input_topic" value="$(arg pointcloud_topic)"/>
     <param name="ground_output_topic" value="$(arg flat_ground_cloud_topic)"/>
     <param name="obstacle_output_topic" value="$(arg flat_non_ground_cloud_topic)"/>
@@ -72,6 +74,7 @@
         output="screen"
         respawn="false">
     <rosparam command="load" file="$(find lidar_obstacle_perception_experimental)/config/linefit_segmentation_params.yaml"/>
+    <param name="n_threads" value="$(arg n_threads)"/>
     <param name="input_topic" value="$(arg pointcloud_topic)"/>
     <param name="ground_output_topic" value="$(arg slope_ground_cloud_topic)"/>
     <param name="obstacle_output_topic" value="$(arg slope_non_ground_cloud_topic)"/>

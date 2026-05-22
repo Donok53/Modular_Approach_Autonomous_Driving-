@@ -307,6 +307,9 @@ class DWAControl:
         self.near_field_raw_stop_downsample = max(
             1, int(rospy.get_param("~near_field_raw_stop_downsample", 1))
         )
+        self.near_field_raw_stop_max_update_hz = max(
+            0.0, float(rospy.get_param("~near_field_raw_stop_max_update_hz", 0.0))
+        )
         self.near_field_raw_stop_on_count = max(
             1, int(rospy.get_param("~near_field_raw_stop_on_count", 1))
         )
@@ -472,6 +475,7 @@ class DWAControl:
         self._near_field_raw_stop_hold_until = rospy.Time(0)
         self._near_field_raw_stop_last_reason = "clear"
         self._near_field_raw_stop_last_process_ms = 0.0
+        self._near_field_raw_stop_last_process_wall_sec = 0.0
         self._last_emergency_source = "none"
         self._emergency_bypass_active = False
         self._emergency_bypass_debug = {}
@@ -1585,6 +1589,18 @@ class DWAControl:
     def near_field_raw_stop_callback(self, msg):
         try:
             process_start = time.monotonic()
+            if self.near_field_raw_stop_max_update_hz > 0.0:
+                min_dt = 1.0 / self.near_field_raw_stop_max_update_hz
+                if (
+                    self._near_field_raw_stop_last_process_wall_sec > 0.0
+                    and (
+                        process_start
+                        - self._near_field_raw_stop_last_process_wall_sec
+                    )
+                    < min_dt
+                ):
+                    return
+                self._near_field_raw_stop_last_process_wall_sec = process_start
             transform_mat, transform_ok, debug_frame = self._near_field_raw_stop_transform_matrix(msg)
             header = self._near_field_header(msg, debug_frame)
             if not transform_ok:
@@ -4277,7 +4293,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s path_mode=%s global_only=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
+            "DWA node started | pose=%s global=%s local=%s path_mode=%s global_only=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_rate=%.1fHz near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -4299,6 +4315,7 @@ class DWAControl:
             "on" if self.enable_raw_cloud_fallback_stop else "off",
             self.near_field_raw_stop_topic if self.near_field_raw_stop_topic else "-",
             self.near_field_raw_stop_base_frame if self.near_field_raw_stop_base_frame else "-",
+            self.near_field_raw_stop_max_update_hz,
             self.near_field_raw_stop_min_x_m,
             self.near_field_raw_stop_max_x_m,
             self.near_field_raw_stop_half_width_m,

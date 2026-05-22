@@ -153,6 +153,7 @@
   <arg name="linefit_slope_max_long_height" default="0.24"/>
   <arg name="linefit_enter_slope_pitch_deg" default="4.5"/>
   <arg name="linefit_exit_slope_pitch_deg" default="3.0"/>
+  <arg name="linefit_n_threads" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '4')"/>
   <arg name="linefit_self_filter_padding_m" default="0.06"/>
   <arg name="linefit_self_filter_center_x_m" default="0.0"/>
   <arg name="linefit_self_filter_center_y_m" default="0.0"/>
@@ -670,6 +671,7 @@
   <arg name="near_field_raw_stop_close_override_min_points" default="3"/>
   <arg name="near_field_raw_stop_close_override_min_cells" default="2"/>
   <arg name="near_field_raw_stop_downsample" default="1"/>
+  <arg name="near_field_raw_stop_max_update_hz" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="near_field_raw_stop_on_count" default="2"/>
   <arg name="near_field_raw_stop_off_count" default="2"/>
   <arg name="near_field_raw_stop_timeout_s" default="0.60"/>
@@ -801,6 +803,7 @@
       <arg name="slope_max_long_height" value="$(arg linefit_slope_max_long_height)"/>
       <arg name="enter_slope_pitch_deg" value="$(arg linefit_enter_slope_pitch_deg)"/>
       <arg name="exit_slope_pitch_deg" value="$(arg linefit_exit_slope_pitch_deg)"/>
+      <arg name="n_threads" value="$(arg linefit_n_threads)"/>
     </include>
 
     <node if="$(arg enable_linefit_self_filter)"
@@ -1410,6 +1413,7 @@
       <arg name="near_field_raw_stop_close_override_min_points" value="$(arg near_field_raw_stop_close_override_min_points)"/>
       <arg name="near_field_raw_stop_close_override_min_cells" value="$(arg near_field_raw_stop_close_override_min_cells)"/>
       <arg name="near_field_raw_stop_downsample" value="$(arg near_field_raw_stop_downsample)"/>
+      <arg name="near_field_raw_stop_max_update_hz" value="$(arg near_field_raw_stop_max_update_hz)"/>
       <arg name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
       <arg name="near_field_raw_stop_off_count" value="$(arg near_field_raw_stop_off_count)"/>
       <arg name="near_field_raw_stop_timeout_s" value="$(arg near_field_raw_stop_timeout_s)"/>
