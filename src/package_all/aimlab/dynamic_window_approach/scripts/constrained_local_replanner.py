@@ -2429,7 +2429,11 @@ class ConstrainedLocalReplanner:
             self.global_nominal_progress_idx = 0
             return 0
 
-        nearest_i = max(0, min(max_idx, self._nearest_idx(points, self.odom_x, self.odom_y)))
+        front_xy = self._robot_front_anchor_xy()
+        anchor_x, anchor_y = (
+            front_xy if front_xy is not None else (self.odom_x, self.odom_y)
+        )
+        nearest_i = max(0, min(max_idx, self._nearest_idx(points, anchor_x, anchor_y)))
         progress_i = max(0, min(max_idx, int(self.global_nominal_progress_idx)))
 
         search_start = progress_i
@@ -2478,21 +2482,20 @@ class ConstrainedLocalReplanner:
             if seg_len2 <= 1e-12:
                 continue
 
-            rx = float(self.odom_x) - float(x0)
-            ry = float(self.odom_y) - float(y0)
+            rx = float(anchor_x) - float(x0)
+            ry = float(anchor_y) - float(y0)
             t = max(0.0, min(1.0, (rx * sx + ry * sy) / seg_len2))
             proj_x = float(x0) + t * sx
             proj_y = float(y0) + t * sy
             dist2 = (
-                (float(self.odom_x) - proj_x) * (float(self.odom_x) - proj_x)
-                + (float(self.odom_y) - proj_y) * (float(self.odom_y) - proj_y)
+                (float(anchor_x) - proj_x) * (float(anchor_x) - proj_x)
+                + (float(anchor_y) - proj_y) * (float(anchor_y) - proj_y)
             )
 
-            # The published nominal local path replaces points[i] with the
-            # current robot pose, so score the direction the controller will
-            # actually see first: odom -> points[i + 1].
-            hx = float(x1) - float(self.odom_x)
-            hy = float(y1) - float(self.odom_y)
+            # The published nominal local path is anchored at the robot front,
+            # so score the first direction the controller will actually track.
+            hx = float(x1) - float(anchor_x)
+            hy = float(y1) - float(anchor_y)
             h_len = math.hypot(hx, hy)
             if h_len <= 1e-6:
                 h_len = math.sqrt(seg_len2)
@@ -3042,17 +3045,19 @@ class ConstrainedLocalReplanner:
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
-        resolved_start_xy = (
-            self._resolve_path_start_xy(start_xy) if anchor_start else start_xy
-        )
+        resolved_start_xy = self._resolve_path_start_xy(start_xy) if anchor_start else start_xy
         world_points = self._grid_path_to_world_points(
             grid_path,
             dg,
-            start_xy=resolved_start_xy,
+            start_xy=start_xy,
             end_xy=end_xy,
         )
-        if anchor_start and resolved_start_xy is None:
-            world_points = self._trim_world_points_from_robot_front(world_points)
+        if anchor_start:
+            world_points = self._anchor_world_points_to_resolved_start(
+                world_points,
+                start_xy,
+                resolved_start_xy,
+            )
 
         if len(world_points) < 2:
             return
@@ -3125,6 +3130,57 @@ class ConstrainedLocalReplanner:
             world_points,
             self.path_start_front_offset_m,
         )
+
+    def _drop_initial_points_behind_start(self, world_points, start_xy):
+        pts = list(world_points)
+        if len(pts) < 3 or start_xy is None or not self.have_odom:
+            return pts
+        sx, sy = float(start_xy[0]), float(start_xy[1])
+        yaw_c = math.cos(self.odom_yaw)
+        yaw_s = math.sin(self.odom_yaw)
+        min_forward_m = -max(0.03, min(0.12, 0.5 * self.published_path_spacing_m))
+        first_keep = 1
+        while first_keep < len(pts) - 1:
+            px, py = pts[first_keep]
+            forward_m = (float(px) - sx) * yaw_c + (float(py) - sy) * yaw_s
+            if forward_m >= min_forward_m:
+                break
+            first_keep += 1
+        if first_keep <= 1:
+            return pts
+        return [pts[0]] + pts[first_keep:]
+
+    def _anchor_world_points_to_resolved_start(
+        self,
+        world_points,
+        original_start_xy,
+        resolved_start_xy,
+    ):
+        pts = list(world_points)
+        if not pts:
+            return pts
+        if resolved_start_xy is None:
+            return self._trim_world_points_from_robot_front(pts)
+
+        trim_m = 0.0
+        if original_start_xy is not None:
+            trim_m = math.hypot(
+                float(resolved_start_xy[0]) - float(original_start_xy[0]),
+                float(resolved_start_xy[1]) - float(original_start_xy[1]),
+            )
+        elif self.have_odom:
+            trim_m = math.hypot(
+                float(resolved_start_xy[0]) - float(self.odom_x),
+                float(resolved_start_xy[1]) - float(self.odom_y),
+            )
+        if self.trim_published_path_to_robot_front and trim_m > 1e-6:
+            pts = self._trim_world_points_from_start(pts, trim_m)
+        if not pts:
+            pts = [(float(resolved_start_xy[0]), float(resolved_start_xy[1]))]
+        else:
+            pts[0] = (float(resolved_start_xy[0]), float(resolved_start_xy[1]))
+        pts = self._drop_initial_points_behind_start(pts, resolved_start_xy)
+        return self._dedupe_world_points(pts)
 
     @staticmethod
     def _set_pose_yaw(pose_stamped, yaw):
@@ -3586,11 +3642,11 @@ class ConstrainedLocalReplanner:
 
     def _publish_world_path(self, world_points, frame_id, stamp):
         resolved_start_xy = self._resolve_path_start_xy(None)
-        if resolved_start_xy is not None and world_points:
-            world_points = list(world_points)
-            world_points[0] = (float(resolved_start_xy[0]), float(resolved_start_xy[1]))
-        else:
-            world_points = self._trim_world_points_from_robot_front(world_points)
+        world_points = self._anchor_world_points_to_resolved_start(
+            world_points,
+            (self.odom_x, self.odom_y) if self.have_odom else None,
+            resolved_start_xy,
+        )
         out = Path()
         out.header.stamp = stamp
         out.header.frame_id = frame_id if frame_id else "map"
