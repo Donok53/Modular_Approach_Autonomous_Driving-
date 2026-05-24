@@ -754,7 +754,13 @@ class ConstrainedLocalReplanner:
             self.pub_debug_text = rospy.Publisher(
                 self.debug_text_topic, String, queue_size=20
             )
-        self.sub_odom = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=20)
+        self.sub_odom = rospy.Subscriber(
+            self.odom_topic,
+            Odometry,
+            self.odom_callback,
+            queue_size=1,
+            tcp_nodelay=True,
+        )
         self.sub_global = rospy.Subscriber(self.global_path_topic, Path, self.global_path_callback, queue_size=5)
         self.sub_drivable = rospy.Subscriber(self.drivable_grid_topic, OccupancyGrid, self.drivable_grid_callback, queue_size=3)
         self.sub_risk = rospy.Subscriber(self.dynamic_risk_grid_topic, OccupancyGrid, self.risk_grid_callback, queue_size=3)
