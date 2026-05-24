@@ -7014,9 +7014,6 @@ class ConstrainedLocalReplanner:
                 )
             self.local_blocked_since_sec = 0.0
             self.local_clear_since_sec = 0.0
-            self._publish_nominal_reference_path(
-                nominal_world, dg.header.frame_id, stamp
-            )
             avoidance_state = self._update_avoidance_path(planning_path, blocked, start_cell, goal_cell, dg, stamp, "local")
             if avoidance_state == "avoidance":
                 self.rejoin_mode_until_sec = 0.0
@@ -7031,6 +7028,9 @@ class ConstrainedLocalReplanner:
             # because the mux stops using the fresh local segment that was just
             # built around the current pose.
             self.rejoin_mode_until_sec = 0.0
+            self._publish_nominal_reference_path(
+                nominal_world, dg.header.frame_id, stamp
+            )
             self._publish_path_mode(
                 "follow_global" if self._use_global_nominal_reference() else "follow_local"
             )
