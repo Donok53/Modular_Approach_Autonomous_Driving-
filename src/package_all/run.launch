@@ -348,7 +348,7 @@
   <arg name="candidate_route_replan_match_distance_m" default="1.10"/>
   <arg name="path_tracking_only" default="true"/>
   <arg name="path_tracking_speed_cap" default="$(eval '0.60' if str(arg('localization_environment')).lower() == 'outdoor' else '0.90')"/>
-  <arg name="path_tracking_steer_filter_gain" default="0.55"/>
+  <arg name="path_tracking_steer_filter_gain" default="$(eval '0.30' if str(arg('localization_environment')).lower() == 'outdoor' else '0.55')"/>
   <arg name="lookahead_distance" default="1.40"/>
   <arg name="lookahead_speed_gain" default="1.80"/>
   <arg name="lookahead_error_gain" default="0.80"/>
@@ -365,35 +365,35 @@
   <arg name="local_tracking_smoothing_enabled" default="false"/>
   <arg name="local_tracking_preview_m" default="$(eval '1.10' if str(arg('localization_environment')).lower() == 'outdoor' else '0.85')"/>
   <arg name="local_tracking_segment_step_scale" default="0.65"/>
-  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.38' if str(arg('localization_environment')).lower() == 'outdoor' else '0.22')"/>
-  <arg name="local_tracking_tangent_window_m" default="0.20"/>
+  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '0.22')"/>
+  <arg name="local_tracking_tangent_window_m" default="$(eval '0.55' if str(arg('localization_environment')).lower() == 'outdoor' else '0.20')"/>
   <arg name="local_tracking_obstacle_speed_cap_mps" default="0.42"/>
-  <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '48.0' if str(arg('real_mode')).lower() == 'true' else '48.0')"/>
+  <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '32.0' if str(arg('localization_environment')).lower() == 'outdoor' else '48.0')"/>
   <arg name="path_tracking_in_place_yaw_rate_max_deg" default="26.0"/>
-  <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '120.0' if str(arg('real_mode')).lower() == 'true' else '120.0')"/>
-  <arg name="path_tracking_kp" default="1.00"/>
+  <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '70.0' if str(arg('localization_environment')).lower() == 'outdoor' else '120.0')"/>
+  <arg name="path_tracking_kp" default="$(eval '0.65' if str(arg('localization_environment')).lower() == 'outdoor' else '1.00')"/>
   <arg name="cmd_smoothing_enabled" default="true"/>
   <arg name="cmd_linear_accel_max_mps2" default="0.68"/>
   <arg name="cmd_linear_decel_max_mps2" default="0.90"/>
-  <arg name="cmd_angular_accel_max_degps2" default="95.0"/>
-  <arg name="cmd_angular_decel_max_degps2" default="120.0"/>
+  <arg name="cmd_angular_accel_max_degps2" default="$(eval '65.0' if str(arg('localization_environment')).lower() == 'outdoor' else '95.0')"/>
+  <arg name="cmd_angular_decel_max_degps2" default="$(eval '90.0' if str(arg('localization_environment')).lower() == 'outdoor' else '120.0')"/>
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
-  <arg name="path_tracking_slowdown_yaw_deg" default="80.0"/>
-  <arg name="path_tracking_stop_yaw_deg" default="95.0"/>
+  <arg name="path_tracking_slowdown_yaw_deg" default="$(eval '55.0' if str(arg('localization_environment')).lower() == 'outdoor' else '80.0')"/>
+  <arg name="path_tracking_stop_yaw_deg" default="$(eval '75.0' if str(arg('localization_environment')).lower() == 'outdoor' else '95.0')"/>
   <arg name="path_tracking_cte_gain" default="0.38"/>
   <arg name="path_tracking_cte_soft_mps" default="0.55"/>
   <arg name="path_tracking_cte_deadband_m" default="0.10"/>
   <arg name="path_tracking_cte_filter_gain" default="0.28"/>
   <arg name="path_tracking_cte_yaw_cap_deg" default="15.0"/>
   <arg name="path_tracking_heading_filter_gain" default="0.35"/>
-  <arg name="local_tracking_heading_filter_gain" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
+  <arg name="local_tracking_heading_filter_gain" default="$(eval '0.20' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
   <arg name="local_tracking_heading_filter_reset_deg" default="$(eval '90.0' if str(arg('localization_environment')).lower() == 'outdoor' else '35.0')"/>
   <arg name="path_tracking_goal_bearing_gain" default="0.50"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="0.32"/>
   <arg name="path_tracking_tangent_window_m" default="0.75"/>
-  <arg name="path_tracking_crawl_speed" default="0.42"/>
-  <arg name="path_tracking_large_yaw_crawl_speed" default="0.34"/>
+  <arg name="path_tracking_crawl_speed" default="$(eval '0.22' if str(arg('localization_environment')).lower() == 'outdoor' else '0.42')"/>
+  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.12' if str(arg('localization_environment')).lower() == 'outdoor' else '0.34')"/>
   <arg name="final_approach_window_m" default="0.80"/>
   <arg name="final_speed_k" default="0.95"/>
   <arg name="final_speed_min" default="0.20"/>
