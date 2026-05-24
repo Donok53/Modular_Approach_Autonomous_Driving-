@@ -214,7 +214,7 @@
     <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
     <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
     <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
-    <arg name="path_tracking_enforce_drivable_grid" default="true"/>
+    <arg name="path_tracking_enforce_drivable_grid" default="false"/>
     <arg name="goal_completion_stuck_distance_m" default="0.95"/>
     <arg name="goal_completion_stuck_arc_m" default="0.55"/>
     <arg name="goal_completion_stuck_hold_s" default="0.60"/>
