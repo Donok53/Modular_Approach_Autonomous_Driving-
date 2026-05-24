@@ -10,7 +10,7 @@
   <arg name="localizer_map_relative_path" default="$(eval '/map/outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test'))"/>
   <arg name="localizer_map_bundle_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
   <arg name="runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
-  <arg name="enable_rviz" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
+  <arg name="enable_rviz" default="true"/>
   <arg name="enable_localizer_drivable_area" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
   <arg name="enable_lio_sam_drivable_area_2d_editor" default="false"/>
@@ -66,7 +66,7 @@
   <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="local_path_timeout_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '4.00')"/>
-  <arg name="local_path_source_timeout_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '4.00')"/>
+  <arg name="local_path_source_timeout_s" default="$(eval '0.85' if str(arg('localization_environment')).lower() == 'outdoor' else arg('local_path_timeout_s'))"/>
   <arg name="local_path_signature_start_resolution_m" default="0.10"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="path_mode_topic" default="/planning/path_mode"/>
@@ -196,7 +196,7 @@
   <arg name="near_field_raw_overlay_min_z_m" default="0.08"/>
   <arg name="near_field_raw_overlay_max_z_m" default="1.40"/>
   <arg name="near_field_raw_overlay_downsample" default="2"/>
-  <arg name="near_field_raw_overlay_max_update_hz" default="$(eval '2.0' if str(arg('localization_environment')).lower() == 'outdoor' else '4.0')"/>
+  <arg name="near_field_raw_overlay_max_update_hz" default="4.0"/>
   <arg name="near_field_raw_overlay_uv_row_step" default="2"/>
   <arg name="near_field_raw_overlay_uv_col_step" default="4"/>
   <arg name="near_field_raw_overlay_min_points" default="3"/>
@@ -207,7 +207,7 @@
   <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
   <arg name="use_raw_near_obstacle_hits" default="$(arg near_field_raw_overlay_enabled)"/>
   <arg name="raw_near_obstacle_hold_s" default="0.25"/>
-  <arg name="near_field_raw_debug_cloud_enabled" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
+  <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
   <arg name="near_field_raw_debug_cloud_topic" default="/planning/near_field_raw_debug_cloud"/>
   <arg name="near_field_raw_debug_min_x_m" default="-1.2"/>
   <arg name="near_field_raw_debug_max_x_m" default="1.8"/>
@@ -550,7 +550,7 @@
   <arg name="global_pointcloud_overlay_evidence_ttl_s" default="0.9"/>
   <arg name="global_pointcloud_overlay_evidence_resolution_m" default="0.6"/>
   <arg name="global_pointcloud_overlay_max_points" default="200"/>
-  <arg name="global_pointcloud_overlay_max_update_hz" default="$(eval '2.0' if str(arg('localization_environment')).lower() == 'outdoor' else '5.0')"/>
+  <arg name="global_pointcloud_overlay_max_update_hz" default="5.0"/>
   <arg name="global_obstacle_overlay_downsample" default="1"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
   <arg name="enable_planning_slowdown_manager" default="true"/>

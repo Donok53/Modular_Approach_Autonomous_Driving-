@@ -935,19 +935,9 @@ class DWAControl:
         self.sub_path_local = None
         if not self.follow_global_path_only:
             self.sub_path_local = rospy.Subscriber(
-                self.local_path_topic,
-                Path,
-                self.path_callback_local,
-                queue_size=1,
-                tcp_nodelay=True,
+                self.local_path_topic, Path, self.path_callback_local, queue_size=5
             )
-        self.sub_pose = rospy.Subscriber(
-            self.pose_topic,
-            Odometry,
-            self.pose_callback,
-            queue_size=1,
-            tcp_nodelay=True,
-        )
+        self.sub_pose = rospy.Subscriber(self.pose_topic, Odometry, self.pose_callback)
         self.sub_server_cmd = rospy.Subscriber("server_to_robot_topic", server_to_robot, self.server_to_robot_callback)
         self.sub_behavior = rospy.Subscriber(
             self.behavior_cmd_topic,
