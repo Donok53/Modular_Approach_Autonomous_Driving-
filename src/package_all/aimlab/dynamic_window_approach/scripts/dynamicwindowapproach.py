@@ -3194,6 +3194,13 @@ class DWAControl:
         source_age_s = (now - self.local_path_source_stamp).to_sec()
         return source_age_s <= self.local_path_source_timeout_s
 
+    def _stamp_age_s(self, stamp, now=None):
+        if stamp is None or stamp.to_sec() <= 0.0:
+            return -1.0
+        if now is None:
+            now = rospy.Time.now()
+        return max(0.0, (now - stamp).to_sec())
+
     def _refresh_active_path(self):
         now = rospy.Time.now()
         if self.follow_global_path_only:
@@ -4675,9 +4682,15 @@ class DWAControl:
                     self._no_valid_traj_arc_m = float(arc_rem)
                     self._no_valid_traj_lat_m = float(lat_err)
                     st = self._last_eval_stats
+                    log_now = rospy.Time.now()
+                    pose_age_s = self._stamp_age_s(self.current_pose.header.stamp, log_now)
+                    local_age_s = self._stamp_age_s(self.local_path_stamp, log_now)
+                    local_source_age_s = self._stamp_age_s(
+                        self.local_path_source_stamp, log_now
+                    )
                     self._log_nav_reason(
                         "stop_no_valid_traj",
-                        "dist=%.2f arc=%.2f lat=%.2f sampled=%d valid=%d skip_grid=%d collision=%d" % (
+                        "dist=%.2f arc=%.2f lat=%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                             dist_to_goal,
                             arc_rem,
                             lat_err,
@@ -4685,6 +4698,9 @@ class DWAControl:
                             st.get("valid", 0),
                             st.get("skip_grid", 0),
                             st.get("collision", 0),
+                            pose_age_s,
+                            local_age_s,
+                            local_source_age_s,
                         ),
                         warn=True,
                     )
@@ -4703,9 +4719,15 @@ class DWAControl:
             else:
                 self._clear_no_valid_traj_state()
                 dbg = self._last_tracking_debug
+                log_now = rospy.Time.now()
+                pose_age_s = self._stamp_age_s(self.current_pose.header.stamp, log_now)
+                local_age_s = self._stamp_age_s(self.local_path_stamp, log_now)
+                local_source_age_s = self._stamp_age_s(
+                    self.local_path_source_stamp, log_now
+                )
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f" % (
+                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                         self.active_path_source,
                         u_cmd[0],
                         u_cmd[1],
@@ -4720,6 +4742,9 @@ class DWAControl:
                         "on" if self._emergency_bypass_active else "off",
                         self._emergency_bypass_debug.get("preview_local_y", 0.0),
                         self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                        pose_age_s,
+                        local_age_s,
+                        local_source_age_s,
                     ),
                 )
 

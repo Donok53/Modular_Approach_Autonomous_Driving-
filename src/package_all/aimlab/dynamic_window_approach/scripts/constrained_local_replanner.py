@@ -182,6 +182,7 @@ class ConstrainedLocalReplanner:
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
+        self.replan_period_s = 1.0 / self.replan_hz
         self.simplify_stride = max(1, int(rospy.get_param("~simplify_stride", 1)))
         self.published_path_spacing_m = max(
             0.05, float(rospy.get_param("~published_path_spacing_m", 0.25))
@@ -601,8 +602,22 @@ class ConstrainedLocalReplanner:
         self.debug_avoidance_log_period_s = max(
             0.1, float(rospy.get_param("~debug_avoidance_log_period_s", 1.0))
         )
+        self.debug_timing_logging = bool(rospy.get_param("~debug_timing_logging", True))
+        self.debug_timing_log_period_s = max(
+            0.2, float(rospy.get_param("~debug_timing_log_period_s", 1.0))
+        )
+        self.debug_timing_overrun_s = max(
+            0.02,
+            float(
+                rospy.get_param(
+                    "~debug_timing_overrun_s",
+                    max(0.12, 0.75 * self.replan_period_s),
+                )
+            ),
+        )
 
         self.have_odom = False
+        self.odom_stamp_sec = 0.0
         self.odom_x = 0.0
         self.odom_y = 0.0
         self.odom_yaw = 0.0
@@ -710,6 +725,7 @@ class ConstrainedLocalReplanner:
         self._last_debug_text = ""
         self._last_debug_text_time = 0.0
         self._last_debug_screen_time = 0.0
+        self._last_timer_start_sec = 0.0
 
         self.pub_local_path = rospy.Publisher(self.local_path_topic, Path, queue_size=2)
         self.pub_avoidance_path = rospy.Publisher(self.avoidance_path_topic, Path, queue_size=2)
@@ -1449,6 +1465,8 @@ class ConstrainedLocalReplanner:
             rospy.loginfo("constrained_local_replanner debug | %s", text)
 
     def odom_callback(self, msg):
+        stamp_sec = msg.header.stamp.to_sec()
+        self.odom_stamp_sec = stamp_sec if stamp_sec > 0.0 else rospy.Time.now().to_sec()
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
         self.odom_x = float(p.x)
@@ -6611,7 +6629,54 @@ class ConstrainedLocalReplanner:
         self._record_published_path(goal_cell, path)
         return True
 
+    @staticmethod
+    def _age_from_stamp_sec(stamp_sec, now_sec):
+        try:
+            stamp_sec = float(stamp_sec)
+        except (TypeError, ValueError):
+            return -1.0
+        if stamp_sec <= 0.0:
+            return -1.0
+        return max(0.0, float(now_sec) - stamp_sec)
+
+    def _grid_stamp_age_s(self, grid, now_sec):
+        if grid is None:
+            return -1.0
+        stamp_sec = grid.header.stamp.to_sec()
+        return self._age_from_stamp_sec(stamp_sec, now_sec)
+
+    def _log_timer_timing(self, loop_start_sec, timer_gap_s):
+        if not self.debug_timing_logging or loop_start_sec <= 0.0:
+            return
+        now_sec = rospy.Time.now().to_sec()
+        loop_s = max(0.0, now_sec - loop_start_sec)
+        gap_s = max(0.0, float(timer_gap_s)) if timer_gap_s > 0.0 else 0.0
+        if loop_s <= self.debug_timing_overrun_s and (
+            gap_s <= 0.0 or gap_s <= 1.5 * self.replan_period_s
+        ):
+            return
+        rospy.logwarn_throttle(
+            self.debug_timing_log_period_s,
+            "constrained_local_replanner timing | loop=%.3fs gap=%.3fs target=%.3fs odom_age=%.2fs cloud_age=%.2fs raw_age=%.2fs grid_age=%.2fs raw_pts=%d clustered=%d",
+            loop_s,
+            gap_s,
+            self.replan_period_s,
+            self._age_from_stamp_sec(self.odom_stamp_sec, now_sec),
+            self._age_from_stamp_sec(self.current_obstacle_points_stamp_sec, now_sec),
+            self._age_from_stamp_sec(self.raw_near_obstacle_points_stamp_sec, now_sec),
+            self._grid_stamp_age_s(self.drivable_grid, now_sec),
+            int(self.obstacle_raw_point_count),
+            int(self.obstacle_cluster_count),
+        )
+
     def on_timer(self, _evt):
+        loop_start_sec = rospy.Time.now().to_sec()
+        timer_gap_s = (
+            loop_start_sec - self._last_timer_start_sec
+            if self._last_timer_start_sec > 0.0
+            else 0.0
+        )
+        self._last_timer_start_sec = loop_start_sec
         try:
             if (not self.have_odom) or self.drivable_grid is None:
                 return
@@ -7037,6 +7102,8 @@ class ConstrainedLocalReplanner:
             )
         except Exception as e:
             rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))
+        finally:
+            self._log_timer_timing(loop_start_sec, timer_gap_s)
 
 
 def main():
