@@ -199,12 +199,20 @@ class PlanningOdomFilter:
                 self.pose_marker_topic, MarkerArray, queue_size=2, latch=True
             )
         self.sub = rospy.Subscriber(
-            self.input_topic, Odometry, self.odom_callback, queue_size=50
+            self.input_topic,
+            Odometry,
+            self.odom_callback,
+            queue_size=1,
+            tcp_nodelay=True,
         )
         self.sub_twist = None
         if self.twist_topic and self.twist_topic != self.input_topic:
             self.sub_twist = rospy.Subscriber(
-                self.twist_topic, Odometry, self.twist_callback, queue_size=50
+                self.twist_topic,
+                Odometry,
+                self.twist_callback,
+                queue_size=1,
+                tcp_nodelay=True,
             )
         self.pub_timer = None
         if self.publish_hz > 0.0:
