@@ -4257,6 +4257,8 @@ class ConstrainedLocalReplanner:
             return False
 
         if source_summary is not None:
+            if int(source_summary.get("grid_occ", 0)) > 0:
+                return False
             if str(source_summary.get("blind_zone", "none")).strip().lower() != "none":
                 return False
             if int(source_summary.get("risk", 0)) > 0:
