@@ -3,6 +3,7 @@
 
 import heapq
 import math
+import traceback
 import zlib
 from array import array
 from collections import deque
@@ -3263,7 +3264,11 @@ class ConstrainedLocalReplanner:
         delete_all.action = Marker.DELETEALL
         markers.markers.append(delete_all)
 
-        branch_entries = [entry for entry in self.path_history_entries if entry["source"] == "avoidance"]
+        branch_entries = [
+            entry
+            for entry in self.path_history_entries
+            if entry["source"] == "avoidance" and len(entry.get("points", [])) >= 2
+        ]
         total = len(branch_entries)
         now = rospy.Time.now()
         for idx, entry in enumerate(branch_entries):
@@ -3282,7 +3287,8 @@ class ConstrainedLocalReplanner:
             marker.color.r = 1.0
             marker.color.g = 0.55 + 0.20 * age_norm
             marker.color.b = 0.0
-            for x, y in entry["points"]:
+            points = entry.get("points", [])
+            for x, y in points:
                 p = Point()
                 p.x = float(x)
                 p.y = float(y)
@@ -3305,8 +3311,8 @@ class ConstrainedLocalReplanner:
             entry_marker.color.g = marker.color.g
             entry_marker.color.b = marker.color.b
             entry_marker.color.a = min(1.0, alpha + 0.05)
-            entry_marker.pose.position.x = float(entry["points"][0][0])
-            entry_marker.pose.position.y = float(entry["points"][0][1])
+            entry_marker.pose.position.x = float(points[0][0])
+            entry_marker.pose.position.y = float(points[0][1])
             entry_marker.pose.position.z = 0.14
             markers.markers.append(entry_marker)
 
@@ -3325,13 +3331,15 @@ class ConstrainedLocalReplanner:
             exit_marker.color.g = 0.75
             exit_marker.color.b = 0.20
             exit_marker.color.a = alpha
-            exit_marker.pose.position.x = float(entry["points"][-1][0])
-            exit_marker.pose.position.y = float(entry["points"][-1][1])
+            exit_marker.pose.position.x = float(points[-1][0])
+            exit_marker.pose.position.y = float(points[-1][1])
             exit_marker.pose.position.z = 0.14
             markers.markers.append(exit_marker)
 
         used_local_entries = [
-            entry for entry in self.path_history_entries if entry["source"] == "used_local"
+            entry
+            for entry in self.path_history_entries
+            if entry["source"] == "used_local" and len(entry.get("points", [])) >= 2
         ]
         for idx, entry in enumerate(used_local_entries):
             age_norm = (
@@ -3354,7 +3362,7 @@ class ConstrainedLocalReplanner:
             marker.color.r = 0.92
             marker.color.g = 0.08 + 0.06 * age_norm
             marker.color.b = 0.10 + 0.10 * age_norm
-            for x, y in entry["points"]:
+            for x, y in entry.get("points", []):
                 p = Point()
                 p.x = float(x)
                 p.y = float(y)
@@ -7107,7 +7115,12 @@ class ConstrainedLocalReplanner:
                 stamp=stamp,
             )
         except Exception as e:
-            rospy.logwarn_throttle(1.0, "constrained_local_replanner error: %s", str(e))
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner error: %s\n%s",
+                str(e),
+                traceback.format_exc(),
+            )
         finally:
             self._log_timer_timing(loop_start_sec, timer_gap_s)
 
