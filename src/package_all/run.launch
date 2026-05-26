@@ -411,7 +411,7 @@
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
-  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('real_mode')).lower() == 'outdoor' else 'false')"/>
   <arg name="goal_completion_stuck_distance_m" default="1.10"/>
   <arg name="goal_completion_stuck_arc_m" default="0.75"/>
   <arg name="goal_completion_stuck_hold_s" default="0.35"/>
@@ -445,7 +445,7 @@
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.24"/>
-  <arg name="use_pointcloud_static_blocking" default="true"/>
+  <arg name="use_pointcloud_static_blocking" default="$(eval 'true' if str(arg('real_mode')).lower() == 'outdoor' else 'false')"/>
   <arg name="pointcloud_static_block_margin_m" default="0.15"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="2"/>
