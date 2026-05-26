@@ -3068,7 +3068,7 @@ class ConstrainedLocalReplanner:
         anchor_start=True,
     ):
         out = Path()
-        out.header.stamp = stamp
+        out.header.stamp = rospy.Time.now()
         out.header.frame_id = dg.header.frame_id if dg.header.frame_id else "map"
         resolved_start_xy = self._resolve_path_start_xy(start_xy) if anchor_start else start_xy
         world_points = self._grid_path_to_world_points(
@@ -3680,7 +3680,7 @@ class ConstrainedLocalReplanner:
             resolved_start_xy,
         )
         out = Path()
-        out.header.stamp = stamp
+        out.header.stamp = rospy.Time.now()
         out.header.frame_id = frame_id if frame_id else "map"
         yaws = self._path_yaws(world_points)
         for (x, y), yaw in zip(world_points, yaws):

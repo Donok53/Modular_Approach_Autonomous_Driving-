@@ -87,6 +87,9 @@ class DWAControl:
                 )
             ),
         )
+        self.enforce_local_path_source_stamp = bool(
+            rospy.get_param("~enforce_local_path_source_stamp", False)
+        )
         self.local_path_signature_start_resolution_m = max(
             0.01,
             float(
@@ -3202,6 +3205,8 @@ class DWAControl:
         if self.local_path_source_stamp.to_sec() <= 0.0:
             return True
         source_age_s = (now - self.local_path_source_stamp).to_sec()
+        if not self.enforce_local_path_source_stamp:
+            return True
         return source_age_s <= self.local_path_source_timeout_s
 
     def _stamp_age_s(self, stamp, now=None):
