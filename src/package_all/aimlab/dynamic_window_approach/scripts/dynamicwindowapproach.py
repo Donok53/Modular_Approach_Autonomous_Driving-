@@ -570,6 +570,9 @@ class DWAControl:
         self.cruise_min_speed = rospy.get_param("~cruise_min_speed", 0.0)
         self.cruise_distance_m = rospy.get_param("~cruise_distance_m", 1.8)
         self.cruise_lat_err_m = rospy.get_param("~cruise_lat_err_m", 0.25)
+        self.cruise_max_heading_err = math.radians(
+            rospy.get_param("~cruise_max_heading_err_deg", 12.0)
+        )
         self.cruise_max_yaw_rate = math.radians(rospy.get_param("~cruise_max_yaw_rate_deg", 45.0))
         self.current_point_search_radius_m = 5.0  # legacy (kept for /traj_info)
         # 경로에서 이 정도 이상 벗어나면 일단 경로로 붙는 스냅 단계
@@ -3839,6 +3842,7 @@ class DWAControl:
             and self.cruise_min_speed > 0.0
             and remaining_dist > self.cruise_distance_m
             and abs(self._path_tracking_filtered_lat_err) < self.cruise_lat_err_m
+            and abs_err < self.cruise_max_heading_err
             and abs(w_cmd) < self.cruise_max_yaw_rate
             and v_cmd > 0.0
         ):

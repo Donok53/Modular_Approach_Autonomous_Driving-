@@ -419,6 +419,7 @@
   <arg name="min_forward_cmd_distance" default="0.80"/>
   <arg name="cruise_min_speed" default="0.62"/>
   <arg name="cruise_distance_m" default="1.80"/>
+  <arg name="cruise_max_heading_err_deg" default="12.0"/>
   <arg name="enable_reverse_recovery" default="false"/>
   <arg name="reverse_recovery_hold_trigger_s" default="1.20"/>
   <arg name="reverse_recovery_emergency_trigger_s" default="0.35"/>
@@ -1224,6 +1225,7 @@
       <arg name="min_forward_cmd_distance" value="$(arg min_forward_cmd_distance)"/>
       <arg name="cruise_min_speed" value="$(arg cruise_min_speed)"/>
       <arg name="cruise_distance_m" value="$(arg cruise_distance_m)"/>
+      <arg name="cruise_max_heading_err_deg" value="$(arg cruise_max_heading_err_deg)"/>
       <arg name="enable_reverse_recovery" value="$(arg enable_reverse_recovery)"/>
       <arg name="reverse_recovery_hold_trigger_s" value="$(arg reverse_recovery_hold_trigger_s)"/>
       <arg name="reverse_recovery_emergency_trigger_s" value="$(arg reverse_recovery_emergency_trigger_s)"/>
