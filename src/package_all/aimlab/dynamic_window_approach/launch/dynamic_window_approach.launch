@@ -98,6 +98,9 @@
     <arg name="local_path_timeout_s" default="4.0"/>
     <arg name="local_path_source_timeout_s" default="$(arg local_path_timeout_s)"/>
     <arg name="local_path_signature_start_resolution_m" default="0.10"/>
+    <arg name="local_path_keepalive_enabled" default="true"/>
+    <arg name="local_path_keepalive_hz" default="5.0"/>
+    <arg name="local_path_keepalive_max_age_s" default="2.5"/>
     <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
     <arg name="path_mode_topic" default="/planning/path_mode"/>
     <arg name="nominal_path_reference_mode" default="local"/>
@@ -272,6 +275,7 @@
     <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
     <arg name="blocked_clear_hold_s" default="0.35"/>
     <arg name="avoidance_keep_until_endpoint_distance_m" default="0.90"/>
+    <arg name="avoidance_clear_detour_hold_s" default="1.2"/>
     <arg name="avoidance_reuse_on_failure_s" default="2.0"/>
     <arg name="avoidance_reuse_max_deviation_m" default="0.80"/>
     <arg name="avoidance_branch_backtrack_cells" default="8"/>
@@ -749,6 +753,9 @@
             <param name="local_path_topic" value="$(arg local_path_topic)"/>
             <param name="avoidance_path_topic" value="$(arg avoidance_path_topic)"/>
             <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
+            <param name="local_path_keepalive_enabled" value="$(arg local_path_keepalive_enabled)"/>
+            <param name="local_path_keepalive_hz" value="$(arg local_path_keepalive_hz)"/>
+            <param name="local_path_keepalive_max_age_s" value="$(arg local_path_keepalive_max_age_s)"/>
             <param name="nominal_path_reference_mode" value="$(arg nominal_path_reference_mode)"/>
             <param name="nominal_start_heading_penalty_m" value="$(arg nominal_start_heading_penalty_m)"/>
             <param name="nominal_start_heading_search_ahead_m" value="$(arg nominal_start_heading_search_ahead_m)"/>
@@ -842,6 +849,7 @@
             <param name="avoidance_trigger_confirm_max_gap_s" value="$(arg avoidance_trigger_confirm_max_gap_s)"/>
             <param name="blocked_clear_hold_s" value="$(arg blocked_clear_hold_s)"/>
             <param name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
+            <param name="avoidance_clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
             <param name="avoidance_reuse_on_failure_s" value="$(arg avoidance_reuse_on_failure_s)"/>
             <param name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
             <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>

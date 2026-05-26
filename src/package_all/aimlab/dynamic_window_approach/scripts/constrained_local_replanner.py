@@ -184,6 +184,15 @@ class ConstrainedLocalReplanner:
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
         self.replan_period_s = 1.0 / self.replan_hz
+        self.local_path_keepalive_enabled = bool(
+            rospy.get_param("~local_path_keepalive_enabled", True)
+        )
+        self.local_path_keepalive_hz = max(
+            0.5, float(rospy.get_param("~local_path_keepalive_hz", 5.0))
+        )
+        self.local_path_keepalive_max_age_s = max(
+            0.0, float(rospy.get_param("~local_path_keepalive_max_age_s", 2.5))
+        )
         self.simplify_stride = max(1, int(rospy.get_param("~simplify_stride", 1)))
         self.published_path_spacing_m = max(
             0.05, float(rospy.get_param("~published_path_spacing_m", 0.25))
@@ -501,6 +510,9 @@ class ConstrainedLocalReplanner:
                 )
             ),
         )
+        self.avoidance_clear_detour_hold_s = max(
+            0.0, float(rospy.get_param("~avoidance_clear_detour_hold_s", 1.2))
+        )
         self.allow_avoidance_reuse_on_no_solution = bool(
             rospy.get_param("~allow_avoidance_reuse_on_no_solution", False)
         )
@@ -641,6 +653,9 @@ class ConstrainedLocalReplanner:
         self.last_published_goal_cell = None
         self.last_published_end_cell = None
         self.last_path_publish_sec = 0.0
+        self.last_local_path_msg = None
+        self.last_local_path_geometry_sec = 0.0
+        self.last_local_path_publish_sec = 0.0
         self.current_obstacle_points_map = []
         self.current_obstacle_points_stamp_sec = 0.0
         self.last_nonempty_current_obstacle_points_map = []
@@ -809,6 +824,12 @@ class ConstrainedLocalReplanner:
         self._clear_travel_history()
         self._publish_path_mode(self.current_path_mode, force=True)
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.replan_hz), self.on_timer)
+        self.local_path_keepalive_timer = None
+        if self.local_path_keepalive_enabled:
+            self.local_path_keepalive_timer = rospy.Timer(
+                rospy.Duration(1.0 / self.local_path_keepalive_hz),
+                self.on_local_path_keepalive,
+            )
         rospy.loginfo(
             "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
             self.global_path_topic,
@@ -908,6 +929,59 @@ class ConstrainedLocalReplanner:
         except rospy.ROSException:
             return
         rospy.loginfo("constrained_local_replanner: path_mode=%s", mode_str)
+
+    def _remember_local_path_msg(self, msg):
+        self.last_local_path_msg = msg
+        now_sec = rospy.Time.now().to_sec()
+        self.last_local_path_geometry_sec = now_sec
+        self.last_local_path_publish_sec = now_sec
+
+    def _forget_local_path_msg(self):
+        self.last_local_path_msg = None
+        self.last_local_path_geometry_sec = 0.0
+        self.last_local_path_publish_sec = 0.0
+
+    def _publish_local_path_msg(self, msg):
+        if msg is None or len(getattr(msg, "poses", [])) < 2:
+            return
+        self.pub_local_path.publish(msg)
+        self._remember_local_path_msg(msg)
+
+    def on_local_path_keepalive(self, _event):
+        if (not self.local_path_keepalive_enabled) or rospy.is_shutdown():
+            return
+        msg = self.last_local_path_msg
+        if msg is None or len(getattr(msg, "poses", [])) < 2:
+            return
+        if self.current_path_mode not in ("follow_local", "follow_avoidance", "rejoin_global"):
+            return
+
+        now = rospy.Time.now()
+        now_sec = now.to_sec()
+        if self.last_local_path_geometry_sec <= 0.0:
+            return
+        geometry_age_s = now_sec - self.last_local_path_geometry_sec
+        if (
+            self.local_path_keepalive_max_age_s > 0.0
+            and geometry_age_s > self.local_path_keepalive_max_age_s
+        ):
+            return
+        min_publish_period_s = 1.0 / max(0.5, self.local_path_keepalive_hz)
+        if (
+            self.last_local_path_publish_sec > 0.0
+            and (now_sec - self.last_local_path_publish_sec) < 0.8 * min_publish_period_s
+        ):
+            return
+
+        msg.header.stamp = now
+        for pose in msg.poses:
+            pose.header.stamp = now
+            pose.header.frame_id = msg.header.frame_id
+        try:
+            self.pub_local_path.publish(msg)
+            self.last_local_path_publish_sec = now_sec
+        except rospy.ROSException:
+            return
 
     def _use_global_nominal_reference(self):
         return self.nominal_path_reference_mode == "global"
@@ -3099,7 +3173,10 @@ class ConstrainedLocalReplanner:
             self._set_pose_yaw(ps, yaw)
             out.poses.append(ps)
         if len(out.poses) >= 2:
-            publisher.publish(out)
+            if publisher is self.pub_local_path:
+                self._publish_local_path_msg(out)
+            else:
+                publisher.publish(out)
         return sampled_points, out.header.frame_id
 
     def _sample_world_points(self, world_points):
@@ -3692,7 +3769,7 @@ class ConstrainedLocalReplanner:
             self._set_pose_yaw(ps, yaw)
             out.poses.append(ps)
         if len(out.poses) >= 2:
-            self.pub_local_path.publish(out)
+            self._publish_local_path_msg(out)
 
     @staticmethod
     def _collapse_straight_grid_runs(grid_path):
@@ -4357,6 +4434,8 @@ class ConstrainedLocalReplanner:
         out.header.stamp = stamp
         out.header.frame_id = frame_id if frame_id else "map"
         publisher.publish(out)
+        if publisher is self.pub_local_path:
+            self._forget_local_path_msg()
 
     def _clear_local_path(self, frame_id, stamp, force=False):
         self._publish_empty_path(self.pub_local_path, frame_id, stamp)
@@ -4429,6 +4508,22 @@ class ConstrainedLocalReplanner:
             return False
         if len(self.last_avoidance_grid_path) < 2:
             return False
+        if (
+            str(clear_reason) == "nominal_path_clear"
+            and self.avoidance_clear_detour_hold_s > 0.0
+            and self.last_avoidance_solution_sec > 0.0
+        ):
+            clear_age_s = stamp.to_sec() - self.last_avoidance_solution_sec
+            if clear_age_s > self.avoidance_clear_detour_hold_s:
+                frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: releasing active avoidance after clear hold | age=%.2fs limit=%.2fs",
+                    clear_age_s,
+                    self.avoidance_clear_detour_hold_s,
+                )
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                return False
         endpoint_dist_m = self._grid_path_endpoint_distance_to_xy(
             self.last_avoidance_grid_path,
             dg,
