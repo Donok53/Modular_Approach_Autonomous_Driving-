@@ -448,6 +448,20 @@ class ConstrainedLocalReplanner:
         self.use_pointcloud_static_blocking = bool(
             rospy.get_param("~use_pointcloud_static_blocking", True)
         )
+        self.launch_profile_label = str(rospy.get_param("~launch_profile_label", "unknown"))
+        self.launch_real_mode = str(rospy.get_param("~launch_real_mode", "unknown"))
+        self.launch_localization_environment = str(
+            rospy.get_param("~launch_localization_environment", "unknown")
+        )
+        self.launch_map_profile_name = str(
+            rospy.get_param("~launch_map_profile_name", "unknown")
+        )
+        self.launch_localizer_map_relative_path = str(
+            rospy.get_param("~launch_localizer_map_relative_path", "unknown")
+        )
+        self.launch_runtime_drivable_state_file = str(
+            rospy.get_param("~launch_runtime_drivable_state_file", "unknown")
+        )
         self.pointcloud_static_block_margin_m = max(
             0.0, float(rospy.get_param("~pointcloud_static_block_margin_m", 0.05))
         )
@@ -831,7 +845,13 @@ class ConstrainedLocalReplanner:
                 self.on_local_path_keepalive,
             )
         rospy.loginfo(
-            "constrained_local_replanner started | global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s",
+            "constrained_local_replanner started | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s pc_static=%s pc_trigger=%s timing_log=%s/%.1fs",
+            self.launch_profile_label,
+            self.launch_real_mode,
+            self.launch_localization_environment,
+            self.launch_map_profile_name,
+            self.launch_localizer_map_relative_path,
+            self.launch_runtime_drivable_state_file,
             self.global_path_topic,
             self.drivable_grid_topic,
             self.dynamic_risk_grid_topic,
@@ -844,6 +864,10 @@ class ConstrainedLocalReplanner:
             self.robot_width_m,
             "on" if self.freeze_path_on_first_plan else "off",
             "on" if self.enable_avoidance_path else "off",
+            "on" if self.use_pointcloud_static_blocking else "off",
+            "on" if self.use_pointcloud_avoidance_trigger else "off",
+            "on" if self.debug_timing_logging else "off",
+            self.debug_timing_log_period_s,
         )
         if self.enable_global_pointcloud_overlay and self.global_obstacle_overlay_topic:
             rospy.loginfo(
@@ -6785,13 +6809,14 @@ class ConstrainedLocalReplanner:
         now_sec = rospy.Time.now().to_sec()
         loop_s = max(0.0, now_sec - loop_start_sec)
         gap_s = max(0.0, float(timer_gap_s)) if timer_gap_s > 0.0 else 0.0
-        if loop_s <= self.debug_timing_overrun_s and (
-            gap_s <= 0.0 or gap_s <= 1.5 * self.replan_period_s
-        ):
-            return
-        rospy.logwarn_throttle(
+        overrun = loop_s > self.debug_timing_overrun_s or (
+            gap_s > 0.0 and gap_s > 1.5 * self.replan_period_s
+        )
+        log_fn = rospy.logwarn_throttle if overrun else rospy.loginfo_throttle
+        log_fn(
             self.debug_timing_log_period_s,
-            "constrained_local_replanner timing | loop=%.3fs gap=%.3fs target=%.3fs odom_age=%.2fs cloud_age=%.2fs raw_age=%.2fs grid_age=%.2fs raw_pts=%d clustered=%d",
+            "constrained_local_replanner timing | status=%s loop=%.3fs gap=%.3fs target=%.3fs odom_age=%.2fs cloud_age=%.2fs raw_age=%.2fs grid_age=%.2fs raw_pts=%d clustered=%d",
+            "overrun" if overrun else "ok",
             loop_s,
             gap_s,
             self.replan_period_s,

@@ -162,9 +162,16 @@ class PlanningOdomFilter:
         )
         self.publish_now_stamp = bool(rospy.get_param("~publish_now_stamp", True))
         self.publish_hz = max(0.0, float(rospy.get_param("~publish_hz", 25.0)))
+        self.debug_latency_logging = bool(
+            rospy.get_param("~debug_latency_logging", True)
+        )
+        self.debug_latency_log_period_s = max(
+            0.2, float(rospy.get_param("~debug_latency_log_period_s", 1.0))
+        )
 
         self.have_state = False
         self.last_stamp_s = None
+        self._last_predict_dt_s = 0.0
         self.fx = 0.0
         self.fy = 0.0
         self.fz = 0.0
@@ -221,7 +228,7 @@ class PlanningOdomFilter:
             )
 
         rospy.loginfo(
-            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s pose_marker=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f",
+            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s pose_marker=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f latency_log=%s/%.1fs",
             self.input_topic,
             self.twist_topic if self.twist_topic else "-",
             self.twist_linear_frame,
@@ -240,6 +247,8 @@ class PlanningOdomFilter:
             self.max_predict_age_s,
             "on" if self.publish_now_stamp else "off",
             self.publish_hz,
+            "on" if self.debug_latency_logging else "off",
+            self.debug_latency_log_period_s,
         )
 
     @staticmethod
@@ -331,6 +340,7 @@ class PlanningOdomFilter:
             dt = max(0.0, float(target_stamp_s) - float(self.last_stamp_s))
             if self.max_predict_age_s > 0.0:
                 dt = min(dt, self.max_predict_age_s)
+        self._last_predict_dt_s = dt
 
         pred_yaw = wrap_angle(self.fyaw + self.fwz * dt)
         mid_yaw = wrap_angle(self.fyaw + 0.5 * self.fwz * dt)
@@ -367,6 +377,23 @@ class PlanningOdomFilter:
         out.twist.twist.linear.z = self.fvz
         out.twist.twist.angular.z = self.fwz
         self.pub.publish(out)
+        if self.debug_latency_logging:
+            now_sec = rospy.Time.now().to_sec()
+            pose_stamp_s = self._stamp_to_sec(pose_msg)
+            twist_stamp_s = self._stamp_to_sec(twist_msg)
+            out_stamp_s = out.header.stamp.to_sec()
+            rospy.loginfo_throttle(
+                self.debug_latency_log_period_s,
+                "planning_odom_filter latency | raw_age=%.3fs twist_age=%.3fs out_age=%.3fs source_to_out=%.3fs predict_dt=%.3fs publish_now=%s vx=%.3f wz=%.3f",
+                max(0.0, now_sec - pose_stamp_s),
+                max(0.0, now_sec - twist_stamp_s),
+                max(0.0, now_sec - out_stamp_s) if out_stamp_s > 0.0 else float("inf"),
+                max(0.0, out_stamp_s - pose_stamp_s) if out_stamp_s > 0.0 else 0.0,
+                self._last_predict_dt_s,
+                "on" if self.publish_now_stamp else "off",
+                self.fvx,
+                self.fwz,
+            )
         frame_id = str(out.header.frame_id).strip() or "map"
         self._publish_pose_marker(
             out.header.stamp, frame_id, pred_x, pred_y, pred_z, pred_yaw

@@ -10,6 +10,7 @@
   <arg name="localizer_map_relative_path" default="$(eval '/map/outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test'))"/>
   <arg name="localizer_map_bundle_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
   <arg name="runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
+  <arg name="launch_profile_label" default="$(arg map_profile_name)"/>
   <arg name="enable_rviz" default="true"/>
   <arg name="enable_localizer_drivable_area" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="enable_localizer_drivable_area_2d_editor" default="false"/>
@@ -42,6 +43,8 @@
   <arg name="pose_filter_max_predict_age_s" default="0.25"/>
   <arg name="pose_filter_publish_now_stamp" default="true"/>
   <arg name="pose_filter_publish_hz" default="25.0"/>
+  <arg name="pose_filter_debug_latency_logging" default="true"/>
+  <arg name="pose_filter_debug_latency_log_period_s" default="1.0"/>
   <arg name="pose_filter_lateral_deadband_m" default="0.04"/>
   <arg name="pose_filter_yaw_deadband_deg" default="2.0"/>
   <arg name="pose_filter_straight_speed_min_mps" default="0.12"/>
@@ -411,7 +414,7 @@
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
-  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('real_mode')).lower() == 'outdoor' else 'false')"/>
+  <arg name="path_tracking_enforce_drivable_grid" default="false"/>
   <arg name="goal_completion_stuck_distance_m" default="1.10"/>
   <arg name="goal_completion_stuck_arc_m" default="0.75"/>
   <arg name="goal_completion_stuck_hold_s" default="0.35"/>
@@ -445,7 +448,7 @@
   <arg name="rotate_reentry_cooldown_s" default="4.0"/>
   <arg name="near_goal_no_rotate_m" default="1.5"/>
   <arg name="avoidance_hard_stop_distance" default="0.24"/>
-  <arg name="use_pointcloud_static_blocking" default="$(eval 'true' if str(arg('real_mode')).lower() == 'outdoor' else 'false')"/>
+  <arg name="use_pointcloud_static_blocking" default="false"/>
   <arg name="pointcloud_static_block_margin_m" default="0.15"/>
   <arg name="pointcloud_cluster_resolution_m" default="0.15"/>
   <arg name="pointcloud_min_cluster_points" default="2"/>
@@ -997,6 +1000,12 @@
 
   <group if="$(eval arg('local_planner_mode') == 'custom')">
     <include file="$(find dynamic_window_approach)/launch/dynamic_window_approach.launch">
+      <arg name="launch_profile_label" value="$(arg launch_profile_label)"/>
+      <arg name="launch_real_mode" value="$(arg real_mode)"/>
+      <arg name="launch_localization_environment" value="$(arg localization_environment)"/>
+      <arg name="launch_map_profile_name" value="$(arg map_profile_name)"/>
+      <arg name="launch_localizer_map_relative_path" value="$(arg localizer_map_relative_path)"/>
+      <arg name="launch_runtime_drivable_state_file" value="$(arg runtime_drivable_state_file)"/>
       <arg name="pose_topic" value="$(arg pose_topic)"/>
       <arg name="planning_pose_topic" value="$(arg planning_pose_topic)"/>
       <arg name="controller_pose_topic" value="$(arg controller_pose_topic)"/>
@@ -1015,6 +1024,8 @@
       <arg name="pose_filter_max_predict_age_s" value="$(arg pose_filter_max_predict_age_s)"/>
       <arg name="pose_filter_publish_now_stamp" value="$(arg pose_filter_publish_now_stamp)"/>
       <arg name="pose_filter_publish_hz" value="$(arg pose_filter_publish_hz)"/>
+      <arg name="pose_filter_debug_latency_logging" value="$(arg pose_filter_debug_latency_logging)"/>
+      <arg name="pose_filter_debug_latency_log_period_s" value="$(arg pose_filter_debug_latency_log_period_s)"/>
       <arg name="pose_filter_lateral_deadband_m" value="$(arg pose_filter_lateral_deadband_m)"/>
       <arg name="pose_filter_yaw_deadband_deg" value="$(arg pose_filter_yaw_deadband_deg)"/>
       <arg name="pose_filter_straight_speed_min_mps" value="$(arg pose_filter_straight_speed_min_mps)"/>

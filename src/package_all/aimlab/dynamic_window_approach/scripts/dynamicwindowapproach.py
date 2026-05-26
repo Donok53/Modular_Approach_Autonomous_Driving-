@@ -111,6 +111,23 @@ class DWAControl:
             "~tracking_reference_topic",
             "/planning/tracking_reference_path",
         )
+        self.launch_profile_label = str(rospy.get_param("~launch_profile_label", "unknown"))
+        self.launch_real_mode = str(rospy.get_param("~launch_real_mode", "unknown"))
+        self.launch_localization_environment = str(
+            rospy.get_param("~launch_localization_environment", "unknown")
+        )
+        self.launch_map_profile_name = str(
+            rospy.get_param("~launch_map_profile_name", "unknown")
+        )
+        self.launch_localizer_map_relative_path = str(
+            rospy.get_param("~launch_localizer_map_relative_path", "unknown")
+        )
+        self.launch_runtime_drivable_state_file = str(
+            rospy.get_param("~launch_runtime_drivable_state_file", "unknown")
+        )
+        self.pointcloud_static_blocking_enabled = bool(
+            rospy.get_param("~pointcloud_static_blocking_enabled", False)
+        )
         self.debug_stop_logging = bool(rospy.get_param("~debug_stop_logging", True))
         self.debug_dwa_stats = bool(rospy.get_param("~debug_dwa_stats", True))
         self.stop_log_period_s = max(0.2, float(rospy.get_param("~stop_log_period_s", 1.0)))
@@ -868,6 +885,7 @@ class DWAControl:
         self._path_tracking_prev_desired_yaw = None
         self._path_tracking_filtered_lat_err = 0.0
         self._last_tracking_debug = {}
+        self._last_target_debug = {}
         self._local_turn_rotate_kind = None
         self._local_turn_rotate_seg_idx = -1
         self._local_turn_rotate_heading = None
@@ -3471,6 +3489,7 @@ class DWAControl:
 
         if goal_align_active:
             s_target = self.s_total
+            target_policy = "goal_align"
         elif (
             self.follow_global_path_only
             or self.active_path_source == "global"
@@ -3487,12 +3506,22 @@ class DWAControl:
                 )
             else:
                 s_target = min(self.s_total, base_s + preview_lookahead)
+            target_policy = (
+                "local_clear_preview"
+                if self.active_path_source == "local"
+                else "global_preview"
+            )
         else:
             # Follow the currently selected path segment more directly instead
             # of skipping far ahead on a heavily smoothed global path.  This
             # keeps obstacle-avoidance detours from being cut across by the
             # controller when the planner intentionally routes around a tight
             # obstacle.
+            target_policy = (
+                "local_segment"
+                if self.active_path_source == "local"
+                else "global_segment"
+            )
             target_seg_idx = idx
             if t >= 0.98 and target_seg_idx + 1 < len(self.seg_lens):
                 target_seg_idx += 1
@@ -3524,6 +3553,20 @@ class DWAControl:
         # making arc_rem small while the robot is still physically far away.
         arc_rem = max(0.0, self.s_total - self.s_cur)
         at_goal = (dist_to_goal <= self.goal_thresh_m) and (abs(lat_err) <= self.lat_goal_slop)
+        self._last_target_debug = {
+            "mode": self.current_path_mode,
+            "source": self.active_path_source,
+            "policy": target_policy,
+            "path_len": len(self.path_pts),
+            "s_proj": s_proj,
+            "s_cur": self.s_cur,
+            "s_target": s_target,
+            "s_total": self.s_total,
+            "preview": preview_lookahead,
+            "lat_err": lat_err,
+            "goal_align": goal_align_active,
+            "obstacle_response": obstacle_response_active,
+        }
 
         return (s_proj, lat_err, (tx, ty), t_hat, at_goal, dist_to_goal, arc_rem)
 
@@ -3763,6 +3806,8 @@ class DWAControl:
             "goal_bearing_err_deg": math.degrees(goal_bearing_err),
             "cte_correction_deg": math.degrees(cte_correction),
             "filtered_lat_err": self._path_tracking_filtered_lat_err,
+            "gate": "precheck",
+            "grid_enforce": "unknown",
             "tangent_window_m": (
                 min(
                     self.path_tracking_tangent_window_m,
@@ -3860,11 +3905,18 @@ class DWAControl:
         enforce_track_drivable = bool(
             self.use_drivable_grid and self.path_tracking_enforce_drivable_grid
         )
+        self._last_tracking_debug["grid_enforce"] = (
+            "on" if enforce_track_drivable else "off"
+        )
+        self._last_tracking_debug["gate"] = "ok"
         if not self._trajectory_in_drivable_area(
             traj,
             ignore_start_distance_m=self.path_tracking_drivable_ignore_start_distance_m,
             check_drivable_grid=enforce_track_drivable,
         ):
+            self._last_tracking_debug["gate"] = (
+                "primary_grid_block" if enforce_track_drivable else "primary_risk_block"
+            )
             recovery_v = min(
                 v_limit,
                 max(
@@ -3884,6 +3936,7 @@ class DWAControl:
             ):
                 v_cmd = recovery_v
                 traj = recovery_traj
+                self._last_tracking_debug["gate"] = "recovery_drivable"
             elif (
                 need_progress
                 and recovery_v > 1e-4
@@ -3892,9 +3945,13 @@ class DWAControl:
             ):
                 v_cmd = recovery_v
                 traj = recovery_traj
+                self._last_tracking_debug["gate"] = "recovery_risk_only"
             else:
                 v_cmd = 0.0
                 traj = self.predict_trajectory(x, v_cmd, w_cmd)
+                self._last_tracking_debug["gate"] = (
+                    "blocked_grid" if enforce_track_drivable else "blocked_risk"
+                )
         return [v_cmd, w_cmd], traj
 
     def moving(self, x, u):
@@ -4379,6 +4436,24 @@ class DWAControl:
             math.degrees(self.cmd_angular_accel_max),
             math.degrees(self.cmd_angular_decel_max),
         )
+        rospy.loginfo(
+            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps",
+            self.launch_profile_label,
+            self.launch_real_mode,
+            self.launch_localization_environment,
+            self.launch_map_profile_name,
+            self.launch_localizer_map_relative_path,
+            self.launch_runtime_drivable_state_file,
+            "on" if self.path_tracking_enforce_drivable_grid else "off",
+            "on" if self.pointcloud_static_blocking_enabled else "off",
+            "on" if self.use_drivable_grid else "off",
+            "occupied" if self.grid_unknown_is_occupied else "free",
+            "on" if self.use_dynamic_risk_grid else "off",
+            "off" if self.follow_global_path_only else "on",
+            self.local_tracking_preview_m,
+            self.local_tracking_target_step_cap_m,
+            self.path_tracking_speed_cap,
+        )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
              self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation),
@@ -4715,12 +4790,22 @@ class DWAControl:
                     local_source_age_s = self._stamp_age_s(
                         self.local_path_source_stamp, log_now
                     )
+                    tdbg = self._last_target_debug
                     self._log_nav_reason(
                         "stop_no_valid_traj",
-                        "dist=%.2f arc=%.2f lat=%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                        "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                            self.active_path_source,
+                            self.current_path_mode,
+                            int(tdbg.get("path_len", len(self.path_pts))),
+                            str(tdbg.get("policy", "-")),
+                            str(self._last_tracking_debug.get("gate", "-")),
+                            str(self._last_tracking_debug.get("grid_enforce", "-")),
                             dist_to_goal,
                             arc_rem,
                             lat_err,
+                            float(tdbg.get("s_proj", self.s_cur)),
+                            float(tdbg.get("s_target", self.s_cur)),
+                            float(tdbg.get("s_total", self.s_total)),
                             st.get("sampled", 0),
                             st.get("valid", 0),
                             st.get("skip_grid", 0),
@@ -4746,6 +4831,7 @@ class DWAControl:
             else:
                 self._clear_no_valid_traj_state()
                 dbg = self._last_tracking_debug
+                tdbg = self._last_target_debug
                 log_now = rospy.Time.now()
                 pose_age_s = self._stamp_age_s(self.current_pose.header.stamp, log_now)
                 local_age_s = self._stamp_age_s(self.local_path_stamp, log_now)
@@ -4754,13 +4840,21 @@ class DWAControl:
                 )
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                         self.active_path_source,
+                        self.current_path_mode,
+                        int(tdbg.get("path_len", len(self.path_pts))),
+                        str(tdbg.get("policy", "-")),
+                        str(dbg.get("gate", "-")),
+                        str(dbg.get("grid_enforce", "-")),
                         u_cmd[0],
                         u_cmd[1],
                         dist_to_goal,
                         arc_rem,
                         lat_err,
+                        float(tdbg.get("s_proj", self.s_cur)),
+                        float(tdbg.get("s_target", self.s_cur)),
+                        float(tdbg.get("s_total", self.s_total)),
                         dbg.get("robot_yaw_deg", 0.0),
                         dbg.get("path_yaw_deg", 0.0),
                         dbg.get("desired_yaw_deg", 0.0),
