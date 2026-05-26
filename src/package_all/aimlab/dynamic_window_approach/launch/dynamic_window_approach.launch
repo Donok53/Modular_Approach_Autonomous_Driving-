@@ -961,6 +961,7 @@
         <param name="path_tracking_goal_yaw_rate_max_deg" value="$(arg path_tracking_goal_yaw_rate_max_deg)"/>
         <param name="local_tracking_stop_turn_only_yaw_deg" value="$(arg local_tracking_stop_turn_only_yaw_deg)"/>
         <param name="path_tracking_drivable_ignore_start_distance_m" value="$(arg path_tracking_drivable_ignore_start_distance_m)"/>
+        <param name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
         <param name="path_tracking_drivable_boundary_tolerance_m" value="$(arg path_tracking_drivable_boundary_tolerance_m)"/>
         <param name="path_tracking_enforce_drivable_grid" value="$(arg path_tracking_enforce_drivable_grid)"/>
         <param name="goal_completion_stuck_distance_m" value="$(arg goal_completion_stuck_distance_m)"/>
