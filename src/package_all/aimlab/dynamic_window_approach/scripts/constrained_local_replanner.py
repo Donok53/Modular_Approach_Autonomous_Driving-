@@ -6172,6 +6172,31 @@ class ConstrainedLocalReplanner:
             trigger_reason,
             source_summary,
         )
+        if (
+            label in ("local", "local_hold")
+            and trigger_reason == "predicted_overlap"
+            and self._is_grid_only_blocker_source_summary(source_summary)
+        ):
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner: grid-only blocker on %s path (grid_occ=%d); skipping expensive avoidance search and continuing nominal local path",
+                label,
+                int(source_summary.get("grid_occ", 0)),
+            )
+            self._clear_blocking_obstacle_markers(stamp)
+            self._clear_avoidance_path(frame_id, stamp, force=True)
+            self._publish_debug_text(
+                self._build_debug_text(
+                    "grid_only_nominal_fallback",
+                    stamp,
+                    trigger_reason=trigger_reason,
+                    path_len=len(nominal_path),
+                    overlay_points=obstacle_count,
+                ),
+                stamp=stamp,
+                force=True,
+            )
+            return "nominal_fallback"
         self._publish_blocking_obstacle_markers(
             stamp,
             blocking_points=blocking_points,
@@ -7022,9 +7047,8 @@ class ConstrainedLocalReplanner:
                 if avoidance_state == "hold":
                     self._publish_path_mode("hold")
                 elif avoidance_state in ("clear", "nominal_fallback"):
-                    if avoidance_state == "clear":
-                        self.local_blocked_since_sec = 0.0
-                        self.local_clear_since_sec = 0.0
+                    self.local_blocked_since_sec = 0.0
+                    self.local_clear_since_sec = 0.0
                     self._publish_nominal_reference_path(
                         nominal_world, dg.header.frame_id, stamp
                     )

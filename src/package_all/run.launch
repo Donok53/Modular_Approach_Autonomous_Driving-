@@ -66,7 +66,7 @@
   <arg name="emergency_stop_topic" default="/planning/emergency_stop"/>
   <arg name="local_path_topic" default="/planning/local_path"/>
   <arg name="local_path_timeout_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '4.00')"/>
-  <arg name="local_path_source_timeout_s" default="$(eval '0.85' if str(arg('localization_environment')).lower() == 'outdoor' else arg('local_path_timeout_s'))"/>
+  <arg name="local_path_source_timeout_s" default="$(arg local_path_timeout_s)"/>
   <arg name="local_path_signature_start_resolution_m" default="0.10"/>
   <arg name="avoidance_path_topic" default="/planning/avoidance_path"/>
   <arg name="path_mode_topic" default="/planning/path_mode"/>
