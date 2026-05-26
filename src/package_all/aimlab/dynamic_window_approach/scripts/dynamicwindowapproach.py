@@ -3471,7 +3471,15 @@ class DWAControl:
 
         if goal_align_active:
             s_target = self.s_total
-        elif self.follow_global_path_only or self.active_path_source == "global":
+        elif (
+            self.follow_global_path_only
+            or self.active_path_source == "global"
+            or (
+                self.active_path_source == "local"
+                and self.current_path_mode == "follow_local"
+                and not obstacle_response_active
+            )
+        ):
             if abs(lat_err) > self.snap_lat_err:
                 s_target = min(
                     self.s_total,
