@@ -6936,6 +6936,30 @@ class ConstrainedLocalReplanner:
                         float(self.grid_only_relaxed_path_blocking_radius_m),
                     )
                     nominal_blocked = False
+                elif (
+                    blocked_reason == "nominal_path_blocked"
+                    and self._is_grid_only_blocker_source_summary(source_summary)
+                ):
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "constrained_local_replanner: treating grid-only nominal block as passable before avoidance search (grid_occ=%d)",
+                        int(source_summary.get("grid_occ", 0)),
+                    )
+                    nominal_blocked = False
+                    self.local_blocked_since_sec = 0.0
+                    self.local_clear_since_sec = 0.0
+                    self._clear_blocking_obstacle_markers(stamp)
+                    self._publish_debug_text(
+                        self._build_debug_text(
+                            "grid_only_nominal_fallback",
+                            stamp,
+                            trigger_reason=blocked_reason,
+                            path_len=len(planning_path),
+                            overlay_points=0,
+                        ),
+                        stamp=stamp,
+                        force=True,
+                    )
 
             if nominal_blocked:
                 blocking_points = []
@@ -7109,9 +7133,6 @@ class ConstrainedLocalReplanner:
                 )
             self.local_blocked_since_sec = 0.0
             self.local_clear_since_sec = 0.0
-            self._publish_nominal_reference_path(
-                nominal_world, dg.header.frame_id, stamp
-            )
             avoidance_state = self._update_avoidance_path(planning_path, blocked, start_cell, goal_cell, dg, stamp, "local")
             if avoidance_state == "avoidance":
                 self.rejoin_mode_until_sec = 0.0
@@ -7120,6 +7141,9 @@ class ConstrainedLocalReplanner:
                 self.rejoin_mode_until_sec = 0.0
                 self._publish_path_mode("hold")
                 return
+            self._publish_nominal_reference_path(
+                nominal_world, dg.header.frame_id, stamp
+            )
             # Keep the controller on the replanner's nominal local path even
             # after an avoidance episode clears.  Falling back to the full
             # global path here reintroduces late switching and S-curve chasing
