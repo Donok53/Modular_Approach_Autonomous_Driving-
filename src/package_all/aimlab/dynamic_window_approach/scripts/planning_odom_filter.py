@@ -82,6 +82,12 @@ class PlanningOdomFilter:
         self.twist_timeout_s = max(
             0.0, float(rospy.get_param("~twist_timeout_s", 0.30))
         )
+        self.use_incremental_pose_prediction = bool(
+            rospy.get_param("~use_incremental_pose_prediction", True)
+        )
+        self.incremental_pose_timeout_s = max(
+            0.0, float(rospy.get_param("~incremental_pose_timeout_s", 0.20))
+        )
         self.output_child_frame_id = str(
             rospy.get_param("~output_child_frame_id", "base_link")
         ).strip()
@@ -188,6 +194,11 @@ class PlanningOdomFilter:
         self.latest_twist_stamp_s = 0.0
         self.last_pose_msg = None
         self.last_twist_msg = None
+        self.last_twist_state_stamp_s = None
+        self.latest_incremental_state = None
+        self._last_predict_source = "velocity"
+        self._last_predict_residual_s = 0.0
+        self._last_incremental_age_s = -1.0
         self.history_points = deque(maxlen=self.history_max_points)
         self.history_frame_id = "map"
 
@@ -230,7 +241,7 @@ class PlanningOdomFilter:
             )
 
         rospy.loginfo(
-            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s pose_marker=%s twist_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f latency_log=%s/%.1fs",
+            "planning_odom_filter started | pose=%s twist=%s twist_frame=%s out=%s history=%s pose_marker=%s twist_timeout=%.2fs inc_pose=%s inc_timeout=%.2fs child=%s tau(fwd=%.2f lat=%.2f turn_lat=%.2f yaw=%.2f turn_yaw=%.2f twist=%.2f) predict_to_now=%s max_predict=%.2fs publish_now=%s hz=%.1f latency_log=%s/%.1fs",
             self.input_topic,
             self.twist_topic if self.twist_topic else "-",
             self.twist_linear_frame,
@@ -238,6 +249,8 @@ class PlanningOdomFilter:
             self.history_path_topic if self.history_path_topic else "-",
             self.pose_marker_topic if self.pose_marker_topic else "-",
             self.twist_timeout_s,
+            "on" if self.use_incremental_pose_prediction else "off",
+            self.incremental_pose_timeout_s,
             self.output_child_frame_id if self.output_child_frame_id else "<inherit>",
             self.forward_tau_s,
             self.lateral_tau_s,
@@ -260,9 +273,48 @@ class PlanningOdomFilter:
             return rospy.Time.now().to_sec()
         return stamp_s
 
+    def _state_from_odom(self, msg):
+        roll, pitch, yaw = quat_to_euler(msg.pose.pose.orientation)
+        p = msg.pose.pose.position
+        return (
+            self._stamp_to_sec(msg),
+            float(p.x),
+            float(p.y),
+            float(p.z),
+            roll,
+            pitch,
+            yaw,
+            str(msg.header.frame_id).strip(),
+        )
+
     def twist_callback(self, msg):
         self.latest_twist_msg = msg
         self.latest_twist_stamp_s = self._stamp_to_sec(msg)
+        if self.use_incremental_pose_prediction:
+            self.latest_incremental_state = self._state_from_odom(msg)
+
+        if not self.have_state:
+            return
+        if (
+            self.last_twist_state_stamp_s is not None
+            and self.latest_twist_stamp_s <= self.last_twist_state_stamp_s
+        ):
+            return
+
+        ref_pose_msg = self.last_pose_msg if self.last_pose_msg is not None else msg
+        raw_vx, raw_vy, raw_vz, raw_wz = self._extract_body_twist(
+            ref_pose_msg, msg, self.fyaw
+        )
+        if self.last_twist_state_stamp_s is None:
+            alpha_twist = 1.0
+        else:
+            dt = max(0.0, self.latest_twist_stamp_s - self.last_twist_state_stamp_s)
+            alpha_twist = alpha_from_tau(min(dt, 0.25), self.twist_tau_s)
+        self.fvx += alpha_twist * (raw_vx - self.fvx)
+        self.fvy += alpha_twist * (raw_vy - self.fvy)
+        self.fvz += alpha_twist * (raw_vz - self.fvz)
+        self.fwz += alpha_twist * (raw_wz - self.fwz)
+        self.last_twist_state_stamp_s = self.latest_twist_stamp_s
 
     def _select_twist_msg(self, pose_msg, pose_stamp_s):
         if self.twist_topic and self.twist_topic != self.input_topic:
@@ -336,24 +388,67 @@ class PlanningOdomFilter:
         self.fwz = raw_wz
         self.have_state = True
 
-    def _predicted_state(self, target_stamp_s):
-        dt = 0.0
-        if self.predict_to_now and self.last_stamp_s is not None:
-            dt = max(0.0, float(target_stamp_s) - float(self.last_stamp_s))
-            if self.max_predict_age_s > 0.0:
-                dt = min(dt, self.max_predict_age_s)
-        self._last_predict_dt_s = dt
-
-        pred_yaw = wrap_angle(self.fyaw + self.fwz * dt)
-        mid_yaw = wrap_angle(self.fyaw + 0.5 * self.fwz * dt)
+    def _integrate_state(self, x, y, z, yaw, dt):
+        pred_yaw = wrap_angle(yaw + self.fwz * dt)
+        mid_yaw = wrap_angle(yaw + 0.5 * self.fwz * dt)
         cy = math.cos(mid_yaw)
         sy = math.sin(mid_yaw)
         world_vx = cy * self.fvx - sy * self.fvy
         world_vy = sy * self.fvx + cy * self.fvy
-        pred_x = self.fx + world_vx * dt
-        pred_y = self.fy + world_vy * dt
-        pred_z = self.fz + self.fvz * dt
+        pred_x = x + world_vx * dt
+        pred_y = y + world_vy * dt
+        pred_z = z + self.fvz * dt
         return pred_x, pred_y, pred_z, pred_yaw
+
+    def _predicted_state(self, target_stamp_s):
+        target_stamp_s = float(target_stamp_s)
+        self._last_predict_source = "velocity"
+        self._last_predict_residual_s = 0.0
+        self._last_incremental_age_s = -1.0
+
+        if (
+            self.use_incremental_pose_prediction
+            and self.predict_to_now
+            and self.latest_incremental_state is not None
+        ):
+            inc = self.latest_incremental_state
+            pose_frame = ""
+            if self.last_pose_msg is not None:
+                pose_frame = str(self.last_pose_msg.header.frame_id).strip()
+            inc_frame = inc[7]
+            inc_age_s = max(0.0, target_stamp_s - inc[0])
+            if (
+                inc_age_s <= self.incremental_pose_timeout_s
+                and (not pose_frame or not inc_frame or pose_frame == inc_frame)
+            ):
+                pred_x = inc[1]
+                pred_y = inc[2]
+                pred_z = inc[3]
+                pred_yaw = inc[6]
+                residual_dt = max(0.0, target_stamp_s - inc[0])
+                if self.max_predict_age_s > 0.0:
+                    residual_dt = min(residual_dt, self.max_predict_age_s)
+                if residual_dt > 0.0:
+                    pred_x, pred_y, pred_z, pred_yaw = self._integrate_state(
+                        pred_x, pred_y, pred_z, pred_yaw, residual_dt
+                    )
+
+                self._last_predict_source = "incremental"
+                self._last_predict_dt_s = inc_age_s
+                self._last_predict_residual_s = residual_dt
+                self._last_incremental_age_s = inc_age_s
+                return pred_x, pred_y, pred_z, pred_yaw
+
+        dt = 0.0
+        uncapped_dt = 0.0
+        if self.predict_to_now and self.last_stamp_s is not None:
+            uncapped_dt = max(0.0, target_stamp_s - float(self.last_stamp_s))
+            dt = uncapped_dt
+            if self.max_predict_age_s > 0.0:
+                dt = min(dt, self.max_predict_age_s)
+        self._last_predict_dt_s = dt
+        self._last_predict_residual_s = max(0.0, uncapped_dt - dt)
+        return self._integrate_state(self.fx, self.fy, self.fz, self.fyaw, dt)
 
     def _publish_filtered(self, pose_msg, twist_msg, publish_stamp=None):
         pose_stamp_s = self._stamp_to_sec(pose_msg)
@@ -387,12 +482,15 @@ class PlanningOdomFilter:
             out_stamp_s = out.header.stamp.to_sec()
             rospy.loginfo_throttle(
                 self.debug_latency_log_period_s,
-                "planning_odom_filter latency | raw_age=%.3fs twist_age=%.3fs out_age=%.3fs source_to_out=%.3fs predict_dt=%.3fs publish_now=%s vx=%.3f wz=%.3f",
+                "planning_odom_filter latency | raw_age=%.3fs twist_age=%.3fs out_age=%.3fs source_to_out=%.3fs predict_dt=%.3fs source=%s inc_age=%.3fs residual=%.3fs publish_now=%s vx=%.3f wz=%.3f",
                 max(0.0, now_sec - pose_stamp_s),
                 max(0.0, now_sec - twist_stamp_s),
                 max(0.0, now_sec - out_stamp_s) if out_stamp_s > 0.0 else float("inf"),
                 max(0.0, out_stamp_s - pose_stamp_s) if out_stamp_s > 0.0 else 0.0,
                 self._last_predict_dt_s,
+                self._last_predict_source,
+                self._last_incremental_age_s,
+                self._last_predict_residual_s,
                 "on" if self.publish_now_stamp else "off",
                 self.fvx,
                 self.fwz,

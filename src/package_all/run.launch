@@ -32,6 +32,8 @@
   <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
+  <arg name="pose_filter_use_incremental_pose_prediction" default="true"/>
+  <arg name="pose_filter_incremental_pose_timeout_s" default="0.20"/>
   <arg name="pose_filter_output_child_frame_id" default="base_link"/>
   <arg name="pose_filter_forward_tau_s" default="0.05"/>
   <arg name="pose_filter_lateral_tau_s" default="0.10"/>
@@ -1013,6 +1015,8 @@
       <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
       <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
+      <arg name="pose_filter_use_incremental_pose_prediction" value="$(arg pose_filter_use_incremental_pose_prediction)"/>
+      <arg name="pose_filter_incremental_pose_timeout_s" value="$(arg pose_filter_incremental_pose_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pose_filter_forward_tau_s" value="$(arg pose_filter_forward_tau_s)"/>
       <arg name="pose_filter_lateral_tau_s" value="$(arg pose_filter_lateral_tau_s)"/>
@@ -1484,6 +1488,8 @@
       <arg name="pose_filter_twist_topic" value="$(arg pose_filter_twist_topic)"/>
       <arg name="pose_filter_twist_linear_frame" value="$(arg pose_filter_twist_linear_frame)"/>
       <arg name="pose_filter_twist_timeout_s" value="$(arg pose_filter_twist_timeout_s)"/>
+      <arg name="pose_filter_use_incremental_pose_prediction" value="$(arg pose_filter_use_incremental_pose_prediction)"/>
+      <arg name="pose_filter_incremental_pose_timeout_s" value="$(arg pose_filter_incremental_pose_timeout_s)"/>
       <arg name="pose_filter_output_child_frame_id" value="$(arg pose_filter_output_child_frame_id)"/>
       <arg name="pose_filter_forward_tau_s" value="$(arg pose_filter_forward_tau_s)"/>
       <arg name="pose_filter_lateral_tau_s" value="$(arg pose_filter_lateral_tau_s)"/>
