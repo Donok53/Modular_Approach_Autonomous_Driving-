@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import copy
 import math
 from collections import deque
 
 import rospy
 from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import Odometry, Path
+from std_msgs.msg import Header
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -354,13 +356,16 @@ class PlanningOdomFilter:
         return pred_x, pred_y, pred_z, pred_yaw
 
     def _publish_filtered(self, pose_msg, twist_msg, publish_stamp=None):
+        pose_stamp_s = self._stamp_to_sec(pose_msg)
+        twist_stamp_s = self._stamp_to_sec(twist_msg)
+
         out = Odometry()
-        out.header = pose_msg.header
-        if publish_stamp is not None:
-            out.header.stamp = publish_stamp
+        out.header = Header()
+        out.header.frame_id = pose_msg.header.frame_id
+        out.header.stamp = publish_stamp if publish_stamp is not None else pose_msg.header.stamp
         out.child_frame_id = self._resolved_child_frame_id(pose_msg, twist_msg)
-        out.pose = pose_msg.pose
-        out.twist = twist_msg.twist
+        out.pose = copy.deepcopy(pose_msg.pose)
+        out.twist = copy.deepcopy(twist_msg.twist)
 
         target_stamp_s = out.header.stamp.to_sec()
         pred_x, pred_y, pred_z, pred_yaw = self._predicted_state(target_stamp_s)
@@ -379,8 +384,6 @@ class PlanningOdomFilter:
         self.pub.publish(out)
         if self.debug_latency_logging:
             now_sec = rospy.Time.now().to_sec()
-            pose_stamp_s = self._stamp_to_sec(pose_msg)
-            twist_stamp_s = self._stamp_to_sec(twist_msg)
             out_stamp_s = out.header.stamp.to_sec()
             rospy.loginfo_throttle(
                 self.debug_latency_log_period_s,
