@@ -621,6 +621,28 @@ class DWAControl:
         self.local_tracking_clear_uses_segment = bool(
             rospy.get_param("~local_tracking_clear_uses_segment", False)
         )
+        self.local_tracking_turn_preview_limit_enabled = bool(
+            rospy.get_param("~local_tracking_turn_preview_limit_enabled", False)
+        )
+        self.local_tracking_turn_preview_threshold_rad = math.radians(
+            max(
+                1.0,
+                float(
+                    rospy.get_param(
+                        "~local_tracking_turn_preview_threshold_deg",
+                        18.0,
+                    )
+                ),
+            )
+        )
+        self.local_tracking_turn_preview_approach_m = max(
+            0.0,
+            float(rospy.get_param("~local_tracking_turn_preview_approach_m", 0.45)),
+        )
+        self.local_tracking_turn_preview_min_step_m = max(
+            0.05,
+            float(rospy.get_param("~local_tracking_turn_preview_min_step_m", 0.25)),
+        )
         self.local_tracking_preview_m = max(
             0.25, float(rospy.get_param("~local_tracking_preview_m", 0.85))
         )
@@ -2992,6 +3014,43 @@ class DWAControl:
             return 0.0, (1.0, 0.0)
         return math.atan2(dy, dx), (dx / seg_len, dy / seg_len)
 
+    def _limit_local_clear_preview_for_turn(self, base_s, s_target):
+        if (
+            (not self.local_tracking_turn_preview_limit_enabled)
+            or self.active_path_source != "local"
+            or self.current_path_mode != "follow_local"
+            or len(self.seg_lens) < 2
+            or s_target <= base_s + 1e-6
+        ):
+            return s_target, None
+
+        start_idx = self._segment_index_at_s(base_s)
+        end_idx = self._segment_index_at_s(s_target)
+        max_idx = min(end_idx, len(self.seg_lens) - 2)
+        for seg_idx in range(start_idx, max_idx + 1):
+            heading, _t_hat = self._segment_heading_tangent(seg_idx)
+            next_heading, _next_t_hat = self._segment_heading_tangent(seg_idx + 1)
+            turn_angle = abs(angdiff(next_heading, heading))
+            if turn_angle < self.local_tracking_turn_preview_threshold_rad:
+                continue
+
+            turn_s = self.cum_len[seg_idx + 1]
+            dist_to_turn = turn_s - base_s
+            if dist_to_turn <= self.local_tracking_turn_preview_approach_m:
+                return s_target, None
+
+            limited_s = turn_s - self.local_tracking_turn_preview_approach_m
+            limited_s = max(base_s + self.local_tracking_turn_preview_min_step_m, limited_s)
+            limited_s = min(s_target, turn_s - 1e-3, limited_s)
+            limited_s = max(base_s, limited_s)
+            return limited_s, {
+                "turn_idx": seg_idx + 1,
+                "turn_angle_deg": math.degrees(turn_angle),
+                "dist_to_turn_m": dist_to_turn,
+            }
+
+        return s_target, None
+
     def _step_local_turn_rotate(self, yaw):
         if self._local_turn_rotate_heading is None:
             return None
@@ -3566,6 +3625,14 @@ class DWAControl:
                 if self.active_path_source == "local"
                 else "global_preview"
             )
+            if target_policy == "local_clear_preview":
+                limited_s, turn_limit_debug = self._limit_local_clear_preview_for_turn(
+                    base_s,
+                    s_target,
+                )
+                if turn_limit_debug is not None:
+                    s_target = limited_s
+                    target_policy = "local_clear_turn_approach"
         else:
             # Follow the currently selected path segment more directly instead
             # of skipping far ahead on a heavily smoothed global path.  This
