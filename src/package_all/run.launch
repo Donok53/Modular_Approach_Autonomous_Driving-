@@ -374,7 +374,7 @@
   <arg name="tracking_path_smoothing_passes" default="2"/>
   <arg name="tracking_anchor_front_offset_m" default="0.0"/>
   <arg name="local_tracking_smoothing_enabled" default="false"/>
-  <arg name="local_tracking_clear_uses_segment" default="false"/>
+  <arg name="local_tracking_clear_uses_segment" default="true"/>
   <arg name="local_tracking_turn_preview_limit_enabled" default="true"/>
   <arg name="local_tracking_turn_preview_threshold_deg" default="14.0"/>
   <arg name="local_tracking_turn_preview_approach_m" default="0.65"/>
