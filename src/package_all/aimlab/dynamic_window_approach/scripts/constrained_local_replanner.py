@@ -162,6 +162,9 @@ class ConstrainedLocalReplanner:
         self.grid_only_relaxed_path_blocking_enabled = bool(
             rospy.get_param("~grid_only_relaxed_path_blocking_enabled", True)
         )
+        self.allow_grid_only_nominal_fallback = bool(
+            rospy.get_param("~allow_grid_only_nominal_fallback", True)
+        )
         self.grid_only_relaxed_path_blocking_radius_m = max(
             0.05,
             float(
@@ -845,7 +848,7 @@ class ConstrainedLocalReplanner:
                 self.on_local_path_keepalive,
             )
         rospy.loginfo(
-            "constrained_local_replanner started | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s pc_static=%s pc_trigger=%s timing_log=%s/%.1fs",
+            "constrained_local_replanner started | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s pc_static=%s pc_trigger=%s grid_only_fallback=%s timing_log=%s/%.1fs",
             self.launch_profile_label,
             self.launch_real_mode,
             self.launch_localization_environment,
@@ -866,6 +869,7 @@ class ConstrainedLocalReplanner:
             "on" if self.enable_avoidance_path else "off",
             "on" if self.use_pointcloud_static_blocking else "off",
             "on" if self.use_pointcloud_avoidance_trigger else "off",
+            "on" if self.allow_grid_only_nominal_fallback else "off",
             "on" if self.debug_timing_logging else "off",
             self.debug_timing_log_period_s,
         )
@@ -7058,6 +7062,7 @@ class ConstrainedLocalReplanner:
                     nominal_blocked = False
                 elif (
                     blocked_reason == "nominal_path_blocked"
+                    and self.allow_grid_only_nominal_fallback
                     and self._is_grid_only_blocker_source_summary(source_summary)
                 ):
                     rospy.logwarn_throttle(

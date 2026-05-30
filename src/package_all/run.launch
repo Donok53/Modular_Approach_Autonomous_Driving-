@@ -307,6 +307,7 @@
   <arg name="path_blocking_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
   <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval max(0.5 * float(arg('robot_width_m')) + max(0.0, float(arg('footprint_padding_m')) - 0.02), float(arg('minimum_passage_clearance_radius_m')) - 0.02))"/>
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
+  <arg name="allow_grid_only_nominal_fallback" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
   <arg name="relaxed_snap_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
@@ -355,18 +356,18 @@
   <arg name="candidate_route_switch_passable_length_margin_m" default="0.20"/>
   <arg name="candidate_route_replan_match_distance_m" default="1.10"/>
   <arg name="path_tracking_only" default="true"/>
-  <arg name="path_tracking_speed_cap" default="0.90"/>
+  <arg name="path_tracking_speed_cap" default="$(eval '0.70' if str(arg('localization_environment')).lower() == 'outdoor' else '0.90')"/>
   <arg name="path_tracking_steer_filter_gain" default="0.55"/>
   <arg name="lookahead_distance" default="1.40"/>
-  <arg name="lookahead_speed_gain" default="1.80"/>
-  <arg name="lookahead_error_gain" default="0.80"/>
-  <arg name="lookahead_max_distance" default="3.50"/>
+  <arg name="lookahead_speed_gain" default="$(eval '1.10' if str(arg('localization_environment')).lower() == 'outdoor' else '1.80')"/>
+  <arg name="lookahead_error_gain" default="$(eval '0.35' if str(arg('localization_environment')).lower() == 'outdoor' else '0.80')"/>
+  <arg name="lookahead_max_distance" default="$(eval '2.40' if str(arg('localization_environment')).lower() == 'outdoor' else '3.50')"/>
   <arg name="obstacle_response_clearance_m" default="1.80"/>
   <arg name="obstacle_response_lookahead_scale" default="1.10"/>
   <arg name="obstacle_response_tracking_kp_scale" default="1.15"/>
   <arg name="obstacle_response_yaw_rate_scale" default="1.08"/>
   <arg name="snap_lat_err" default="0.20"/>
-  <arg name="snap_target_ahead_m" default="2.20"/>
+  <arg name="snap_target_ahead_m" default="$(eval '1.30' if str(arg('localization_environment')).lower() == 'outdoor' else '2.20')"/>
   <arg name="tracking_projection_back_window_m" default="0.35"/>
   <arg name="tracking_projection_forward_window_m" default="1.20"/>
   <arg name="tracking_path_smoothing_passes" default="2"/>
@@ -388,11 +389,11 @@
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="80.0"/>
   <arg name="path_tracking_stop_yaw_deg" default="95.0"/>
-  <arg name="path_tracking_cte_gain" default="0.38"/>
+  <arg name="path_tracking_cte_gain" default="$(eval '0.65' if str(arg('localization_environment')).lower() == 'outdoor' else '0.38')"/>
   <arg name="path_tracking_cte_soft_mps" default="0.55"/>
   <arg name="path_tracking_cte_deadband_m" default="0.10"/>
   <arg name="path_tracking_cte_filter_gain" default="0.28"/>
-  <arg name="path_tracking_cte_yaw_cap_deg" default="15.0"/>
+  <arg name="path_tracking_cte_yaw_cap_deg" default="$(eval '25.0' if str(arg('localization_environment')).lower() == 'outdoor' else '15.0')"/>
   <arg name="path_tracking_heading_filter_gain" default="0.35"/>
   <arg name="local_tracking_heading_filter_gain" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
   <arg name="local_tracking_heading_filter_reset_deg" default="$(eval '90.0' if str(arg('localization_environment')).lower() == 'outdoor' else '35.0')"/>
@@ -416,7 +417,7 @@
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
-  <arg name="path_tracking_enforce_drivable_grid" default="false"/>
+  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="goal_completion_stuck_distance_m" default="1.10"/>
   <arg name="goal_completion_stuck_arc_m" default="0.75"/>
   <arg name="goal_completion_stuck_hold_s" default="0.35"/>
@@ -1166,6 +1167,7 @@
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <arg name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
       <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
+      <arg name="allow_grid_only_nominal_fallback" value="$(arg allow_grid_only_nominal_fallback)"/>
       <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -1653,6 +1655,7 @@
       <arg name="path_blocking_radius_m" value="$(arg path_blocking_radius_m)"/>
       <arg name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
       <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
+      <arg name="allow_grid_only_nominal_fallback" value="$(arg allow_grid_only_nominal_fallback)"/>
       <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
