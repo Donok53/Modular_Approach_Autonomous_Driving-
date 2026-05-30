@@ -544,6 +544,20 @@ class ConstrainedLocalReplanner:
                 "~allow_nominal_local_fallback_on_no_solution", True
             )
         )
+        self.weak_grid_no_solution_fallback_enabled = bool(
+            rospy.get_param("~weak_grid_no_solution_fallback_enabled", True)
+        )
+        self.weak_grid_no_solution_fallback_max_cells = max(
+            0, int(rospy.get_param("~weak_grid_no_solution_fallback_max_cells", 3))
+        )
+        self.weak_grid_no_solution_fallback_max_memory_points = max(
+            0,
+            int(
+                rospy.get_param(
+                    "~weak_grid_no_solution_fallback_max_memory_points", 1
+                )
+            ),
+        )
         self.avoidance_branch_backtrack_cells = max(
             0, int(rospy.get_param("~avoidance_branch_backtrack_cells", 2))
         )
@@ -4396,8 +4410,6 @@ class ConstrainedLocalReplanner:
         source_summary=None,
         now_sec=None,
     ):
-        if not self.allow_nominal_local_fallback_on_no_solution:
-            return False
         if self._use_global_nominal_reference():
             return False
 
@@ -4407,6 +4419,15 @@ class ConstrainedLocalReplanner:
 
         reason = str(trigger_reason or "").strip().lower()
         if reason not in ("predicted_overlap", "dynamic_points_overlap"):
+            return False
+
+        weak_grid_fallback = self._weak_grid_no_solution_fallback_allowed(
+            source_summary
+        )
+        if (
+            not self.allow_nominal_local_fallback_on_no_solution
+            and not weak_grid_fallback
+        ):
             return False
 
         if source_summary is not None:
@@ -4422,6 +4443,29 @@ class ConstrainedLocalReplanner:
         if self.tracked_object_count > 0 or self.tracked_object_memory_count > 0:
             return False
         if self._effective_raw_near_obstacle_points_map(now_sec=now_sec):
+            return False
+        return True
+
+    def _weak_grid_no_solution_fallback_allowed(self, summary):
+        if not self.weak_grid_no_solution_fallback_enabled or not summary:
+            return False
+        if str(summary.get("blind_zone", "none")).strip().lower() != "none":
+            return False
+        grid_occ = int(summary.get("grid_occ", 0))
+        if grid_occ <= 0 or grid_occ > self.weak_grid_no_solution_fallback_max_cells:
+            return False
+        if int(summary.get("risk", 0)) > 0:
+            return False
+        if int(summary.get("pc_current", 0)) > 0:
+            return False
+        if (
+            int(summary.get("pc_memory", 0))
+            > self.weak_grid_no_solution_fallback_max_memory_points
+        ):
+            return False
+        if int(summary.get("tracked_current", 0)) > 0:
+            return False
+        if int(summary.get("tracked_memory", 0)) > 0:
             return False
         return True
 

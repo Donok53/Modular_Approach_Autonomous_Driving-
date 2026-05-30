@@ -320,6 +320,9 @@
     <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
     <arg name="allow_avoidance_reuse_on_no_solution" default="true"/>
     <arg name="allow_nominal_local_fallback_on_no_solution" default="$(eval 'false' if str(arg('enable_avoidance_path')).lower() == 'true' else 'true')"/>
+    <arg name="weak_grid_no_solution_fallback_enabled" default="true"/>
+    <arg name="weak_grid_no_solution_fallback_max_cells" default="3"/>
+    <arg name="weak_grid_no_solution_fallback_max_memory_points" default="1"/>
     <arg name="debug_avoidance_logging" default="true"/>
     <arg name="debug_avoidance_log_period_s" default="1.0"/>
     <arg name="static_obstacle_memory_enabled" default="true"/>
@@ -901,6 +904,9 @@
             <param name="near_goal_recent_avoidance_release_distance_m" value="$(arg near_goal_recent_avoidance_release_distance_m)"/>
             <param name="allow_avoidance_reuse_on_no_solution" value="$(arg allow_avoidance_reuse_on_no_solution)"/>
             <param name="allow_nominal_local_fallback_on_no_solution" value="$(arg allow_nominal_local_fallback_on_no_solution)"/>
+            <param name="weak_grid_no_solution_fallback_enabled" value="$(arg weak_grid_no_solution_fallback_enabled)"/>
+            <param name="weak_grid_no_solution_fallback_max_cells" value="$(arg weak_grid_no_solution_fallback_max_cells)"/>
+            <param name="weak_grid_no_solution_fallback_max_memory_points" value="$(arg weak_grid_no_solution_fallback_max_memory_points)"/>
             <param name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
             <param name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
             <param name="robot_width_m" value="$(arg robot_width_m)"/>
