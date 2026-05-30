@@ -3322,6 +3322,13 @@ class DWAControl:
         self.local_path_sig = self._path_signature(path_msg, include_start=True)
         self.local_path_stamp = now
         source_stamp = path_msg.header.stamp if path_msg is not None else rospy.Time(0)
+        if path_msg is not None and path_msg.poses:
+            geometry_stamp = path_msg.poses[0].header.stamp
+            if (
+                geometry_stamp.to_sec() > 0.0
+                and (source_stamp.to_sec() <= 0.0 or geometry_stamp < source_stamp)
+            ):
+                source_stamp = geometry_stamp
         if source_stamp.to_sec() <= 0.0:
             source_stamp = now
         self.local_path_source_stamp = source_stamp

@@ -308,6 +308,7 @@
   <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval max(0.5 * float(arg('robot_width_m')) + max(0.0, float(arg('footprint_padding_m')) - 0.02), float(arg('minimum_passage_clearance_radius_m')) - 0.02))"/>
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
   <arg name="allow_grid_only_nominal_fallback" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
+  <arg name="grid_only_nominal_fallback_max_cells" default="$(eval '3' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
   <arg name="relaxed_snap_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
@@ -1179,6 +1180,7 @@
       <arg name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
       <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
       <arg name="allow_grid_only_nominal_fallback" value="$(arg allow_grid_only_nominal_fallback)"/>
+      <arg name="grid_only_nominal_fallback_max_cells" value="$(arg grid_only_nominal_fallback_max_cells)"/>
       <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -1678,6 +1680,7 @@
       <arg name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
       <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
       <arg name="allow_grid_only_nominal_fallback" value="$(arg allow_grid_only_nominal_fallback)"/>
+      <arg name="grid_only_nominal_fallback_max_cells" value="$(arg grid_only_nominal_fallback_max_cells)"/>
       <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>

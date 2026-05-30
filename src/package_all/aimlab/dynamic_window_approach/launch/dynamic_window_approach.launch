@@ -168,6 +168,7 @@
     <arg name="near_goal_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
     <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
     <arg name="allow_grid_only_nominal_fallback" default="$(eval 'false' if str(arg('launch_localization_environment')).lower() == 'outdoor' else 'true')"/>
+    <arg name="grid_only_nominal_fallback_max_cells" default="$(eval '3' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '0')"/>
     <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
     <arg name="relaxed_snap_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
     <arg name="path_tracking_only" default="true"/>
@@ -905,6 +906,7 @@
             <param name="near_goal_relaxed_path_blocking_radius_m" value="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
             <param name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
             <param name="allow_grid_only_nominal_fallback" value="$(arg allow_grid_only_nominal_fallback)"/>
+            <param name="grid_only_nominal_fallback_max_cells" value="$(arg grid_only_nominal_fallback_max_cells)"/>
             <param name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
             <param name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
         </node>

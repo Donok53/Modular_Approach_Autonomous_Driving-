@@ -165,6 +165,9 @@ class ConstrainedLocalReplanner:
         self.allow_grid_only_nominal_fallback = bool(
             rospy.get_param("~allow_grid_only_nominal_fallback", True)
         )
+        self.grid_only_nominal_fallback_max_cells = max(
+            0, int(rospy.get_param("~grid_only_nominal_fallback_max_cells", 0))
+        )
         self.grid_only_relaxed_path_blocking_radius_m = max(
             0.05,
             float(
@@ -978,8 +981,8 @@ class ConstrainedLocalReplanner:
     def on_local_path_keepalive(self, _event):
         if (not self.local_path_keepalive_enabled) or rospy.is_shutdown():
             return
-        msg = self.last_local_path_msg
-        if msg is None or len(getattr(msg, "poses", [])) < 2:
+        src_msg = self.last_local_path_msg
+        if src_msg is None or len(getattr(src_msg, "poses", [])) < 2:
             return
         if self.current_path_mode not in ("follow_local", "follow_avoidance", "rejoin_global"):
             return
@@ -1001,10 +1004,18 @@ class ConstrainedLocalReplanner:
         ):
             return
 
+        msg = Path()
         msg.header.stamp = now
-        for pose in msg.poses:
-            pose.header.stamp = now
-            pose.header.frame_id = msg.header.frame_id
+        msg.header.frame_id = src_msg.header.frame_id
+        geometry_stamp = src_msg.poses[0].header.stamp
+        if geometry_stamp.to_sec() <= 0.0:
+            geometry_stamp = src_msg.header.stamp
+        for src_pose in src_msg.poses:
+            pose = PoseStamped()
+            pose.header.frame_id = src_pose.header.frame_id or src_msg.header.frame_id
+            pose.header.stamp = geometry_stamp
+            pose.pose = src_pose.pose
+            msg.poses.append(pose)
         try:
             self.pub_local_path.publish(msg)
             self.last_local_path_publish_sec = now_sec
@@ -5706,6 +5717,14 @@ class ConstrainedLocalReplanner:
             and int(summary.get("tracked_memory", 0)) <= 0
         )
 
+    def _grid_only_nominal_fallback_allowed(self, summary):
+        if not self._is_grid_only_blocker_source_summary(summary):
+            return False
+        if self.allow_grid_only_nominal_fallback:
+            return True
+        max_cells = int(self.grid_only_nominal_fallback_max_cells)
+        return max_cells > 0 and int(summary.get("grid_occ", 0)) <= max_cells
+
     def _should_ignore_grid_only_nominal_block(
         self,
         path,
@@ -6180,6 +6199,18 @@ class ConstrainedLocalReplanner:
                             int(blocker_source_summary.get("pc_memory", 0)),
                             int(blocker_source_summary.get("tracked_memory", 0)),
                         )
+                    )
+                    trigger_reason = None
+                    trigger_key = None
+                    same_obstacle_episode = False
+                    preferred_direction = None
+                elif self._grid_only_nominal_fallback_allowed(blocker_source_summary):
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "constrained_local_replanner: suppressing sparse grid-only avoidance trigger | reason=%s grid_occ=%d limit=%d",
+                        trigger_reason,
+                        int(blocker_source_summary.get("grid_occ", 0)),
+                        int(self.grid_only_nominal_fallback_max_cells),
                     )
                     trigger_reason = None
                     trigger_key = None
@@ -7062,13 +7093,14 @@ class ConstrainedLocalReplanner:
                     nominal_blocked = False
                 elif (
                     blocked_reason == "nominal_path_blocked"
-                    and self.allow_grid_only_nominal_fallback
+                    and self._grid_only_nominal_fallback_allowed(source_summary)
                     and self._is_grid_only_blocker_source_summary(source_summary)
                 ):
                     rospy.logwarn_throttle(
                         1.0,
-                        "constrained_local_replanner: treating grid-only nominal block as passable before avoidance search (grid_occ=%d)",
+                        "constrained_local_replanner: treating grid-only nominal block as passable before avoidance search (grid_occ=%d limit=%d)",
                         int(source_summary.get("grid_occ", 0)),
+                        int(self.grid_only_nominal_fallback_max_cells),
                     )
                     nominal_blocked = False
                     self.local_blocked_since_sec = 0.0
