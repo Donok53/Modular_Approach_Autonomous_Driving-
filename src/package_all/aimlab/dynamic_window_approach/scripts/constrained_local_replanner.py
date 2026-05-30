@@ -168,6 +168,9 @@ class ConstrainedLocalReplanner:
         self.grid_only_nominal_fallback_max_cells = max(
             0, int(rospy.get_param("~grid_only_nominal_fallback_max_cells", 0))
         )
+        self.grid_only_avoidance_search_enabled = bool(
+            rospy.get_param("~grid_only_avoidance_search_enabled", False)
+        )
         self.grid_only_relaxed_path_blocking_radius_m = max(
             0.05,
             float(
@@ -851,7 +854,7 @@ class ConstrainedLocalReplanner:
                 self.on_local_path_keepalive,
             )
         rospy.loginfo(
-            "constrained_local_replanner started | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s pc_static=%s pc_trigger=%s grid_only_fallback=%s timing_log=%s/%.1fs",
+            "constrained_local_replanner started | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s global=%s drivable=%s risk=%s local=%s avoidance=%s nominal_ref=%s direct_goal=%s(%s) footprint=%.2fm x %.2fm freeze_first=%s avoid=%s pc_static=%s pc_trigger=%s grid_only_fallback=%s grid_only_search=%s nominal_no_solution_fallback=%s timing_log=%s/%.1fs",
             self.launch_profile_label,
             self.launch_real_mode,
             self.launch_localization_environment,
@@ -873,6 +876,8 @@ class ConstrainedLocalReplanner:
             "on" if self.use_pointcloud_static_blocking else "off",
             "on" if self.use_pointcloud_avoidance_trigger else "off",
             "on" if self.allow_grid_only_nominal_fallback else "off",
+            "on" if self.grid_only_avoidance_search_enabled else "off",
+            "on" if self.allow_nominal_local_fallback_on_no_solution else "off",
             "on" if self.debug_timing_logging else "off",
             self.debug_timing_log_period_s,
         )
@@ -5720,6 +5725,8 @@ class ConstrainedLocalReplanner:
     def _grid_only_nominal_fallback_allowed(self, summary):
         if not self._is_grid_only_blocker_source_summary(summary):
             return False
+        if self.enable_avoidance_path and self.grid_only_avoidance_search_enabled:
+            return False
         if self.allow_grid_only_nominal_fallback:
             return True
         max_cells = int(self.grid_only_nominal_fallback_max_cells)
@@ -6329,7 +6336,7 @@ class ConstrainedLocalReplanner:
         if (
             label in ("local", "local_hold")
             and trigger_reason == "predicted_overlap"
-            and self._is_grid_only_blocker_source_summary(source_summary)
+            and self._grid_only_nominal_fallback_allowed(source_summary)
         ):
             rospy.logwarn_throttle(
                 1.0,

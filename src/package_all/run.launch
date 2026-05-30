@@ -62,7 +62,7 @@
   <arg name="enable_cloud_tracker" default="false"/>
   <arg name="enable_dynamic_risk_manager" default="false"/>
   <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
+  <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' or str(arg('enable_local_replanner')).lower() == 'true' else 'true')"/>
   <arg name="use_dynamic_risk_grid" default="false"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="enable_tracked_objects_marker_viz" default="false"/>
@@ -126,7 +126,7 @@
   <arg name="local_replan_lookahead_m" default="$(eval '10.0' if str(arg('localization_environment')).lower() == 'outdoor' else '7.0')"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.90"/>
-  <arg name="enable_avoidance_path" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="enable_avoidance_path" default="$(arg enable_local_replanner)"/>
   <arg name="enable_graph_planner" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="enable_robot_send" default="false"/>
   <arg name="enable_wave_cmd_bridge" default="false"/>
@@ -309,6 +309,7 @@
   <arg name="grid_only_relaxed_path_blocking_enabled" default="true"/>
   <arg name="allow_grid_only_nominal_fallback" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' else 'true')"/>
   <arg name="grid_only_nominal_fallback_max_cells" default="$(eval '3' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
+  <arg name="grid_only_avoidance_search_enabled" default="$(arg enable_avoidance_path)"/>
   <arg name="grid_only_relaxed_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
   <arg name="relaxed_snap_path_blocking_radius_m" default="$(arg near_goal_relaxed_path_blocking_radius_m)"/>
   <arg name="global_path_grid_planner" default="astar8"/>
@@ -499,6 +500,7 @@
   <arg name="near_goal_block_ignore_after_avoidance_s" default="1.0"/>
   <arg name="near_goal_recent_avoidance_release_distance_m" default="0.30"/>
   <arg name="allow_avoidance_reuse_on_no_solution" default="true"/>
+  <arg name="allow_nominal_local_fallback_on_no_solution" default="$(eval 'false' if str(arg('enable_avoidance_path')).lower() == 'true' else 'true')"/>
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="static_obstacle_memory_enabled" default="true"/>
@@ -1182,6 +1184,7 @@
       <arg name="grid_only_relaxed_path_blocking_enabled" value="$(arg grid_only_relaxed_path_blocking_enabled)"/>
       <arg name="allow_grid_only_nominal_fallback" value="$(arg allow_grid_only_nominal_fallback)"/>
       <arg name="grid_only_nominal_fallback_max_cells" value="$(arg grid_only_nominal_fallback_max_cells)"/>
+      <arg name="grid_only_avoidance_search_enabled" value="$(arg grid_only_avoidance_search_enabled)"/>
       <arg name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
       <arg name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
       <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
@@ -1328,6 +1331,7 @@
       <arg name="near_goal_block_ignore_after_avoidance_s" value="$(arg near_goal_block_ignore_after_avoidance_s)"/>
       <arg name="near_goal_recent_avoidance_release_distance_m" value="$(arg near_goal_recent_avoidance_release_distance_m)"/>
       <arg name="allow_avoidance_reuse_on_no_solution" value="$(arg allow_avoidance_reuse_on_no_solution)"/>
+      <arg name="allow_nominal_local_fallback_on_no_solution" value="$(arg allow_nominal_local_fallback_on_no_solution)"/>
       <arg name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <arg name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
       <arg name="static_obstacle_memory_enabled" value="$(arg static_obstacle_memory_enabled)"/>
