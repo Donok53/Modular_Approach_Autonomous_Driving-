@@ -230,6 +230,7 @@
     <arg name="path_tracking_tangent_window_m" default="0.75"/>
     <arg name="path_tracking_crawl_speed" default="0.42"/>
     <arg name="path_tracking_large_yaw_crawl_speed" default="0.34"/>
+    <arg name="path_tracking_goal_align_speed_cap_mps" default="0.18"/>
     <arg name="final_approach_window_m" default="0.0"/>
     <arg name="final_speed_k" default="0.95"/>
     <arg name="final_speed_min" default="0.34"/>
@@ -1017,6 +1018,7 @@
         <param name="path_tracking_tangent_window_m" value="$(arg path_tracking_tangent_window_m)"/>
         <param name="path_tracking_crawl_speed" value="$(arg path_tracking_crawl_speed)"/>
         <param name="path_tracking_large_yaw_crawl_speed" value="$(arg path_tracking_large_yaw_crawl_speed)"/>
+        <param name="path_tracking_goal_align_speed_cap_mps" value="$(arg path_tracking_goal_align_speed_cap_mps)"/>
         <param name="final_approach_window_m" value="$(arg final_approach_window_m)"/>
         <param name="final_speed_k" value="$(arg final_speed_k)"/>
         <param name="final_speed_min" value="$(arg final_speed_min)"/>

@@ -806,6 +806,15 @@ class DWAControl:
                 )
             ),
         )
+        self.path_tracking_goal_align_speed_cap = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_tracking_goal_align_speed_cap_mps",
+                    0.18,
+                )
+            ),
+        )
         self.path_tracking_stop_distance_m = max(
             0.0, float(rospy.get_param("~path_tracking_stop_distance_m", 0.35))
         )
@@ -2848,7 +2857,22 @@ class DWAControl:
         if not self.reach_goal_flag:
             return False
         if self.active_path_source == "local":
-            return False
+            nav_goal_xy = self._navigation_goal_xy()
+            if nav_goal_xy is None:
+                nav_goal_xy = self._goal_xy_from_path_msg(next_path_msg)
+            if nav_goal_xy is None:
+                return False
+
+            completion_window = max(self.goal_thresh_m, self.path_tracking_stop_distance_m)
+            local_latch_window = completion_window + self.path_tracking_minor_replan_delta_m
+            pose = self.current_pose.pose.pose.position
+            return (
+                math.hypot(
+                    float(pose.x) - nav_goal_xy[0],
+                    float(pose.y) - nav_goal_xy[1],
+                )
+                <= local_latch_window
+            )
         current_goal_xy = self._goal_xy_from_path_msg(self.path_msg)
         next_goal_xy = self._goal_xy_from_path_msg(next_path_msg)
         if current_goal_xy is None or next_goal_xy is None:
@@ -3964,6 +3988,11 @@ class DWAControl:
             v_limit = min(v_limit, self.emergency_bypass_speed_limit_mps)
         if self.active_path_source == "local" and obstacle_response_active:
             v_limit = min(v_limit, self.local_tracking_obstacle_speed_cap_mps)
+        if goal_align_ratio > 0.0 and self.path_tracking_goal_align_speed_cap > 0.0:
+            goal_align_cap = self.path_tracking_goal_align_speed_cap + (
+                1.0 - goal_align_ratio
+            ) * max(0.0, v_limit - self.path_tracking_goal_align_speed_cap)
+            v_limit = min(v_limit, goal_align_cap)
         abs_err = abs(yaw_err)
         need_progress = remaining_dist > self.goal_thresh_m
         tracking_kp = self.path_tracking_kp * (
