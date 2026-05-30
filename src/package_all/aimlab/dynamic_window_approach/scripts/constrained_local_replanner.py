@@ -4554,10 +4554,18 @@ class ConstrainedLocalReplanner:
             return False
         if (
             str(clear_reason) == "nominal_path_clear"
-            and self.avoidance_clear_detour_hold_s > 0.0
             and self.last_avoidance_solution_sec > 0.0
         ):
             clear_age_s = stamp.to_sec() - self.last_avoidance_solution_sec
+            if self.avoidance_clear_detour_hold_s <= 0.0:
+                frame_id = dg.header.frame_id if dg.header.frame_id else "map"
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: releasing active avoidance immediately after nominal path clear | age=%.2fs",
+                    clear_age_s,
+                )
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                return False
             if clear_age_s > self.avoidance_clear_detour_hold_s:
                 frame_id = dg.header.frame_id if dg.header.frame_id else "map"
                 rospy.loginfo_throttle(
