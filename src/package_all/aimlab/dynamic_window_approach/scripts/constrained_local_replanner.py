@@ -348,6 +348,17 @@ class ConstrainedLocalReplanner:
         self.known_map_subtraction_radius_m = max(
             0.0, float(rospy.get_param("~known_map_subtraction_radius_m", 0.30))
         )
+        self.use_map_filtered_path_obstacle_trigger = bool(
+            rospy.get_param("~use_map_filtered_path_obstacle_trigger", True)
+        )
+        self.map_filtered_path_trigger_margin_m = max(
+            0.0,
+            float(rospy.get_param("~map_filtered_path_trigger_margin_m", 0.10)),
+        )
+        self.map_filtered_path_trigger_min_points = max(
+            1,
+            int(rospy.get_param("~map_filtered_path_trigger_min_points", 3)),
+        )
         self.local_blind_zone_guard_enabled = bool(
             rospy.get_param("~local_blind_zone_guard_enabled", True)
         )
@@ -708,6 +719,7 @@ class ConstrainedLocalReplanner:
         self.obstacle_memory_count = 0
         self.obstacle_memory_locked_count = 0
         self.known_map_filtered_count = 0
+        self.known_map_filtered_points_map = []
         self.next_obstacle_memory_id = 1
         self.current_tracked_object_points_map = []
         self.tracked_object_points_map = []
@@ -924,7 +936,7 @@ class ConstrainedLocalReplanner:
             )
         if self.static_obstacle_memory_enabled:
             rospy.loginfo(
-                "constrained_local_replanner static obstacle memory | ttl=%.1fs lock_ttl=%.1fs blind_ttl=%.1fs blind_radius=%.2fm persist=%d locked_keep=%.1fm range=%.1fm map_subtract=%s radius=%.2fm",
+                "constrained_local_replanner static obstacle memory | ttl=%.1fs lock_ttl=%.1fs blind_ttl=%.1fs blind_radius=%.2fm persist=%d locked_keep=%.1fm range=%.1fm map_subtract=%s radius=%.2fm map_filtered_path_trigger=%s min=%d margin=%.2fm",
                 self.static_obstacle_memory_ttl_s,
                 self.static_obstacle_memory_lock_ttl_s,
                 self.static_obstacle_memory_blind_zone_hold_ttl_s,
@@ -934,6 +946,9 @@ class ConstrainedLocalReplanner:
                 self.static_obstacle_memory_max_range_m,
                 "on" if self.known_map_subtraction_enabled else "off",
                 self.known_map_subtraction_radius_m,
+                "on" if self.use_map_filtered_path_obstacle_trigger else "off",
+                self.map_filtered_path_trigger_min_points,
+                self.map_filtered_path_trigger_margin_m,
             )
         if self.tracked_object_virtual_obstacles_enabled or self.near_field_object_memory_enabled:
             rospy.loginfo(
@@ -2199,6 +2214,19 @@ class ConstrainedLocalReplanner:
             merge_radius_m,
         )
 
+    def _avoidance_trigger_points_map(self, include_tracked=True):
+        points = self._combined_dynamic_obstacle_points(include_tracked=include_tracked)
+        if (
+            self.use_map_filtered_path_obstacle_trigger
+            and self.known_map_filtered_points_map
+        ):
+            points = self._merge_point_sets(
+                points,
+                self.known_map_filtered_points_map,
+                self.pointcloud_cluster_resolution_m,
+            )
+        return points
+
     def _in_global_overlay_blind_zone(self, wx, wy):
         if self.global_pointcloud_overlay_blind_zone_radius_m <= 0.0:
             return False
@@ -2407,14 +2435,17 @@ class ConstrainedLocalReplanner:
 
             self.obstacle_cluster_count = len(filtered_clusters)
             current_points_map = []
+            known_map_filtered_points_map = []
             map_filtered_count = 0
             for item in filtered_clusters:
                 wx, wy = self._local_to_map(item["x"], item["y"])
                 if self._is_known_map_static_obstacle(wx, wy):
                     map_filtered_count += 1
+                    known_map_filtered_points_map.append((wx, wy))
                     continue
                 current_points_map.append((wx, wy))
             self.known_map_filtered_count = map_filtered_count
+            self.known_map_filtered_points_map = list(known_map_filtered_points_map)
             self.current_obstacle_points_map = list(current_points_map)
 
             stamp_sec = msg.header.stamp.to_sec()
@@ -4458,6 +4489,8 @@ class ConstrainedLocalReplanner:
             return False
         if int(summary.get("pc_current", 0)) > 0:
             return False
+        if int(summary.get("map_filtered_path", 0)) > 0:
+            return False
         if (
             int(summary.get("pc_memory", 0))
             > self.weak_grid_no_solution_fallback_max_memory_points
@@ -4998,7 +5031,7 @@ class ConstrainedLocalReplanner:
                 self.tracked_object_virtual_obstacles_enabled
                 and self.tracked_object_avoidance_enabled
             )
-        dynamic_points = self._combined_dynamic_obstacle_points(
+        dynamic_points = self._avoidance_trigger_points_map(
             include_tracked=include_tracked
         )
         if path is not None and start_cell is not None:
@@ -5015,6 +5048,7 @@ class ConstrainedLocalReplanner:
             keep_cells=keep_cells,
             enabled=(
                 self.use_pointcloud_avoidance_trigger
+                or self.use_map_filtered_path_obstacle_trigger
                 or (
                     self.tracked_object_virtual_obstacles_enabled
                     and include_tracked
@@ -5390,6 +5424,7 @@ class ConstrainedLocalReplanner:
             "grid_occ": 0,
             "risk": 0,
             "pc_current": 0,
+            "map_filtered_path": 0,
             "pc_memory": 0,
             "tracked_current": 0,
             "tracked_memory": 0,
@@ -5437,6 +5472,16 @@ class ConstrainedLocalReplanner:
                 max_check_m=max_check_m,
             )
         )
+        summary["map_filtered_path"] = len(
+            self._collect_path_overlap_points(
+                path,
+                dg,
+                start_cell,
+                self.known_map_filtered_points_map,
+                self.map_filtered_path_trigger_margin_m,
+                max_check_m=max_check_m,
+            )
+        )
         summary["pc_memory"] = len(
             self._collect_path_overlap_points(
                 path,
@@ -5473,13 +5518,14 @@ class ConstrainedLocalReplanner:
 
     def _log_blocker_source_summary(self, context, base_label, trigger_reason, summary):
         self._debug_avoidance_log(
-            "constrained_local_replanner: blocker_sources | context={} base={} reason={} grid_occ={} risk={} pc_current={} pc_memory={} tracked_current={} tracked_memory={} blind_zone={}".format(
+            "constrained_local_replanner: blocker_sources | context={} base={} reason={} grid_occ={} risk={} pc_current={} map_filtered_path={} pc_memory={} tracked_current={} tracked_memory={} blind_zone={}".format(
                 context,
                 base_label,
                 trigger_reason,
                 int(summary.get("grid_occ", 0)),
                 int(summary.get("risk", 0)),
                 int(summary.get("pc_current", 0)),
+                int(summary.get("map_filtered_path", 0)),
                 int(summary.get("pc_memory", 0)),
                 int(summary.get("tracked_current", 0)),
                 int(summary.get("tracked_memory", 0)),
@@ -5769,6 +5815,7 @@ class ConstrainedLocalReplanner:
         return (
             int(summary.get("risk", 0)) <= 0
             and int(summary.get("pc_current", 0)) <= 0
+            and int(summary.get("map_filtered_path", 0)) <= 0
             and int(summary.get("pc_memory", 0)) <= 0
             and int(summary.get("tracked_current", 0)) <= 0
             and int(summary.get("tracked_memory", 0)) <= 0
@@ -6077,7 +6124,10 @@ class ConstrainedLocalReplanner:
             self.tracked_object_virtual_obstacles_enabled
             and self.tracked_object_avoidance_enabled
         )
-        dynamic_points_map = self._combined_dynamic_obstacle_points(
+        live_trigger_points_map = self._combined_dynamic_obstacle_points(
+            include_tracked=tracked_for_avoidance
+        )
+        dynamic_points_map = self._avoidance_trigger_points_map(
             include_tracked=tracked_for_avoidance
         )
         dynamic_blocked, obstacle_count = self._overlay_dynamic_obstacles(
@@ -6128,13 +6178,34 @@ class ConstrainedLocalReplanner:
                 nominal_path,
                 dg,
                 start_cell,
-                dynamic_points_map,
+                live_trigger_points_map,
                 point_margin_m,
                 max_check_m=self.avoidance_trigger_ahead_m,
             )
         direct_points_overlap = (
             direct_points_enabled
             and len(blocking_points) >= self.pointcloud_block_confirm_points
+        )
+        map_filtered_blocking_points = []
+        if self.use_map_filtered_path_obstacle_trigger:
+            map_filtered_blocking_points = self._collect_path_overlap_points(
+                nominal_path,
+                dg,
+                start_cell,
+                self.known_map_filtered_points_map,
+                self.map_filtered_path_trigger_margin_m,
+                max_check_m=self.avoidance_trigger_ahead_m,
+            )
+            if map_filtered_blocking_points:
+                blocking_points = self._merge_point_sets(
+                    blocking_points,
+                    map_filtered_blocking_points,
+                    self.pointcloud_cluster_resolution_m,
+                )
+        map_filtered_path_overlap = (
+            self.use_map_filtered_path_obstacle_trigger
+            and len(map_filtered_blocking_points)
+            >= self.map_filtered_path_trigger_min_points
         )
         relevant_static_entries = self._relevant_static_memory_entries(
             blocking_points_world=blocking_points,
@@ -6161,6 +6232,7 @@ class ConstrainedLocalReplanner:
         obstacle_evidence_confirmed = (
             overlay_evidence_confirmed
             or point_evidence_present
+            or map_filtered_path_overlap
             or grid_evidence_present
             or tracked_evidence_present
             or locked_static_evidence_present
@@ -6174,7 +6246,7 @@ class ConstrainedLocalReplanner:
         ):
             predicted_overlap = False
         self._debug_avoidance_log(
-            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} base_predicted_overlap={} direct_points_enabled={} tracked_avoidance={} direct_points_overlap={} overlay_confirmed={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
+            "constrained_local_replanner: avoid_eval | base={} risk_grid={} predicted_overlap={} base_predicted_overlap={} direct_points_enabled={} tracked_avoidance={} direct_points_overlap={} map_filtered_path={} overlay_confirmed={} raw_points={} clustered_points={} map_filtered={} memory_points={} locked_static={} tracked_objects={} tracked_points={} tracked_memory_points={} overlay_points={} ahead={:.1f}m".format(
                 label,
                 "on" if self.risk_grid is not None else "off",
                 "yes" if predicted_overlap else "no",
@@ -6182,6 +6254,7 @@ class ConstrainedLocalReplanner:
                 "on" if direct_points_enabled else "off",
                 "on" if tracked_for_avoidance else "off",
                 "yes" if direct_points_overlap else "no",
+                len(map_filtered_blocking_points),
                 "yes" if overlay_evidence_confirmed else "no",
                 self.obstacle_raw_point_count,
                 clustered_point_count,
@@ -6201,6 +6274,8 @@ class ConstrainedLocalReplanner:
             trigger_reason = "predicted_overlap"
         elif direct_points_overlap:
             trigger_reason = "dynamic_points_overlap"
+        elif map_filtered_path_overlap:
+            trigger_reason = "map_filtered_path_overlap"
 
         blind_zone_conflict = None
         if trigger_reason is None:
@@ -6245,6 +6320,7 @@ class ConstrainedLocalReplanner:
                     int(blocker_source_summary.get("grid_occ", 0)) <= 0
                     and int(blocker_source_summary.get("risk", 0)) <= 0
                     and int(blocker_source_summary.get("pc_current", 0)) <= 0
+                    and int(blocker_source_summary.get("map_filtered_path", 0)) <= 0
                     and int(blocker_source_summary.get("tracked_current", 0)) <= 0
                     and (
                         int(blocker_source_summary.get("pc_memory", 0)) > 0

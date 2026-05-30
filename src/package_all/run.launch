@@ -519,6 +519,9 @@
   <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="5.0"/>
   <arg name="known_map_subtraction_enabled" default="true"/>
   <arg name="known_map_subtraction_radius_m" default="0.30"/>
+  <arg name="use_map_filtered_path_obstacle_trigger" default="true"/>
+  <arg name="map_filtered_path_trigger_margin_m" default="0.10"/>
+  <arg name="map_filtered_path_trigger_min_points" default="3"/>
   <arg name="local_blind_zone_guard_enabled" default="true"/>
   <arg name="local_blind_zone_guard_radius_m" default="1.20"/>
   <arg name="local_blind_zone_guard_ttl_s" default="0.45"/>
@@ -1354,6 +1357,9 @@
       <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" value="$(arg static_obstacle_memory_blind_zone_hold_ttl_s)"/>
       <arg name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
       <arg name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>
+      <arg name="use_map_filtered_path_obstacle_trigger" value="$(arg use_map_filtered_path_obstacle_trigger)"/>
+      <arg name="map_filtered_path_trigger_margin_m" value="$(arg map_filtered_path_trigger_margin_m)"/>
+      <arg name="map_filtered_path_trigger_min_points" value="$(arg map_filtered_path_trigger_min_points)"/>
       <arg name="local_blind_zone_guard_enabled" value="$(arg local_blind_zone_guard_enabled)"/>
       <arg name="local_blind_zone_guard_radius_m" value="$(arg local_blind_zone_guard_radius_m)"/>
       <arg name="local_blind_zone_guard_ttl_s" value="$(arg local_blind_zone_guard_ttl_s)"/>
@@ -1629,6 +1635,9 @@
       <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" value="$(arg static_obstacle_memory_blind_zone_hold_ttl_s)"/>
       <arg name="known_map_subtraction_enabled" value="$(arg known_map_subtraction_enabled)"/>
       <arg name="known_map_subtraction_radius_m" value="$(arg known_map_subtraction_radius_m)"/>
+      <arg name="use_map_filtered_path_obstacle_trigger" value="$(arg use_map_filtered_path_obstacle_trigger)"/>
+      <arg name="map_filtered_path_trigger_margin_m" value="$(arg map_filtered_path_trigger_margin_m)"/>
+      <arg name="map_filtered_path_trigger_min_points" value="$(arg map_filtered_path_trigger_min_points)"/>
       <arg name="local_blind_zone_guard_enabled" value="$(arg local_blind_zone_guard_enabled)"/>
       <arg name="local_blind_zone_guard_radius_m" value="$(arg local_blind_zone_guard_radius_m)"/>
       <arg name="local_blind_zone_guard_ttl_s" value="$(arg local_blind_zone_guard_ttl_s)"/>
