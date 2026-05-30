@@ -418,6 +418,7 @@
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
   <arg name="path_tracking_drivable_footprint_scale" default="$(eval '0.0' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
+  <arg name="path_tracking_drivable_check_horizon_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="goal_completion_stuck_distance_m" default="1.10"/>
   <arg name="goal_completion_stuck_arc_m" default="0.75"/>
@@ -1235,6 +1236,7 @@
       <arg name="path_tracking_recovery_ignore_start_distance_m" value="$(arg path_tracking_recovery_ignore_start_distance_m)"/>
       <arg name="path_tracking_drivable_boundary_tolerance_m" value="$(arg path_tracking_drivable_boundary_tolerance_m)"/>
       <arg name="path_tracking_drivable_footprint_scale" value="$(arg path_tracking_drivable_footprint_scale)"/>
+      <arg name="path_tracking_drivable_check_horizon_m" value="$(arg path_tracking_drivable_check_horizon_m)"/>
       <arg name="path_tracking_enforce_drivable_grid" value="$(arg path_tracking_enforce_drivable_grid)"/>
       <arg name="goal_completion_stuck_distance_m" value="$(arg goal_completion_stuck_distance_m)"/>
       <arg name="goal_completion_stuck_arc_m" value="$(arg goal_completion_stuck_arc_m)"/>

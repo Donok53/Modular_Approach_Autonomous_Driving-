@@ -855,6 +855,15 @@ class DWAControl:
                 ),
             ),
         )
+        self.path_tracking_drivable_check_horizon_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~path_tracking_drivable_check_horizon_m",
+                    0.0,
+                )
+            ),
+        )
         self.path_tracking_enforce_drivable_grid = bool(
             rospy.get_param("~path_tracking_enforce_drivable_grid", False)
         )
@@ -3828,6 +3837,8 @@ class DWAControl:
             "gate": "precheck",
             "grid_enforce": "unknown",
             "grid_footprint_scale": 1.0,
+            "grid_check_horizon_m": 0.0,
+            "grid_recovery_candidates": 0,
             "tangent_window_m": (
                 min(
                     self.path_tracking_tangent_window_m,
@@ -3934,46 +3945,81 @@ class DWAControl:
             else 1.0
         )
         self._last_tracking_debug["grid_footprint_scale"] = track_grid_scale
+        track_grid_horizon = (
+            self.path_tracking_drivable_check_horizon_m
+            if enforce_track_drivable
+            else 0.0
+        )
+        self._last_tracking_debug["grid_check_horizon_m"] = track_grid_horizon
         self._last_tracking_debug["gate"] = "ok"
         if not self._trajectory_in_drivable_area(
             traj,
             ignore_start_distance_m=self.path_tracking_drivable_ignore_start_distance_m,
             check_drivable_grid=enforce_track_drivable,
             footprint_scale=track_grid_scale,
+            max_check_distance_m=track_grid_horizon,
         ):
             self._last_tracking_debug["gate"] = (
                 "primary_grid_block" if enforce_track_drivable else "primary_risk_block"
             )
-            recovery_v = min(
+            base_recovery_v = min(
                 v_limit,
                 max(
                     self.path_tracking_crawl_speed,
                     self.path_tracking_large_yaw_crawl_speed,
                 ),
             )
-            recovery_traj = self.predict_trajectory(x, recovery_v, w_cmd)
-            if (
-                need_progress
-                and recovery_v > 1e-4
-                and self._trajectory_in_drivable_area(
-                    recovery_traj,
-                    ignore_start_distance_m=self.path_tracking_recovery_ignore_start_distance_m,
-                    check_drivable_grid=enforce_track_drivable,
-                    footprint_scale=track_grid_scale,
+            recovery_candidates = []
+
+            def add_recovery_candidate(candidate_v, candidate_w):
+                if candidate_v <= 1e-4:
+                    return
+                candidate_v = min(v_limit, max(0.0, candidate_v))
+                candidate_w = max(-w_limit, min(w_limit, candidate_w))
+                key = (round(candidate_v, 4), round(candidate_w, 4))
+                if key not in recovery_candidates:
+                    recovery_candidates.append(key)
+
+            for candidate_v in (
+                base_recovery_v,
+                min(v_limit, self.path_tracking_crawl_speed),
+                min(v_limit, self.path_tracking_large_yaw_crawl_speed),
+                min(v_limit, 0.28),
+                min(v_limit, 0.18),
+                min(v_limit, self.min_forward_cmd),
+            ):
+                for w_scale in (1.0, 0.75, 0.50, 0.25, 0.0):
+                    add_recovery_candidate(candidate_v, w_cmd * w_scale)
+
+            safe_recovery = None
+            if need_progress:
+                for recovery_v, recovery_w in recovery_candidates:
+                    recovery_traj = self.predict_trajectory(x, recovery_v, recovery_w)
+                    self._last_tracking_debug["grid_recovery_candidates"] += 1
+                    if self._trajectory_in_drivable_area(
+                        recovery_traj,
+                        ignore_start_distance_m=self.path_tracking_recovery_ignore_start_distance_m,
+                        check_drivable_grid=enforce_track_drivable,
+                        footprint_scale=track_grid_scale,
+                        max_check_distance_m=track_grid_horizon,
+                    ):
+                        safe_recovery = (recovery_v, recovery_w, recovery_traj)
+                        break
+                    if (
+                        (not enforce_track_drivable)
+                        and self._trajectory_is_risk_only_safe(recovery_traj)
+                    ):
+                        safe_recovery = (recovery_v, recovery_w, recovery_traj)
+                        break
+
+            if safe_recovery is not None:
+                v_cmd, w_cmd, traj = safe_recovery
+                self._path_tracking_prev_w = w_cmd
+                self._last_tracking_debug["gate"] = (
+                    "recovery_drivable"
+                    if abs(w_cmd - recovery_candidates[0][1]) <= 1e-4
+                    else "recovery_grid_search"
                 )
-            ):
-                v_cmd = recovery_v
-                traj = recovery_traj
-                self._last_tracking_debug["gate"] = "recovery_drivable"
-            elif (
-                need_progress
-                and recovery_v > 1e-4
-                and (not enforce_track_drivable)
-                and self._trajectory_is_risk_only_safe(recovery_traj)
-            ):
-                v_cmd = recovery_v
-                traj = recovery_traj
-                self._last_tracking_debug["gate"] = "recovery_risk_only"
             else:
                 v_cmd = 0.0
                 traj = self.predict_trajectory(x, v_cmd, w_cmd)
@@ -4089,6 +4135,7 @@ class DWAControl:
         check_drivable_grid=None,
         check_risk_grid=None,
         footprint_scale=1.0,
+        max_check_distance_m=0.0,
     ):
         if check_drivable_grid is None:
             check_drivable_grid = bool(self.use_drivable_grid)
@@ -4124,6 +4171,8 @@ class DWAControl:
         for row in traj[1::self.traj_check_step]:
             traveled_m += math.hypot(float(row[0]) - float(prev_row[0]), float(row[1]) - float(prev_row[1]))
             prev_row = row
+            if max_check_distance_m > 1e-6 and traveled_m > max_check_distance_m:
+                break
             yaw = float(row[2])
             c = math.cos(yaw)
             s = math.sin(yaw)
@@ -4466,7 +4515,7 @@ class DWAControl:
             math.degrees(self.cmd_angular_decel_max),
         )
         rospy.loginfo(
-            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s footprint_scale=%.2f pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps",
+            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s footprint_scale=%.2f check_horizon=%.2fm pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps",
             self.launch_profile_label,
             self.launch_real_mode,
             self.launch_localization_environment,
@@ -4475,6 +4524,7 @@ class DWAControl:
             self.launch_runtime_drivable_state_file,
             "on" if self.path_tracking_enforce_drivable_grid else "off",
             self.path_tracking_drivable_footprint_scale,
+            self.path_tracking_drivable_check_horizon_m,
             "on" if self.pointcloud_static_blocking_enabled else "off",
             "on" if self.use_drivable_grid else "off",
             "occupied" if self.grid_unknown_is_occupied else "free",
@@ -4823,7 +4873,7 @@ class DWAControl:
                     tdbg = self._last_target_debug
                     self._log_nav_reason(
                         "stop_no_valid_traj",
-                        "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                        "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f horizon=%.2f rec=%d dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                             self.active_path_source,
                             self.current_path_mode,
                             int(tdbg.get("path_len", len(self.path_pts))),
@@ -4831,6 +4881,8 @@ class DWAControl:
                             str(self._last_tracking_debug.get("gate", "-")),
                             str(self._last_tracking_debug.get("grid_enforce", "-")),
                             float(self._last_tracking_debug.get("grid_footprint_scale", 1.0)),
+                            float(self._last_tracking_debug.get("grid_check_horizon_m", 0.0)),
+                            int(self._last_tracking_debug.get("grid_recovery_candidates", 0)),
                             dist_to_goal,
                             arc_rem,
                             lat_err,
@@ -4871,7 +4923,7 @@ class DWAControl:
                 )
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f horizon=%.2f rec=%d cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                         self.active_path_source,
                         self.current_path_mode,
                         int(tdbg.get("path_len", len(self.path_pts))),
@@ -4879,6 +4931,8 @@ class DWAControl:
                         str(dbg.get("gate", "-")),
                         str(dbg.get("grid_enforce", "-")),
                         float(dbg.get("grid_footprint_scale", 1.0)),
+                        float(dbg.get("grid_check_horizon_m", 0.0)),
+                        int(dbg.get("grid_recovery_candidates", 0)),
                         u_cmd[0],
                         u_cmd[1],
                         dist_to_goal,
