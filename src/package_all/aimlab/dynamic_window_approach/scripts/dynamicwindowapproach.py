@@ -843,6 +843,18 @@ class DWAControl:
                 )
             ),
         )
+        self.path_tracking_drivable_footprint_scale = min(
+            1.0,
+            max(
+                0.0,
+                float(
+                    rospy.get_param(
+                        "~path_tracking_drivable_footprint_scale",
+                        1.0,
+                    )
+                ),
+            ),
+        )
         self.path_tracking_enforce_drivable_grid = bool(
             rospy.get_param("~path_tracking_enforce_drivable_grid", False)
         )
@@ -1917,15 +1929,22 @@ class DWAControl:
         dy = np.maximum(np.abs(points_xy[:, 1]) - half_width, 0.0)
         return np.hypot(dx, dy)
 
-    def _footprint_sample_offsets(self, step_m):
+    def _footprint_sample_offsets(self, step_m, scale=1.0):
         step = max(0.05, float(step_m))
-        key = round(step, 3)
+        scale = min(1.0, max(0.0, float(scale)))
+        key = (round(step, 3), round(scale, 3))
         cached = self._footprint_sample_cache.get(key)
         if cached is not None:
             return cached
 
         half_length = self.robot_half_length_m + self.footprint_padding_m
         half_width = self.robot_half_width_m + self.footprint_padding_m
+        if scale <= 1e-6:
+            offsets = np.array([[0.0, 0.0]], dtype=np.float32)
+            self._footprint_sample_cache[key] = offsets
+            return offsets
+        half_length *= scale
+        half_width *= scale
         xs = np.arange(-half_length, half_length + 0.5 * step, step, dtype=np.float32)
         ys = np.arange(-half_width, half_width + 0.5 * step, step, dtype=np.float32)
         if xs.size == 0 or abs(xs[-1] - half_length) > 1e-6:
@@ -3808,6 +3827,7 @@ class DWAControl:
             "filtered_lat_err": self._path_tracking_filtered_lat_err,
             "gate": "precheck",
             "grid_enforce": "unknown",
+            "grid_footprint_scale": 1.0,
             "tangent_window_m": (
                 min(
                     self.path_tracking_tangent_window_m,
@@ -3908,11 +3928,18 @@ class DWAControl:
         self._last_tracking_debug["grid_enforce"] = (
             "on" if enforce_track_drivable else "off"
         )
+        track_grid_scale = (
+            self.path_tracking_drivable_footprint_scale
+            if enforce_track_drivable
+            else 1.0
+        )
+        self._last_tracking_debug["grid_footprint_scale"] = track_grid_scale
         self._last_tracking_debug["gate"] = "ok"
         if not self._trajectory_in_drivable_area(
             traj,
             ignore_start_distance_m=self.path_tracking_drivable_ignore_start_distance_m,
             check_drivable_grid=enforce_track_drivable,
+            footprint_scale=track_grid_scale,
         ):
             self._last_tracking_debug["gate"] = (
                 "primary_grid_block" if enforce_track_drivable else "primary_risk_block"
@@ -3932,6 +3959,7 @@ class DWAControl:
                     recovery_traj,
                     ignore_start_distance_m=self.path_tracking_recovery_ignore_start_distance_m,
                     check_drivable_grid=enforce_track_drivable,
+                    footprint_scale=track_grid_scale,
                 )
             ):
                 v_cmd = recovery_v
@@ -4060,6 +4088,7 @@ class DWAControl:
         ignore_start_distance_m=0.0,
         check_drivable_grid=None,
         check_risk_grid=None,
+        footprint_scale=1.0,
     ):
         if check_drivable_grid is None:
             check_drivable_grid = bool(self.use_drivable_grid)
@@ -4081,7 +4110,7 @@ class DWAControl:
         ):
             res_candidates.append(float(self.risk_grid_resolution))
         sample_step = min(res_candidates) if res_candidates else 0.1
-        offsets = self._footprint_sample_offsets(sample_step)
+        offsets = self._footprint_sample_offsets(sample_step, scale=footprint_scale)
         inward_recovery_ok = self._initial_inward_recovery_window_ok(
             traj,
             offsets,
@@ -4437,7 +4466,7 @@ class DWAControl:
             math.degrees(self.cmd_angular_decel_max),
         )
         rospy.loginfo(
-            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps",
+            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s footprint_scale=%.2f pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps",
             self.launch_profile_label,
             self.launch_real_mode,
             self.launch_localization_environment,
@@ -4445,6 +4474,7 @@ class DWAControl:
             self.launch_localizer_map_relative_path,
             self.launch_runtime_drivable_state_file,
             "on" if self.path_tracking_enforce_drivable_grid else "off",
+            self.path_tracking_drivable_footprint_scale,
             "on" if self.pointcloud_static_blocking_enabled else "off",
             "on" if self.use_drivable_grid else "off",
             "occupied" if self.grid_unknown_is_occupied else "free",
@@ -4793,13 +4823,14 @@ class DWAControl:
                     tdbg = self._last_target_debug
                     self._log_nav_reason(
                         "stop_no_valid_traj",
-                        "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                        "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f sampled=%d valid=%d skip_grid=%d collision=%d pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                             self.active_path_source,
                             self.current_path_mode,
                             int(tdbg.get("path_len", len(self.path_pts))),
                             str(tdbg.get("policy", "-")),
                             str(self._last_tracking_debug.get("gate", "-")),
                             str(self._last_tracking_debug.get("grid_enforce", "-")),
+                            float(self._last_tracking_debug.get("grid_footprint_scale", 1.0)),
                             dist_to_goal,
                             arc_rem,
                             lat_err,
@@ -4840,13 +4871,14 @@ class DWAControl:
                 )
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                         self.active_path_source,
                         self.current_path_mode,
                         int(tdbg.get("path_len", len(self.path_pts))),
                         str(tdbg.get("policy", "-")),
                         str(dbg.get("gate", "-")),
                         str(dbg.get("grid_enforce", "-")),
+                        float(dbg.get("grid_footprint_scale", 1.0)),
                         u_cmd[0],
                         u_cmd[1],
                         dist_to_goal,
