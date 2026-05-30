@@ -649,6 +649,10 @@ class DWAControl:
         self.local_tracking_segment_step_scale = max(
             0.20, float(rospy.get_param("~local_tracking_segment_step_scale", 0.65))
         )
+        self.local_tracking_segment_min_step_m = max(
+            0.05,
+            float(rospy.get_param("~local_tracking_segment_min_step_m", 0.35)),
+        )
         self.local_tracking_target_step_cap_m = max(
             0.05, float(rospy.get_param("~local_tracking_target_step_cap_m", 0.22))
         )
@@ -3662,17 +3666,21 @@ class DWAControl:
                     segment_step_scale,
                     self.local_tracking_segment_step_scale,
                 )
-                segment_target_step_cap = min(
-                    segment_target_step_cap,
-                    self.local_tracking_target_step_cap_m,
-                )
+                segment_target_step_cap = max(0.05, self.local_tracking_target_step_cap_m)
             segment_target_step = min(
                 segment_target_step_cap,
                 max(0.05, segment_step_scale * self.seg_lens[target_seg_idx]),
             )
+            segment_limit_s = segment_end_s
+            if self.active_path_source == "local" and not obstacle_response_active:
+                segment_target_step = min(
+                    segment_target_step_cap,
+                    max(self.local_tracking_segment_min_step_m, segment_target_step),
+                )
+                segment_limit_s = self.s_total
             s_target = min(
                 self.s_total,
-                min(segment_end_s, max(base_s, s_proj + segment_target_step)),
+                min(segment_limit_s, max(base_s, s_proj + segment_target_step)),
             )
 
         tx, ty, t_hat = self._interp_xy_smoothed_tangent_at_s(s_target)
