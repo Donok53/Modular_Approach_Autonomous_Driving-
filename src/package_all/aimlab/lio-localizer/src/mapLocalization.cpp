@@ -713,7 +713,7 @@ public:
             voxel_grid_filter_.filter(*filter_cloud_corner);
 
             pcl::fromROSMsg(msg_ptr->cloud_surface, *cloud_surface);
-            voxel_grid_filter_.setInputCloud(cloud_deskewed);
+            voxel_grid_filter_.setInputCloud(cloud_surface);
             voxel_grid_filter_.filter(*filter_cloud_surface);
         }
 
