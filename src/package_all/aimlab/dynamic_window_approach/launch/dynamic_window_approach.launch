@@ -186,12 +186,17 @@
     <arg name="tracking_projection_back_window_m" default="0.35"/>
     <arg name="tracking_projection_forward_window_m" default="1.20"/>
     <arg name="tracking_path_smoothing_passes" default="2"/>
+    <arg name="tracking_anchor_front_offset_m" default="$(eval '0.0' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '-1.0')"/>
     <arg name="local_tracking_smoothing_enabled" default="false"/>
-    <arg name="local_tracking_preview_m" default="0.85"/>
+    <arg name="local_tracking_clear_uses_segment" default="$(eval 'true' if str(arg('launch_localization_environment')).lower() == 'outdoor' else 'false')"/>
+    <arg name="local_tracking_preview_m" default="$(eval '1.10' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '0.85')"/>
     <arg name="local_tracking_segment_step_scale" default="0.65"/>
-    <arg name="local_tracking_target_step_cap_m" default="0.22"/>
+    <arg name="local_tracking_target_step_cap_m" default="$(eval '0.38' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '0.22')"/>
     <arg name="local_tracking_tangent_window_m" default="0.20"/>
     <arg name="local_tracking_obstacle_speed_cap_mps" default="0.42"/>
+    <arg name="local_tracking_yaw_speed_cap_mps" default="$(eval '0.38' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '0.0')"/>
+    <arg name="local_tracking_yaw_speed_cap_start_deg" default="$(eval '8.0' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '12.0')"/>
+    <arg name="local_tracking_yaw_speed_cap_full_deg" default="$(eval '18.0' if str(arg('launch_localization_environment')).lower() == 'outdoor' else '28.0')"/>
     <arg name="path_tracking_yaw_rate_max_deg" default="42.0"/>
     <arg name="path_tracking_in_place_yaw_rate_max_deg" default="26.0"/>
     <arg name="path_tracking_yaw_accel_max_deg" default="120.0"/>
@@ -953,12 +958,17 @@
         <param name="tracking_projection_back_window_m" value="$(arg tracking_projection_back_window_m)"/>
         <param name="tracking_projection_forward_window_m" value="$(arg tracking_projection_forward_window_m)"/>
         <param name="tracking_path_smoothing_passes" value="$(arg tracking_path_smoothing_passes)"/>
+        <param name="tracking_anchor_front_offset_m" value="$(arg tracking_anchor_front_offset_m)"/>
         <param name="local_tracking_smoothing_enabled" value="$(arg local_tracking_smoothing_enabled)"/>
+        <param name="local_tracking_clear_uses_segment" value="$(arg local_tracking_clear_uses_segment)"/>
         <param name="local_tracking_preview_m" value="$(arg local_tracking_preview_m)"/>
         <param name="local_tracking_segment_step_scale" value="$(arg local_tracking_segment_step_scale)"/>
         <param name="local_tracking_target_step_cap_m" value="$(arg local_tracking_target_step_cap_m)"/>
         <param name="local_tracking_tangent_window_m" value="$(arg local_tracking_tangent_window_m)"/>
         <param name="local_tracking_obstacle_speed_cap_mps" value="$(arg local_tracking_obstacle_speed_cap_mps)"/>
+        <param name="local_tracking_yaw_speed_cap_mps" value="$(arg local_tracking_yaw_speed_cap_mps)"/>
+        <param name="local_tracking_yaw_speed_cap_start_deg" value="$(arg local_tracking_yaw_speed_cap_start_deg)"/>
+        <param name="local_tracking_yaw_speed_cap_full_deg" value="$(arg local_tracking_yaw_speed_cap_full_deg)"/>
         <param name="path_tracking_yaw_rate_max_deg" value="$(arg path_tracking_yaw_rate_max_deg)"/>
         <param name="path_tracking_in_place_yaw_rate_max_deg" value="$(arg path_tracking_in_place_yaw_rate_max_deg)"/>
         <param name="path_tracking_yaw_accel_max_deg" value="$(arg path_tracking_yaw_accel_max_deg)"/>

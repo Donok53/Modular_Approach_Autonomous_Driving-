@@ -608,8 +608,18 @@ class DWAControl:
         self.tracking_path_smoothing_passes = max(
             0, int(rospy.get_param("~tracking_path_smoothing_passes", 2))
         )
+        self.tracking_anchor_front_offset_m = float(
+            rospy.get_param("~tracking_anchor_front_offset_m", -1.0)
+        )
+        if self.tracking_anchor_front_offset_m < 0.0:
+            self.tracking_anchor_front_offset_m = (
+                self.robot_half_length_m + self.footprint_padding_m
+            )
         self.local_tracking_smoothing_enabled = bool(
             rospy.get_param("~local_tracking_smoothing_enabled", False)
+        )
+        self.local_tracking_clear_uses_segment = bool(
+            rospy.get_param("~local_tracking_clear_uses_segment", False)
         )
         self.local_tracking_preview_m = max(
             0.25, float(rospy.get_param("~local_tracking_preview_m", 0.85))
@@ -623,6 +633,22 @@ class DWAControl:
         self.local_tracking_obstacle_speed_cap_mps = max(
             0.05,
             float(rospy.get_param("~local_tracking_obstacle_speed_cap_mps", 0.42)),
+        )
+        self.local_tracking_yaw_speed_cap_mps = max(
+            0.0,
+            float(rospy.get_param("~local_tracking_yaw_speed_cap_mps", 0.0)),
+        )
+        self.local_tracking_yaw_speed_cap_start = math.radians(
+            max(
+                0.0,
+                float(rospy.get_param("~local_tracking_yaw_speed_cap_start_deg", 12.0)),
+            )
+        )
+        self.local_tracking_yaw_speed_cap_full = math.radians(
+            max(
+                math.degrees(self.local_tracking_yaw_speed_cap_start) + 1.0,
+                float(rospy.get_param("~local_tracking_yaw_speed_cap_full_deg", 28.0)),
+            )
         )
         self.path_tracking_only = bool(rospy.get_param("~path_tracking_only", True))
         self.path_tracking_kp = float(rospy.get_param("~path_tracking_kp", 0.92))
@@ -3097,7 +3123,7 @@ class DWAControl:
     def _tracking_anchor_xy(self):
         pose = self.current_pose.pose.pose.position
         yaw = self.get_yaw_from_quaternion(self.current_pose.pose.pose.orientation)
-        front_offset = self.robot_half_length_m + self.footprint_padding_m
+        front_offset = self.tracking_anchor_front_offset_m
         return (
             float(pose.x) + math.cos(yaw) * front_offset,
             float(pose.y) + math.sin(yaw) * front_offset,
@@ -3514,6 +3540,11 @@ class DWAControl:
             min(max(0.0, self.s_total - base_s), dist_to_goal)
             <= self.path_tracking_goal_align_window_m
         )
+        local_clear_follow = (
+            self.active_path_source == "local"
+            and self.current_path_mode == "follow_local"
+            and not obstacle_response_active
+        )
 
         if goal_align_active:
             s_target = self.s_total
@@ -3521,11 +3552,7 @@ class DWAControl:
         elif (
             self.follow_global_path_only
             or self.active_path_source == "global"
-            or (
-                self.active_path_source == "local"
-                and self.current_path_mode == "follow_local"
-                and not obstacle_response_active
-            )
+            or (local_clear_follow and not self.local_tracking_clear_uses_segment)
         ):
             if abs(lat_err) > self.snap_lat_err:
                 s_target = min(
@@ -3839,6 +3866,7 @@ class DWAControl:
             "grid_footprint_scale": 1.0,
             "grid_check_horizon_m": 0.0,
             "grid_recovery_candidates": 0,
+            "yaw_speed_cap_mps": 0.0,
             "tangent_window_m": (
                 min(
                     self.path_tracking_tangent_window_m,
@@ -3920,6 +3948,30 @@ class DWAControl:
         )
         self._path_tracking_prev_w = w_cmd
 
+        yaw_speed_limit_v = 0.0
+        if (
+            self.active_path_source == "local"
+            and need_progress
+            and v_cmd > 0.0
+            and self.local_tracking_yaw_speed_cap_mps > 1e-4
+            and abs_err > self.local_tracking_yaw_speed_cap_start
+        ):
+            yaw_cap_ratio = (
+                (abs_err - self.local_tracking_yaw_speed_cap_start)
+                / max(
+                    1e-6,
+                    self.local_tracking_yaw_speed_cap_full
+                    - self.local_tracking_yaw_speed_cap_start,
+                )
+            )
+            yaw_cap_ratio = max(0.0, min(1.0, yaw_cap_ratio))
+            yaw_limited_v = self.local_tracking_yaw_speed_cap_mps + (
+                1.0 - yaw_cap_ratio
+            ) * max(0.0, v_limit - self.local_tracking_yaw_speed_cap_mps)
+            yaw_speed_limit_v = yaw_limited_v
+            v_cmd = min(v_cmd, yaw_limited_v)
+            self._last_tracking_debug["yaw_speed_cap_mps"] = yaw_limited_v
+
         if (
             need_progress
             and (not obstacle_response_active)
@@ -3931,6 +3983,8 @@ class DWAControl:
             and v_cmd > 0.0
         ):
             v_cmd = min(v_limit, max(v_cmd, self.cruise_min_speed))
+        if yaw_speed_limit_v > 1e-4:
+            v_cmd = min(v_cmd, yaw_speed_limit_v)
 
         traj = self.predict_trajectory(x, v_cmd, w_cmd)
         enforce_track_drivable = bool(
@@ -4515,7 +4569,7 @@ class DWAControl:
             math.degrees(self.cmd_angular_decel_max),
         )
         rospy.loginfo(
-            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s footprint_scale=%.2f check_horizon=%.2fm pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps",
+            "DWA launch profile | profile=%s real_mode=%s env=%s map=%s map_path=%s state=%s gates: enforce_drivable=%s footprint_scale=%.2f check_horizon=%.2fm pointcloud_static=%s use_drivable=%s unknown_occ=%s risk=%s local_avoidance=%s tracking: preview=%.2fm step_cap=%.2fm speed_cap=%.2fmps anchor=%.2fm local_segment=%s yaw_cap=%.2fmps",
             self.launch_profile_label,
             self.launch_real_mode,
             self.launch_localization_environment,
@@ -4533,6 +4587,9 @@ class DWAControl:
             self.local_tracking_preview_m,
             self.local_tracking_target_step_cap_m,
             self.path_tracking_speed_cap,
+            self.tracking_anchor_front_offset_m,
+            "on" if self.local_tracking_clear_uses_segment else "off",
+            self.local_tracking_yaw_speed_cap_mps,
         )
         x = [self.current_pose.pose.pose.position.x,
              self.current_pose.pose.pose.position.y,
@@ -4923,7 +4980,7 @@ class DWAControl:
                 )
                 self._log_nav_reason(
                     "tracking",
-                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f horizon=%.2f rec=%d cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
+                    "src=%s mode=%s pts=%d policy=%s gate=%s grid=%s scale=%.2f horizon=%.2f rec=%d ycap=%.2f cmd_v=%.3f cmd_w=%.3f dist=%.2f arc=%.2f lat=%.2f s=%.2f->%.2f/%.2f yaw=%.1f path=%.1f des=%.1f err=%.1f cte=%.1f bypass=%s p_y=%.2f clr=%.2f pose_age=%.2fs local_age=%.2fs source_age=%.2fs" % (
                         self.active_path_source,
                         self.current_path_mode,
                         int(tdbg.get("path_len", len(self.path_pts))),
@@ -4933,6 +4990,7 @@ class DWAControl:
                         float(dbg.get("grid_footprint_scale", 1.0)),
                         float(dbg.get("grid_check_horizon_m", 0.0)),
                         int(dbg.get("grid_recovery_candidates", 0)),
+                        float(dbg.get("yaw_speed_cap_mps", 0.0)),
                         u_cmd[0],
                         u_cmd[1],
                         dist_to_goal,
