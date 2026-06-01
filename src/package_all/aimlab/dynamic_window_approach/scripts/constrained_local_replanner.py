@@ -4137,7 +4137,7 @@ class ConstrainedLocalReplanner:
                 if box_waypoints and cell == box_waypoints[-1]:
                     continue
                 box_waypoints.append(cell)
-            if len(box_waypoints) < 2:
+            if len(box_waypoints) < 4:
                 continue
             if any(
                 (not self._in_bounds_blocked(dynamic_blocked, wx, wy))
@@ -6752,7 +6752,40 @@ class ConstrainedLocalReplanner:
         curved_metrics = None
         avoid_path = None
         branch_history_points = None
-        if self.short_curved_avoidance_enabled:
+        if self.sidestep_avoidance_enabled:
+            (
+                curved_world_path,
+                avoid_path,
+                branch_history_points,
+                curved_metrics,
+            ) = self._build_sidestep_avoidance_path(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                blocked_idx=blocked_idx,
+                blocking_cells_world=blocking_cells,
+                blocking_points_world=blocking_points,
+                preferred_direction=preferred_direction,
+                now_sec=stamp.to_sec(),
+            )
+            if curved_world_path is not None and avoid_path is not None:
+                avoid_solution_kind = "sidestep"
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: using sidestep avoidance path | cells=%d pts=%d max_curv=%.2f max_heading_step=%.1fdeg",
+                    len(avoid_path),
+                    len(branch_history_points)
+                    if branch_history_points is not None
+                    else 0,
+                    float(curved_metrics.get("max_curvature", 0.0))
+                    if curved_metrics is not None
+                    else 0.0,
+                    float(curved_metrics.get("max_heading_delta_deg", 0.0))
+                    if curved_metrics is not None
+                    else 0.0,
+                )
+        if avoid_path is None and self.short_curved_avoidance_enabled:
             (
                 curved_world_path,
                 avoid_path,
@@ -6797,39 +6830,6 @@ class ConstrainedLocalReplanner:
                 blocking_points_world=blocking_points,
                 preferred_direction=preferred_direction,
             )
-        if avoid_path is None and self.sidestep_avoidance_enabled:
-            (
-                curved_world_path,
-                avoid_path,
-                branch_history_points,
-                curved_metrics,
-            ) = self._build_sidestep_avoidance_path(
-                nominal_path,
-                dynamic_blocked,
-                start_cell,
-                dg,
-                blocked_idx=blocked_idx,
-                blocking_cells_world=blocking_cells,
-                blocking_points_world=blocking_points,
-                preferred_direction=preferred_direction,
-                now_sec=stamp.to_sec(),
-            )
-            if curved_world_path is not None and avoid_path is not None:
-                avoid_solution_kind = "sidestep"
-                rospy.loginfo_throttle(
-                    1.0,
-                    "constrained_local_replanner: using sidestep avoidance path | cells=%d pts=%d max_curv=%.2f max_heading_step=%.1fdeg",
-                    len(avoid_path),
-                    len(branch_history_points)
-                    if branch_history_points is not None
-                    else 0,
-                    float(curved_metrics.get("max_curvature", 0.0))
-                    if curved_metrics is not None
-                    else 0.0,
-                    float(curved_metrics.get("max_heading_delta_deg", 0.0))
-                    if curved_metrics is not None
-                    else 0.0,
-                )
         if avoid_path is None:
             if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
                 self._publish_stored_avoidance_path(
