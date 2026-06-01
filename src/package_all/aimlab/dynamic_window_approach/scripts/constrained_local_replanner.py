@@ -524,7 +524,7 @@ class ConstrainedLocalReplanner:
             1, int(rospy.get_param("~avoidance_trigger_confirm_cycles", 2))
         )
         self.avoidance_trigger_confirm_max_gap_s = max(
-            0.0, float(rospy.get_param("~avoidance_trigger_confirm_max_gap_s", 0.6))
+            0.0, float(rospy.get_param("~avoidance_trigger_confirm_max_gap_s", 2.5))
         )
         self.blocked_clear_hold_s = max(
             0.0, float(rospy.get_param("~blocked_clear_hold_s", 0.35))
@@ -5001,6 +5001,27 @@ class ConstrainedLocalReplanner:
         self.pending_avoidance_trigger_count = 0
         self.pending_avoidance_trigger_stamp_sec = 0.0
 
+    @staticmethod
+    def _avoidance_trigger_keys_compatible(new_key, pending_key):
+        if new_key == pending_key:
+            return True
+        if new_key is None or pending_key is None:
+            return False
+        try:
+            new_reason = str(new_key[0])
+            pending_reason = str(pending_key[0])
+        except (IndexError, TypeError):
+            return False
+        # Static memory ids and raw obstacle centroids can churn while the robot
+        # approaches the same front obstacle.  For the debounce stage, treat
+        # repeated overlap evidence as the same episode so we can actually enter
+        # avoidance instead of staying in avoid_pending forever.
+        return new_reason == pending_reason and new_reason in (
+            "overlap",
+            "map_filtered_path_overlap",
+            "blind_zone_turn_conflict",
+        )
+
     def _make_avoidance_trigger_key(
         self,
         trigger_reason,
@@ -5056,7 +5077,9 @@ class ConstrainedLocalReplanner:
         ):
             self._reset_pending_avoidance_trigger()
 
-        if trigger_key == self.pending_avoidance_trigger_key:
+        if self._avoidance_trigger_keys_compatible(
+            trigger_key, self.pending_avoidance_trigger_key
+        ):
             self.pending_avoidance_trigger_count += 1
         else:
             self.pending_avoidance_trigger_key = trigger_key

@@ -484,7 +484,7 @@
   <arg name="avoidance_hold_s" default="3.0"/>
   <arg name="avoidance_clear_confirm_cycles" default="16"/>
   <arg name="avoidance_trigger_confirm_cycles" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '1')"/>
-  <arg name="avoidance_trigger_confirm_max_gap_s" default="0.8"/>
+  <arg name="avoidance_trigger_confirm_max_gap_s" default="2.5"/>
   <arg name="blocked_clear_hold_s" default="0.80"/>
   <arg name="avoidance_keep_until_endpoint_distance_m" default="0.55"/>
   <arg name="avoidance_clear_detour_hold_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.00')"/>
