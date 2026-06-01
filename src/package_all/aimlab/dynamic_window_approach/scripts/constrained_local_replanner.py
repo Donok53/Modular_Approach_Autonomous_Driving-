@@ -625,6 +625,29 @@ class ConstrainedLocalReplanner:
                 ),
             )
         )
+        self.sidestep_avoidance_enabled = bool(
+            rospy.get_param("~sidestep_avoidance_enabled", True)
+        )
+        self.sidestep_avoidance_min_offset_m = max(
+            0.10,
+            float(
+                rospy.get_param(
+                    "~sidestep_avoidance_min_offset_m",
+                    self.robot_half_width + 0.18,
+                )
+            ),
+        )
+        self.sidestep_avoidance_max_offset_m = max(
+            self.sidestep_avoidance_min_offset_m + 0.05,
+            float(rospy.get_param("~sidestep_avoidance_max_offset_m", 1.15)),
+        )
+        self.sidestep_avoidance_preview_m = max(
+            0.8, float(rospy.get_param("~sidestep_avoidance_preview_m", 2.0))
+        )
+        self.sidestep_avoidance_forward_margin_m = max(
+            0.20,
+            float(rospy.get_param("~sidestep_avoidance_forward_margin_m", 0.55)),
+        )
         # In global-nominal mode, we need to detect and branch around obstacles
         # earlier than the short controller-facing lookahead, otherwise the
         # robot keeps following the fixed global path until emergency stop.
@@ -4410,6 +4433,193 @@ class ConstrainedLocalReplanner:
             return None, None, None, None
         return best_candidate
 
+    def _build_sidestep_avoidance_path(
+        self,
+        nominal_path,
+        dynamic_blocked,
+        start_cell,
+        dg,
+        blocked_idx=None,
+        blocking_cells_world=None,
+        blocking_points_world=None,
+        preferred_direction=None,
+        now_sec=None,
+    ):
+        if (
+            (not self.sidestep_avoidance_enabled)
+            or len(nominal_path) < 2
+            or (not self.have_odom)
+        ):
+            return None, None, None, None
+
+        preferred_direction = (
+            str(preferred_direction).strip().lower()
+            if preferred_direction is not None
+            else None
+        )
+        if preferred_direction not in ("left", "right"):
+            preferred_direction = None
+
+        start_idx = self._nearest_path_cell_index(nominal_path, start_cell)
+        if blocked_idx is None:
+            blocked_idx = self._first_blocked_path_index(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                max_check_m=self.avoidance_trigger_ahead_m,
+                include_pointcloud=self.use_pointcloud_avoidance_trigger,
+            )
+        if blocked_idx is None:
+            return None, None, None, None
+
+        _obstacle_key, stable_points, _matched_entries = (
+            self._stable_avoidance_obstacle_points(
+                blocking_cells_world=blocking_cells_world,
+                blocking_points_world=blocking_points_world,
+            )
+        )
+        obstacle_local = []
+        local_horizon_m = max(
+            self.sidestep_avoidance_preview_m + self.sidestep_avoidance_forward_margin_m,
+            self.avoidance_rejoin_min_distance_m + self.robot_length_m,
+        )
+        lateral_limit_m = (
+            self.sidestep_avoidance_max_offset_m
+            + self.robot_half_width
+            + self.obstacle_block_margin_m
+            + 0.20
+        )
+        for wx, wy in stable_points:
+            lx, ly = self._world_to_local(wx, wy)
+            if lx < -0.20 or lx > local_horizon_m:
+                continue
+            if abs(ly) > lateral_limit_m:
+                continue
+            obstacle_local.append((float(lx), float(ly)))
+
+        if not obstacle_local:
+            bx, by = nominal_path[blocked_idx]
+            wx, wy = self._grid_to_world(dg, bx, by)
+            lx, ly = self._world_to_local(wx, wy)
+            if lx < -0.20 or lx > local_horizon_m:
+                return None, None, None, None
+            obstacle_local.append((float(lx), float(ly)))
+
+        min_x = min(lx for lx, _ly in obstacle_local)
+        max_x = max(lx for lx, _ly in obstacle_local)
+        min_y = min(ly for _lx, ly in obstacle_local)
+        max_y = max(ly for _lx, ly in obstacle_local)
+        center_y = 0.5 * (min_y + max_y)
+        start_x = max(0.0, float(self.path_start_front_offset_m))
+
+        side_order = []
+        if preferred_direction == "left":
+            side_order = [1, -1]
+        elif preferred_direction == "right":
+            side_order = [-1, 1]
+        else:
+            side_order = [-1, 1] if center_y >= 0.0 else [1, -1]
+
+        clearance_y = (
+            self.robot_half_width
+            + self.obstacle_block_margin_m
+            + min(self.avoidance_trigger_margin_m, 0.15)
+            + 0.08
+        )
+        preview_x = max(
+            self.sidestep_avoidance_preview_m,
+            max_x + self.sidestep_avoidance_forward_margin_m + self.robot_length_m,
+            start_x + 1.0,
+        )
+
+        best_candidate = None
+        best_score = None
+        for side in side_order:
+            if side > 0:
+                required_offset = max_y + clearance_y
+            else:
+                required_offset = -(min_y - clearance_y)
+            required_offset = max(0.0, float(required_offset))
+            offset_candidates = sorted(
+                {
+                    self.sidestep_avoidance_min_offset_m,
+                    required_offset,
+                    required_offset + 0.15,
+                    required_offset + 0.30,
+                }
+            )
+            for offset_m in offset_candidates:
+                offset_m = max(
+                    self.sidestep_avoidance_min_offset_m, float(offset_m)
+                )
+                if offset_m > self.sidestep_avoidance_max_offset_m + 1e-6:
+                    continue
+                target_y = float(side) * offset_m
+                entry_x = max(start_x + 0.15, min_x - 0.20)
+                pass_x = max(
+                    entry_x + 0.35,
+                    max_x + self.sidestep_avoidance_forward_margin_m,
+                )
+                end_x = max(preview_x, pass_x + 0.35)
+                mid_x = start_x + 0.5 * max(0.20, entry_x - start_x)
+                local_waypoints = [
+                    (start_x, 0.0),
+                    (mid_x, 0.0),
+                    (entry_x, 0.35 * target_y),
+                    (0.5 * (entry_x + pass_x), 0.80 * target_y),
+                    (pass_x, target_y),
+                    (end_x, target_y),
+                ]
+                world_points = [
+                    self._local_to_map(local_x, local_y)
+                    for local_x, local_y in local_waypoints
+                ]
+                world_points = self._dedupe_world_points(world_points)
+                if len(world_points) < 3:
+                    continue
+
+                for smooth_passes in range(
+                    self.short_curved_avoidance_smooth_passes, -1, -1
+                ):
+                    if smooth_passes > 0:
+                        candidate_world = self._chaikin_smooth_world_points(
+                            world_points, passes=smooth_passes
+                        )
+                    else:
+                        candidate_world = world_points
+                    sampled_points, grid_path, metrics = (
+                        self._candidate_world_path_is_safe(
+                            candidate_world,
+                            dynamic_blocked,
+                            dg,
+                            start_cell,
+                            now_sec=now_sec,
+                        )
+                    )
+                    if sampled_points is None or grid_path is None:
+                        continue
+                    score = (
+                        0 if preferred_direction is None else int(side_order[0] != side),
+                        offset_m,
+                        float(metrics.get("max_curvature", 0.0))
+                        if metrics is not None
+                        else 0.0,
+                    )
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        best_candidate = (
+                            candidate_world,
+                            grid_path,
+                            sampled_points,
+                            metrics,
+                        )
+                    break
+
+        if best_candidate is None:
+            return None, None, None, None
+        return best_candidate
+
     @staticmethod
     def _dedupe_world_points(world_points):
         deduped = []
@@ -6564,6 +6774,39 @@ class ConstrainedLocalReplanner:
                 blocking_points_world=blocking_points,
                 preferred_direction=preferred_direction,
             )
+        if avoid_path is None and self.sidestep_avoidance_enabled:
+            (
+                curved_world_path,
+                avoid_path,
+                branch_history_points,
+                curved_metrics,
+            ) = self._build_sidestep_avoidance_path(
+                nominal_path,
+                dynamic_blocked,
+                start_cell,
+                dg,
+                blocked_idx=blocked_idx,
+                blocking_cells_world=blocking_cells,
+                blocking_points_world=blocking_points,
+                preferred_direction=preferred_direction,
+                now_sec=stamp.to_sec(),
+            )
+            if curved_world_path is not None and avoid_path is not None:
+                avoid_solution_kind = "sidestep"
+                rospy.loginfo_throttle(
+                    1.0,
+                    "constrained_local_replanner: using sidestep avoidance path | cells=%d pts=%d max_curv=%.2f max_heading_step=%.1fdeg",
+                    len(avoid_path),
+                    len(branch_history_points)
+                    if branch_history_points is not None
+                    else 0,
+                    float(curved_metrics.get("max_curvature", 0.0))
+                    if curved_metrics is not None
+                    else 0.0,
+                    float(curved_metrics.get("max_heading_delta_deg", 0.0))
+                    if curved_metrics is not None
+                    else 0.0,
+                )
         if avoid_path is None:
             if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
                 self._publish_stored_avoidance_path(
@@ -6709,7 +6952,7 @@ class ConstrainedLocalReplanner:
             self._clear_avoidance_path(frame_id, stamp, force=True)
             return "hold"
 
-        if avoid_solution_kind == "short_curved" and curved_world_path is not None:
+        if avoid_solution_kind in ("short_curved", "sidestep") and curved_world_path is not None:
             self._publish_world_avoidance_path(
                 curved_world_path,
                 dg,

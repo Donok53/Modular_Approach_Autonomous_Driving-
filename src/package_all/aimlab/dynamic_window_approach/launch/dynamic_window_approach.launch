@@ -310,6 +310,11 @@
     <arg name="avoidance_reuse_max_deviation_m" default="0.80"/>
     <arg name="avoidance_branch_backtrack_cells" default="8"/>
     <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
+    <arg name="sidestep_avoidance_enabled" default="true"/>
+    <arg name="sidestep_avoidance_min_offset_m" default="0.48"/>
+    <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
+    <arg name="sidestep_avoidance_preview_m" default="2.0"/>
+    <arg name="sidestep_avoidance_forward_margin_m" default="0.55"/>
     <arg name="avoidance_same_side_commitment_enabled" default="true"/>
     <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
     <arg name="avoidance_local_collapse_straights" default="true"/>
@@ -900,6 +905,11 @@
             <param name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
             <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
             <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+            <param name="sidestep_avoidance_enabled" value="$(arg sidestep_avoidance_enabled)"/>
+            <param name="sidestep_avoidance_min_offset_m" value="$(arg sidestep_avoidance_min_offset_m)"/>
+            <param name="sidestep_avoidance_max_offset_m" value="$(arg sidestep_avoidance_max_offset_m)"/>
+            <param name="sidestep_avoidance_preview_m" value="$(arg sidestep_avoidance_preview_m)"/>
+            <param name="sidestep_avoidance_forward_margin_m" value="$(arg sidestep_avoidance_forward_margin_m)"/>
             <param name="avoidance_same_side_commitment_enabled" value="$(arg avoidance_same_side_commitment_enabled)"/>
             <param name="avoidance_memory_only_trigger_enabled" value="$(arg avoidance_memory_only_trigger_enabled)"/>
             <param name="avoidance_local_collapse_straights" value="$(arg avoidance_local_collapse_straights)"/>
