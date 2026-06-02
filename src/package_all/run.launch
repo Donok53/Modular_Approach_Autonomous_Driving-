@@ -513,15 +513,15 @@
   <arg name="debug_avoidance_logging" default="true"/>
   <arg name="debug_avoidance_log_period_s" default="1.0"/>
   <arg name="static_obstacle_memory_enabled" default="true"/>
-  <arg name="static_obstacle_memory_ttl_s" default="1.0"/>
+  <arg name="static_obstacle_memory_ttl_s" default="0.6"/>
   <arg name="static_obstacle_memory_max_range_m" default="5.0"/>
   <arg name="static_obstacle_memory_max_support" default="8"/>
   <arg name="static_obstacle_memory_max_points" default="40"/>
   <arg name="static_obstacle_memory_persistence_frames" default="3"/>
-  <arg name="static_obstacle_memory_lock_ttl_s" default="4.0"/>
+  <arg name="static_obstacle_memory_lock_ttl_s" default="2.0"/>
   <arg name="static_obstacle_memory_locked_keep_range_m" default="4.5"/>
   <arg name="static_obstacle_memory_blind_zone_radius_m" default="1.40"/>
-  <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="5.0"/>
+  <arg name="static_obstacle_memory_blind_zone_hold_ttl_s" default="1.5"/>
   <arg name="known_map_subtraction_enabled" default="true"/>
   <arg name="known_map_subtraction_radius_m" default="0.30"/>
   <arg name="use_map_filtered_path_obstacle_trigger" default="true"/>
@@ -540,7 +540,7 @@
   <arg name="tracked_object_prediction_min_speed_mps" default="0.06"/>
   <arg name="tracked_object_virtual_margin_m" default="0.20"/>
   <arg name="near_field_object_memory_enabled" default="true"/>
-  <arg name="near_field_object_memory_ttl_s" default="2.5"/>
+  <arg name="near_field_object_memory_ttl_s" default="1.0"/>
   <arg name="near_field_object_memory_max_range_m" default="4.0"/>
   <arg name="near_field_object_memory_merge_radius_m" default="0.30"/>
   <arg name="near_field_object_memory_max_points" default="120"/>
@@ -557,10 +557,10 @@
   <arg name="global_obstacle_overlay_threshold" default="50"/>
   <arg name="global_pointcloud_overlay_persistence_frames" default="3"/>
   <arg name="global_pointcloud_overlay_static_lock_frames" default="5"/>
-  <arg name="global_pointcloud_overlay_ttl_s" default="2.0"/>
-  <arg name="global_pointcloud_overlay_static_lock_ttl_s" default="30.0"/>
+  <arg name="global_pointcloud_overlay_ttl_s" default="1.0"/>
+  <arg name="global_pointcloud_overlay_static_lock_ttl_s" default="8.0"/>
   <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
-  <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="6.0"/>
+  <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="1.5"/>
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
   <arg name="global_pointcloud_overlay_max_range_m" default="25.0"/>
   <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
