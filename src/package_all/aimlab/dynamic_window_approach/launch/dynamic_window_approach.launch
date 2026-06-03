@@ -299,6 +299,7 @@
     <arg name="pointcloud_block_confirm_points" default="1"/>
     <arg name="avoidance_min_overlay_points" default="1"/>
     <arg name="avoidance_min_cluster_count" default="1"/>
+    <arg name="avoidance_sparse_path_evidence_min_points" default="0"/>
     <arg name="avoidance_hold_s" default="1.5"/>
     <arg name="avoidance_clear_confirm_cycles" default="10"/>
     <arg name="avoidance_trigger_confirm_cycles" default="1"/>
@@ -896,6 +897,7 @@
             <param name="pointcloud_block_confirm_points" value="$(arg pointcloud_block_confirm_points)"/>
             <param name="avoidance_min_overlay_points" value="$(arg avoidance_min_overlay_points)"/>
             <param name="avoidance_min_cluster_count" value="$(arg avoidance_min_cluster_count)"/>
+            <param name="avoidance_sparse_path_evidence_min_points" value="$(arg avoidance_sparse_path_evidence_min_points)"/>
             <param name="avoidance_hold_s" value="$(arg avoidance_hold_s)"/>
             <param name="avoidance_clear_confirm_cycles" value="$(arg avoidance_clear_confirm_cycles)"/>
             <param name="avoidance_trigger_confirm_cycles" value="$(arg avoidance_trigger_confirm_cycles)"/>

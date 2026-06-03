@@ -516,6 +516,10 @@ class ConstrainedLocalReplanner:
         self.avoidance_min_cluster_count = max(
             1, int(rospy.get_param("~avoidance_min_cluster_count", 2))
         )
+        self.avoidance_sparse_path_evidence_min_points = max(
+            0,
+            int(rospy.get_param("~avoidance_sparse_path_evidence_min_points", 0)),
+        )
         self.avoidance_hold_s = max(0.0, float(rospy.get_param("~avoidance_hold_s", 1.5)))
         self.avoidance_clear_confirm_cycles = max(
             1, int(rospy.get_param("~avoidance_clear_confirm_cycles", 6))
@@ -6132,6 +6136,18 @@ class ConstrainedLocalReplanner:
             and int(summary.get("tracked_memory", 0)) <= 0
         )
 
+    @staticmethod
+    def _path_blocker_point_evidence_count(summary):
+        if not summary:
+            return 0
+        return (
+            int(summary.get("pc_current", 0))
+            + int(summary.get("map_filtered_path", 0))
+            + int(summary.get("pc_memory", 0))
+            + int(summary.get("tracked_current", 0))
+            + int(summary.get("tracked_memory", 0))
+        )
+
     def _grid_only_nominal_fallback_allowed(self, summary):
         if not self._is_grid_only_blocker_source_summary(summary):
             return False
@@ -6638,7 +6654,35 @@ class ConstrainedLocalReplanner:
                         or int(blocker_source_summary.get("tracked_memory", 0)) > 0
                     )
                 )
-                if memory_only_trigger and (not same_obstacle_episode):
+                sparse_point_trigger = (
+                    self.avoidance_sparse_path_evidence_min_points > 0
+                    and int(blocker_source_summary.get("grid_occ", 0)) <= 0
+                    and int(blocker_source_summary.get("risk", 0)) <= 0
+                    and str(blocker_source_summary.get("blind_zone", "none")) == "none"
+                    and self._path_blocker_point_evidence_count(blocker_source_summary)
+                    < self.avoidance_sparse_path_evidence_min_points
+                )
+                if sparse_point_trigger and (not same_obstacle_episode):
+                    path_evidence = self._path_blocker_point_evidence_count(
+                        blocker_source_summary
+                    )
+                    self._debug_avoidance_log(
+                        "constrained_local_replanner: suppressing sparse point avoidance trigger | reason={} path_evidence={} min={} pc={} map={} mem={} tracked={} tracked_mem={}".format(
+                            trigger_reason,
+                            path_evidence,
+                            self.avoidance_sparse_path_evidence_min_points,
+                            int(blocker_source_summary.get("pc_current", 0)),
+                            int(blocker_source_summary.get("map_filtered_path", 0)),
+                            int(blocker_source_summary.get("pc_memory", 0)),
+                            int(blocker_source_summary.get("tracked_current", 0)),
+                            int(blocker_source_summary.get("tracked_memory", 0)),
+                        )
+                    )
+                    trigger_reason = None
+                    trigger_key = None
+                    same_obstacle_episode = False
+                    preferred_direction = None
+                elif memory_only_trigger and (not same_obstacle_episode):
                     self._debug_avoidance_log(
                         "constrained_local_replanner: suppressing memory-only avoidance trigger | reason={} pc_mem={} tracked_mem={}".format(
                             trigger_reason,
