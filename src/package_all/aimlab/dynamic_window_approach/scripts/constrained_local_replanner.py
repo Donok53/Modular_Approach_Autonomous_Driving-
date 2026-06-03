@@ -6628,6 +6628,12 @@ class ConstrainedLocalReplanner:
                 and self.active_avoidance_obstacle_key is not None
                 and trigger_key == self.active_avoidance_obstacle_key
             )
+            active_same_obstacle_path = (
+                same_obstacle_episode
+                and self.avoidance_active
+                and self.last_avoidance_grid_path is not None
+                and len(self.last_avoidance_grid_path) >= 2
+            )
             if same_obstacle_episode and self.last_avoidance_direction in ("left", "right"):
                 preferred_direction = self.last_avoidance_direction
             if (
@@ -6661,6 +6667,7 @@ class ConstrainedLocalReplanner:
                     <= int(self.grid_only_nominal_fallback_max_cells)
                     and int(blocker_source_summary.get("risk", 0)) <= 0
                     and str(blocker_source_summary.get("blind_zone", "none")) == "none"
+                    and (not active_same_obstacle_path)
                     and self._path_blocker_point_evidence_count(blocker_source_summary)
                     < self.avoidance_sparse_path_evidence_min_points
                 )
@@ -6716,6 +6723,25 @@ class ConstrainedLocalReplanner:
             self._avoidance_trigger_confirmed(None, stamp)
             self._clear_blocking_obstacle_markers(stamp)
             if weak_evidence_suppressed:
+                if (not self._use_global_nominal_reference()) and self._hold_active_avoidance_until_endpoint(
+                    dg,
+                    stamp,
+                    clear_reason="weak_path_evidence",
+                ):
+                    self._publish_debug_text(
+                        self._build_debug_text(
+                            "avoid_hold",
+                            stamp,
+                            trigger_reason="weak_path_evidence",
+                            path_len=len(self.last_avoidance_grid_path)
+                            if self.last_avoidance_grid_path is not None
+                            else 0,
+                            overlay_points=obstacle_count,
+                        ),
+                        stamp=stamp,
+                        force=True,
+                    )
+                    return "avoidance"
                 self._clear_avoidance_path(frame_id, stamp, force=True)
                 self._publish_debug_text(
                     self._build_debug_text(

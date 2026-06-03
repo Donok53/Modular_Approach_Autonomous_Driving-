@@ -493,7 +493,7 @@
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="1.00"/>
   <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="avoidance_fast_reuse_window_s" default="$(eval '0.85' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
+  <arg name="avoidance_fast_reuse_window_s" default="$(eval '2.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
   <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.1' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
