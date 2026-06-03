@@ -44,7 +44,17 @@ class ReplannerNode {
   ros::Subscriber sub_global_path_;
   ros::Publisher pub_local_path_;
   ros::Publisher pub_path_mode_;
+  ros::Publisher pub_avoidance_path_;
+  ros::Publisher pub_path_history_;
+  ros::Publisher pub_travel_history_;
+  ros::Publisher pub_travel_history_path_;
+  ros::Publisher pub_recognized_obstacles_;
+  ros::Publisher pub_blocking_obstacles_;
+  ros::Publisher pub_global_overlay_;
+  ros::Publisher pub_debug_text_;
   ros::Timer timer_;
+
+  std::vector<WorldXY> travel_history_;
 
   std::mutex state_mu_;
   std::vector<WorldXY> latest_obstacle_points_;
@@ -64,6 +74,14 @@ class ReplannerNode {
   std::unique_ptr<AvoidanceStateMachine> sm_;
   std::string output_local_path_topic_{"/planning/local_path_cpp"};
   std::string output_path_mode_topic_{"/planning/path_mode_cpp"};
+  std::string output_avoidance_path_topic_{"/planning/avoidance_path_cpp"};
+  std::string output_path_history_topic_{"/planning/path_history_cpp"};
+  std::string output_travel_history_topic_{"/planning/travel_history_cpp"};
+  std::string output_travel_history_path_topic_{"/planning/travel_history_path_cpp"};
+  std::string output_recognized_obstacles_topic_{"/planning/recognized_obstacles_cpp"};
+  std::string output_blocking_obstacles_topic_{"/planning/blocking_obstacles_cpp"};
+  std::string output_global_overlay_topic_{"/planning/global_obstacle_overlay_cpp"};
+  std::string output_debug_text_topic_{"/planning/local_replanner_debug_text_cpp"};
   bool primary_mode_{false};
   double cloud_z_min_{0.10};
   double cloud_z_max_{1.30};

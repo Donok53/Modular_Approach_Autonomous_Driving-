@@ -62,6 +62,7 @@ add_library(${PROJECT_NAME}
   src/avoidance_planner.cpp
   src/avoidance_state.cpp
   src/branch_search.cpp
+  src/viz.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}

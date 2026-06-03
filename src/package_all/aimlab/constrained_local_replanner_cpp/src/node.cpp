@@ -15,6 +15,7 @@
 #include "constrained_local_replanner_cpp/cluster.hpp"
 #include "constrained_local_replanner_cpp/grid.hpp"
 #include "constrained_local_replanner_cpp/path_ops.hpp"
+#include "constrained_local_replanner_cpp/viz.hpp"
 
 namespace clr {
 
@@ -88,11 +89,27 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("global_path_topic", global_path_topic, global_path_topic);
   pnh_.param("primary_mode", primary_mode_, primary_mode_);
   if (primary_mode_) {
-    output_local_path_topic_ = "/planning/local_path";
-    output_path_mode_topic_  = "/planning/path_mode";
+    output_local_path_topic_            = "/planning/local_path";
+    output_path_mode_topic_             = "/planning/path_mode";
+    output_avoidance_path_topic_        = "/planning/avoidance_path";
+    output_path_history_topic_          = "/planning/path_history";
+    output_travel_history_topic_        = "/planning/travel_history";
+    output_travel_history_path_topic_   = "/planning/travel_history_path";
+    output_recognized_obstacles_topic_  = "/planning/recognized_obstacles";
+    output_blocking_obstacles_topic_    = "/planning/blocking_obstacles";
+    output_global_overlay_topic_        = "/planning/global_obstacle_overlay";
+    output_debug_text_topic_            = "/planning/local_replanner_debug_text";
   }
   pnh_.param("local_path_topic", output_local_path_topic_, output_local_path_topic_);
-  pnh_.param("path_mode_topic", output_path_mode_topic_, output_path_mode_topic_);
+  pnh_.param("path_mode_topic",  output_path_mode_topic_,  output_path_mode_topic_);
+  pnh_.param("avoidance_path_topic",        output_avoidance_path_topic_,        output_avoidance_path_topic_);
+  pnh_.param("path_history_topic",          output_path_history_topic_,          output_path_history_topic_);
+  pnh_.param("travel_history_topic",        output_travel_history_topic_,        output_travel_history_topic_);
+  pnh_.param("travel_history_path_topic",   output_travel_history_path_topic_,   output_travel_history_path_topic_);
+  pnh_.param("recognized_obstacles_topic",  output_recognized_obstacles_topic_,  output_recognized_obstacles_topic_);
+  pnh_.param("blocking_obstacles_topic",    output_blocking_obstacles_topic_,    output_blocking_obstacles_topic_);
+  pnh_.param("global_obstacle_overlay_topic", output_global_overlay_topic_,      output_global_overlay_topic_);
+  pnh_.param("debug_text_topic",            output_debug_text_topic_,            output_debug_text_topic_);
 
   pnh_.param("loop_period_s", loop_period_s_, loop_period_s_);
   pnh_.param("cloud_z_min_m", cloud_z_min_, cloud_z_min_);
@@ -134,8 +151,16 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              smc.locked_static_hold_radius_m);
   sm_ = std::make_unique<AvoidanceStateMachine>(smc);
 
-  pub_local_path_ = nh_.advertise<nav_msgs::Path>(output_local_path_topic_, 2, true);
-  pub_path_mode_  = nh_.advertise<std_msgs::String>(output_path_mode_topic_, 2, true);
+  pub_local_path_           = nh_.advertise<nav_msgs::Path>(output_local_path_topic_, 2, true);
+  pub_path_mode_            = nh_.advertise<std_msgs::String>(output_path_mode_topic_, 4, true);
+  pub_avoidance_path_       = nh_.advertise<nav_msgs::Path>(output_avoidance_path_topic_, 2, true);
+  pub_path_history_         = nh_.advertise<visualization_msgs::MarkerArray>(output_path_history_topic_, 2, true);
+  pub_travel_history_       = nh_.advertise<visualization_msgs::Marker>(output_travel_history_topic_, 2, true);
+  pub_travel_history_path_  = nh_.advertise<nav_msgs::Path>(output_travel_history_path_topic_, 2, true);
+  pub_recognized_obstacles_ = nh_.advertise<visualization_msgs::MarkerArray>(output_recognized_obstacles_topic_, 2);
+  pub_blocking_obstacles_   = nh_.advertise<visualization_msgs::MarkerArray>(output_blocking_obstacles_topic_, 2);
+  pub_global_overlay_       = nh_.advertise<nav_msgs::OccupancyGrid>(output_global_overlay_topic_, 1);
+  pub_debug_text_           = nh_.advertise<std_msgs::String>(output_debug_text_topic_, 5);
   sub_cloud_ = nh_.subscribe(cloud_topic, 2, &ReplannerNode::cloudCB, this);
   sub_grid_ = nh_.subscribe(grid_topic, 2, &ReplannerNode::gridCB, this);
   sub_odom_ = nh_.subscribe(odom_topic, 5, &ReplannerNode::odomCB, this);
@@ -354,6 +379,91 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   std_msgs::String mode_msg;
   mode_msg.data = pathModeToString(mode);
   pub_path_mode_.publish(mode_msg);
+
+  // ---- visualization mirror topics (RViz parity with Python) ----
+  const std::string frame = grid->header.frame_id;
+  const ros::Time now_stamp = out.header.stamp;
+
+  // /planning/avoidance_path: same content as local_path while
+  // FOLLOW_AVOIDANCE, empty otherwise.
+  nav_msgs::Path avoid_msg;
+  avoid_msg.header = out.header;
+  if (mode == PathMode::FOLLOW_AVOIDANCE) avoid_msg.poses = out.poses;
+  pub_avoidance_path_.publish(avoid_msg);
+
+  // /planning/recognized_obstacles + /planning/blocking_obstacles markers.
+  pub_recognized_obstacles_.publish(buildRecognizedObstaclesMarkers(
+      sm_->lockedList(), clusters, frame, now_stamp,
+      /*sphere_scale_m*/ 0.18, /*lifetime_s*/ 0.8));
+  pub_blocking_obstacles_.publish(buildBlockingObstacleMarkers(
+      blocker_world, /*active*/ nominal_blocked, frame, now_stamp,
+      /*radius_m*/ params_.obstacle_block_margin_m + 0.20,
+      /*lifetime_s*/ 0.8));
+
+  // /planning/global_obstacle_overlay republishes the blocked mask so the
+  // existing RViz overlay panel keeps working.
+  pub_global_overlay_.publish(buildOverlayGrid(g, blocked, frame, now_stamp));
+
+  // /planning/path_history: the current local path as a strip marker.
+  std::vector<WorldXY> current_path;
+  current_path.reserve(out.poses.size());
+  for (const auto& ps : out.poses) {
+    current_path.push_back(WorldXY{ps.pose.position.x, ps.pose.position.y});
+  }
+  pub_path_history_.publish(
+      buildPathHistoryMarkers(current_path, frame, now_stamp));
+
+  // /planning/travel_history + travel_history_path: accumulate the robot's
+  // own positions over time.
+  if (travel_history_.empty() ||
+      std::hypot(rx - travel_history_.back().x, ry - travel_history_.back().y)
+          > 0.10) {
+    travel_history_.push_back(WorldXY{rx, ry});
+    if (travel_history_.size() > 2000) {
+      travel_history_.erase(travel_history_.begin(),
+                            travel_history_.begin() + 500);
+    }
+  }
+  {
+    visualization_msgs::Marker tr;
+    tr.header.frame_id = frame;
+    tr.header.stamp = now_stamp;
+    tr.ns = "travel_history";
+    tr.id = 0;
+    tr.type = visualization_msgs::Marker::LINE_STRIP;
+    tr.action = visualization_msgs::Marker::ADD;
+    tr.scale.x = 0.05;
+    tr.color.a = 0.85;
+    tr.color.r = 0.85;
+    tr.color.g = 0.85;
+    tr.color.b = 0.0;
+    tr.pose.orientation.w = 1.0;
+    for (const auto& p : travel_history_) {
+      geometry_msgs::Point pt;
+      pt.x = p.x;
+      pt.y = p.y;
+      pt.z = 0.02;
+      tr.points.push_back(pt);
+    }
+    pub_travel_history_.publish(tr);
+
+    nav_msgs::Path tp;
+    tp.header.frame_id = frame;
+    tp.header.stamp = now_stamp;
+    for (const auto& p : travel_history_) {
+      geometry_msgs::PoseStamped ps;
+      ps.header = tp.header;
+      ps.pose.position.x = p.x;
+      ps.pose.position.y = p.y;
+      ps.pose.orientation.w = 1.0;
+      tp.poses.push_back(ps);
+    }
+    pub_travel_history_path_.publish(tp);
+  }
+
+  pub_debug_text_.publish(buildDebugText(
+      mode, nominal_blocked, candidate.found, cached_drivable, endpoint_dist,
+      clusters.size(), obstacle_pts.size()));
 
   ROS_INFO_THROTTLE(1.0,
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
