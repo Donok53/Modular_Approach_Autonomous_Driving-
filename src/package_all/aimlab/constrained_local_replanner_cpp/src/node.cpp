@@ -262,7 +262,16 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     global = latest_global_path_;
     obstacle_pts = latest_obstacle_points_;
   }
-  if (!grid || !odom || !global || global->poses.size() < 2) return;
+  if (!grid || !odom || !global || global->poses.size() < 2) {
+    const double tick_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - t_tick_start).count();
+    ROS_INFO_THROTTLE(1.0,
+        "cpp planner | skipped=missing_inputs grid=%d odom=%d global=%d gpts=%zu tick=%.1fms",
+        static_cast<int>(grid != nullptr), static_cast<int>(odom != nullptr),
+        static_cast<int>(global != nullptr),
+        global ? global->poses.size() : 0u, tick_ms);
+    return;
+  }
 
   const OccupancyView g = fromOccupancyGrid(*grid);
   auto blocked = baseBlockedMask(g, params_.grid_unknown_is_occupied);
@@ -292,7 +301,14 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   const std::size_t near_idx = nearestIndex(global_world, rx, ry);
   const auto nominal_world = truncateWorld(global_world, near_idx, params_.lookahead_m);
   const auto nominal_cells = worldPointsToGridPath(nominal_world, g);
-  if (nominal_cells.size() < 2) return;
+  if (nominal_cells.size() < 2) {
+    const double tick_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - t_tick_start).count();
+    ROS_INFO_THROTTLE(1.0,
+        "cpp planner | skipped=at_goal_or_short_nominal near_idx=%zu nominal_cells=%zu tick=%.1fms",
+        near_idx, nominal_cells.size(), tick_ms);
+    return;
+  }
 
   // Is the nominal path blocked ahead?
   const bool nominal_blocked =
