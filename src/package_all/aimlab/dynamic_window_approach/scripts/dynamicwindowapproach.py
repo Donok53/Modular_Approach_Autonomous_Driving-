@@ -4979,7 +4979,10 @@ class DWAControl:
             self._emergency_bypass_active = bool(avoidance_can_continue)
             bypass_reject = self._emergency_bypass_debug.get("reject") \
                 if isinstance(self._emergency_bypass_debug, dict) else None
-            if bypass_reject:
+            # Only surface bypass_blocked when an emergency stop is actually
+            # latched — otherwise this dict is just bookkeeping for the case
+            # where bypass would not have been needed (e.g. clearance=inf).
+            if bypass_reject and self.enable_emergency_stop and self.emergency_blocked:
                 rospy.loginfo_throttle(
                     0.5,
                     "bypass_blocked: reason=%s clearance=%.2f path_age=%.2f lat_dev=%.2f",
