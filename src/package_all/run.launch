@@ -712,9 +712,14 @@
   <arg name="near_field_raw_stop_tf_timeout_s" default="0.02"/>
   <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
   <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
-  <arg name="near_field_raw_stop_min_x_m" default="0.30"/>
+  <arg name="near_field_raw_stop_min_x_m" default="0.35"/>
   <arg name="near_field_raw_stop_max_x_m" default="0.75"/>
-  <arg name="near_field_raw_stop_half_width_m" default="0.28"/>
+  <!-- Narrowed from 0.28 to 0.18 m so the safety stop only catches
+       obstacles in front of the robot's centre column. Anything beside
+       the robot during a sidestep is filtered out (the planner already
+       knows about it). 0.18 m is ~60% of the robot half-width, leaving
+       a guard band but not the full footprint. -->
+  <arg name="near_field_raw_stop_half_width_m" default="0.18"/>
   <arg name="near_field_raw_stop_min_z_m" default="0.08"/>
   <arg name="near_field_raw_stop_max_z_m" default="0.70"/>
   <arg name="near_field_raw_stop_min_points" default="2"/>
