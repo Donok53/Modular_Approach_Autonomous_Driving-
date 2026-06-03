@@ -4700,6 +4700,19 @@ class ConstrainedLocalReplanner:
                 return False
             if int(source_summary.get("tracked_memory", 0)) > 0:
                 return False
+            # Strong-evidence guard: if both the drivable grid and the
+            # current point cloud confirm a blocker on the path, refuse to
+            # silently continue down the nominal path. The cmd_vel relay
+            # would otherwise drive into the obstacle since near_field_raw
+            # safety stop can fail (e.g. broken TF).
+            grid_occ = int(source_summary.get("grid_occ", 0))
+            pc_current = int(source_summary.get("pc_current", 0))
+            if grid_occ >= 1 and pc_current >= 1:
+                return False
+            if grid_occ >= 3:
+                return False
+            if pc_current >= 2:
+                return False
 
         if self.tracked_object_count > 0 or self.tracked_object_memory_count > 0:
             return False

@@ -1348,8 +1348,19 @@ class DWAControl:
             ).to_sec() <= self.near_field_raw_stop_timeout_s
         )
         near_raw_hold_active = rospy.Time.now() < self._near_field_raw_stop_hold_until
-        near_raw_blocked = near_raw_hold_active or (
-            self._near_field_raw_stop_blocked and near_raw_fresh
+        # Fail-safe: when the LiDAR TF is broken the raw-stop ROI is being
+        # checked in the wrong frame and always reports "clear". Treat the
+        # broken-TF status as a stop so the robot does not drive blind.
+        tf_status = str(self._near_field_raw_stop_tf_status or "")
+        near_raw_tf_failsafe = tf_status in (
+            "raw_fallback_tf_missing",
+            "tf_missing",
+            "tf_buffer_missing",
+        )
+        near_raw_blocked = (
+            near_raw_hold_active
+            or (self._near_field_raw_stop_blocked and near_raw_fresh)
+            or near_raw_tf_failsafe
         )
 
         raw_fallback_blocked = self.enable_raw_cloud_fallback_stop and (
@@ -1366,7 +1377,10 @@ class DWAControl:
             if self.overlay_box_blocked:
                 source_parts.append("overlay_boxes")
             if near_raw_blocked:
-                source_parts.append("near_raw")
+                source_parts.append("near_raw_tf_failsafe" if near_raw_tf_failsafe
+                                    and not (near_raw_hold_active
+                                             or self._near_field_raw_stop_blocked)
+                                    else "near_raw")
             if self._raw_immediate_contact_blocked:
                 source_parts.append("raw_intrusion")
             elif raw_fallback_blocked:
@@ -1379,7 +1393,10 @@ class DWAControl:
             )
             source_parts = []
             if near_raw_blocked:
-                source_parts.append("near_raw")
+                source_parts.append("near_raw_tf_failsafe" if near_raw_tf_failsafe
+                                    and not (near_raw_hold_active
+                                             or self._near_field_raw_stop_blocked)
+                                    else "near_raw")
             if self._raw_immediate_contact_blocked:
                 source_parts.append("raw_intrusion")
             elif self._raw_emergency_band_blocked:
