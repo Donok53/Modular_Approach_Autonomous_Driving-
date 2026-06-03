@@ -204,9 +204,9 @@
   <arg name="near_field_raw_overlay_min_z_m" default="0.08"/>
   <arg name="near_field_raw_overlay_max_z_m" default="1.40"/>
   <arg name="near_field_raw_overlay_downsample" default="2"/>
-  <arg name="near_field_raw_overlay_max_update_hz" default="4.0"/>
-  <arg name="near_field_raw_overlay_uv_row_step" default="2"/>
-  <arg name="near_field_raw_overlay_uv_col_step" default="4"/>
+  <arg name="near_field_raw_overlay_max_update_hz" default="$(eval '2.0' if str(arg('localization_environment')).lower() == 'outdoor' else '4.0')"/>
+  <arg name="near_field_raw_overlay_uv_row_step" default="$(eval '4' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
+  <arg name="near_field_raw_overlay_uv_col_step" default="$(eval '8' if str(arg('localization_environment')).lower() == 'outdoor' else '4')"/>
   <arg name="near_field_raw_overlay_min_points" default="3"/>
   <arg name="near_field_raw_overlay_min_cells" default="1"/>
   <arg name="near_field_raw_overlay_min_points_per_cell" default="2"/>
@@ -223,7 +223,7 @@
   <arg name="near_field_raw_debug_min_z_m" default="-0.35"/>
   <arg name="near_field_raw_debug_max_z_m" default="1.50"/>
   <arg name="near_field_raw_debug_publish_hz" default="1.0"/>
-  <arg name="near_field_raw_debug_max_points" default="1200"/>
+  <arg name="near_field_raw_debug_max_points" default="$(eval '400' if str(arg('localization_environment')).lower() == 'outdoor' else '1200')"/>
   <arg name="near_field_raw_overlay_log_period_s" default="2.0"/>
   <arg name="cmd_vel_topic" default="/cmd_vel"/>
   <arg name="teb_publish_astar_via_points" default="true"/>
@@ -490,6 +490,8 @@
   <arg name="avoidance_clear_detour_hold_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.00')"/>
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="1.00"/>
+  <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="avoidance_fast_reuse_window_s" default="$(eval '0.75' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
   <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.1' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
@@ -562,15 +564,15 @@
   <arg name="global_pointcloud_overlay_blind_zone_radius_m" default="1.40"/>
   <arg name="global_pointcloud_overlay_blind_zone_hold_ttl_s" default="1.5"/>
   <arg name="global_pointcloud_overlay_merge_radius_m" default="0.25"/>
-  <arg name="global_pointcloud_overlay_max_range_m" default="$(eval '12.0' if str(arg('localization_environment')).lower() == 'outdoor' else '25.0')"/>
+  <arg name="global_pointcloud_overlay_max_range_m" default="$(eval '10.0' if str(arg('localization_environment')).lower() == 'outdoor' else '25.0')"/>
   <arg name="global_pointcloud_overlay_static_lock_keep_range_m" default="15.0"/>
   <arg name="global_pointcloud_overlay_static_box_margin_m" default="0.06"/>
-  <arg name="global_pointcloud_overlay_lookahead_m" default="$(eval '10.0' if str(arg('localization_environment')).lower() == 'outdoor' else '25.0')"/>
-  <arg name="global_pointcloud_overlay_corridor_margin_m" default="$(eval '0.8' if str(arg('localization_environment')).lower() == 'outdoor' else '1.3')"/>
+  <arg name="global_pointcloud_overlay_lookahead_m" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '25.0')"/>
+  <arg name="global_pointcloud_overlay_corridor_margin_m" default="$(eval '0.7' if str(arg('localization_environment')).lower() == 'outdoor' else '1.3')"/>
   <arg name="global_pointcloud_overlay_forward_min_x_m" default="-0.50"/>
-  <arg name="global_pointcloud_overlay_lateral_max_m" default="$(eval '4.5' if str(arg('localization_environment')).lower() == 'outdoor' else '8.0')"/>
+  <arg name="global_pointcloud_overlay_lateral_max_m" default="$(eval '3.5' if str(arg('localization_environment')).lower() == 'outdoor' else '8.0')"/>
   <arg name="global_pointcloud_overlay_near_range_m" default="8.0"/>
-  <arg name="global_pointcloud_overlay_mid_range_m" default="$(eval '10.0' if str(arg('localization_environment')).lower() == 'outdoor' else '16.0')"/>
+  <arg name="global_pointcloud_overlay_mid_range_m" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '16.0')"/>
   <arg name="global_pointcloud_overlay_near_min_points" default="2"/>
   <arg name="global_pointcloud_overlay_mid_min_points" default="6"/>
   <arg name="global_pointcloud_overlay_far_min_points" default="12"/>
@@ -587,9 +589,9 @@
   <arg name="global_pointcloud_overlay_caution_confirm_frames" default="3"/>
   <arg name="global_pointcloud_overlay_evidence_ttl_s" default="0.9"/>
   <arg name="global_pointcloud_overlay_evidence_resolution_m" default="0.6"/>
-  <arg name="global_pointcloud_overlay_max_points" default="$(eval '90' if str(arg('localization_environment')).lower() == 'outdoor' else '200')"/>
-  <arg name="global_pointcloud_overlay_max_update_hz" default="$(eval '3.0' if str(arg('localization_environment')).lower() == 'outdoor' else '5.0')"/>
-  <arg name="global_obstacle_overlay_downsample" default="1"/>
+  <arg name="global_pointcloud_overlay_max_points" default="$(eval '60' if str(arg('localization_environment')).lower() == 'outdoor' else '200')"/>
+  <arg name="global_pointcloud_overlay_max_update_hz" default="$(eval '2.0' if str(arg('localization_environment')).lower() == 'outdoor' else '5.0')"/>
+  <arg name="global_obstacle_overlay_downsample" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '1')"/>
   <arg name="global_obstacle_overlay_obstacle_max_range_m" default="25.0"/>
   <arg name="enable_planning_slowdown_manager" default="true"/>
   <arg name="planning_slowdown_speed_limit_mps" default="0.65"/>
@@ -1333,6 +1335,8 @@
       <arg name="avoidance_clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
       <arg name="avoidance_reuse_on_failure_s" value="$(arg avoidance_reuse_on_failure_s)"/>
       <arg name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
+      <arg name="avoidance_fast_reuse_enabled" value="$(arg avoidance_fast_reuse_enabled)"/>
+      <arg name="avoidance_fast_reuse_window_s" value="$(arg avoidance_fast_reuse_window_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="sidestep_avoidance_enabled" value="$(arg sidestep_avoidance_enabled)"/>
@@ -1620,6 +1624,8 @@
       <arg name="avoidance_keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="avoidance_reuse_on_failure_s" value="$(arg avoidance_reuse_on_failure_s)"/>
       <arg name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
+      <arg name="avoidance_fast_reuse_enabled" value="$(arg avoidance_fast_reuse_enabled)"/>
+      <arg name="avoidance_fast_reuse_window_s" value="$(arg avoidance_fast_reuse_window_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="sidestep_avoidance_enabled" value="$(arg sidestep_avoidance_enabled)"/>

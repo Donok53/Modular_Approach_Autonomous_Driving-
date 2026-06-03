@@ -535,6 +535,12 @@ class ConstrainedLocalReplanner:
         self.avoidance_reuse_max_deviation_m = max(
             0.0, float(rospy.get_param("~avoidance_reuse_max_deviation_m", 0.8))
         )
+        self.avoidance_fast_reuse_enabled = bool(
+            rospy.get_param("~avoidance_fast_reuse_enabled", False)
+        )
+        self.avoidance_fast_reuse_window_s = max(
+            0.0, float(rospy.get_param("~avoidance_fast_reuse_window_s", 0.0))
+        )
         self.avoidance_keep_until_endpoint_distance_m = max(
             0.10,
             float(
@@ -759,6 +765,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_world_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.last_avoidance_validation_sec = 0.0
         self.last_avoidance_active_sec = 0.0
         self.active_avoidance_obstacle_key = None
         self.pending_avoidance_trigger_key = None
@@ -1676,6 +1683,7 @@ class ConstrainedLocalReplanner:
         sig = self._path_signature_from_points(pts)
         if sig != self.global_path_signature:
             self.global_nominal_progress_idx = 0
+            self.last_avoidance_validation_sec = 0.0
             self.global_path_signature = sig
         self.global_path = msg
 
@@ -2589,6 +2597,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_world_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.last_avoidance_validation_sec = 0.0
         self.last_avoidance_active_sec = 0.0
         self._reset_pending_avoidance_trigger()
         self.local_blocked_since_sec = 0.0
@@ -4796,6 +4805,7 @@ class ConstrainedLocalReplanner:
         self.last_avoidance_grid_path = None
         self.last_avoidance_world_path = None
         self.last_avoidance_solution_sec = 0.0
+        self.last_avoidance_validation_sec = 0.0
 
     def _grid_path_min_distance_to_xy(self, grid_path, dg, x, y):
         if not grid_path:
@@ -4937,6 +4947,73 @@ class ConstrainedLocalReplanner:
         )
         return True
 
+    def _fast_reuse_active_avoidance_path(self, dg, stamp):
+        if (
+            (not self.avoidance_fast_reuse_enabled)
+            or self.avoidance_fast_reuse_window_s <= 0.0
+            or (not self.avoidance_active)
+            or self.last_avoidance_grid_path is None
+            or len(self.last_avoidance_grid_path) < 2
+        ):
+            return False
+        validation_sec = float(self.last_avoidance_validation_sec)
+        if validation_sec <= 0.0:
+            return False
+        now_sec = stamp.to_sec()
+        validation_age_s = now_sec - validation_sec
+        if validation_age_s < 0.0 or validation_age_s > self.avoidance_fast_reuse_window_s:
+            return False
+        endpoint_dist_m = self._grid_path_endpoint_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        if endpoint_dist_m <= self.avoidance_keep_until_endpoint_distance_m:
+            return False
+        deviation_m = self._grid_path_min_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        deviation_limit_m = max(
+            0.45,
+            self.avoidance_reuse_max_deviation_m,
+            self.robot_length_m * 1.6,
+            self.robot_width_m * 2.2,
+        )
+        if deviation_m > deviation_limit_m:
+            return False
+        if self._path_blind_zone_turn_conflict(
+            self.last_avoidance_grid_path, dg, now_sec=now_sec
+        ) is not None:
+            return False
+        if not self._publish_stored_avoidance_path(dg, stamp, record_history=False):
+            return False
+        self.avoidance_active = True
+        self.avoidance_clear_count = 0
+        self.last_avoidance_publish_sec = now_sec
+        rospy.loginfo_throttle(
+            1.0,
+            "constrained_local_replanner: fast-reusing active avoidance path | age=%.2fs dev=%.2fm end=%.2fm",
+            validation_age_s,
+            deviation_m,
+            endpoint_dist_m,
+        )
+        self._publish_debug_text(
+            self._build_debug_text(
+                "avoid_fast_reuse",
+                stamp,
+                trigger_reason=self.last_avoidance_trigger_reason
+                if self.last_avoidance_trigger_reason
+                else "recent_valid_avoidance",
+                path_len=len(self.last_avoidance_grid_path),
+            ),
+            stamp=stamp,
+        )
+        return True
+
     def _continue_active_avoidance_path(
         self,
         dg,
@@ -4986,6 +5063,7 @@ class ConstrainedLocalReplanner:
             return False
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
+        self.last_avoidance_validation_sec = stamp.to_sec()
         rospy.loginfo_throttle(
             1.0,
             "constrained_local_replanner: reusing active avoidance path | dev=%.2fm cells=%d blocked=%s same_obstacle=%s",
@@ -6994,6 +7072,7 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_count = 0
         self.last_avoidance_publish_sec = stamp.to_sec()
         self.last_avoidance_solution_sec = stamp.to_sec()
+        self.last_avoidance_validation_sec = stamp.to_sec()
         if (not self.avoidance_active) or trigger_reason != self.last_avoidance_trigger_reason or avoid_direction != self.last_avoidance_direction:
             action_taken = "avoid_{}".format(avoid_direction) if avoid_direction in ("left", "right") else "avoid"
             self._publish_explainability(
@@ -7294,6 +7373,8 @@ class ConstrainedLocalReplanner:
                     self._build_debug_text("no_global_path", stamp, trigger_reason="missing_global"),
                     stamp=stamp,
                 )
+                return
+            if self._fast_reuse_active_avoidance_path(dg, stamp):
                 return
             i0 = self._nominal_global_start_index(pts)
             nominal_horizon_m = self.lookahead_m
