@@ -122,8 +122,8 @@
   <arg name="max_los_segment_m" default="4.0"/>
   <arg name="published_path_spacing_m" default="0.25"/>
   <arg name="path_history_max_paths" default="12"/>
-  <arg name="local_replan_hz" default="$(eval '5.0' if str(arg('localization_environment')).lower() == 'outdoor' else '3.0')"/>
-  <arg name="local_replan_lookahead_m" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '7.0')"/>
+  <arg name="local_replan_hz" default="3.0"/>
+  <arg name="local_replan_lookahead_m" default="$(eval '9.0' if str(arg('localization_environment')).lower() == 'outdoor' else '7.0')"/>
   <arg name="allow_best_effort_local_path" default="true"/>
   <arg name="best_effort_max_goal_gap_m" default="0.90"/>
   <arg name="enable_avoidance_path" default="$(arg enable_local_replanner)"/>
@@ -474,7 +474,7 @@
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
   <arg name="obstacle_block_margin_m" default="0.18"/>
   <arg name="avoidance_trigger_margin_m" default="0.12"/>
-  <arg name="avoidance_trigger_ahead_m" default="$(eval '7.5' if str(arg('localization_environment')).lower() == 'outdoor' else max(7.0, min(float(arg('local_replan_lookahead_m')), 8.0)))"/>
+  <arg name="avoidance_trigger_ahead_m" default="$(eval '9.0' if str(arg('localization_environment')).lower() == 'outdoor' else max(7.0, min(float(arg('local_replan_lookahead_m')), 8.0)))"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
   <arg name="risk_block_confirm_cells" default="2"/>
@@ -491,7 +491,7 @@
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="1.00"/>
   <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="avoidance_fast_reuse_window_s" default="$(eval '0.75' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
+  <arg name="avoidance_fast_reuse_window_s" default="$(eval '2.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
   <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.1' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
