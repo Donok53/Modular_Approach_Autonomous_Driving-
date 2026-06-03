@@ -35,6 +35,10 @@ class AvoidanceStateMachine {
     double locked_static_hit_radius_m{0.40};
     int locked_static_persistence_hits{3};
     double locked_static_hold_radius_m{3.0};
+    // If HOLD persists this long with no candidate, fall through to
+    // FOLLOW_LOCAL so the robot stops being stuck. DWA's near_field
+    // safety stop still catches genuine collision threats.
+    double hold_escape_timeout_s{5.0};
   };
 
   AvoidanceStateMachine() : cfg_(Config()) {}
@@ -73,6 +77,7 @@ class AvoidanceStateMachine {
   int confirm_count_{0};
   double last_clear_seen_sec_{0.0};
   double avoidance_entry_sec_{0.0};
+  double hold_entry_sec_{0.0};
   std::vector<LockedStatic> locked_;
 };
 

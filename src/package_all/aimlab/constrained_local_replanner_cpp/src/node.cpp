@@ -155,6 +155,8 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              smc.locked_static_persistence_hits);
   pnh_.param("locked_static_hold_radius_m", smc.locked_static_hold_radius_m,
              smc.locked_static_hold_radius_m);
+  pnh_.param("hold_escape_timeout_s", smc.hold_escape_timeout_s,
+             smc.hold_escape_timeout_s);
   sm_ = std::make_unique<AvoidanceStateMachine>(smc);
 
   pub_local_path_           = nh_.advertise<nav_msgs::Path>(output_local_path_topic_, 2, true);

@@ -34,6 +34,7 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
           // Blocker confirmed but no detour found — escalate to HOLD until
           // either obstacle clears or a candidate appears.
           mode_ = PathMode::HOLD;
+          hold_entry_sec_ = now_sec;
           confirm_count_ = 0;
         }
       } else {
@@ -54,6 +55,7 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
       if (stale && !avoidance_candidate_available) {
         // Cached path lost validity and no fresh candidate — bail to HOLD.
         mode_ = PathMode::HOLD;
+        hold_entry_sec_ = now_sec;
         break;
       }
       const bool clear_long_enough =
@@ -72,9 +74,21 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
         mode_ = PathMode::FOLLOW_AVOIDANCE;
         avoidance_entry_sec_ = now_sec;
         last_clear_seen_sec_ = 0.0;
+        hold_entry_sec_ = 0.0;
       } else if (!nominal_blocked) {
         mode_ = PathMode::FOLLOW_LOCAL;
         confirm_count_ = 0;
+        hold_entry_sec_ = 0.0;
+      } else if (hold_entry_sec_ > 0.0 &&
+                 cfg_.hold_escape_timeout_s > 0.0 &&
+                 (now_sec - hold_entry_sec_) > cfg_.hold_escape_timeout_s) {
+        // Stuck-escape: HOLD with no candidate for too long is worse than
+        // returning to nominal — the DWA near-field safety stop will catch
+        // a genuine close obstacle. Without this the robot froze in place
+        // for 14-22 s in the field.
+        mode_ = PathMode::FOLLOW_LOCAL;
+        confirm_count_ = 0;
+        hold_entry_sec_ = 0.0;
       }
       break;
     }
