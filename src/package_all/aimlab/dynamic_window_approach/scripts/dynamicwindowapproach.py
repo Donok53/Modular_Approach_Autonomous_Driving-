@@ -411,6 +411,24 @@ class DWAControl:
             0.02,
             float(rospy.get_param("~emergency_bypass_max_lateral_dev_m", 0.10)),
         )
+        # Post-stop rotation recovery: when emergency stop is latched and the
+        # robot is misaligned with an active avoidance path, allow a slow
+        # in-place rotation toward the path instead of zeroing the whole Twist.
+        self.post_stop_rotation_enabled = bool(
+            rospy.get_param("~post_stop_rotation_enabled", True)
+        )
+        self.post_stop_rotation_min_yaw_err_deg = max(
+            1.0,
+            float(rospy.get_param("~post_stop_rotation_min_yaw_err_deg", 8.0)),
+        )
+        self.post_stop_rotation_max_rate_rps = max(
+            0.05,
+            float(rospy.get_param("~post_stop_rotation_max_rate_rps", 0.35)),
+        )
+        self.post_stop_rotation_preview_idx = max(
+            1,
+            int(rospy.get_param("~post_stop_rotation_preview_idx", 3)),
+        )
         self.enable_reverse_recovery = bool(
             rospy.get_param("~enable_reverse_recovery", False)
         )
@@ -1162,12 +1180,66 @@ class DWAControl:
             return
         try:
             if self._publish_emergency_stop_state():
-                self.last_cmd = Twist()
+                rotation_cmd = self._post_stop_rotation_cmd()
+                if rotation_cmd is not None:
+                    self.last_cmd = rotation_cmd
+                else:
+                    self.last_cmd = Twist()
                 self._last_cmd_smooth_stamp = rospy.Time.now()
             self.cmd_vel_pub.publish(self.last_cmd)
             self._refresh_near_field_raw_stop_marker_if_waiting()
         except rospy.ROSException:
             pass
+
+    def _post_stop_rotation_cmd(self):
+        # When emergency stop fires while the avoidance bypass was rejected
+        # because the robot drifted off the cached path (or the path is
+        # stale), the robot would otherwise be stuck. Issue a zero-linear
+        # rotation toward the avoidance path so the robot can realign and
+        # let bypass re-engage on the next tick.
+        if not self.post_stop_rotation_enabled:
+            return None
+        if not self._avoidance_mode_active():
+            return None
+        if self.behavior_stop:
+            return None
+        reject = None
+        if isinstance(self._emergency_bypass_debug, dict):
+            reject = self._emergency_bypass_debug.get("reject")
+        if reject not in ("lateral_dev", "path_stale"):
+            return None
+        if not self.path_pts or len(self.path_pts) < 2:
+            return None
+        try:
+            pose_x = float(self.current_pose.pose.pose.position.x)
+            pose_y = float(self.current_pose.pose.pose.position.y)
+            yaw = self.get_yaw_from_quaternion(
+                self.current_pose.pose.pose.orientation
+            )
+        except Exception:
+            return None
+        idx = min(self.post_stop_rotation_preview_idx, len(self.path_pts) - 1)
+        tx, ty = self.path_pts[idx]
+        dx = float(tx) - pose_x
+        dy = float(ty) - pose_y
+        if math.hypot(dx, dy) < 0.05:
+            return None
+        target_heading = math.atan2(dy, dx)
+        yaw_err = angdiff(target_heading, yaw)
+        if abs(yaw_err) < math.radians(self.post_stop_rotation_min_yaw_err_deg):
+            return None
+        rate = min(self.post_stop_rotation_max_rate_rps,
+                   max(0.10, abs(yaw_err) * 0.8))
+        out = Twist()
+        out.angular.z = rate if yaw_err > 0.0 else -rate
+        rospy.loginfo_throttle(
+            0.5,
+            "post_stop_rotation: yaw_err=%.1fdeg rate=%.2frad/s reject=%s",
+            math.degrees(yaw_err),
+            out.angular.z,
+            reject,
+        )
+        return out
 
     def _hard_stop_active(self):
         # A planned avoidance detour may continue through the outer emergency band

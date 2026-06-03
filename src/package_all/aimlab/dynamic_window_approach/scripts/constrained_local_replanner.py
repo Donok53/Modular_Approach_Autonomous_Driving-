@@ -5044,11 +5044,16 @@ class ConstrainedLocalReplanner:
         )
         deviation_limit_m = max(0.25, min(0.55, self.avoidance_reuse_max_deviation_m))
         if same_obstacle_episode:
+            # Earlier this allowed deviation up to ~robot_width * 2 (≈1.1 m).
+            # Field logs showed the robot drifting 0.8 m off the cached path
+            # while the planner kept reusing it, never recomputing from the
+            # robot's current pose. Tighten so we always force a fresh search
+            # once the deviation grows beyond a single robot footprint.
             deviation_limit_m = max(
                 deviation_limit_m,
-                self.robot_length_m * 1.40,
-                self.robot_width_m * 2.0,
+                min(self.robot_length_m, self.robot_width_m * 1.0),
             )
+            deviation_limit_m = min(deviation_limit_m, 0.40)
         deviation_m = self._grid_path_min_distance_to_xy(
             self.last_avoidance_grid_path,
             dg,
