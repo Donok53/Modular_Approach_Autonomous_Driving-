@@ -62,10 +62,13 @@
   <arg name="enable_cloud_tracker" default="false"/>
   <arg name="enable_dynamic_risk_manager" default="false"/>
   <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <!-- Default: outdoor runs the C++ replanner instead of the Python one.
-       Set use_cpp_replanner:=false on the roslaunch command line to fall
-       back to the Python constrained_local_replanner. -->
-  <arg name="use_cpp_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <!-- Default: Python constrained_local_replanner stays authoritative so
+       RViz keeps showing the full set of visualization topics
+       (avoidance_path, blocking_obstacles markers, debug_text, etc.) that
+       the C++ port has not implemented yet. Opt into the C++ replanner
+       with use_cpp_replanner:=true on the command line for latency
+       experiments. -->
+  <arg name="use_cpp_replanner" default="false"/>
   <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' or str(arg('enable_local_replanner')).lower() == 'true' else 'true')"/>
   <arg name="use_dynamic_risk_grid" default="false"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
