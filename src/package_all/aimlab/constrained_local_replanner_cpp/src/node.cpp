@@ -10,6 +10,9 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <std_msgs/String.h>
 #include <tf2/utils.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <chrono>
 
 #include "constrained_local_replanner_cpp/branch_search.hpp"
 #include "constrained_local_replanner_cpp/cluster.hpp"
@@ -78,6 +81,9 @@ std::vector<WorldXY> samplePath(const std::vector<GridCell>& grid_path,
 
 ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
     : nh_(nh), pnh_(pnh) {
+  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(tf_buffer_);
+  pnh_.param("target_frame", target_frame_, target_frame_);
+  pnh_.param("tf_wait_s", tf_wait_s_, tf_wait_s_);
   std::string cloud_topic = "/ouster/points";
   std::string grid_topic = "/lio_sam/drivable_area/grid";
   std::string odom_topic = "/lio_localizer/odometry/optimization";
@@ -176,14 +182,51 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
 
 void ReplannerNode::cloudCB(const sensor_msgs::PointCloud2::ConstPtr& msg) {
   if (!msg) return;
+
+  // Resolve sensor-frame -> planner-frame transform at the cloud stamp.
+  // Fall back to the latest known transform if the exact stamp is not yet
+  // in the buffer.
+  geometry_msgs::TransformStamped tf;
+  try {
+    tf = tf_buffer_.lookupTransform(target_frame_, msg->header.frame_id,
+                                    msg->header.stamp,
+                                    ros::Duration(tf_wait_s_));
+  } catch (const tf2::TransformException&) {
+    try {
+      tf = tf_buffer_.lookupTransform(target_frame_, msg->header.frame_id,
+                                      ros::Time(0));
+    } catch (const tf2::TransformException& ex2) {
+      ROS_WARN_THROTTLE(1.0, "cpp planner: TF %s -> %s unavailable: %s",
+                        msg->header.frame_id.c_str(), target_frame_.c_str(),
+                        ex2.what());
+      return;
+    }
+  }
+
+  // Build a 2D rotation/translation from the transform — we drop z later.
+  const double tx = tf.transform.translation.x;
+  const double ty = tf.transform.translation.y;
+  const double tz = tf.transform.translation.z;
+  tf2::Quaternion q(tf.transform.rotation.x, tf.transform.rotation.y,
+                    tf.transform.rotation.z, tf.transform.rotation.w);
+  tf2::Matrix3x3 R(q);
+
   pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
   pcl::fromROSMsg(*msg, pcl_cloud);
   std::vector<WorldXY> pts;
   pts.reserve(pcl_cloud.size() / 4);
   for (const auto& p : pcl_cloud.points) {
     if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) continue;
+    // z gating is in sensor frame (height above sensor); apply before
+    // transform so the gating bounds match Python's behaviour.
     if (p.z < cloud_z_min_ || p.z > cloud_z_max_) continue;
-    pts.push_back(WorldXY{static_cast<double>(p.x), static_cast<double>(p.y)});
+    const double wx = R[0][0] * p.x + R[0][1] * p.y + R[0][2] * p.z + tx;
+    const double wy = R[1][0] * p.x + R[1][1] * p.y + R[1][2] * p.z + ty;
+    // Also drop ground-plane returns after transform: anything below ~5 cm
+    // above the world floor is likely ground.
+    const double wz = R[2][0] * p.x + R[2][1] * p.y + R[2][2] * p.z + tz;
+    if (wz < 0.05) continue;
+    pts.push_back(WorldXY{wx, wy});
   }
   auto down = voxelDownsample2D(pts, cloud_voxel_m_);
   std::lock_guard<std::mutex> lk(state_mu_);
@@ -207,6 +250,7 @@ void ReplannerNode::globalPathCB(const nav_msgs::Path::ConstPtr& msg) {
 }
 
 void ReplannerNode::timerCB(const ros::TimerEvent&) {
+  const auto t_tick_start = std::chrono::steady_clock::now();
   nav_msgs::OccupancyGrid::ConstPtr grid;
   nav_msgs::Odometry::ConstPtr odom;
   nav_msgs::Path::ConstPtr global;
@@ -465,13 +509,17 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       mode, nominal_blocked, candidate.found, cached_drivable, endpoint_dist,
       clusters.size(), obstacle_pts.size()));
 
+  const double tick_ms =
+      std::chrono::duration<double, std::milli>(
+          std::chrono::steady_clock::now() - t_tick_start)
+          .count();
   ROS_INFO_THROTTLE(1.0,
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
-      "endpoint=%.2f locked_static=%d clusters=%zu obs_pts=%zu",
+      "endpoint=%.2f locked_static=%d clusters=%zu obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
-      clusters.size(), obstacle_pts.size());
+      clusters.size(), obstacle_pts.size(), tick_ms);
 }
 
 }  // namespace clr

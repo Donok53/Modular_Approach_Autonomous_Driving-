@@ -9,6 +9,8 @@
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 #include "constrained_local_replanner_cpp/avoidance_planner.hpp"
 #include "constrained_local_replanner_cpp/avoidance_state.hpp"
@@ -55,6 +57,14 @@ class ReplannerNode {
   ros::Timer timer_;
 
   std::vector<WorldXY> travel_history_;
+
+  // tf2 listener used to transform incoming point clouds from the sensor
+  // frame (e.g. os_sensor) into the planning frame (e.g. map). Without this
+  // every cloud point was overlaid at the wrong cell.
+  tf2_ros::Buffer tf_buffer_;
+  std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
+  std::string target_frame_{"map"};
+  double tf_wait_s_{0.05};
 
   std::mutex state_mu_;
   std::vector<WorldXY> latest_obstacle_points_;
