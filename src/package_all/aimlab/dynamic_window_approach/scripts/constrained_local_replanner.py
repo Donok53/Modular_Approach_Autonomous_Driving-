@@ -5057,7 +5057,7 @@ class ConstrainedLocalReplanner:
             float(dg.info.resolution),
             max_check_m=self.lookahead_m,
         )
-        if path_still_blocked and (not same_obstacle_episode):
+        if not same_obstacle_episode:
             return False
         if self._path_blind_zone_turn_conflict(
             self.last_avoidance_grid_path, dg, now_sec=stamp.to_sec()
@@ -6615,6 +6615,7 @@ class ConstrainedLocalReplanner:
         trigger_key = None
         same_obstacle_episode = False
         preferred_direction = None
+        weak_evidence_suppressed = False
         if trigger_reason is not None:
             trigger_key = self._make_avoidance_trigger_key(
                 trigger_reason,
@@ -6656,19 +6657,21 @@ class ConstrainedLocalReplanner:
                 )
                 sparse_point_trigger = (
                     self.avoidance_sparse_path_evidence_min_points > 0
-                    and int(blocker_source_summary.get("grid_occ", 0)) <= 0
+                    and int(blocker_source_summary.get("grid_occ", 0))
+                    <= int(self.grid_only_nominal_fallback_max_cells)
                     and int(blocker_source_summary.get("risk", 0)) <= 0
                     and str(blocker_source_summary.get("blind_zone", "none")) == "none"
                     and self._path_blocker_point_evidence_count(blocker_source_summary)
                     < self.avoidance_sparse_path_evidence_min_points
                 )
-                if sparse_point_trigger and (not same_obstacle_episode):
+                if sparse_point_trigger:
                     path_evidence = self._path_blocker_point_evidence_count(
                         blocker_source_summary
                     )
                     self._debug_avoidance_log(
-                        "constrained_local_replanner: suppressing sparse point avoidance trigger | reason={} path_evidence={} min={} pc={} map={} mem={} tracked={} tracked_mem={}".format(
+                        "constrained_local_replanner: suppressing weak avoidance trigger | reason={} grid={} path_evidence={} min={} pc={} map={} mem={} tracked={} tracked_mem={} same_obstacle={}".format(
                             trigger_reason,
+                            int(blocker_source_summary.get("grid_occ", 0)),
                             path_evidence,
                             self.avoidance_sparse_path_evidence_min_points,
                             int(blocker_source_summary.get("pc_current", 0)),
@@ -6676,8 +6679,10 @@ class ConstrainedLocalReplanner:
                             int(blocker_source_summary.get("pc_memory", 0)),
                             int(blocker_source_summary.get("tracked_current", 0)),
                             int(blocker_source_summary.get("tracked_memory", 0)),
+                            "yes" if same_obstacle_episode else "no",
                         )
                     )
+                    weak_evidence_suppressed = True
                     trigger_reason = None
                     trigger_key = None
                     same_obstacle_episode = False
@@ -6710,6 +6715,20 @@ class ConstrainedLocalReplanner:
         if trigger_reason is None:
             self._avoidance_trigger_confirmed(None, stamp)
             self._clear_blocking_obstacle_markers(stamp)
+            if weak_evidence_suppressed:
+                self._clear_avoidance_path(frame_id, stamp, force=True)
+                self._publish_debug_text(
+                    self._build_debug_text(
+                        "weak_evidence_nominal_fallback",
+                        stamp,
+                        trigger_reason="weak_path_evidence",
+                        path_len=len(nominal_path),
+                        overlay_points=obstacle_count,
+                    ),
+                    stamp=stamp,
+                    force=True,
+                )
+                return "nominal_fallback"
             if (not self._use_global_nominal_reference()) and self._hold_active_avoidance_until_endpoint(
                 dg,
                 stamp,
