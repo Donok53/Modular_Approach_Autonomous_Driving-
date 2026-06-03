@@ -252,6 +252,7 @@
     <arg name="goal_completion_stuck_distance_m" default="0.95"/>
     <arg name="goal_completion_stuck_arc_m" default="0.55"/>
     <arg name="goal_completion_stuck_hold_s" default="0.60"/>
+    <arg name="lat_goal_slop" default="0.60"/>
     <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
     <arg name="path_tracking_minor_replan_delta_m" default="0.20"/>
     <arg name="rotate_only_deg" default="150.0"/>
@@ -1077,6 +1078,7 @@
         <param name="goal_completion_stuck_distance_m" value="$(arg goal_completion_stuck_distance_m)"/>
         <param name="goal_completion_stuck_arc_m" value="$(arg goal_completion_stuck_arc_m)"/>
         <param name="goal_completion_stuck_hold_s" value="$(arg goal_completion_stuck_hold_s)"/>
+        <param name="lat_goal_slop" value="$(arg lat_goal_slop)"/>
         <param name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
         <param name="rotate_exit_deg" value="$(arg rotate_exit_deg)"/>
         <param name="rotate_w_max_deg" value="$(arg rotate_w_max_deg)"/>

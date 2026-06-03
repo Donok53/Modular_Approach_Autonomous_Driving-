@@ -386,7 +386,7 @@
   <arg name="local_tracking_segment_min_step_m" default="0.42"/>
   <arg name="local_tracking_target_step_cap_m" default="0.55"/>
   <arg name="local_tracking_tangent_window_m" default="0.60"/>
-  <arg name="local_tracking_obstacle_speed_cap_mps" default="$(eval '0.40' if str(arg('localization_environment')).lower() == 'outdoor' else '0.42')"/>
+  <arg name="local_tracking_obstacle_speed_cap_mps" default="$(eval '0.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.42')"/>
   <arg name="local_tracking_yaw_speed_cap_mps" default="0.38"/>
   <arg name="local_tracking_yaw_speed_cap_start_deg" default="7.0"/>
   <arg name="local_tracking_yaw_speed_cap_full_deg" default="16.0"/>
@@ -434,9 +434,10 @@
   <arg name="path_tracking_drivable_footprint_scale" default="$(eval '0.0' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
   <arg name="path_tracking_drivable_check_horizon_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="goal_completion_stuck_distance_m" default="1.10"/>
-  <arg name="goal_completion_stuck_arc_m" default="0.75"/>
+  <arg name="goal_completion_stuck_distance_m" default="1.60"/>
+  <arg name="goal_completion_stuck_arc_m" default="1.20"/>
   <arg name="goal_completion_stuck_hold_s" default="0.35"/>
+  <arg name="lat_goal_slop" default="1.00"/>
   <arg name="path_tracking_reset_goal_delta_m" default="0.80"/>
   <arg name="path_tracking_minor_replan_delta_m" default="0.20"/>
   <arg name="forward_motion_deadband" default="0.01"/>
@@ -488,7 +489,7 @@
   <arg name="avoidance_trigger_confirm_cycles" default="1"/>
   <arg name="avoidance_trigger_confirm_max_gap_s" default="2.5"/>
   <arg name="blocked_clear_hold_s" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '0.80')"/>
-  <arg name="avoidance_keep_until_endpoint_distance_m" default="0.55"/>
+  <arg name="avoidance_keep_until_endpoint_distance_m" default="0.30"/>
   <arg name="avoidance_clear_detour_hold_s" default="$(eval '3.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.00')"/>
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="0.40"/>
@@ -498,10 +499,10 @@
   <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '12' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="avoidance_branch_time_budget_s" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.1' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.8' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
   <arg name="short_curved_avoidance_smooth_passes" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
-  <arg name="sidestep_avoidance_min_offset_m" default="0.48"/>
+  <arg name="sidestep_avoidance_min_offset_m" default="0.65"/>
   <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
   <arg name="sidestep_avoidance_preview_m" default="2.0"/>
   <arg name="sidestep_avoidance_forward_margin_m" default="0.55"/>
@@ -1291,6 +1292,7 @@
       <arg name="goal_completion_stuck_distance_m" value="$(arg goal_completion_stuck_distance_m)"/>
       <arg name="goal_completion_stuck_arc_m" value="$(arg goal_completion_stuck_arc_m)"/>
       <arg name="goal_completion_stuck_hold_s" value="$(arg goal_completion_stuck_hold_s)"/>
+      <arg name="lat_goal_slop" value="$(arg lat_goal_slop)"/>
       <arg name="path_tracking_reset_goal_delta_m" value="$(arg path_tracking_reset_goal_delta_m)"/>
       <arg name="path_tracking_minor_replan_delta_m" value="$(arg path_tracking_minor_replan_delta_m)"/>
       <arg name="rotate_only_deg" value="$(arg rotate_only_deg)"/>
