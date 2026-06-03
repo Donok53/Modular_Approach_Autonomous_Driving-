@@ -287,6 +287,7 @@
     <arg name="pointcloud_min_cluster_points" default="2"/>
     <arg name="pointcloud_visibility_hold_s" default="0.45"/>
     <arg name="use_raw_near_obstacle_hits" default="$(arg near_field_raw_overlay_enabled)"/>
+    <arg name="raw_near_obstacle_hits_topic" default="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
     <arg name="raw_near_obstacle_hold_s" default="$(arg near_field_raw_overlay_ttl_s)"/>
     <arg name="global_obstacle_overlay_downsample" default="1"/>
     <arg name="use_pointcloud_avoidance_trigger" default="false"/>
@@ -842,7 +843,7 @@
             <param name="pointcloud_min_cluster_points" value="$(arg pointcloud_min_cluster_points)"/>
             <param name="pointcloud_visibility_hold_s" value="$(arg pointcloud_visibility_hold_s)"/>
             <param name="use_raw_near_obstacle_hits" value="$(arg use_raw_near_obstacle_hits)"/>
-            <param name="raw_near_obstacle_hits_topic" value="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
+            <param name="raw_near_obstacle_hits_topic" value="$(arg raw_near_obstacle_hits_topic)"/>
             <param name="raw_near_obstacle_hold_s" value="$(arg raw_near_obstacle_hold_s)"/>
             <param name="static_obstacle_memory_enabled" value="$(arg static_obstacle_memory_enabled)"/>
             <param name="static_obstacle_memory_ttl_s" value="$(arg static_obstacle_memory_ttl_s)"/>
