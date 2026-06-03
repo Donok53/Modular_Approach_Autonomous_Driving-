@@ -4771,8 +4771,14 @@ class DWAControl:
             and float(u[0]) < -1e-4
         )
         if hard_stop_active and not allow_reverse_recovery_motion:
+            # Preserve a post-stop rotation command even when the hard stop
+            # is latched. Without this, every main-loop tick that calls
+            # publish_drive([0,0]) races with _cmd_timer_callback's rotation
+            # publish and the motor sees mostly zeros — the robot ends up
+            # frozen mid-detour with a large yaw error.
+            rotation_cmd = self._post_stop_rotation_cmd()
             cmd.linear.x = 0.0
-            cmd.angular.z = 0.0
+            cmd.angular.z = rotation_cmd.angular.z if rotation_cmd is not None else 0.0
             self._last_cmd_smooth_stamp = rospy.Time.now()
         else:
             cmd.linear.x = u[0]
