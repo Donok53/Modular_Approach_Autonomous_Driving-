@@ -482,7 +482,7 @@
   <arg name="pointcloud_block_confirm_points" default="2"/>
   <arg name="avoidance_min_overlay_points" default="$(eval '4' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
   <arg name="avoidance_min_cluster_count" default="2"/>
-  <arg name="avoidance_sparse_path_evidence_min_points" default="$(eval '5' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
+  <arg name="avoidance_sparse_path_evidence_min_points" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="avoidance_hold_s" default="3.0"/>
   <arg name="avoidance_clear_confirm_cycles" default="16"/>
   <arg name="avoidance_trigger_confirm_cycles" default="1"/>
