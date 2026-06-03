@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   pcl_conversions
   eigen_conversions
+  dynamic_window_approach
 )
 
 find_package(Eigen3 REQUIRED)
@@ -45,6 +46,7 @@ catkin_package(
     tf2_geometry_msgs
     pcl_ros
     pcl_conversions
+    dynamic_window_approach
   DEPENDS EIGEN3 PCL
 )
 

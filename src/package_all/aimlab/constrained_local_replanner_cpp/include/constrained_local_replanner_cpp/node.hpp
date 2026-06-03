@@ -54,6 +54,7 @@ class ReplannerNode {
   ros::Publisher pub_blocking_obstacles_;
   ros::Publisher pub_global_overlay_;
   ros::Publisher pub_debug_text_;
+  ros::Publisher pub_explainability_;
   ros::Timer timer_;
 
   std::vector<WorldXY> travel_history_;
@@ -92,7 +93,12 @@ class ReplannerNode {
   std::string output_blocking_obstacles_topic_{"/planning/blocking_obstacles_cpp"};
   std::string output_global_overlay_topic_{"/planning/global_obstacle_overlay_cpp"};
   std::string output_debug_text_topic_{"/planning/local_replanner_debug_text_cpp"};
+  std::string output_explainability_topic_{"/planning/explainability_cpp"};
   bool primary_mode_{false};
+  // Tracks the path mode published on the previous tick so we can fire an
+  // ExplainabilityEvent only on transitions, matching Python's behaviour.
+  PathMode last_published_mode_{PathMode::FOLLOW_LOCAL};
+  bool first_mode_publish_{true};
   double cloud_z_min_{0.10};
   double cloud_z_max_{1.30};
   double cloud_voxel_m_{0.10};

@@ -12,6 +12,7 @@
 #include <tf2/utils.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <dynamic_window_approach/ExplainabilityEvent.h>
 #include <chrono>
 
 #include "constrained_local_replanner_cpp/branch_search.hpp"
@@ -105,6 +106,7 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
     output_blocking_obstacles_topic_    = "/planning/blocking_obstacles";
     output_global_overlay_topic_        = "/planning/global_obstacle_overlay";
     output_debug_text_topic_            = "/planning/local_replanner_debug_text";
+    output_explainability_topic_        = "/planning/explainability";
   }
   pnh_.param("local_path_topic", output_local_path_topic_, output_local_path_topic_);
   pnh_.param("path_mode_topic",  output_path_mode_topic_,  output_path_mode_topic_);
@@ -116,6 +118,7 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("blocking_obstacles_topic",    output_blocking_obstacles_topic_,    output_blocking_obstacles_topic_);
   pnh_.param("global_obstacle_overlay_topic", output_global_overlay_topic_,      output_global_overlay_topic_);
   pnh_.param("debug_text_topic",            output_debug_text_topic_,            output_debug_text_topic_);
+  pnh_.param("explainability_topic",        output_explainability_topic_,        output_explainability_topic_);
 
   pnh_.param("loop_period_s", loop_period_s_, loop_period_s_);
   pnh_.param("cloud_z_min_m", cloud_z_min_, cloud_z_min_);
@@ -169,6 +172,7 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pub_blocking_obstacles_   = nh_.advertise<visualization_msgs::MarkerArray>(output_blocking_obstacles_topic_, 2);
   pub_global_overlay_       = nh_.advertise<nav_msgs::OccupancyGrid>(output_global_overlay_topic_, 1);
   pub_debug_text_           = nh_.advertise<std_msgs::String>(output_debug_text_topic_, 5);
+  pub_explainability_       = nh_.advertise<dynamic_window_approach::ExplainabilityEvent>(output_explainability_topic_, 20);
   sub_cloud_ = nh_.subscribe(cloud_topic, 2, &ReplannerNode::cloudCB, this);
   sub_grid_ = nh_.subscribe(grid_topic, 2, &ReplannerNode::gridCB, this);
   sub_odom_ = nh_.subscribe(odom_topic, 5, &ReplannerNode::odomCB, this);
@@ -441,6 +445,44 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   std_msgs::String mode_msg;
   mode_msg.data = pathModeToString(mode);
   pub_path_mode_.publish(mode_msg);
+
+  // ---- ExplainabilityEvent on mode transitions (XAI parity with Python) ----
+  if (first_mode_publish_ || mode != last_published_mode_) {
+    dynamic_window_approach::ExplainabilityEvent ev;
+    ev.header.stamp = out.header.stamp;
+    ev.header.frame_id = grid->header.frame_id;
+    ev.source_node = "constrained_local_replanner_cpp";
+    ev.decision_layer = "local_planner";
+    ev.local_planning_active = (mode == PathMode::FOLLOW_AVOIDANCE);
+    ev.stop_commanded = (mode == PathMode::HOLD);
+    ev.slowdown_commanded = false;
+    ev.avoid_direction = (candidate.side > 0) ? "right" :
+                          (candidate.side < 0) ? "left" : "";
+    if (mode == PathMode::FOLLOW_AVOIDANCE) {
+      ev.event_type = "AVOIDANCE_ACTIVE";
+      ev.trigger_reason = "predicted_overlap";
+      ev.action_taken = "follow_avoidance";
+      ev.summary_text = "C++ planner entered avoidance: blocker detected on nominal path";
+    } else if (mode == PathMode::HOLD) {
+      ev.event_type = "HOLD";
+      ev.trigger_reason = "no_valid_avoidance_candidate";
+      ev.action_taken = "stop";
+      ev.summary_text = "C++ planner holding: nominal blocked but no detour found";
+    } else {
+      ev.event_type = "FOLLOW_LOCAL";
+      ev.trigger_reason = "nominal_clear";
+      ev.action_taken = "follow_local";
+      ev.summary_text = "C++ planner tracking nominal global path";
+    }
+    ev.closest_obstacle_dist_m =
+        clusters.empty() ? -1.0f
+                          : static_cast<float>(std::hypot(
+                                blocker_world.x - rx, blocker_world.y - ry));
+    ev.tracked_object_id = -1;
+    pub_explainability_.publish(ev);
+    last_published_mode_ = mode;
+    first_mode_publish_ = false;
+  }
 
   // ---- visualization mirror topics (RViz parity with Python) ----
   const std::string frame = grid->header.frame_id;
