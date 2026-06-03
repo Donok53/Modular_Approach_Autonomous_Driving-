@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Standalone-shadow launch: starts the C++ replanner alongside the existing
+       Python pipeline and publishes its candidate output on a parallel topic
+       so the two can be compared in rviz / rosbag. -->
+
+  <arg name="cloud_topic" default="/ouster/points"/>
+  <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
+  <arg name="odom_topic" default="/lio_localizer/odometry/optimization"/>
+  <arg name="global_path_topic" default="/astar/path"/>
+  <arg name="local_path_topic" default="/planning/local_path_cpp"/>
+
+  <arg name="loop_period_s" default="0.10"/>
+  <arg name="cloud_z_min_m" default="0.10"/>
+  <arg name="cloud_z_max_m" default="1.30"/>
+  <arg name="cloud_voxel_m" default="0.10"/>
+
+  <arg name="lookahead_m" default="8.5"/>
+  <arg name="avoidance_trigger_ahead_m" default="8.5"/>
+  <arg name="obstacle_block_margin_m" default="0.18"/>
+  <arg name="sidestep_min_offset_m" default="0.52"/>
+  <arg name="sidestep_max_offset_m" default="1.15"/>
+  <arg name="sidestep_preview_m" default="2.0"/>
+  <arg name="rejoin_min_distance_m" default="1.4"/>
+  <arg name="grid_unknown_is_occupied" default="true"/>
+
+  <node pkg="constrained_local_replanner_cpp" type="node"
+        name="constrained_local_replanner_cpp" output="screen" respawn="false">
+    <param name="cloud_topic" value="$(arg cloud_topic)"/>
+    <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="global_path_topic" value="$(arg global_path_topic)"/>
+    <param name="local_path_topic" value="$(arg local_path_topic)"/>
+    <param name="loop_period_s" value="$(arg loop_period_s)"/>
+    <param name="cloud_z_min_m" value="$(arg cloud_z_min_m)"/>
+    <param name="cloud_z_max_m" value="$(arg cloud_z_max_m)"/>
+    <param name="cloud_voxel_m" value="$(arg cloud_voxel_m)"/>
+    <param name="lookahead_m" value="$(arg lookahead_m)"/>
+    <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+    <param name="obstacle_block_margin_m" value="$(arg obstacle_block_margin_m)"/>
+    <param name="sidestep_min_offset_m" value="$(arg sidestep_min_offset_m)"/>
+    <param name="sidestep_max_offset_m" value="$(arg sidestep_max_offset_m)"/>
+    <param name="sidestep_preview_m" value="$(arg sidestep_preview_m)"/>
+    <param name="rejoin_min_distance_m" value="$(arg rejoin_min_distance_m)"/>
+    <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+  </node>
+</launch>
