@@ -37,7 +37,8 @@ class AvoidanceStateMachine {
     double locked_static_hold_radius_m{3.0};
   };
 
-  explicit AvoidanceStateMachine(Config cfg = {}) : cfg_(cfg) {}
+  AvoidanceStateMachine() : cfg_(Config()) {}
+  explicit AvoidanceStateMachine(Config cfg) : cfg_(cfg) {}
 
   // Update internal state. Returns the path mode to publish this tick.
   // - `nominal_blocked` : nominal path is currently blocked
