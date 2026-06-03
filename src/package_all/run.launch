@@ -62,6 +62,10 @@
   <arg name="enable_cloud_tracker" default="false"/>
   <arg name="enable_dynamic_risk_manager" default="false"/>
   <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <!-- Default: outdoor runs the C++ replanner instead of the Python one.
+       Set use_cpp_replanner:=false on the roslaunch command line to fall
+       back to the Python constrained_local_replanner. -->
+  <arg name="use_cpp_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' or str(arg('enable_local_replanner')).lower() == 'true' else 'true')"/>
   <arg name="use_dynamic_risk_grid" default="false"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
@@ -1121,6 +1125,7 @@
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_tracked_objects_marker_viz" value="$(arg enable_tracked_objects_marker_viz)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+      <arg name="use_cpp_replanner" value="$(arg use_cpp_replanner)"/>
       <arg name="follow_global_path_only" value="$(arg follow_global_path_only)"/>
       <arg name="use_dynamic_risk_grid" value="$(arg use_dynamic_risk_grid)"/>
       <arg name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
@@ -1605,6 +1610,7 @@
       <arg name="enable_dynamic_risk_manager" value="$(arg enable_dynamic_risk_manager)"/>
       <arg name="enable_tracked_objects_marker_viz" value="$(arg enable_tracked_objects_marker_viz)"/>
       <arg name="enable_local_replanner" value="$(arg enable_local_replanner)"/>
+      <arg name="use_cpp_replanner" value="$(arg use_cpp_replanner)"/>
       <arg name="dynamic_risk_grid_topic" value="$(arg dynamic_risk_grid_topic)"/>
       <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
       <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
@@ -1939,6 +1945,33 @@
       <arg name="topic_manifest_topic" value="$(arg xai_topic_manifest_topic)"/>
       <arg name="planner_snapshot_topic" value="$(arg xai_planner_snapshot_topic)"/>
       <arg name="event_log_topic" value="$(arg xai_event_log_topic)"/>
+    </include>
+  </group>
+
+  <!-- C++ local replanner. Active iff use_cpp_replanner=true (default
+       true for outdoor). The Python constrained_local_replanner is
+       skipped in this case via the use_cpp_replanner flag forwarded
+       into dynamic_window_approach.launch / teb_trial.launch. -->
+  <group if="$(arg use_cpp_replanner)">
+    <include file="$(find constrained_local_replanner_cpp)/launch/replanner_cpp.launch">
+      <arg name="primary_mode" value="true"/>
+      <arg name="cloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
+      <arg name="odom_topic" value="lio_localizer/odometry/optimization"/>
+      <arg name="global_path_topic" value="/astar/path"/>
+      <arg name="lookahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+      <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
+      <arg name="obstacle_block_margin_m" value="$(arg obstacle_block_margin_m)"/>
+      <arg name="sidestep_min_offset_m" value="$(arg sidestep_avoidance_min_offset_m)"/>
+      <arg name="sidestep_max_offset_m" value="$(arg sidestep_avoidance_max_offset_m)"/>
+      <arg name="sidestep_preview_m" value="$(arg sidestep_avoidance_preview_m)"/>
+      <arg name="rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+      <arg name="branch_max_expand" value="$(arg max_expand)"/>
+      <arg name="branch_time_budget_s" value="$(arg avoidance_branch_time_budget_s)"/>
+      <arg name="branch_max_rejoin_candidates" value="$(arg avoidance_branch_max_rejoin_candidates)"/>
+      <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
+      <arg name="keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
     </include>
   </group>
 

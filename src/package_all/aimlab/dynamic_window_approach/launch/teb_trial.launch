@@ -43,6 +43,7 @@
   <arg name="enable_cloud_tracker" default="true"/>
   <arg name="enable_dynamic_risk_manager" default="true"/>
   <arg name="enable_local_replanner" default="true"/>
+  <arg name="use_cpp_replanner" default="false"/>
   <arg name="dynamic_risk_grid_topic" default="/planning/dynamic_risk_grid"/>
   <arg name="use_direct_goal" default="false"/>
   <arg name="direct_goal_topic" default="/move_base_simple/goal"/>
@@ -486,6 +487,7 @@
   </group>
 
   <group if="$(arg enable_local_replanner)">
+    <group unless="$(arg use_cpp_replanner)">
     <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
       <param name="odom_topic" value="$(arg planning_pose_topic)"/>
       <param name="global_path_topic" value="$(arg global_path_topic)"/>
@@ -597,6 +599,7 @@
       <param name="debug_avoidance_logging" value="$(arg debug_avoidance_logging)"/>
       <param name="debug_avoidance_log_period_s" value="$(arg debug_avoidance_log_period_s)"/>
     </node>
+    </group>
   </group>
 
   <group if="$(arg publish_astar_via_points)">

@@ -139,6 +139,11 @@
     <arg name="enable_cloud_tracker" default="true"/>
     <arg name="enable_dynamic_risk_manager" default="true"/>
     <arg name="enable_local_replanner" default="false"/>
+    <!-- When true, the Python constrained_local_replanner node is skipped.
+         The C++ replanner (constrained_local_replanner_cpp) is expected to
+         own /planning/local_path and /planning/path_mode instead. Controlled
+         from run.launch; do not flip in isolation. -->
+    <arg name="use_cpp_replanner" default="false"/>
     <arg name="follow_global_path_only" default="true"/>
     <arg name="use_dynamic_risk_grid" default="true"/>
     <arg name="use_direct_goal" default="false"/>
@@ -799,6 +804,7 @@
 
     <group if="$(arg enable_local_replanner)">
         <group unless="$(arg follow_global_path_only)">
+        <group unless="$(arg use_cpp_replanner)">
         <node pkg="dynamic_window_approach" type="constrained_local_replanner.py" name="constrained_local_replanner" output="screen" respawn="false">
             <param name="launch_profile_label" value="$(arg launch_profile_label)"/>
             <param name="launch_real_mode" value="$(arg launch_real_mode)"/>
@@ -957,6 +963,7 @@
             <param name="grid_only_relaxed_path_blocking_radius_m" value="$(arg grid_only_relaxed_path_blocking_radius_m)"/>
             <param name="relaxed_snap_path_blocking_radius_m" value="$(arg relaxed_snap_path_blocking_radius_m)"/>
         </node>
+        </group>
         </group>
     </group>
 
