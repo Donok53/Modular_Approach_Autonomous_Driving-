@@ -1206,7 +1206,20 @@ class DWAControl:
         reject = None
         if isinstance(self._emergency_bypass_debug, dict):
             reject = self._emergency_bypass_debug.get("reject")
-        if reject not in ("lateral_dev", "path_stale"):
+        # Accept any rejection where rotating in place toward the avoidance
+        # path could plausibly unstick us: path-tracking signals went off
+        # course (lat_dev, path_stale, preview_behind, no_lateral_detour) or
+        # the obstacle is biting into clearance (clearance_floor,
+        # clearance_band) and the cached avoidance path still exists.
+        allowed = {
+            "lateral_dev",
+            "path_stale",
+            "preview_behind",
+            "no_lateral_detour",
+            "clearance_floor",
+            "clearance_band",
+        }
+        if reject not in allowed:
             return None
         if not self.path_pts or len(self.path_pts) < 2:
             return None
@@ -3846,14 +3859,19 @@ class DWAControl:
         # around the obstacle and the obstacle is not yet in the hard-stop zone.
         self._emergency_bypass_debug = {}
         if not self.emergency_bypass_enabled:
+            self._emergency_bypass_debug = {"reject": "disabled"}
             return False
         if not self.path_tracking_only or len(self.path_pts) < 2:
+            self._emergency_bypass_debug = {"reject": "no_path"}
             return False
         if self.active_path_source == "none":
+            self._emergency_bypass_debug = {"reject": "no_source"}
             return False
         if self._raw_immediate_contact_blocked:
+            self._emergency_bypass_debug = {"reject": "raw_immediate_contact"}
             return False
         if not math.isfinite(self.front_obstacle_clearance):
+            self._emergency_bypass_debug = {"reject": "clearance_unknown"}
             return False
         active_avoidance = self._avoidance_mode_active()
         min_bypass_clearance = (
@@ -3865,8 +3883,14 @@ class DWAControl:
             + self.emergency_bypass_clearance_margin_m
         )
         if self.front_obstacle_clearance <= min_bypass_clearance:
+            self._emergency_bypass_debug = {
+                "reject": "clearance_band",
+                "clearance": self.front_obstacle_clearance,
+                "min_bypass": min_bypass_clearance,
+            }
             return False
         if remaining_dist <= max(self.goal_thresh_m, self.emergency_bypass_goal_window_m):
+            self._emergency_bypass_debug = {"reject": "near_goal"}
             return False
 
         # Hard floor: even in active avoidance, never let bypass run the robot
@@ -3929,6 +3953,7 @@ class DWAControl:
         }
 
         if preview_local_x <= 0.05:
+            self._emergency_bypass_debug["reject"] = "preview_behind"
             return False
 
         lateral_detour = max(abs(target_local_y), abs(preview_local_y))
@@ -3939,11 +3964,15 @@ class DWAControl:
             lateral_threshold = max(0.03, lateral_threshold * 0.75)
             bearing_threshold = max(math.radians(2.0), bearing_threshold * 0.75)
             yaw_err_threshold = max(math.radians(3.0), yaw_err_threshold * 0.75)
-        return (
+        bypass_ok = (
             lateral_detour >= lateral_threshold
             or abs(preview_bearing) >= bearing_threshold
             or abs(preview_yaw_err) >= yaw_err_threshold
         )
+        if not bypass_ok:
+            self._emergency_bypass_debug["reject"] = "no_lateral_detour"
+            self._emergency_bypass_debug["preview_yaw_err_deg"] = math.degrees(preview_yaw_err)
+        return bypass_ok
 
     def _near_goal_completion_allowed(self, dist_to_goal, arc_rem, lat_err):
         if self.enable_emergency_stop and self.emergency_blocked:
