@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -10,17 +11,19 @@
 #include <sensor_msgs/PointCloud2.h>
 
 #include "constrained_local_replanner_cpp/avoidance_planner.hpp"
+#include "constrained_local_replanner_cpp/avoidance_state.hpp"
 #include "constrained_local_replanner_cpp/types.hpp"
 
 namespace clr {
 
-// Minimal ROS wrapper that demonstrates the C++ planner end-to-end. It
-// subscribes to the same inputs the Python replanner uses and publishes a
-// candidate avoidance path on a parallel topic so the Python and C++
-// implementations can run side by side during validation. **Not** a drop-in
-// replacement for the Python node yet — the state machine, trigger
-// debouncing, locked-static memory, branch search, etc. are still living in
-// Python. See README.md for the full scoreboard.
+// ROS wrapper. Two run modes selectable via the ~primary_mode parameter:
+//   primary_mode=false (default): publishes candidate output on the
+//     shadow topics (~local_path_topic, ~path_mode_topic). Python remains
+//     authoritative.
+//   primary_mode=true: publishes onto the same topics the DWA controller
+//     consumes (/planning/local_path and /planning/path_mode). The Python
+//     constrained_local_replanner must be disabled in the launch file to
+//     avoid topic contention.
 class ReplannerNode {
  public:
   ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh);
@@ -40,6 +43,7 @@ class ReplannerNode {
   ros::Subscriber sub_odom_;
   ros::Subscriber sub_global_path_;
   ros::Publisher pub_local_path_;
+  ros::Publisher pub_path_mode_;
   ros::Timer timer_;
 
   std::mutex state_mu_;
@@ -49,12 +53,25 @@ class ReplannerNode {
   nav_msgs::Odometry::ConstPtr latest_odom_;
   nav_msgs::Path::ConstPtr latest_global_path_;
 
+  // Cached last-published avoidance so we can apply the
+  // endpoint-distance / locked-static / drivable-revalidation guards the
+  // Python node uses.
+  std::vector<GridCell> last_avoid_grid_path_;
+  std::vector<WorldXY>  last_avoid_world_path_;
+  bool                   last_avoid_active_{false};
+
   PlannerParams params_;
+  std::unique_ptr<AvoidanceStateMachine> sm_;
   std::string output_local_path_topic_{"/planning/local_path_cpp"};
+  std::string output_path_mode_topic_{"/planning/path_mode_cpp"};
+  bool primary_mode_{false};
   double cloud_z_min_{0.10};
   double cloud_z_max_{1.30};
   double cloud_voxel_m_{0.10};
   double loop_period_s_{0.10};
+  int branch_max_expand_{4500};
+  double branch_time_budget_s_{0.45};
+  int branch_max_rejoin_candidates_{12};
 };
 
 }  // namespace clr

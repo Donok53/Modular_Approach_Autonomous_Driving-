@@ -60,6 +60,8 @@ add_library(${PROJECT_NAME}
   src/path_ops.cpp
   src/cluster.cpp
   src/avoidance_planner.cpp
+  src/avoidance_state.cpp
+  src/branch_search.cpp
 )
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}

@@ -2,13 +2,14 @@
 
 C++ port-in-progress of `dynamic_window_approach/scripts/constrained_local_replanner.py`.
 
-This is **NOT** a drop-in replacement for the Python node yet. It is a
-foundation that ports the hottest inner loops to native C++ so the Python
-node's 2-3 s `loop=overrun` can be retired in stages.
+The node now publishes both `/planning/local_path` and `/planning/path_mode`
+and contains a minimal state machine + sidestep + branch-search avoidance,
+so it can be flipped from a shadow validator into the primary local
+replanner. **Behavior parity with the Python node is NOT fully verified yet
+— treat the primary mode as a risky test until the Python and C++ outputs
+have been compared on at least one outdoor bag.**
 
 ## Build
-
-This is a catkin package. From the workspace root:
 
 ```bash
 source /opt/ros/noetic/setup.bash
@@ -16,65 +17,89 @@ catkin_make -DCMAKE_BUILD_TYPE=Release
 source devel/setup.bash
 ```
 
-## Run alongside the existing Python stack
+## Run
+
+### Shadow mode (default — safe, no behavior change)
 
 ```bash
 roslaunch constrained_local_replanner_cpp replanner_cpp.launch
 ```
 
-It publishes its candidate avoidance path on `/planning/local_path_cpp` so you
-can compare it to the Python node's `/planning/local_path` in rviz or rosbag
-without changing the existing pipeline. The DWA controller is unaffected.
+Publishes on `/planning/local_path_cpp` + `/planning/path_mode_cpp`. The
+Python node still owns `/planning/local_path` and `/planning/path_mode`.
 
-## Scope — what's ported vs. still in Python
+### Primary mode (replaces Python — disable Python first)
 
-### Ported (in this package)
+```bash
+roslaunch constrained_local_replanner_cpp replanner_cpp.launch primary_mode:=true
+```
+
+You **must** disable the Python `constrained_local_replanner` node in your
+outer launch before flipping the switch, otherwise both publishers fight
+for the same topic and the DWA controller will see flickering modes.
+
+In the project's `src/package_all/run.launch`, the simplest way is to
+add `if="$(arg run_cpp_replanner)" / unless="$(arg run_cpp_replanner)"`
+flags around the Python node block. (Not done in this commit — set up
+manually when you are ready.)
+
+## What's ported
 
 - Drivable / occupancy grid view + occupied / unknown handling.
-- Bresenham line-of-sight check (`hasLineOfSight`).
-- `pathBlockedAhead` — the hot per-tick blocked-cells check.
-- `gridPathMinDistanceToXY`, `gridPathEndpointDistanceToXY` — used by the
-  release / endpoint guards on the Python side.
+- Bresenham line-of-sight check.
+- `pathBlockedAhead`, `gridPathMinDistanceToXY`, `gridPathEndpointDistanceToXY`.
 - 2-D voxel downsample + 4-connected cluster blob detection.
-- Sidestep avoidance candidate generator (`buildSidestepAvoidance`) — the
-  Python `_build_sidestep_avoidance_path` equivalent, minus the static-memory
-  preference scoring.
-- A minimal ROS node that subscribes to cloud / drivable grid / odom /
-  global path and publishes a parallel local-path candidate.
+- Sidestep avoidance candidate generator with drivable-aware rejection
+  (the same guard we added to the Python node in commit `d6d300d`).
+- 8-connected A* branch search with rejoin candidates and budget-bound
+  expansion / time-budget.
+- Avoidance state machine:
+    - `FOLLOW_LOCAL` → `FOLLOW_AVOIDANCE` after `trigger_confirm_cycles`
+      consecutive ticks of nominal-path blockage.
+    - `FOLLOW_AVOIDANCE` → `FOLLOW_LOCAL` only when robot is within
+      `keep_until_endpoint_distance_m` of the cached path's endpoint AND
+      the `clear_detour_hold_s` has elapsed AND no locked-static blocker
+      is within `locked_static_hold_radius_m` of the robot.
+    - Any → `HOLD` when nominal is blocked and no candidate is available.
+- locked-static memory: cluster centroids accumulate hits within
+  `locked_static_hit_radius_m`; after `locked_static_persistence_hits`
+  sightings the entry is "locked" and survives perception dropouts.
+- Cached avoidance path re-validation against the current drivable+blocked
+  mask every tick (the bug we hit in commit `d6d300d`).
+- `/planning/path_mode` publisher with `follow_local` / `follow_avoidance`
+  / `hold` strings matching the Python schema.
 
-### Not yet ported — still owned by the Python node
+## What's NOT yet ported (still owned by Python if you stay in shadow mode)
 
-These rely on the existing replanner; do not turn off Python until they are
-ported:
+- Tracked-object integration (`tracked_objects`, blind-zone turn conflicts).
+- The full nominal-path-blocked decision pipeline (strong-evidence,
+  grid_only_nominal_fallback, weak_grid_no_solution_fallback). The C++
+  approximation considers a cell blocked if it is non-drivable OR has any
+  obstacle overlay overlap.
+- Sparse-trigger / weak-evidence trigger suppression.
+- bypass diagnostics and post_stop_rotation feedback (those live in DWA,
+  not the replanner — they continue to work via DWA's own logic).
+- Visualization markers + explainability bridge.
+- Reuse_active_avoidance_path with deviation gates beyond the simple
+  re-validation. (Reusing the cached path when the candidate disappears
+  is implemented; the deviation-based rebuild trigger from
+  `_reuse_active_avoidance_path` is not.)
+- The long tail of launch parameters that wire into the above.
 
-- Trigger debounce / confirm cycles / `avoid_pending` state machine.
-- Static-obstacle memory and `locked_static` confirmation.
-- Dynamic tracker integration (`tracked_objects` / blind-zone).
-- Branch / A* search variant (`_build_branch_avoidance_path`).
-- Path-mode publishing (`follow_local` / `follow_avoidance` / `hold`).
-- Reuse-with-deviation and clear-hold release logic
-  (`_hold_active_avoidance_until_endpoint`, `_reuse_active_avoidance_path`).
-- Bypass diagnostics, post_stop_rotation feedback, weak-evidence trigger
-  suppression, sparse-trigger debouncing.
-- Visualization markers, explainability bridge, debug text publishing.
-- Pitch-mode aware cloud filtering, memory persistence frames.
-- Every launch parameter that wires into the above.
+## Validation checklist before flipping primary_mode
 
-## Next steps
-
-Once the parallel C++ candidate matches Python output for nominal-path and
-sidestep cases (verify in rviz / rosbag for at least one outdoor run), the
-next priorities are:
-
-1. Port `_build_branch_avoidance_path` (A* with rejoin candidates) — biggest
-   remaining CPU cost.
-2. Port the trigger debounce + path-mode state machine so this node can
-   actually own `/planning/local_path` and `/planning/path_mode`.
-3. Port static-memory `locked_static` accumulation.
-4. Replace the Python node with this one in `run.launch` once 1-3 are stable.
+1. Run shadow mode for at least one outdoor bag.
+2. In rviz, display `/planning/local_path` (Python) and
+   `/planning/local_path_cpp` (C++) as two `Path` topics. They should
+   trace similar geometry while the robot drives.
+3. `rostopic echo /planning/path_mode_cpp` and compare to
+   `/planning/path_mode` — same transitions in roughly the same windows.
+4. If both look fine, set `primary_mode:=true` AND disable the Python
+   constrained_local_replanner in run.launch.
 
 ## Status
 
-Foundational scaffold + core compute primitives. Tested by inspection only —
-NOT yet validated against the existing Python node on a bag. Expect to need
-parameter alignment and a side-by-side rviz session before promoting it.
+State machine + sidestep + branch search are in. Latency improvement vs
+Python should be visible only after switching to primary mode and
+disabling the Python node — until then the C++ runs in parallel and the
+controller still consumes Python output.

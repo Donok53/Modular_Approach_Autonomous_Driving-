@@ -1,14 +1,20 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- Standalone-shadow launch: starts the C++ replanner alongside the existing
-       Python pipeline and publishes its candidate output on a parallel topic
-       so the two can be compared in rviz / rosbag. -->
+  <!-- Launch the C++ replanner. With primary_mode=false (default) it shadows
+       the Python replanner on parallel topics. Set primary_mode=true ONLY
+       after disabling the Python constrained_local_replanner node in your
+       outer launch — otherwise both nodes will fight for /planning/local_path
+       and /planning/path_mode. -->
+
+  <arg name="primary_mode" default="false"/>
 
   <arg name="cloud_topic" default="/ouster/points"/>
   <arg name="drivable_grid_topic" default="/lio_sam/drivable_area/grid"/>
   <arg name="odom_topic" default="/lio_localizer/odometry/optimization"/>
   <arg name="global_path_topic" default="/astar/path"/>
-  <arg name="local_path_topic" default="/planning/local_path_cpp"/>
+
+  <arg name="local_path_topic" default="$(eval '/planning/local_path' if arg('primary_mode') else '/planning/local_path_cpp')"/>
+  <arg name="path_mode_topic"  default="$(eval '/planning/path_mode'  if arg('primary_mode') else '/planning/path_mode_cpp')"/>
 
   <arg name="loop_period_s" default="0.10"/>
   <arg name="cloud_z_min_m" default="0.10"/>
@@ -24,13 +30,26 @@
   <arg name="rejoin_min_distance_m" default="1.4"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
 
+  <arg name="branch_max_expand" default="4500"/>
+  <arg name="branch_time_budget_s" default="0.45"/>
+  <arg name="branch_max_rejoin_candidates" default="12"/>
+
+  <arg name="trigger_confirm_cycles" default="2"/>
+  <arg name="clear_detour_hold_s" default="3.5"/>
+  <arg name="keep_until_endpoint_distance_m" default="0.30"/>
+  <arg name="locked_static_hit_radius_m" default="0.40"/>
+  <arg name="locked_static_persistence_hits" default="3"/>
+  <arg name="locked_static_hold_radius_m" default="3.0"/>
+
   <node pkg="constrained_local_replanner_cpp" type="node"
         name="constrained_local_replanner_cpp" output="screen" respawn="false">
+    <param name="primary_mode" value="$(arg primary_mode)"/>
     <param name="cloud_topic" value="$(arg cloud_topic)"/>
     <param name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
     <param name="odom_topic" value="$(arg odom_topic)"/>
     <param name="global_path_topic" value="$(arg global_path_topic)"/>
     <param name="local_path_topic" value="$(arg local_path_topic)"/>
+    <param name="path_mode_topic" value="$(arg path_mode_topic)"/>
     <param name="loop_period_s" value="$(arg loop_period_s)"/>
     <param name="cloud_z_min_m" value="$(arg cloud_z_min_m)"/>
     <param name="cloud_z_max_m" value="$(arg cloud_z_max_m)"/>
@@ -43,5 +62,14 @@
     <param name="sidestep_preview_m" value="$(arg sidestep_preview_m)"/>
     <param name="rejoin_min_distance_m" value="$(arg rejoin_min_distance_m)"/>
     <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
+    <param name="branch_max_expand" value="$(arg branch_max_expand)"/>
+    <param name="branch_time_budget_s" value="$(arg branch_time_budget_s)"/>
+    <param name="branch_max_rejoin_candidates" value="$(arg branch_max_rejoin_candidates)"/>
+    <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>
+    <param name="clear_detour_hold_s" value="$(arg clear_detour_hold_s)"/>
+    <param name="keep_until_endpoint_distance_m" value="$(arg keep_until_endpoint_distance_m)"/>
+    <param name="locked_static_hit_radius_m" value="$(arg locked_static_hit_radius_m)"/>
+    <param name="locked_static_persistence_hits" value="$(arg locked_static_persistence_hits)"/>
+    <param name="locked_static_hold_radius_m" value="$(arg locked_static_hold_radius_m)"/>
   </node>
 </launch>
