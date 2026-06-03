@@ -2,8 +2,6 @@
 
 #include <cmath>
 
-#include <nav_msgs/OccupancyGrid.h>
-
 namespace clr {
 
 OccupancyView fromOccupancyGrid(const nav_msgs::OccupancyGrid& msg) {

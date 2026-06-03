@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <geometry_msgs/PoseStamped.h>
 #include <pcl/point_cloud.h>

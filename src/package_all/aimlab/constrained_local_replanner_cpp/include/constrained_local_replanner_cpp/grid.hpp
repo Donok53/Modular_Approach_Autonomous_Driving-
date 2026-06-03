@@ -2,11 +2,9 @@
 
 #include <vector>
 
-#include "constrained_local_replanner_cpp/types.hpp"
+#include <nav_msgs/OccupancyGrid.h>
 
-namespace nav_msgs {
-class OccupancyGrid;
-}
+#include "constrained_local_replanner_cpp/types.hpp"
 
 namespace clr {
 
