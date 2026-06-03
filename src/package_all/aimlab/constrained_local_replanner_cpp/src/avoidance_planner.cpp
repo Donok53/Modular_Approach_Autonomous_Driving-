@@ -88,9 +88,13 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
   const double preview_x =
       std::max(params.sidestep_preview_m,
                obs_lx + params.sidestep_forward_margin_m + params.footprint.half_length_m * 2.0);
+  // Lateral clearance the path centerline needs from the obstacle centroid.
+  // The overlay already inflates obstacles by (half_width + block_margin),
+  // so we only add a small safety nudge here — the previous +0.08 m made the
+  // sidestep wider than necessary without buying real safety.
   const double clearance_y =
       params.footprint.half_width_m + params.footprint.padding_m +
-      params.obstacle_block_margin_m + 0.08;
+      params.obstacle_block_margin_m + 0.02;
 
   double best_score = std::numeric_limits<double>::infinity();
   for (const int side : side_order) {
@@ -111,7 +115,12 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       const double entry_x = std::max(start_x + 0.15, obs_lx - 0.20);
       const double pass_x = std::max(entry_x + 0.35,
                                      obs_lx + params.sidestep_forward_margin_m);
-      const double end_x = std::max(preview_x, pass_x + 0.35);
+      // Rejoin curve: after passing the obstacle the path must come back to
+      // the nominal corridor (y = 0). Without this the candidate "stays
+      // wide" for the entire preview window and the robot looks like it is
+      // taking a huge detour.
+      const double rejoin_x = pass_x + params.rejoin_min_distance_m;
+      const double end_x = std::max(preview_x, rejoin_x + 0.30);
       const double mid_x = start_x + 0.5 * std::max(0.20, entry_x - start_x);
 
       const std::vector<std::pair<double, double>> waypts_local{
@@ -120,7 +129,9 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
           {entry_x, 0.35 * target_y},
           {0.5 * (entry_x + pass_x), 0.80 * target_y},
           {pass_x, target_y},
-          {end_x, target_y},
+          {0.5 * (pass_x + rejoin_x), 0.60 * target_y},
+          {rejoin_x, 0.0},
+          {end_x, 0.0},
       };
       std::vector<WorldXY> ctrl;
       ctrl.reserve(waypts_local.size());
