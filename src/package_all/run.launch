@@ -199,12 +199,12 @@
   <arg name="near_field_raw_overlay_tf_fallback_latest" default="true"/>
   <arg name="near_field_raw_overlay_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_overlay_min_x_m" default="0.05"/>
-  <arg name="near_field_raw_overlay_max_x_m" default="1.60"/>
+  <arg name="near_field_raw_overlay_max_x_m" default="$(eval '2.40' if str(arg('localization_environment')).lower() == 'outdoor' else '1.60')"/>
   <arg name="near_field_raw_overlay_half_width_m" default="0.65"/>
   <arg name="near_field_raw_overlay_min_z_m" default="0.08"/>
   <arg name="near_field_raw_overlay_max_z_m" default="1.40"/>
   <arg name="near_field_raw_overlay_downsample" default="2"/>
-  <arg name="near_field_raw_overlay_max_update_hz" default="$(eval '2.0' if str(arg('localization_environment')).lower() == 'outdoor' else '4.0')"/>
+  <arg name="near_field_raw_overlay_max_update_hz" default="$(eval '5.0' if str(arg('localization_environment')).lower() == 'outdoor' else '4.0')"/>
   <arg name="near_field_raw_overlay_uv_row_step" default="$(eval '4' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
   <arg name="near_field_raw_overlay_uv_col_step" default="$(eval '8' if str(arg('localization_environment')).lower() == 'outdoor' else '4')"/>
   <arg name="near_field_raw_overlay_min_points" default="3"/>
@@ -214,7 +214,7 @@
   <arg name="near_field_raw_overlay_ttl_s" default="0.60"/>
   <arg name="near_field_raw_overlay_hit_cloud_topic" default="/planning/near_field_raw_overlay_hits"/>
   <arg name="use_raw_near_obstacle_hits" default="$(arg near_field_raw_overlay_enabled)"/>
-  <arg name="raw_near_obstacle_hits_topic" default="$(eval '/planning/near_field_stop_hits' if str(arg('localization_environment')).lower() == 'outdoor' else arg('near_field_raw_overlay_hit_cloud_topic'))"/>
+  <arg name="raw_near_obstacle_hits_topic" default="$(arg near_field_raw_overlay_hit_cloud_topic)"/>
   <arg name="raw_near_obstacle_hold_s" default="0.25"/>
   <arg name="near_field_raw_debug_cloud_enabled" default="true"/>
   <arg name="near_field_raw_debug_cloud_topic" default="/planning/near_field_raw_debug_cloud"/>
