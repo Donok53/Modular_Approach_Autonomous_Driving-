@@ -7132,7 +7132,14 @@ class ConstrainedLocalReplanner:
                     "constrained_local_replanner: keeping current avoidance path during no-solution hold | reason=%s",
                     trigger_reason,
                 )
-                return "hold"
+                # Return "avoidance" so downstream stays in follow_avoidance
+                # mode and tracks the path we just republished. Returning
+                # "hold" here was the bug: the stored avoidance path was
+                # being broadcast on /planning/local_path but path_mode
+                # flipped to "hold" the same tick, which the controller
+                # interprets as a full stop. The robot then sat in
+                # stop_hold while a valid avoidance path was alive.
+                return "avoidance"
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return "avoidance"
             if self._should_follow_nominal_local_on_no_solution(
