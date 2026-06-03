@@ -564,6 +564,14 @@ class ConstrainedLocalReplanner:
         self.avoidance_clear_detour_hold_s = max(
             0.0, float(rospy.get_param("~avoidance_clear_detour_hold_s", 1.2))
         )
+        # Radius (m) around the robot in which a confirmed locked-static
+        # obstacle in memory forbids time-based avoidance release. Prevents
+        # the case where a momentary perception clear releases the detour
+        # while the robot is still right next to a known static obstacle.
+        self.locked_static_hold_radius_m = max(
+            0.0,
+            float(rospy.get_param("~locked_static_hold_radius_m", 3.0)),
+        )
         self.allow_avoidance_reuse_on_no_solution = bool(
             rospy.get_param("~allow_avoidance_reuse_on_no_solution", False)
         )
@@ -1401,6 +1409,32 @@ class ConstrainedLocalReplanner:
             self._memory_entry_hits(entry)
             >= self.static_obstacle_memory_persistence_frames
         )
+
+    def _locked_static_within_radius(self, radius_m):
+        # True iff any confirmed locked-static obstacle memory is within
+        # `radius_m` of the robot's current odom position. Used to refuse a
+        # time-based avoidance release when prior evidence says an obstacle
+        # is still around, even if the current point cloud lost it.
+        if radius_m <= 0.0:
+            return False
+        try:
+            rx = float(self.odom_x)
+            ry = float(self.odom_y)
+        except (TypeError, ValueError):
+            return False
+        r2 = radius_m * radius_m
+        for entry in self.obstacle_memory_points:
+            if not self._is_confirmed_static_obstacle_entry(entry):
+                continue
+            try:
+                wx, wy = self._memory_entry_position(entry)
+            except (TypeError, ValueError):
+                continue
+            dx = float(wx) - rx
+            dy = float(wy) - ry
+            if dx * dx + dy * dy <= r2:
+                return True
+        return False
 
     def _memory_points_from_entries(self, entries, confirmed_only=False):
         points = []
@@ -4873,12 +4907,37 @@ class ConstrainedLocalReplanner:
             return False
         if len(self.last_avoidance_grid_path) < 2:
             return False
+        # Distance to the cached detour endpoint. Compute up-front so the
+        # time-based release below can defer when the robot has not yet
+        # physically passed the obstacle.
+        endpoint_dist_m = self._grid_path_endpoint_distance_to_xy(
+            self.last_avoidance_grid_path,
+            dg,
+            self.odom_x,
+            self.odom_y,
+        )
+        mid_detour = endpoint_dist_m > self.avoidance_keep_until_endpoint_distance_m
+        # Static-memory guard: if any confirmed locked-static obstacle is
+        # within `locked_static_hold_radius_m` of the robot, do not release
+        # avoidance from a momentary perception clear — we have prior
+        # evidence that an obstacle is still there.
+        locked_static_nearby = self._locked_static_within_radius(
+            self.locked_static_hold_radius_m
+        )
         if (
             str(clear_reason) == "nominal_path_clear"
             and self.last_avoidance_solution_sec > 0.0
         ):
             clear_age_s = stamp.to_sec() - self.last_avoidance_solution_sec
             if self.avoidance_clear_detour_hold_s <= 0.0:
+                if mid_detour or locked_static_nearby:
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: deferring avoidance release | endpoint=%.2fm locked_static=%s",
+                        endpoint_dist_m,
+                        "yes" if locked_static_nearby else "no",
+                    )
+                    return True
                 frame_id = dg.header.frame_id if dg.header.frame_id else "map"
                 rospy.loginfo_throttle(
                     1.0,
@@ -4888,6 +4947,15 @@ class ConstrainedLocalReplanner:
                 self._clear_avoidance_path(frame_id, stamp, force=True)
                 return False
             if clear_age_s > self.avoidance_clear_detour_hold_s:
+                if mid_detour or locked_static_nearby:
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: deferring avoidance release | age=%.2fs endpoint=%.2fm locked_static=%s",
+                        clear_age_s,
+                        endpoint_dist_m,
+                        "yes" if locked_static_nearby else "no",
+                    )
+                    return True
                 frame_id = dg.header.frame_id if dg.header.frame_id else "map"
                 rospy.loginfo_throttle(
                     1.0,
@@ -4897,12 +4965,6 @@ class ConstrainedLocalReplanner:
                 )
                 self._clear_avoidance_path(frame_id, stamp, force=True)
                 return False
-        endpoint_dist_m = self._grid_path_endpoint_distance_to_xy(
-            self.last_avoidance_grid_path,
-            dg,
-            self.odom_x,
-            self.odom_y,
-        )
         if endpoint_dist_m <= self.avoidance_keep_until_endpoint_distance_m:
             return False
         deviation_limit_m = max(
