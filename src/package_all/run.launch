@@ -493,9 +493,13 @@
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="1.00"/>
   <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="avoidance_fast_reuse_window_s" default="$(eval '2.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
+  <arg name="avoidance_fast_reuse_window_s" default="$(eval '3.40' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
+  <arg name="max_expand" default="$(eval '4500' if str(arg('localization_environment')).lower() == 'outdoor' else '25000')"/>
+  <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '5' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
+  <arg name="avoidance_branch_time_budget_s" default="$(eval '0.18' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
   <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.1' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
+  <arg name="short_curved_avoidance_smooth_passes" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="0.48"/>
   <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
@@ -727,7 +731,7 @@
   <arg name="emergency_bypass_bearing_deg" default="4.5"/>
   <arg name="emergency_bypass_yaw_err_deg" default="6.0"/>
   <arg name="emergency_bypass_clearance_margin_m" default="0.00"/>
-  <arg name="active_avoidance_bypass_clearance_m" default="0.14"/>
+  <arg name="active_avoidance_bypass_clearance_m" default="$(eval '0.08' if str(arg('localization_environment')).lower() == 'outdoor' else '0.14')"/>
   <arg name="emergency_bypass_goal_window_m" default="0.60"/>
   <arg name="emergency_bypass_speed_limit_mps" default="0.26"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
@@ -1341,8 +1345,12 @@
       <arg name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
       <arg name="avoidance_fast_reuse_enabled" value="$(arg avoidance_fast_reuse_enabled)"/>
       <arg name="avoidance_fast_reuse_window_s" value="$(arg avoidance_fast_reuse_window_s)"/>
+      <arg name="max_expand" value="$(arg max_expand)"/>
+      <arg name="avoidance_branch_max_rejoin_candidates" value="$(arg avoidance_branch_max_rejoin_candidates)"/>
+      <arg name="avoidance_branch_time_budget_s" value="$(arg avoidance_branch_time_budget_s)"/>
       <arg name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
       <arg name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+      <arg name="short_curved_avoidance_smooth_passes" value="$(arg short_curved_avoidance_smooth_passes)"/>
       <arg name="sidestep_avoidance_enabled" value="$(arg sidestep_avoidance_enabled)"/>
       <arg name="sidestep_avoidance_min_offset_m" value="$(arg sidestep_avoidance_min_offset_m)"/>
       <arg name="sidestep_avoidance_max_offset_m" value="$(arg sidestep_avoidance_max_offset_m)"/>

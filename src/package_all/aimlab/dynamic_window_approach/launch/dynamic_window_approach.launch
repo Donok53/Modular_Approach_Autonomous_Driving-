@@ -155,6 +155,7 @@
     <arg name="published_path_spacing_m" default="0.25"/>
     <arg name="path_history_max_paths" default="12"/>
     <arg name="replan_hz" default="3.0"/>
+    <arg name="max_expand" default="25000"/>
     <arg name="lookahead_m" default="6.0"/>
     <arg name="allow_best_effort_path" default="true"/>
     <arg name="best_effort_max_goal_gap_m" default="0.60"/>
@@ -312,8 +313,11 @@
     <arg name="avoidance_reuse_max_deviation_m" default="0.80"/>
     <arg name="avoidance_fast_reuse_enabled" default="false"/>
     <arg name="avoidance_fast_reuse_window_s" default="0.0"/>
+    <arg name="avoidance_branch_max_rejoin_candidates" default="0"/>
+    <arg name="avoidance_branch_time_budget_s" default="0.0"/>
     <arg name="avoidance_branch_backtrack_cells" default="8"/>
     <arg name="avoidance_rejoin_min_distance_m" default="1.5"/>
+    <arg name="short_curved_avoidance_smooth_passes" default="2"/>
     <arg name="sidestep_avoidance_enabled" default="true"/>
     <arg name="sidestep_avoidance_min_offset_m" default="0.48"/>
     <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
@@ -833,6 +837,7 @@
             <param name="published_path_spacing_m" value="$(arg published_path_spacing_m)"/>
             <param name="path_history_max_paths" value="$(arg path_history_max_paths)"/>
             <param name="replan_hz" value="$(arg replan_hz)"/>
+            <param name="max_expand" value="$(arg max_expand)"/>
             <param name="lookahead_m" value="$(arg lookahead_m)"/>
             <param name="allow_best_effort_path" value="$(arg allow_best_effort_path)"/>
             <param name="best_effort_max_goal_gap_m" value="$(arg best_effort_max_goal_gap_m)"/>
@@ -910,8 +915,11 @@
             <param name="avoidance_reuse_max_deviation_m" value="$(arg avoidance_reuse_max_deviation_m)"/>
             <param name="avoidance_fast_reuse_enabled" value="$(arg avoidance_fast_reuse_enabled)"/>
             <param name="avoidance_fast_reuse_window_s" value="$(arg avoidance_fast_reuse_window_s)"/>
+            <param name="avoidance_branch_max_rejoin_candidates" value="$(arg avoidance_branch_max_rejoin_candidates)"/>
+            <param name="avoidance_branch_time_budget_s" value="$(arg avoidance_branch_time_budget_s)"/>
             <param name="avoidance_branch_backtrack_cells" value="$(arg avoidance_branch_backtrack_cells)"/>
             <param name="avoidance_rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
+            <param name="short_curved_avoidance_smooth_passes" value="$(arg short_curved_avoidance_smooth_passes)"/>
             <param name="sidestep_avoidance_enabled" value="$(arg sidestep_avoidance_enabled)"/>
             <param name="sidestep_avoidance_min_offset_m" value="$(arg sidestep_avoidance_min_offset_m)"/>
             <param name="sidestep_avoidance_max_offset_m" value="$(arg sidestep_avoidance_max_offset_m)"/>

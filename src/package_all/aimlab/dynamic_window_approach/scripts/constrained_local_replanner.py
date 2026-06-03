@@ -3,6 +3,7 @@
 
 import heapq
 import math
+import time
 import traceback
 import zlib
 from array import array
@@ -191,6 +192,12 @@ class ConstrainedLocalReplanner:
         )
         self.risk_threshold = int(rospy.get_param("~risk_occupied_threshold", 45))
         self.max_expand = max(100, int(rospy.get_param("~max_expand", 25000)))
+        self.avoidance_branch_max_rejoin_candidates = max(
+            0, int(rospy.get_param("~avoidance_branch_max_rejoin_candidates", 0))
+        )
+        self.avoidance_branch_time_budget_s = max(
+            0.0, float(rospy.get_param("~avoidance_branch_time_budget_s", 0.0))
+        )
         self.replan_hz = max(1.0, float(rospy.get_param("~replan_hz", 6.0)))
         self.replan_period_s = 1.0 / self.replan_hz
         self.local_path_keepalive_enabled = bool(
@@ -6292,15 +6299,37 @@ class ConstrainedLocalReplanner:
         exact_fallback_history = None
         best_effort_candidate = None
         best_effort_score = None
+        branch_search_start = time.monotonic()
+        branch_attempts = 0
+        branch_timed_out = False
+
+        def _branch_budget_exceeded():
+            return (
+                self.avoidance_branch_time_budget_s > 0.0
+                and (time.monotonic() - branch_search_start)
+                >= self.avoidance_branch_time_budget_s
+            )
+
         for rejoin_distance_m in ordered_rejoin_distances:
             min_rejoin_cells = max(1, int(math.ceil(rejoin_distance_m / res_m)))
             first_rejoin_idx = max(branch_start_idx + 2, blocked_idx + min_rejoin_cells)
 
             for rejoin_idx in range(first_rejoin_idx, len(nominal_path)):
+                if (
+                    self.avoidance_branch_max_rejoin_candidates > 0
+                    and branch_attempts
+                    >= self.avoidance_branch_max_rejoin_candidates
+                ):
+                    branch_timed_out = True
+                    break
+                if _branch_budget_exceeded():
+                    branch_timed_out = True
+                    break
                 rejoin_cell = nominal_path[rejoin_idx]
                 rx, ry = rejoin_cell
                 if not self._in_bounds_blocked(dynamic_blocked, rx, ry) or dynamic_blocked[ry][rx]:
                     continue
+                branch_attempts += 1
                 detour = self._astar(
                     dynamic_blocked,
                     branch_start,
@@ -6407,6 +6436,18 @@ class ConstrainedLocalReplanner:
                 if best_effort_score is None or candidate_score < best_effort_score:
                     best_effort_score = candidate_score
                     best_effort_candidate = composed
+
+            if branch_timed_out:
+                break
+
+        if branch_timed_out:
+            rospy.logwarn_throttle(
+                1.0,
+                "constrained_local_replanner: branch avoidance search capped | attempts=%d limit=%d budget=%.2fs",
+                int(branch_attempts),
+                int(self.avoidance_branch_max_rejoin_candidates),
+                float(self.avoidance_branch_time_budget_s),
+            )
 
         if exact_fallback_candidate is not None:
             return exact_fallback_candidate, exact_fallback_history
