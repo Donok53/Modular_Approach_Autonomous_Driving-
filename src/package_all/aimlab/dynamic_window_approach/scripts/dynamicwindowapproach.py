@@ -399,6 +399,18 @@ class DWAControl:
             0.05,
             float(rospy.get_param("~emergency_bypass_speed_limit_mps", 0.18)),
         )
+        self.emergency_bypass_clearance_floor_m = max(
+            0.05,
+            float(rospy.get_param("~emergency_bypass_clearance_floor_m", 0.15)),
+        )
+        self.emergency_bypass_max_path_age_s = max(
+            0.05,
+            float(rospy.get_param("~emergency_bypass_max_path_age_s", 0.70)),
+        )
+        self.emergency_bypass_max_lateral_dev_m = max(
+            0.02,
+            float(rospy.get_param("~emergency_bypass_max_lateral_dev_m", 0.10)),
+        )
         self.enable_reverse_recovery = bool(
             rospy.get_param("~enable_reverse_recovery", False)
         )
@@ -3768,6 +3780,32 @@ class DWAControl:
         if remaining_dist <= max(self.goal_thresh_m, self.emergency_bypass_goal_window_m):
             return False
 
+        # Hard floor: even in active avoidance, never let bypass run the robot
+        # past raw clearance < 0.15 m. Prevents scraping when the bypass
+        # clearance param has been tuned too aggressively low.
+        if self.front_obstacle_clearance < self.emergency_bypass_clearance_floor_m:
+            self._emergency_bypass_debug = {"reject": "clearance_floor",
+                                            "clearance": self.front_obstacle_clearance}
+            return False
+        # Stale-path guard: refuse bypass when we're riding an old fast-reuse
+        # avoidance path (observed age 2-3 s in the field). The bypass logic
+        # below evaluates the cached path shape; if the path itself is stale
+        # the geometry no longer matches the actual obstacle.
+        local_path_age = self._stamp_age_s(self.local_path_stamp)
+        if (local_path_age >= 0.0
+                and local_path_age > self.emergency_bypass_max_path_age_s):
+            self._emergency_bypass_debug = {"reject": "path_stale",
+                                            "local_path_age_s": local_path_age}
+            return False
+        # Lateral deviation guard: if the robot has drifted off the cached
+        # path, the bypass would steer through phantom clearance. Require the
+        # robot to be reasonably on-path before allowing bypass.
+        lateral_dev = abs(float(lat_err)) if lat_err is not None else 0.0
+        if lateral_dev > self.emergency_bypass_max_lateral_dev_m:
+            self._emergency_bypass_debug = {"reject": "lateral_dev",
+                                            "lateral_dev_m": lateral_dev}
+            return False
+
         cos_yaw = math.cos(yaw)
         sin_yaw = math.sin(yaw)
 
@@ -4821,6 +4859,17 @@ class DWAControl:
                 dist_to_goal,
             )
             self._emergency_bypass_active = bool(avoidance_can_continue)
+            bypass_reject = self._emergency_bypass_debug.get("reject") \
+                if isinstance(self._emergency_bypass_debug, dict) else None
+            if bypass_reject:
+                rospy.loginfo_throttle(
+                    0.5,
+                    "bypass_blocked: reason=%s clearance=%.2f path_age=%.2f lat_dev=%.2f",
+                    bypass_reject,
+                    self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                    float(self._emergency_bypass_debug.get("local_path_age_s", -1.0)),
+                    float(self._emergency_bypass_debug.get("lateral_dev_m", -1.0)),
+                )
             if self.enable_emergency_stop and self.emergency_blocked and not avoidance_can_continue:
                 self._rot_mode = False
                 self._log_nav_reason(

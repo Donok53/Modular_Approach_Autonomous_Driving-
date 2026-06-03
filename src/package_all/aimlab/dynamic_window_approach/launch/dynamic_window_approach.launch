@@ -556,6 +556,9 @@
     <arg name="active_avoidance_bypass_clearance_m" default="0.16"/>
     <arg name="emergency_bypass_goal_window_m" default="0.60"/>
     <arg name="emergency_bypass_speed_limit_mps" default="0.32"/>
+    <arg name="emergency_bypass_clearance_floor_m" default="0.15"/>
+    <arg name="emergency_bypass_max_path_age_s" default="0.70"/>
+    <arg name="emergency_bypass_max_lateral_dev_m" default="0.10"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
     <arg name="debug_stop_logging" default="true"/>
     <arg name="debug_dwa_stats" default="true"/>
@@ -1150,6 +1153,9 @@
         <param name="active_avoidance_bypass_clearance_m" value="$(arg active_avoidance_bypass_clearance_m)"/>
         <param name="emergency_bypass_goal_window_m" value="$(arg emergency_bypass_goal_window_m)"/>
         <param name="emergency_bypass_speed_limit_mps" value="$(arg emergency_bypass_speed_limit_mps)"/>
+        <param name="emergency_bypass_clearance_floor_m" value="$(arg emergency_bypass_clearance_floor_m)"/>
+        <param name="emergency_bypass_max_path_age_s" value="$(arg emergency_bypass_max_path_age_s)"/>
+        <param name="emergency_bypass_max_lateral_dev_m" value="$(arg emergency_bypass_max_lateral_dev_m)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>
         <param name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
         <param name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>

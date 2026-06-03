@@ -480,9 +480,9 @@
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
   <arg name="risk_block_confirm_cells" default="2"/>
   <arg name="pointcloud_block_confirm_points" default="2"/>
-  <arg name="avoidance_min_overlay_points" default="$(eval '4' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
+  <arg name="avoidance_min_overlay_points" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
   <arg name="avoidance_min_cluster_count" default="2"/>
-  <arg name="avoidance_sparse_path_evidence_min_points" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
+  <arg name="avoidance_sparse_path_evidence_min_points" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="avoidance_hold_s" default="3.0"/>
   <arg name="avoidance_clear_confirm_cycles" default="16"/>
   <arg name="avoidance_trigger_confirm_cycles" default="1"/>
@@ -493,7 +493,7 @@
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="1.00"/>
   <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="avoidance_fast_reuse_window_s" default="$(eval '3.40' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
+  <arg name="avoidance_fast_reuse_window_s" default="$(eval '0.70' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="max_expand" default="$(eval '4500' if str(arg('localization_environment')).lower() == 'outdoor' else '25000')"/>
   <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '5' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="avoidance_branch_time_budget_s" default="$(eval '0.18' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
@@ -730,10 +730,13 @@
   <arg name="emergency_bypass_target_lateral_m" default="0.06"/>
   <arg name="emergency_bypass_bearing_deg" default="4.5"/>
   <arg name="emergency_bypass_yaw_err_deg" default="6.0"/>
-  <arg name="emergency_bypass_clearance_margin_m" default="0.00"/>
-  <arg name="active_avoidance_bypass_clearance_m" default="$(eval '0.08' if str(arg('localization_environment')).lower() == 'outdoor' else '0.14')"/>
+  <arg name="emergency_bypass_clearance_margin_m" default="0.05"/>
+  <arg name="active_avoidance_bypass_clearance_m" default="$(eval '0.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.18')"/>
   <arg name="emergency_bypass_goal_window_m" default="0.60"/>
-  <arg name="emergency_bypass_speed_limit_mps" default="0.26"/>
+  <arg name="emergency_bypass_speed_limit_mps" default="0.08"/>
+  <arg name="emergency_bypass_clearance_floor_m" default="0.15"/>
+  <arg name="emergency_bypass_max_path_age_s" default="0.70"/>
+  <arg name="emergency_bypass_max_lateral_dev_m" default="0.10"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
   <arg name="use_auto_osm" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
@@ -1527,6 +1530,9 @@
       <arg name="active_avoidance_bypass_clearance_m" value="$(arg active_avoidance_bypass_clearance_m)"/>
       <arg name="emergency_bypass_goal_window_m" value="$(arg emergency_bypass_goal_window_m)"/>
       <arg name="emergency_bypass_speed_limit_mps" value="$(arg emergency_bypass_speed_limit_mps)"/>
+      <arg name="emergency_bypass_clearance_floor_m" value="$(arg emergency_bypass_clearance_floor_m)"/>
+      <arg name="emergency_bypass_max_path_age_s" value="$(arg emergency_bypass_max_path_age_s)"/>
+      <arg name="emergency_bypass_max_lateral_dev_m" value="$(arg emergency_bypass_max_lateral_dev_m)"/>
       <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
       <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
       <arg name="direct_goal_timeout_s" value="$(eval arg('crossing_portal_direct_goal_timeout_s') if arg('enable_crossing_portal_manager') == 'true' else '0.0')"/>
