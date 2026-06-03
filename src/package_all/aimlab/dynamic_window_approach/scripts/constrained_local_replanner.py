@@ -4332,6 +4332,15 @@ class ConstrainedLocalReplanner:
         for gx, gy in grid_path:
             if (not self._in_bounds_blocked(dynamic_blocked, gx, gy)) or dynamic_blocked[gy][gx]:
                 return None, None, None
+            # Drivable guard: a sidestep candidate that hops out of the
+            # drivable area is not a valid detour, even when no dynamic
+            # obstacle sits on those cells. Without this check the
+            # replanner publishes paths that the DWA tracker then refuses
+            # to follow, leaving the robot stuck in recovery_drivable.
+            if self.drivable_grid is not None and not self._grid_cell_is_drivable_free(
+                self.drivable_grid, gx, gy
+            ):
+                return None, None, None
         for idx in range(len(grid_path) - 1):
             if not self._has_line_of_sight(
                 dynamic_blocked, grid_path[idx], grid_path[idx + 1]
@@ -7120,26 +7129,47 @@ class ConstrainedLocalReplanner:
             )
         if avoid_path is None:
             if self.avoidance_active and self.last_avoidance_grid_path is not None and len(self.last_avoidance_grid_path) >= 2:
-                self._publish_stored_avoidance_path(
-                    dg,
-                    stamp,
-                    record_history=False,
-                )
-                self.avoidance_clear_count = 0
-                self.last_avoidance_publish_sec = stamp.to_sec()
-                rospy.loginfo_throttle(
+                # Re-validate the cached avoidance path against the *current*
+                # drivable grid before keeping it. The drivable area may have
+                # shifted (or the cached path may have been generated when
+                # the grid was less stale) and silently broadcasting a path
+                # that exits drivable cells puts the DWA tracker into
+                # gate=recovery_drivable forever.
+                stored_path_drivable = True
+                if self.drivable_grid is not None:
+                    for gx, gy in self.last_avoidance_grid_path:
+                        if not self._grid_cell_is_drivable_free(self.drivable_grid, gx, gy):
+                            stored_path_drivable = False
+                            break
+                if stored_path_drivable:
+                    self._publish_stored_avoidance_path(
+                        dg,
+                        stamp,
+                        record_history=False,
+                    )
+                    self.avoidance_clear_count = 0
+                    self.last_avoidance_publish_sec = stamp.to_sec()
+                    rospy.loginfo_throttle(
+                        1.0,
+                        "constrained_local_replanner: keeping current avoidance path during no-solution hold | reason=%s",
+                        trigger_reason,
+                    )
+                    # Return "avoidance" so downstream stays in follow_avoidance
+                    # mode and tracks the path we just republished. Returning
+                    # "hold" here was the bug: the stored avoidance path was
+                    # being broadcast on /planning/local_path but path_mode
+                    # flipped to "hold" the same tick, which the controller
+                    # interprets as a full stop. The robot then sat in
+                    # stop_hold while a valid avoidance path was alive.
+                    return "avoidance"
+                rospy.logwarn_throttle(
                     1.0,
-                    "constrained_local_replanner: keeping current avoidance path during no-solution hold | reason=%s",
+                    "constrained_local_replanner: dropping cached avoidance — path exits current drivable grid | reason=%s",
                     trigger_reason,
                 )
-                # Return "avoidance" so downstream stays in follow_avoidance
-                # mode and tracks the path we just republished. Returning
-                # "hold" here was the bug: the stored avoidance path was
-                # being broadcast on /planning/local_path but path_mode
-                # flipped to "hold" the same tick, which the controller
-                # interprets as a full stop. The robot then sat in
-                # stop_hold while a valid avoidance path was alive.
-                return "avoidance"
+                # Fall through to the lower-rank fallbacks (republish-last
+                # then nominal_fallback) instead of broadcasting a path the
+                # tracker will refuse to follow.
             if self.avoidance_active and self._republish_last_avoidance_path(dg, stamp):
                 return "avoidance"
             if self._should_follow_nominal_local_on_no_solution(
