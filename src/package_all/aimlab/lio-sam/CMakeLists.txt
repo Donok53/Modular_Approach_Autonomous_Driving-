@@ -15,6 +15,8 @@ find_package(catkin REQUIRED COMPONENTS
   # msgs
   std_msgs
   std_srvs
+  pluginlib
+  rviz
   sensor_msgs
   geometry_msgs
   nav_msgs
@@ -28,6 +30,7 @@ find_package(PCL REQUIRED QUIET)
 find_package(OpenCV REQUIRED QUIET)
 find_package(GTSAM REQUIRED QUIET)
 find_package(Boost REQUIRED COMPONENTS timer)
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
 
 add_message_files(
   DIRECTORY msg
@@ -56,6 +59,8 @@ catkin_package(
   CATKIN_DEPENDS
   std_msgs
   std_srvs
+  pluginlib
+  rviz
   nav_msgs
   geometry_msgs
   sensor_msgs
@@ -106,6 +111,10 @@ target_link_libraries(${PROJECT_NAME}_mapOptmization Boost::timer ${catkin_LIBRA
 add_executable(${PROJECT_NAME}_imuPreintegration src/imuPreintegration.cpp)
 target_link_libraries(${PROJECT_NAME}_imuPreintegration Boost::timer ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} gtsam)
 
+# RViz map extension toolbar tools
+add_library(${PROJECT_NAME}_map_extension_tools src/map_extension_tools.cpp)
+target_link_libraries(${PROJECT_NAME}_map_extension_tools ${catkin_LIBRARIES} Qt5::Widgets)
+
 catkin_install_python(PROGRAMS
   scripts/gps_factor_track.py
   scripts/gps_track.py
@@ -127,5 +136,13 @@ catkin_install_python(PROGRAMS
 )
 
 install(DIRECTORY launch config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+
+install(TARGETS ${PROJECT_NAME}_map_extension_tools
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+)
+
+install(FILES map_extension_rviz_plugins.xml
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

@@ -85,6 +85,7 @@ class MapExtensionSupervisor:
         self.preview_max_points = max(1000, int(rospy.get_param("~preview_max_points", 150000)))
         self.preview_publish_hz = max(0.2, float(rospy.get_param("~preview_publish_hz", 2.0)))
         self.control_refresh_s = max(0.2, float(rospy.get_param("~control_refresh_s", 1.0)))
+        self.enable_interactive_controls = bool(rospy.get_param("~enable_interactive_controls", False))
 
         self._lock = threading.RLock()
         self._launch_parent = None
@@ -126,10 +127,10 @@ class MapExtensionSupervisor:
         self.srv_cancel = rospy.Service(self.cancel_service_name, Trigger, self.handle_cancel)
 
         self.marker_server = None
-        if InteractiveMarkerServer is not None:
+        if self.enable_interactive_controls and InteractiveMarkerServer is not None:
             self.marker_server = InteractiveMarkerServer("map_extension_controls")
             self._refresh_interactive_markers()
-        else:
+        elif self.enable_interactive_controls:
             rospy.logwarn("map_extension_supervisor: interactive_markers is unavailable; services still work")
 
         self.preview_timer = rospy.Timer(
@@ -139,11 +140,12 @@ class MapExtensionSupervisor:
         rospy.on_shutdown(self._shutdown_mapping_launch)
 
         rospy.loginfo(
-            "map_extension_supervisor started | start=%s finish=%s cancel=%s preview=%s controls=/map_extension_controls/update",
+            "map_extension_supervisor started | start=%s finish=%s cancel=%s preview=%s scene_controls=%s",
             self.start_service_name,
             self.finish_service_name,
             self.cancel_service_name,
             self.preview_cloud_topic,
+            str(self.enable_interactive_controls),
         )
         self._publish_status("idle", "waiting for localization")
 

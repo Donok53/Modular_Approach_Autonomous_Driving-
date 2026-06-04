@@ -17,6 +17,7 @@
   <arg name="preview_source_cloud_topic" default="/lio_sam/mapping/cloud_registered_raw"/>
   <arg name="preview_voxel_leaf_size" default="0.12"/>
   <arg name="preview_point_stride" default="4"/>
+  <arg name="enable_interactive_controls" default="false"/>
   <arg name="enable_semantic_sidewalk_pipeline" default="true"/>
 
   <group if="$(arg enable)">
@@ -31,6 +32,7 @@
       <param name="preview_source_cloud_topic" value="$(arg preview_source_cloud_topic)"/>
       <param name="preview_voxel_leaf_size" value="$(arg preview_voxel_leaf_size)"/>
       <param name="preview_point_stride" value="$(arg preview_point_stride)"/>
+      <param name="enable_interactive_controls" value="$(arg enable_interactive_controls)"/>
       <rosparam param="transform_pcd_files">
         ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"]
       </rosparam>

@@ -403,12 +403,12 @@ Visualization Manager:
           Value: true
         - Class: rviz/InteractiveMarkers
           Enable Transparency: true
-          Enabled: true
+          Enabled: false
           Name: Map Extension Controls
           Show Axes: false
           Show Descriptions: true
           Update Topic: /map_extension_controls/update
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -438,13 +438,13 @@ Visualization Manager:
           Use rainbow: true
           Value: true
         - Class: rviz/Marker
-          Enabled: true
+          Enabled: false
           Marker Topic: /map_extension/status_marker
           Name: Map Extension Status
           Namespaces:
             map_extension_status: true
           Queue Size: 10
-          Value: true
+          Value: false
         - Class: rviz/Marker
           Enabled: true
           Marker Topic: /lio_sam/drivable_area/marker
@@ -695,6 +695,9 @@ Visualization Manager:
       Hide Inactive Objects: true
     - Class: rviz/FocusCamera
     - Class: rviz/Measure
+    - Class: lio_sam/MapExtensionStartTool
+    - Class: lio_sam/MapExtensionSaveTool
+    - Class: lio_sam/MapExtensionCancelTool
   Value: true
   Views:
     Current:

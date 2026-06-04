@@ -30,6 +30,10 @@
   <run_depend>std_msgs</run_depend>
   <build_depend>std_srvs</build_depend>
   <run_depend>std_srvs</run_depend>
+  <build_depend>pluginlib</build_depend>
+  <run_depend>pluginlib</run_depend>
+  <build_depend>rviz</build_depend>
+  <run_depend>rviz</run_depend>
   <build_depend>sensor_msgs</build_depend>
   <run_depend>sensor_msgs</run_depend>
   <build_depend>geometry_msgs</build_depend>
@@ -48,5 +52,9 @@
 
   <build_depend>GTSAM</build_depend>
   <run_depend>GTSAM</run_depend>
+
+  <export>
+    <rviz plugin="${prefix}/map_extension_rviz_plugins.xml"/>
+  </export>
 
 </package>

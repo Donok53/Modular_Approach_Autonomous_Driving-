@@ -1,0 +1,20 @@
+<library path="lib/liblio_sam_map_extension_tools">
+  <class
+    name="lio_sam/MapExtensionStartTool"
+    type="lio_sam_rviz_plugins::MapExtensionStartTool"
+    base_class_type="rviz::Tool">
+    <description>Start RViz-controlled map extension after localization is ready.</description>
+  </class>
+  <class
+    name="lio_sam/MapExtensionSaveTool"
+    type="lio_sam_rviz_plugins::MapExtensionSaveTool"
+    base_class_type="rviz::Tool">
+    <description>Save and merge the active map extension.</description>
+  </class>
+  <class
+    name="lio_sam/MapExtensionCancelTool"
+    type="lio_sam_rviz_plugins::MapExtensionCancelTool"
+    base_class_type="rviz::Tool">
+    <description>Cancel the active map extension without merging it.</description>
+  </class>
+</library>
