@@ -15,6 +15,7 @@
     <arg name="extend_existing_map" default="false"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
     <arg name="map_sync_destination_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
+    <arg name="map_sync_delete_extra" default="true"/>
     <arg name="map_extension_backup_dir" default="$(arg map_sync_destination_dir)_extension_backups"/>
     <arg name="map_extension_voxel_leaf_size" default="0.08"/>
     <arg name="map_extension_keep_existing_ref" default="true"/>
@@ -82,6 +83,7 @@
       <arg name="source_dir" value="$(arg map_sync_source_dir)"/>
       <arg name="destination_dir" value="$(arg map_sync_destination_dir)"/>
       <arg name="extend_existing_map" value="$(arg extend_existing_map)"/>
+      <arg name="delete_extra" value="$(arg map_sync_delete_extra)"/>
       <arg name="extension_backup_dir" value="$(arg map_extension_backup_dir)"/>
       <arg name="extension_voxel_leaf_size" value="$(arg map_extension_voxel_leaf_size)"/>
       <arg name="extension_keep_existing_ref" value="$(arg map_extension_keep_existing_ref)"/>

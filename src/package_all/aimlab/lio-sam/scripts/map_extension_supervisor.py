@@ -9,6 +9,7 @@ import struct
 import subprocess
 import threading
 import time
+from collections import deque
 
 import rospy
 import sensor_msgs.point_cloud2 as pc2
@@ -97,6 +98,9 @@ class MapExtensionSupervisor:
         self.preview_publish_hz = max(0.2, float(rospy.get_param("~preview_publish_hz", 2.0)))
         self.control_refresh_s = max(0.2, float(rospy.get_param("~control_refresh_s", 1.0)))
         self.enable_interactive_controls = bool(rospy.get_param("~enable_interactive_controls", False))
+        self.localization_time_sync_max_dt_s = max(
+            0.0, float(rospy.get_param("~localization_time_sync_max_dt_s", 0.35))
+        )
 
         self._lock = threading.RLock()
         self._launch_parent = None
@@ -105,6 +109,7 @@ class MapExtensionSupervisor:
         self._last_message = "ready"
         self._last_localizer_odom = None
         self._last_localizer_time = rospy.Time(0)
+        self._localizer_history = deque(maxlen=240)
         self._start_localizer_matrix = None
         self._start_localizer_quat = (0.0, 0.0, 0.0, 1.0)
         self._session_to_map = None
@@ -401,9 +406,35 @@ class MapExtensionSupervisor:
                 f.write(struct.pack("<ffff", float(x), float(y), float(z), float(intensity)))
 
     def _on_localizer_odom(self, msg):
+        stamp = msg.header.stamp if msg.header.stamp != rospy.Time(0) else rospy.Time.now()
+        matrix = self._pose_matrix_from_odom(msg)
+        quat = self._pose_quat_from_odom(msg)
         with self._lock:
             self._last_localizer_odom = msg
             self._last_localizer_time = rospy.Time.now()
+            self._localizer_history.append((stamp, matrix, quat))
+
+    def _select_localizer_pose_for_mapping(self, mapping_stamp):
+        now = rospy.Time.now()
+        with self._lock:
+            history = list(self._localizer_history)
+            latest_odom = self._last_localizer_odom
+            latest_age = (now - self._last_localizer_time).to_sec()
+            start_matrix = None if self._start_localizer_matrix is None else self._copy_matrix(self._start_localizer_matrix)
+            start_quat = tuple(self._start_localizer_quat)
+
+        if mapping_stamp != rospy.Time(0) and history and self.localization_time_sync_max_dt_s > 0.0:
+            best = min(history, key=lambda item: abs((item[0] - mapping_stamp).to_sec()))
+            best_dt = abs((best[0] - mapping_stamp).to_sec())
+            if best_dt <= self.localization_time_sync_max_dt_s:
+                return self._copy_matrix(best[1]), tuple(best[2]), "history", best_dt
+
+        if latest_odom is not None and latest_age <= self.localization_max_age_s:
+            return self._pose_matrix_from_odom(latest_odom), self._pose_quat_from_odom(latest_odom), "latest", latest_age
+
+        if start_matrix is not None:
+            return start_matrix, start_quat, "start_fallback", float("inf")
+        return None, None, "missing", float("inf")
 
     def _on_mapping_odom(self, msg):
         with self._lock:
@@ -411,15 +442,30 @@ class MapExtensionSupervisor:
                 return
             if self._start_localizer_matrix is None:
                 return
+        localizer_matrix, localizer_quat, pose_source, pose_dt = self._select_localizer_pose_for_mapping(
+            msg.header.stamp
+        )
+        if localizer_matrix is None:
+            rospy.logwarn_throttle(
+                1.0, "map_extension_supervisor: waiting for localizer pose to align extension session"
+            )
+            return
+        with self._lock:
+            if not self._running or self._session_to_map is not None:
+                return
             session_start = self._pose_matrix_from_odom(msg)
             self._session_to_map = self._matrix_multiply(
-                self._start_localizer_matrix, self._matrix_inverse_rigid(session_start)
+                localizer_matrix, self._matrix_inverse_rigid(session_start)
             )
             self._session_quat = self._quat_multiply(
-                self._start_localizer_quat, self._quat_inverse(self._pose_quat_from_odom(msg))
+                localizer_quat, self._quat_inverse(self._pose_quat_from_odom(msg))
             )
             self._publish_status("running", "extension transform ready")
-            rospy.loginfo("map_extension_supervisor: session-to-map transform is ready")
+            rospy.loginfo(
+                "map_extension_supervisor: session-to-map transform is ready | localizer_pose=%s dt=%.3fs",
+                pose_source,
+                pose_dt,
+            )
 
     def _on_mapping_path(self, msg):
         with self._lock:

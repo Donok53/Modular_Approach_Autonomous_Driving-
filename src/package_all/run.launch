@@ -850,7 +850,7 @@
     <arg name="localizer_odom_topic" value="/lio_localizer/odometry/optimization"/>
     <arg name="preview_cloud_topic" value="$(arg map_extension_preview_cloud_topic)"/>
     <arg name="status_marker_topic" value="$(arg map_extension_status_marker_topic)"/>
-    <arg name="enable_semantic_sidewalk_pipeline" value="true"/>
+    <arg name="enable_semantic_sidewalk_pipeline" value="false"/>
   </include>
 
   <node if="$(arg enable_monitoring_asset_bundle)" pkg="lio_sam" type="lio_sam_map_sync.py"

@@ -25,7 +25,7 @@
   <arg name="require_stationary_start" default="true"/>
   <arg name="start_max_linear_speed_mps" default="0.12"/>
   <arg name="start_max_angular_speed_rps" default="0.20"/>
-  <arg name="enable_semantic_sidewalk_pipeline" default="true"/>
+  <arg name="enable_semantic_sidewalk_pipeline" default="false"/>
 
   <group if="$(arg enable)">
     <node pkg="lio_sam" type="map_extension_supervisor.py"
@@ -59,6 +59,7 @@
           "publish_tf:=false",
           "enable_map_sync:=true",
           "extend_existing_map:=true",
+          "map_sync_delete_extra:=false",
           "map_sync_source_dir:=$(arg source_dir)",
           "map_sync_destination_dir:=$(arg destination_dir)",
           "map_extension_backup_dir:=$(arg extension_backup_dir)",
