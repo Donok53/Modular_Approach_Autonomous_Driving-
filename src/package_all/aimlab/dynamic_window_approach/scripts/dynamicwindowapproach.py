@@ -1192,32 +1192,37 @@ class DWAControl:
             pass
 
     def _post_stop_rotation_cmd(self):
-        # When emergency stop fires while the avoidance bypass was rejected
-        # because the robot drifted off the cached path (or the path is
-        # stale), the robot would otherwise be stuck. Issue a zero-linear
-        # rotation toward the avoidance path so the robot can realign and
-        # let bypass re-engage on the next tick.
+        # When emergency stop fires because the robot drifted off the cached
+        # avoidance path (or the path is stale), a small zero-linear rotation
+        # can realign the robot. Do not use this for genuine close-contact
+        # stops; emergency stop must mean a full Twist zero in that case.
         if not self.post_stop_rotation_enabled:
             return None
         if not self._avoidance_mode_active():
             return None
         if self.behavior_stop:
             return None
+        if self._raw_immediate_contact_blocked:
+            return None
+        if math.isfinite(self.front_obstacle_clearance):
+            min_rotation_clearance = max(
+                self.emergency_bypass_clearance_floor_m,
+                self.active_avoidance_bypass_clearance_m
+                + self.emergency_bypass_clearance_margin_m,
+            )
+            if self.front_obstacle_clearance <= min_rotation_clearance:
+                return None
         reject = None
         if isinstance(self._emergency_bypass_debug, dict):
             reject = self._emergency_bypass_debug.get("reject")
-        # Accept any rejection where rotating in place toward the avoidance
-        # path could plausibly unstick us: path-tracking signals went off
-        # course (lat_dev, path_stale, preview_behind, no_lateral_detour) or
-        # the obstacle is biting into clearance (clearance_floor,
-        # clearance_band) and the cached avoidance path still exists.
+        # Accept only path-tracking rejections where rotating in place toward
+        # the avoidance path could plausibly unstick us. Clearance rejections
+        # remain a true stop.
         allowed = {
             "lateral_dev",
             "path_stale",
             "preview_behind",
             "no_lateral_detour",
-            "clearance_floor",
-            "clearance_band",
         }
         if reject not in allowed:
             return None
