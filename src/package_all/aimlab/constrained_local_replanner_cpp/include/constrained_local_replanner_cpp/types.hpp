@@ -59,6 +59,7 @@ struct PlannerParams {
   double return_to_global_trigger_distance_m{0.65};
   double return_to_global_min_tail_m{0.80};
   double return_to_global_goal_tolerance_m{0.35};
+  double final_goal_direct_distance_m{2.0};
   double candidate_start_clearance_m{0.35};
   double obstacle_drivable_filter_radius_m{0.0};
   double relaxed_obstacle_block_margin_m{0.04};

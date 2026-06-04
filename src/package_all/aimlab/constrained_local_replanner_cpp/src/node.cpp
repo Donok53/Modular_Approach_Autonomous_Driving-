@@ -117,6 +117,29 @@ std::size_t nearestIndexHeadingAware(const std::vector<WorldXY>& world,
   return std::max(min_idx, pure_near);
 }
 
+std::vector<WorldXY> makeDirectGoalPath(double rx,
+                                        double ry,
+                                        WorldXY goal,
+                                        double step_m) {
+  std::vector<WorldXY> out;
+  const double dx = goal.x - rx;
+  const double dy = goal.y - ry;
+  const double dist = std::hypot(dx, dy);
+  if (dist <= 1e-6) {
+    out.push_back(WorldXY{rx, ry});
+    out.push_back(goal);
+    return out;
+  }
+  const int n = std::max(1, static_cast<int>(
+      std::ceil(dist / std::max(0.05, step_m))));
+  out.reserve(static_cast<std::size_t>(n) + 1);
+  for (int i = 0; i <= n; ++i) {
+    const double t = static_cast<double>(i) / static_cast<double>(n);
+    out.push_back(WorldXY{rx + t * dx, ry + t * dy});
+  }
+  return out;
+}
+
 bool globalSignatureChanged(const std::vector<WorldXY>& world,
                             bool have_signature,
                             std::size_t last_size,
@@ -482,6 +505,9 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("return_to_global_goal_tolerance_m",
              params_.return_to_global_goal_tolerance_m,
              params_.return_to_global_goal_tolerance_m);
+  pnh_.param("final_goal_direct_distance_m",
+             params_.final_goal_direct_distance_m,
+             params_.final_goal_direct_distance_m);
   pnh_.param("return_to_global_max_candidates",
              params_.return_to_global_max_candidates,
              params_.return_to_global_max_candidates);
@@ -753,8 +779,13 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   }
   const double goal_dist = std::hypot(global_world.back().x - rx,
                                       global_world.back().y - ry);
+  const bool final_direct_goal =
+      params_.final_goal_direct_distance_m > 0.0 &&
+      goal_dist <= params_.final_goal_direct_distance_m;
   std::vector<WorldXY> nominal_world =
-      truncateWorld(global_world, near_idx, params_.lookahead_m);
+      final_direct_goal
+          ? makeDirectGoalPath(rx, ry, global_world.back(), 0.20)
+          : truncateWorld(global_world, near_idx, params_.lookahead_m);
 
   overlayPointsPathAdaptive(g, blocked, obstacle_pts, nominal_world, params_);
 
@@ -772,7 +803,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       goal_dist > params_.return_to_global_goal_tolerance_m;
   const bool off_global_path =
       near_dist > params_.return_to_global_trigger_distance_m;
-  if (short_tail || off_global_path) {
+  if (!final_direct_goal && (short_tail || off_global_path)) {
     ReturnPath return_path = buildReturnToGlobalPath(
         global_world, candidate_blocked, g, start, rx, ry, near_idx, params_,
         branch_max_expand_, branch_time_budget_s_);
@@ -865,9 +896,17 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   AvoidanceResult candidate;
   std::vector<GridCell> candidate_cells;
   std::vector<WorldXY>  candidate_world;
+  PlannerParams planning_params = params_;
+  if (final_direct_goal) {
+    const double final_rejoin_m =
+        std::min(params_.rejoin_min_distance_m, std::max(0.20, goal_dist * 0.35));
+    planning_params.rejoin_min_distance_m = final_rejoin_m;
+    planning_params.sidestep_preview_m =
+        std::min(params_.sidestep_preview_m, std::max(0.60, goal_dist + 0.30));
+  }
   if (nominal_blocked) {
     candidate = buildSidestepAvoidance(nominal_cells, candidate_blocked, g, start,
-                                       blocker_world, params_, yaw, 0);
+                                       blocker_world, planning_params, yaw, 0);
     if (candidate.found) {
       candidate_cells = candidate.grid_path;
       candidate_world = candidate.waypoints;
@@ -882,7 +921,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
         traveled += std::hypot(
             static_cast<double>(nominal_cells[i].x - nominal_cells[i - 1].x),
             static_cast<double>(nominal_cells[i].y - nominal_cells[i - 1].y)) * res;
-        if (traveled < params_.rejoin_min_distance_m) continue;
+        if (traveled < planning_params.rejoin_min_distance_m) continue;
         if (cellIsBlockedAt(candidate_blocked, g.width, g.height,
                             nominal_cells[i].x, nominal_cells[i].y)) continue;
         rejoin_candidates.push_back(nominal_cells[i]);
@@ -917,10 +956,21 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
 
   const bool locked_static_nearby =
       sm_->lockedStaticNearby(WorldXY{rx, ry}, locked_static_hold_radius_m_);
-  const PathMode mode = sm_->update(
+  PathMode mode = sm_->update(
       nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
       endpoint_dist, cached_drivable, locked_static_nearby,
       now_sec);
+  if (final_direct_goal && !nominal_blocked && mode == PathMode::FOLLOW_AVOIDANCE) {
+    sm_->forceFollowLocal();
+    mode = PathMode::FOLLOW_LOCAL;
+    last_avoid_active_ = false;
+    last_avoid_grid_path_.clear();
+    last_avoid_world_path_.clear();
+    ROS_INFO_THROTTLE(
+        1.0,
+        "cpp planner | final direct goal released cached avoidance goal_dist=%.2f near_dist=%.2f",
+        goal_dist, near_dist);
+  }
 
   // Choose what to publish based on the resolved mode.
   nav_msgs::Path out;
@@ -1103,14 +1153,16 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
           .count();
   ROS_INFO_THROTTLE(1.0,
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
-      "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d near_dist=%.2f "
-      "tail=%.2f blocker_path=%d blocker_lx=%.2f blocker_ly=%.2f blocker_path_dist=%.2f "
+      "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d final_goal=%d "
+      "near_dist=%.2f goal_dist=%.2f tail=%.2f blocker_path=%d "
+      "blocker_lx=%.2f blocker_ly=%.2f blocker_path_dist=%.2f "
       "clusters=%zu obs_pts=%zu raw_obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
       static_cast<int>(start_blocked), static_cast<int>(return_to_global),
-      near_dist, nominal_tail_m, static_cast<int>(blocker_path_relevant),
+      static_cast<int>(final_direct_goal), near_dist, goal_dist, nominal_tail_m,
+      static_cast<int>(blocker_path_relevant),
       blocker_lx, blocker_ly, blocker_path_dist,
       clusters.size(), obstacle_pts.size(), raw_obstacle_count, tick_ms);
 }

@@ -109,6 +109,14 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
   return mode_;
 }
 
+void AvoidanceStateMachine::forceFollowLocal() {
+  mode_ = PathMode::FOLLOW_LOCAL;
+  confirm_count_ = 0;
+  last_clear_seen_sec_ = 0.0;
+  avoidance_entry_sec_ = 0.0;
+  hold_entry_sec_ = 0.0;
+}
+
 void AvoidanceStateMachine::recordStaticHit(WorldXY centroid, double now_sec) {
   if (cfg_.locked_static_ttl_s <= 0.0) {
     locked_.clear();

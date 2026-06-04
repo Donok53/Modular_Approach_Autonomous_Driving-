@@ -66,6 +66,11 @@ class AvoidanceStateMachine {
 
   PathMode currentMode() const noexcept { return mode_; }
 
+  // Final-goal approach can supersede a cached detour once the nominal direct
+  // goal corridor is clear. This prevents carrying an old avoidance loop around
+  // the destination.
+  void forceFollowLocal();
+
   // Push a candidate blocker centroid. After
   // cfg.locked_static_persistence_hits sightings within
   // cfg.locked_static_hit_radius_m it becomes "locked" and is preserved
