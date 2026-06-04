@@ -39,15 +39,12 @@ class AvoidanceStateMachine {
     // Keep locked static memory only long enough to bridge short perception
     // dropouts. Set <= 0 to disable locked static memory entirely.
     double locked_static_ttl_s{0.8};
-    // If HOLD persists this long with no candidate, fall through to
-    // FOLLOW_LOCAL so the robot stops being stuck. DWA's near-field
-    // safety stop still catches genuine collision threats.
-    double hold_escape_timeout_s{5.0};
-    // The C++ blocker check is intentionally fast and can be conservative in
-    // cluttered indoor scenes. By default, a blocked nominal path with no valid
-    // detour keeps publishing the nominal path; DWA's raw near-field stop owns
-    // the actual collision stop.
-    bool hold_without_candidate{false};
+    // Optional stuck-escape timeout. Disabled by default because a blocked
+    // nominal path with no candidate must not fall through to straight driving.
+    double hold_escape_timeout_s{0.0};
+    // A blocked nominal path with no valid detour becomes HOLD instead of
+    // publishing the blocked nominal path.
+    bool hold_without_candidate{true};
   };
 
   AvoidanceStateMachine() : cfg_(Config()) {}

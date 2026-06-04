@@ -520,8 +520,8 @@
   <arg name="return_to_global_max_candidates" default="24"/>
   <arg name="candidate_start_clearance_m" default="0.35"/>
   <arg name="locked_static_ttl_s" default="0.80"/>
-  <arg name="hold_without_candidate" default="false"/>
-  <arg name="hold_escape_timeout_s" default="5.0"/>
+  <arg name="hold_without_candidate" default="true"/>
+  <arg name="hold_escape_timeout_s" default="0.0"/>
   <arg name="cpp_replanner_cloud_z_min_m" default="0.04"/>
   <arg name="cpp_replanner_cloud_world_z_min_m" default="0.03"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>

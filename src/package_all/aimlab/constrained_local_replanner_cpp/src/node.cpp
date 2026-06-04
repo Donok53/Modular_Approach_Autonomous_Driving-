@@ -82,6 +82,43 @@ void appendGlobalTail(std::vector<WorldXY>& out,
   }
 }
 
+double pointSegmentDistance(WorldXY p, WorldXY a, WorldXY b) {
+  const double vx = b.x - a.x;
+  const double vy = b.y - a.y;
+  const double wx = p.x - a.x;
+  const double wy = p.y - a.y;
+  const double denom = vx * vx + vy * vy;
+  if (denom <= 1e-9) return std::hypot(p.x - a.x, p.y - a.y);
+  const double t = std::max(0.0, std::min(1.0, (wx * vx + wy * vy) / denom));
+  const double px = a.x + t * vx;
+  const double py = a.y + t * vy;
+  return std::hypot(p.x - px, p.y - py);
+}
+
+double pointPolylineDistance(WorldXY p, const std::vector<WorldXY>& path) {
+  if (path.empty()) return std::numeric_limits<double>::infinity();
+  if (path.size() == 1) return std::hypot(p.x - path.front().x, p.y - path.front().y);
+  double best = std::numeric_limits<double>::infinity();
+  for (std::size_t i = 1; i < path.size(); ++i) {
+    best = std::min(best, pointSegmentDistance(p, path[i - 1], path[i]));
+  }
+  return best;
+}
+
+double pointAabbDistance(WorldXY p, WorldXY min_xy, WorldXY max_xy) {
+  const double dx = std::max({min_xy.x - p.x, 0.0, p.x - max_xy.x});
+  const double dy = std::max({min_xy.y - p.y, 0.0, p.y - max_xy.y});
+  return std::hypot(dx, dy);
+}
+
+double clusterPathDistance(const Cluster& cl, const std::vector<WorldXY>& path) {
+  double best = pointPolylineDistance(cl.centroid, path);
+  for (const auto& p : path) {
+    best = std::min(best, pointAabbDistance(p, cl.min_xy, cl.max_xy));
+  }
+  return best;
+}
+
 struct ReturnPath {
   bool found{false};
   std::size_t rejoin_idx{0};
@@ -506,17 +543,61 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       pathBlockedAhead(nominal_cells, blocked, g.width, g.height, start,
                        g.resolution_m, params_.avoidance_trigger_ahead_m);
 
-  // Record candidate static blockers from the obstacle clusters.
+  // Record candidate static blockers from the obstacle clusters, and choose
+  // the cluster that actually intersects the forward nominal corridor. Picking
+  // the nearest cluster globally can select a side/behind wall; then sidestep
+  // rejects it as "not in front" and the planner falls into HOLD even though a
+  // real forward blocker exists.
   auto clusters = clusterPoints2D(obstacle_pts, params_.pointcloud_cluster_resolution_m);
   WorldXY blocker_world{rx + 2.0 * std::cos(yaw), ry + 2.0 * std::sin(yaw)};
+  double blocker_lx = std::numeric_limits<double>::infinity();
+  double blocker_ly = std::numeric_limits<double>::infinity();
+  double blocker_path_dist = std::numeric_limits<double>::infinity();
+  bool blocker_path_relevant = false;
   {
-    double best = std::numeric_limits<double>::infinity();
+    WorldXY nearest_world = blocker_world;
+    double nearest_dxy = std::numeric_limits<double>::infinity();
+    double best_path_score = std::numeric_limits<double>::infinity();
+    const double c = std::cos(yaw);
+    const double s = std::sin(yaw);
+    const double path_gate_m =
+        params_.footprint.half_width_m + params_.footprint.padding_m +
+        params_.obstacle_block_margin_m + 0.30;
     for (const auto& cl : clusters) {
       const double dxy = std::hypot(cl.centroid.x - rx, cl.centroid.y - ry);
-      if (dxy < best) { best = dxy; blocker_world = cl.centroid; }
+      if (dxy < nearest_dxy) {
+        nearest_dxy = dxy;
+        nearest_world = cl.centroid;
+      }
+      const double dx = cl.centroid.x - rx;
+      const double dy = cl.centroid.y - ry;
+      const double lx = c * dx + s * dy;
+      const double ly = -s * dx + c * dy;
+      const double path_dist = clusterPathDistance(cl, nominal_world);
+      const bool ahead =
+          lx >= -0.05 && lx <= params_.avoidance_trigger_ahead_m + 1.0;
+      if (ahead && path_dist <= path_gate_m) {
+        const double score = std::max(0.0, lx) + 3.0 * path_dist + 0.01 * dxy;
+        if (score < best_path_score) {
+          best_path_score = score;
+          blocker_world = cl.centroid;
+          blocker_lx = lx;
+          blocker_ly = ly;
+          blocker_path_dist = path_dist;
+          blocker_path_relevant = true;
+        }
+      }
       sm_->recordStaticHit(cl.centroid, now_sec);
     }
     sm_->pruneStaleStatic(now_sec);
+    if (!blocker_path_relevant) {
+      blocker_world = nearest_world;
+      const double dx = blocker_world.x - rx;
+      const double dy = blocker_world.y - ry;
+      blocker_lx = c * dx + s * dy;
+      blocker_ly = -s * dx + c * dy;
+      blocker_path_dist = pointPolylineDistance(blocker_world, nominal_world);
+    }
   }
 
   // Try sidestep first, then branch search as a fallback.
@@ -762,12 +843,14 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   ROS_INFO_THROTTLE(1.0,
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
       "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d near_dist=%.2f "
-      "tail=%.2f clusters=%zu obs_pts=%zu tick=%.1fms",
+      "tail=%.2f blocker_path=%d blocker_lx=%.2f blocker_ly=%.2f blocker_path_dist=%.2f "
+      "clusters=%zu obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
       static_cast<int>(start_blocked), static_cast<int>(return_to_global),
-      near_dist, nominal_tail_m,
+      near_dist, nominal_tail_m, static_cast<int>(blocker_path_relevant),
+      blocker_lx, blocker_ly, blocker_path_dist,
       clusters.size(), obstacle_pts.size(), tick_ms);
 }
 

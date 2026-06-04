@@ -96,9 +96,9 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
       } else if (hold_entry_sec_ > 0.0 &&
                  cfg_.hold_escape_timeout_s > 0.0 &&
                  (now_sec - hold_entry_sec_) > cfg_.hold_escape_timeout_s) {
-        // Optional escape hatch for conservative maps. The default runtime
-        // policy already falls back to FOLLOW_LOCAL when no candidate exists;
-        // this only helps explicit hold configurations avoid permanent stalls.
+        // Optional manual escape hatch for conservative maps. The default is
+        // disabled so a currently blocked nominal path never becomes a forward
+        // drive command just because no candidate was found.
         mode_ = PathMode::FOLLOW_LOCAL;
         confirm_count_ = 0;
         hold_entry_sec_ = 0.0;
