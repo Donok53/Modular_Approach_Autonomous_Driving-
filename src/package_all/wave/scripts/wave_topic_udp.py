@@ -38,6 +38,10 @@ alive_count = 0
 emergency_stop_active = False
 emergency_stop_last_stamp = rospy.Time(0)
 emergency_stop_timeout_s = 0.35
+emergency_preserve_angular = True
+emergency_angular_limit_rps = 0.35
+latest_cmd = Twist()
+latest_cmd_from_emergency = False
 
 # 서버로부터 수신받을 데이터 변수
 ser_Robot_id = 0
@@ -79,20 +83,42 @@ def write_twist(twist):
     except serial.SerialException as e:
         rospy.logerr("Serial communication error: %s", str(e))
 
+def emergency_filter_twist(twist=None):
+    out = Twist()
+    if emergency_preserve_angular and twist is not None:
+        angular = float(twist.angular.z)
+        limit = float(emergency_angular_limit_rps)
+        if limit > 0.0:
+            angular = max(-limit, min(limit, angular))
+        else:
+            angular = 0.0
+        out.angular.z = angular
+    return out
+
 def emergency_stop_callback(msg):
-    global emergency_stop_active, emergency_stop_last_stamp
+    global emergency_stop_active, emergency_stop_last_stamp, latest_cmd_from_emergency
     emergency_stop_active = bool(msg.data)
     emergency_stop_last_stamp = rospy.Time.now()
+    if not emergency_stop_active:
+        latest_cmd_from_emergency = False
     if emergency_stop_active:
-        rospy.logwarn_throttle(0.5, "wave_topic_udp: emergency stop active -> forcing serial zero")
+        rospy.logwarn_throttle(0.5, "wave_topic_udp: emergency stop active -> forcing linear zero")
         write_twist(Twist())
 
 def emergency_timer_callback(_event):
     if emergency_stop_fresh():
-        write_twist(Twist())
+        write_twist(
+            emergency_filter_twist(latest_cmd)
+            if latest_cmd_from_emergency
+            else Twist()
+        )
 
 def callback(data):
-    write_twist(Twist() if emergency_stop_fresh() else data)
+    global latest_cmd, latest_cmd_from_emergency
+    emergency_now = emergency_stop_fresh()
+    latest_cmd = data
+    latest_cmd_from_emergency = emergency_now
+    write_twist(emergency_filter_twist(data) if emergency_now else data)
 
 def robot_to_server_callback(robot_data):
     global robot_id, robot_State, robot_Cur_index, robot_Dest_index, robot_Cur_lat, robot_Cur_long, robot_Cur_lin_vel,robot_Cur_ang_vel,Dist_destination,Remain_Dist, alive_count
@@ -154,11 +180,13 @@ def server_communication():
         sock.close()
 
 def listener():
-    global emergency_stop_timeout_s
+    global emergency_stop_timeout_s, emergency_preserve_angular, emergency_angular_limit_rps
     rospy.init_node('robot_command_listener', anonymous=True)
     cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
     emergency_stop_topic = rospy.get_param("~emergency_stop_topic", "/planning/emergency_stop")
     emergency_stop_timeout_s = max(0.05, float(rospy.get_param("~emergency_stop_timeout_s", 0.35)))
+    emergency_preserve_angular = bool(rospy.get_param("~emergency_preserve_angular", True))
+    emergency_angular_limit_rps = max(0.0, float(rospy.get_param("~emergency_angular_limit_rps", 0.35)))
     rospy.Subscriber(cmd_vel_topic, Twist, callback)
     rospy.Subscriber(emergency_stop_topic, Bool, emergency_stop_callback, queue_size=5)
     rospy.Subscriber("robot_to_server_topic", robot_to_server, robot_to_server_callback)

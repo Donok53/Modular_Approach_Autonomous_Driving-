@@ -145,6 +145,8 @@
   <arg name="wave_baud_rate" default="19200"/>
   <arg name="wave_linear_scale" default="1.0"/>
   <arg name="wave_angular_scale" default="1.0"/>
+  <arg name="wave_emergency_preserve_angular" default="true"/>
+  <arg name="wave_emergency_angular_limit_rps" default="0.35"/>
   <arg name="local_planner_mode" default="custom"/>
   <arg name="enable_linefit_ground_filter_for_planning" default="true"/>
   <arg name="enable_linefit_self_filter" default="true"/>
@@ -766,6 +768,7 @@
   <arg name="emergency_bypass_clearance_floor_m" default="0.15"/>
   <arg name="emergency_bypass_max_path_age_s" default="0.70"/>
   <arg name="emergency_bypass_max_lateral_dev_m" default="0.10"/>
+  <arg name="post_stop_rotation_min_clearance_m" default="$(arg emergency_bypass_clearance_floor_m)"/>
   <arg name="obstacle_ignore_traj_steps" default="3"/>
   <arg name="use_auto_osm" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'true')"/>
   <arg name="default_osm_file" default="$(find astar_map)/map/test_trajectory.osm"/>
@@ -848,6 +851,8 @@
     <param name="linear_scale" value="$(arg wave_linear_scale)"/>
     <param name="angular_scale" value="$(arg wave_angular_scale)"/>
     <param name="emergency_stop_topic" value="$(arg emergency_stop_topic)"/>
+    <param name="emergency_preserve_angular" value="$(arg wave_emergency_preserve_angular)"/>
+    <param name="emergency_angular_limit_rps" value="$(arg wave_emergency_angular_limit_rps)"/>
   </node>
 
   <node if="$(arg publish_os_sensor_static_tf)"
@@ -1564,6 +1569,7 @@
       <arg name="emergency_bypass_clearance_floor_m" value="$(arg emergency_bypass_clearance_floor_m)"/>
       <arg name="emergency_bypass_max_path_age_s" value="$(arg emergency_bypass_max_path_age_s)"/>
       <arg name="emergency_bypass_max_lateral_dev_m" value="$(arg emergency_bypass_max_lateral_dev_m)"/>
+      <arg name="post_stop_rotation_min_clearance_m" value="$(arg post_stop_rotation_min_clearance_m)"/>
       <arg name="use_direct_goal" value="$(eval 'true' if arg('use_free_area_goal') == 'true' or arg('enable_crossing_portal_manager') == 'true' else 'false')"/>
       <arg name="direct_goal_topic" value="$(eval arg('crossing_portal_goal_topic') if arg('enable_crossing_portal_manager') == 'true' else arg('free_area_goal_topic'))"/>
       <arg name="direct_goal_timeout_s" value="$(eval arg('crossing_portal_direct_goal_timeout_s') if arg('enable_crossing_portal_manager') == 'true' else '0.0')"/>

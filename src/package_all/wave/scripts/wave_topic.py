@@ -19,6 +19,12 @@ class WaveTopicBridge(object):
         self.angular_scale = float(rospy.get_param("~angular_scale", 1.0))
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
         self.emergency_stop_topic = rospy.get_param("~emergency_stop_topic", "/planning/emergency_stop")
+        self.emergency_preserve_angular = bool(
+            rospy.get_param("~emergency_preserve_angular", True)
+        )
+        self.emergency_angular_limit_rps = max(
+            0.0, float(rospy.get_param("~emergency_angular_limit_rps", 0.35))
+        )
         self.emergency_stop_timeout_s = max(
             0.05, float(rospy.get_param("~emergency_stop_timeout_s", 0.35))
         )
@@ -31,6 +37,8 @@ class WaveTopicBridge(object):
         )
 
         self.alive_count = 0
+        self.latest_cmd = Twist()
+        self.latest_cmd_from_emergency = False
         self.emergency_stop_active = False
         self.emergency_stop_last_stamp = rospy.Time(0)
         resolved_port = self._resolve_port()
@@ -62,7 +70,7 @@ class WaveTopicBridge(object):
             self.emergency_timer_callback,
         )
         rospy.loginfo(
-            "wave_topic started | port=%s baud=%d timeout=%.2fs cmd=%s linear_scale=%.2f angular_scale=%.2f emergency=%s",
+            "wave_topic started | port=%s baud=%d timeout=%.2fs cmd=%s linear_scale=%.2f angular_scale=%.2f emergency=%s preserve_ang=%s ang_limit=%.2f",
             self.port_name,
             self.baud_rate,
             self.timeout_s,
@@ -70,6 +78,8 @@ class WaveTopicBridge(object):
             self.linear_scale,
             self.angular_scale,
             self.emergency_stop_topic,
+            "on" if self.emergency_preserve_angular else "off",
+            self.emergency_angular_limit_rps,
         )
 
     def _resolve_port(self):
@@ -110,22 +120,44 @@ class WaveTopicBridge(object):
     def write_zero_stop(self):
         self.write_twist(Twist())
 
+    def emergency_filter_twist(self, twist=None):
+        out = Twist()
+        if self.emergency_preserve_angular and twist is not None:
+            angular = float(twist.angular.z)
+            limit = self.emergency_angular_limit_rps
+            if limit > 0.0:
+                angular = max(-limit, min(limit, angular))
+            else:
+                angular = 0.0
+            out.angular.z = angular
+        return out
+
     def emergency_stop_callback(self, msg):
         self.emergency_stop_active = bool(msg.data)
         self.emergency_stop_last_stamp = rospy.Time.now()
+        if not self.emergency_stop_active:
+            self.latest_cmd_from_emergency = False
         if self.emergency_stop_active:
             rospy.logwarn_throttle(
                 self.log_period_s,
-                "wave_topic: emergency stop active -> forcing serial zero",
+                "wave_topic: emergency stop active -> forcing linear zero",
             )
             self.write_zero_stop()
 
     def emergency_timer_callback(self, _event):
         if self.emergency_stop_fresh():
-            self.write_zero_stop()
+            cmd = (
+                self.emergency_filter_twist(self.latest_cmd)
+                if self.latest_cmd_from_emergency
+                else Twist()
+            )
+            self.write_twist(cmd)
 
     def callback(self, data):
-        out = Twist() if self.emergency_stop_fresh() else data
+        emergency_now = self.emergency_stop_fresh()
+        self.latest_cmd = data
+        self.latest_cmd_from_emergency = emergency_now
+        out = self.emergency_filter_twist(data) if emergency_now else data
         scaled_linear = float(out.linear.x) * self.linear_scale
         scaled_angular = float(out.angular.z) * self.angular_scale
         rospy.loginfo_throttle(

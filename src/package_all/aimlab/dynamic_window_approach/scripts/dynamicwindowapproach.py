@@ -425,6 +425,15 @@ class DWAControl:
             0.05,
             float(rospy.get_param("~post_stop_rotation_max_rate_rps", 0.35)),
         )
+        self.post_stop_rotation_min_clearance_m = max(
+            0.0,
+            float(
+                rospy.get_param(
+                    "~post_stop_rotation_min_clearance_m",
+                    self.emergency_bypass_clearance_floor_m,
+                )
+            ),
+        )
         self.post_stop_rotation_preview_idx = max(
             1,
             int(rospy.get_param("~post_stop_rotation_preview_idx", 3)),
@@ -1205,20 +1214,16 @@ class DWAControl:
         if self._raw_immediate_contact_blocked:
             return None
         if math.isfinite(self.front_obstacle_clearance):
-            min_rotation_clearance = max(
-                self.emergency_bypass_clearance_floor_m,
-                self.active_avoidance_bypass_clearance_m
-                + self.emergency_bypass_clearance_margin_m,
-            )
-            if self.front_obstacle_clearance <= min_rotation_clearance:
+            if self.front_obstacle_clearance < self.post_stop_rotation_min_clearance_m:
                 return None
         reject = None
         if isinstance(self._emergency_bypass_debug, dict):
             reject = self._emergency_bypass_debug.get("reject")
-        # Accept only path-tracking rejections where rotating in place toward
-        # the avoidance path could plausibly unstick us. Clearance rejections
-        # remain a true stop.
+        # Accept path-tracking rejections plus the outer clearance band. The
+        # dedicated clearance floor above keeps genuine close-contact stops at
+        # full zero Twist.
         allowed = {
+            "clearance_band",
             "lateral_dev",
             "path_stale",
             "preview_behind",
@@ -1252,10 +1257,11 @@ class DWAControl:
         out.angular.z = rate if yaw_err > 0.0 else -rate
         rospy.loginfo_throttle(
             0.5,
-            "post_stop_rotation: yaw_err=%.1fdeg rate=%.2frad/s reject=%s",
+            "post_stop_rotation: yaw_err=%.1fdeg rate=%.2frad/s reject=%s clearance=%.2f",
             math.degrees(yaw_err),
             out.angular.z,
             reject,
+            self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
         )
         return out
 
