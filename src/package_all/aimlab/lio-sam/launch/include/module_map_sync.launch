@@ -36,6 +36,7 @@
   <arg name="semantic_lidar_frame_stride" default="1"/>
   <arg name="semantic_point_stride" default="8"/>
   <arg name="semantic_max_lidar_frames" default="100000"/>
+  <arg name="sync_on_shutdown" default="true"/>
   <arg name="detach_full_sync_on_shutdown" default="true"/>
   <arg name="shutdown_worker_job_file" default="lio_sam_map_sync_job.json"/>
   <arg name="shutdown_worker_log_file" default="lio_sam_map_sync_worker.log"/>
@@ -86,6 +87,7 @@
       <param name="semantic_lidar_frame_stride" value="$(arg semantic_lidar_frame_stride)"/>
       <param name="semantic_point_stride" value="$(arg semantic_point_stride)"/>
       <param name="semantic_max_lidar_frames" value="$(arg semantic_max_lidar_frames)"/>
+      <param name="sync_on_shutdown" value="$(arg sync_on_shutdown)"/>
       <param name="detach_full_sync_on_shutdown" value="$(arg detach_full_sync_on_shutdown)"/>
       <param name="shutdown_worker_job_file" value="$(arg shutdown_worker_job_file)"/>
       <param name="shutdown_worker_log_file" value="$(arg shutdown_worker_log_file)"/>

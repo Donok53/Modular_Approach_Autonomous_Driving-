@@ -18,6 +18,9 @@
   <arg name="preview_voxel_leaf_size" default="0.12"/>
   <arg name="preview_point_stride" default="4"/>
   <arg name="enable_interactive_controls" default="false"/>
+  <arg name="require_stationary_start" default="true"/>
+  <arg name="start_max_linear_speed_mps" default="0.12"/>
+  <arg name="start_max_angular_speed_rps" default="0.20"/>
   <arg name="enable_semantic_sidewalk_pipeline" default="true"/>
 
   <group if="$(arg enable)">
@@ -33,6 +36,9 @@
       <param name="preview_voxel_leaf_size" value="$(arg preview_voxel_leaf_size)"/>
       <param name="preview_point_stride" value="$(arg preview_point_stride)"/>
       <param name="enable_interactive_controls" value="$(arg enable_interactive_controls)"/>
+      <param name="require_stationary_start" value="$(arg require_stationary_start)"/>
+      <param name="start_max_linear_speed_mps" value="$(arg start_max_linear_speed_mps)"/>
+      <param name="start_max_angular_speed_rps" value="$(arg start_max_angular_speed_rps)"/>
       <rosparam param="transform_pcd_files">
         ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"]
       </rosparam>
@@ -55,6 +61,7 @@
           "auto_finalize_after_bag:=false",
           "auto_shutdown_after_bag_complete:=false",
           "detach_full_sync_on_shutdown:=false",
+          "map_sync_on_shutdown:=false",
           "enable_trajectory_export:=true",
           "trajectory_export_path_topic:=$(arg transformed_path_topic)",
           "trajectory_export_path_mode:=local",

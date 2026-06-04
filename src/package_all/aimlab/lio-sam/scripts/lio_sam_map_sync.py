@@ -113,6 +113,7 @@ class LioSamMapSync:
         self.semantic_point_stride = max(1, int(rospy.get_param("~semantic_point_stride", 8)))
         self.semantic_max_lidar_frames = max(1, int(rospy.get_param("~semantic_max_lidar_frames", 100000)))
         self.semantic_async_on_shutdown = bool(rospy.get_param("~semantic_async_on_shutdown", True))
+        self.sync_on_shutdown = bool(rospy.get_param("~sync_on_shutdown", True))
         self.detach_full_sync_on_shutdown = bool(rospy.get_param("~detach_full_sync_on_shutdown", True))
         self.shutdown_worker_job_file = rospy.get_param("~shutdown_worker_job_file", "lio_sam_map_sync_job.json")
         self.shutdown_worker_log_file = rospy.get_param("~shutdown_worker_log_file", "lio_sam_map_sync_worker.log")
@@ -132,6 +133,9 @@ class LioSamMapSync:
         self.srv_sync_now = rospy.Service("~sync_now", Trigger, self.handle_sync_now)
         self.srv_save_and_sync_now = rospy.Service(
             "~save_and_sync_now", Trigger, self.handle_save_and_sync_now
+        )
+        self.srv_disable_shutdown_sync = rospy.Service(
+            "~disable_shutdown_sync", Trigger, self.handle_disable_shutdown_sync
         )
 
         if self.enabled and self.copy_on_start:
@@ -1223,6 +1227,12 @@ class LioSamMapSync:
             rospy.logwarn("lio_sam_map_sync manual save+sync failed: %s", str(e))
             return TriggerResponse(False, str(e))
 
+    def handle_disable_shutdown_sync(self, _req):
+        self.sync_on_shutdown = False
+        self._manual_sync_completed = True
+        rospy.loginfo("lio_sam_map_sync: shutdown sync disabled by request")
+        return TriggerResponse(True, "shutdown sync disabled")
+
     def on_shutdown(self):
         if not self.enabled:
             return
@@ -1234,6 +1244,9 @@ class LioSamMapSync:
                     pass
             if self._bag_completion_sync_completed:
                 rospy.loginfo("lio_sam_map_sync: bag-complete sync already finished, skipping shutdown sync")
+                return
+            if not self.sync_on_shutdown:
+                rospy.loginfo("lio_sam_map_sync: shutdown sync disabled, skipping shutdown sync")
                 return
             if self._manual_sync_completed:
                 rospy.loginfo("lio_sam_map_sync: manual sync already finished, skipping shutdown sync")

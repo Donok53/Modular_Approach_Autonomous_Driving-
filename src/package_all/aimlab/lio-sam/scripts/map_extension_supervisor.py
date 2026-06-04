@@ -57,6 +57,9 @@ class MapExtensionSupervisor:
         self.map_sync_service_name = rospy.get_param(
             "~map_sync_service", "/lio_sam_map_sync/sync_now"
         )
+        self.map_sync_disable_shutdown_service_name = rospy.get_param(
+            "~map_sync_disable_shutdown_service", "/lio_sam_map_sync/disable_shutdown_sync"
+        )
         self.trajectory_save_service_name = rospy.get_param(
             "~trajectory_save_service", "/trajectory_osm_exporter/save_now"
         )
@@ -76,6 +79,13 @@ class MapExtensionSupervisor:
         self.clear_source_dir_on_start = bool(rospy.get_param("~clear_source_dir_on_start", False))
 
         self.localization_max_age_s = max(0.1, float(rospy.get_param("~localization_max_age_s", 1.0)))
+        self.require_stationary_start = bool(rospy.get_param("~require_stationary_start", True))
+        self.start_max_linear_speed_mps = max(
+            0.0, float(rospy.get_param("~start_max_linear_speed_mps", 0.12))
+        )
+        self.start_max_angular_speed_rps = max(
+            0.0, float(rospy.get_param("~start_max_angular_speed_rps", 0.20))
+        )
         self.service_timeout_s = max(0.5, float(rospy.get_param("~service_timeout_s", 30.0)))
         self.require_trajectory_save = bool(rospy.get_param("~require_trajectory_save", False))
         self.preview_voxel_leaf_size = max(
@@ -508,6 +518,30 @@ class MapExtensionSupervisor:
         age = (rospy.Time.now() - stamp).to_sec()
         if age > self.localization_max_age_s:
             return False, "localization odometry stale %.2fs" % age
+        if self.require_stationary_start:
+            twist = odom.twist.twist
+            linear_speed = math.sqrt(
+                twist.linear.x * twist.linear.x
+                + twist.linear.y * twist.linear.y
+                + twist.linear.z * twist.linear.z
+            )
+            angular_speed = math.sqrt(
+                twist.angular.x * twist.angular.x
+                + twist.angular.y * twist.angular.y
+                + twist.angular.z * twist.angular.z
+            )
+            if linear_speed > self.start_max_linear_speed_mps:
+                return (
+                    False,
+                    "robot moving too fast for map extension start %.2fm/s > %.2fm/s"
+                    % (linear_speed, self.start_max_linear_speed_mps),
+                )
+            if angular_speed > self.start_max_angular_speed_rps:
+                return (
+                    False,
+                    "robot rotating too fast for map extension start %.2frad/s > %.2frad/s"
+                    % (angular_speed, self.start_max_angular_speed_rps),
+                )
         return True, "localized age %.2fs" % age
 
     def _start_mapping_launch(self):
@@ -545,6 +579,14 @@ class MapExtensionSupervisor:
         rospy.wait_for_service(service_name, timeout=timeout_s)
         proxy = rospy.ServiceProxy(service_name, Trigger)
         return proxy()
+
+    def _disable_child_shutdown_sync(self):
+        try:
+            resp = self._call_trigger(self.map_sync_disable_shutdown_service_name, timeout_s=1.0)
+            if not resp.success:
+                rospy.logwarn("map_extension_supervisor: disable shutdown sync returned false: %s", resp.message)
+        except Exception as e:
+            rospy.logwarn("map_extension_supervisor: shutdown sync disable service unavailable: %s", str(e))
 
     def _call_save_map(self):
         rospy.wait_for_service(self.save_map_service_name, timeout=self.service_timeout_s)
@@ -670,6 +712,7 @@ class MapExtensionSupervisor:
         if not was_running:
             self._publish_status("idle", "cancel ignored; extension was not running")
             return TriggerResponse(True, "extension was not running")
+        self._disable_child_shutdown_sync()
         self._shutdown_mapping_launch()
         self._publish_status("idle", "extension cancelled")
         return TriggerResponse(True, "map extension cancelled")
