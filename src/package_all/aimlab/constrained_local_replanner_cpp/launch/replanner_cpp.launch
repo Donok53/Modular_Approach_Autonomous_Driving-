@@ -42,6 +42,7 @@
   <arg name="locked_static_hold_radius_m" default="3.0"/>
   <arg name="locked_static_ttl_s" default="0.80"/>
   <arg name="hold_escape_timeout_s" default="5.0"/>
+  <arg name="hold_without_candidate" default="false"/>
 
   <node pkg="constrained_local_replanner_cpp" type="node"
         name="constrained_local_replanner_cpp" output="screen" respawn="false">
@@ -75,5 +76,6 @@
     <param name="locked_static_hold_radius_m" value="$(arg locked_static_hold_radius_m)"/>
     <param name="locked_static_ttl_s" value="$(arg locked_static_ttl_s)"/>
     <param name="hold_escape_timeout_s" value="$(arg hold_escape_timeout_s)"/>
+    <param name="hold_without_candidate" value="$(arg hold_without_candidate)"/>
   </node>
 </launch>

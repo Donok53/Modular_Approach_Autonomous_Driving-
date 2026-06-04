@@ -32,10 +32,11 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
           confirm_count_ = 0;
         } else if (confirm_count_ >= cfg_.trigger_confirm_cycles &&
                    !avoidance_candidate_available) {
-          // Blocker confirmed but no detour found — escalate to HOLD until
-          // either obstacle clears or a candidate appears.
-          mode_ = PathMode::HOLD;
-          hold_entry_sec_ = now_sec;
+          if (cfg_.hold_without_candidate) {
+            // Legacy behavior: an unrouteable blocker becomes a local HOLD.
+            mode_ = PathMode::HOLD;
+            hold_entry_sec_ = now_sec;
+          }
           confirm_count_ = 0;
         }
       } else {
@@ -54,9 +55,17 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
       }
       const bool stale = !cached_path_still_drivable;
       if (stale && !avoidance_candidate_available) {
-        // Cached path lost validity and no fresh candidate — bail to HOLD.
-        mode_ = PathMode::HOLD;
-        hold_entry_sec_ = now_sec;
+        if (cfg_.hold_without_candidate) {
+          mode_ = PathMode::HOLD;
+          hold_entry_sec_ = now_sec;
+        } else {
+          // Conservative path blocking can invalidate a cached detour even
+          // when raw near-field is clear. Return to nominal and let the
+          // safety stop own close obstacles.
+          mode_ = PathMode::FOLLOW_LOCAL;
+          confirm_count_ = 0;
+          last_clear_seen_sec_ = 0.0;
+        }
         break;
       }
       const bool clear_long_enough =
@@ -71,7 +80,11 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
       break;
     }
     case PathMode::HOLD: {
-      if (avoidance_candidate_available) {
+      if (!cfg_.hold_without_candidate && !avoidance_candidate_available) {
+        mode_ = PathMode::FOLLOW_LOCAL;
+        confirm_count_ = 0;
+        hold_entry_sec_ = 0.0;
+      } else if (avoidance_candidate_available) {
         mode_ = PathMode::FOLLOW_AVOIDANCE;
         avoidance_entry_sec_ = now_sec;
         last_clear_seen_sec_ = 0.0;

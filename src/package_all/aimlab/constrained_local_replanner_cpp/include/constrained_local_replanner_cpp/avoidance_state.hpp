@@ -26,7 +26,7 @@ struct LockedStatic {
 // Lightweight state machine that owns the avoidance lifecycle:
 //   FOLLOW_LOCAL -> (blocker confirmed for N ticks) -> FOLLOW_AVOIDANCE
 //   FOLLOW_AVOIDANCE -> (endpoint reached + clear hold) -> FOLLOW_LOCAL
-//   any -> (no path + nominal blocked) -> HOLD
+//   optionally HOLD when nominal is blocked and no detour exists
 class AvoidanceStateMachine {
  public:
   struct Config {
@@ -43,6 +43,11 @@ class AvoidanceStateMachine {
     // FOLLOW_LOCAL so the robot stops being stuck. DWA's near_field
     // safety stop still catches genuine collision threats.
     double hold_escape_timeout_s{5.0};
+    // The C++ blocker check is intentionally fast and can be conservative in
+    // cluttered indoor scenes. By default, a blocked nominal path with no valid
+    // detour keeps publishing the nominal path; DWA's raw near-field stop owns
+    // the actual collision stop.
+    bool hold_without_candidate{false};
   };
 
   AvoidanceStateMachine() : cfg_(Config()) {}

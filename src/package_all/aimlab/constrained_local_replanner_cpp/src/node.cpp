@@ -162,6 +162,8 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              smc.locked_static_ttl_s);
   pnh_.param("hold_escape_timeout_s", smc.hold_escape_timeout_s,
              smc.hold_escape_timeout_s);
+  pnh_.param("hold_without_candidate", smc.hold_without_candidate,
+             smc.hold_without_candidate);
   sm_ = std::make_unique<AvoidanceStateMachine>(smc);
 
   pub_local_path_           = nh_.advertise<nav_msgs::Path>(output_local_path_topic_, 2, true);
