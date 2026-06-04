@@ -99,8 +99,10 @@ def emergency_stop_callback(msg):
     global emergency_stop_active, emergency_stop_last_stamp, latest_cmd_from_emergency
     emergency_stop_active = bool(msg.data)
     emergency_stop_last_stamp = rospy.Time.now()
-    if not emergency_stop_active:
-        latest_cmd_from_emergency = False
+    # A new emergency-stop sample invalidates any previously preserved angular
+    # command. Angular may only pass again from a fresh /cmd_vel published after
+    # this stop state was observed.
+    latest_cmd_from_emergency = False
     if emergency_stop_active:
         rospy.logwarn_throttle(0.5, "wave_topic_udp: emergency stop active -> forcing linear zero")
         write_twist(Twist())

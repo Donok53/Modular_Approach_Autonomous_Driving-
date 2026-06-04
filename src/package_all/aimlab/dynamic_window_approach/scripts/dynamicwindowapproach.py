@@ -399,8 +399,17 @@ class DWAControl:
             0.05,
             float(rospy.get_param("~emergency_bypass_speed_limit_mps", 0.18)),
         )
-        self.emergency_bypass_clearance_floor_m = max(
+        self.emergency_motion_hard_clearance_m = max(
             0.05,
+            float(
+                rospy.get_param(
+                    "~emergency_motion_hard_clearance_m",
+                    self.avoidance_hard_stop_distance,
+                )
+            ),
+        )
+        self.emergency_bypass_clearance_floor_m = max(
+            self.emergency_motion_hard_clearance_m,
             float(rospy.get_param("~emergency_bypass_clearance_floor_m", 0.15)),
         )
         self.emergency_bypass_max_path_age_s = max(
@@ -426,11 +435,11 @@ class DWAControl:
             float(rospy.get_param("~post_stop_rotation_max_rate_rps", 0.35)),
         )
         self.post_stop_rotation_min_clearance_m = max(
-            0.0,
+            self.emergency_motion_hard_clearance_m,
             float(
                 rospy.get_param(
                     "~post_stop_rotation_min_clearance_m",
-                    self.emergency_bypass_clearance_floor_m,
+                    self.emergency_motion_hard_clearance_m,
                 )
             ),
         )
@@ -1215,6 +1224,18 @@ class DWAControl:
         # avoidance path (or the path is stale), a small zero-linear rotation
         # can realign the robot. Do not use this for genuine close-contact
         # stops; emergency stop must mean a full Twist zero in that case.
+        hard_blocked, hard_reason = self._emergency_motion_hard_blocked()
+        if hard_blocked:
+            self._post_stop_rotation_clearance_latched = False
+            rospy.loginfo_throttle(
+                0.5,
+                "post_stop_rotation blocked | reason=%s clearance=%.2f hard=%.2f source=%s",
+                hard_reason,
+                self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+                self.emergency_motion_hard_clearance_m,
+                self._last_emergency_source,
+            )
+            return None
         if not self.post_stop_rotation_enabled:
             self._post_stop_rotation_clearance_latched = False
             return None
@@ -1291,13 +1312,30 @@ class DWAControl:
         )
         return out
 
+    def _emergency_motion_hard_blocked(self):
+        if self.behavior_stop:
+            return True, "behavior_stop"
+        if not (self.enable_emergency_stop and self.emergency_blocked):
+            return False, "not_emergency"
+        if self._raw_immediate_contact_blocked:
+            return True, "raw_immediate_contact"
+        if math.isfinite(self.front_obstacle_clearance):
+            if self.front_obstacle_clearance <= self.emergency_motion_hard_clearance_m:
+                return True, "hard_clearance"
+            return False, "clearance_ok"
+        # Fail closed while an emergency stop is latched but no reliable
+        # clearance is available. A zero-linear rotation is only safe when the
+        # forward clearance is known and above the hard-motion threshold.
+        return True, "clearance_unknown"
+
     def _hard_stop_active(self):
         # A planned avoidance detour may continue through the outer emergency band
         # when the controller has already verified the path bends around the obstacle.
+        hard_motion_blocked, _ = self._emergency_motion_hard_blocked()
         emergency_hard_stop = (
             self.enable_emergency_stop
             and self.emergency_blocked
-            and (not self._emergency_bypass_active)
+            and (hard_motion_blocked or not self._emergency_bypass_active)
         )
         return bool(emergency_hard_stop or self.behavior_stop)
 
@@ -3911,6 +3949,13 @@ class DWAControl:
         if not math.isfinite(self.front_obstacle_clearance):
             self._emergency_bypass_debug = {"reject": "clearance_unknown"}
             return False
+        if self.front_obstacle_clearance <= self.emergency_motion_hard_clearance_m:
+            self._emergency_bypass_debug = {
+                "reject": "hard_clearance",
+                "clearance": self.front_obstacle_clearance,
+                "hard_clearance": self.emergency_motion_hard_clearance_m,
+            }
+            return False
         active_avoidance = self._avoidance_mode_active()
         min_bypass_clearance = (
             (
@@ -4814,8 +4859,8 @@ class DWAControl:
 
     def publish_drive(self, u):
         cmd = Twist()
-        hard_stop_active = self._hard_stop_active()
         self._publish_emergency_stop_state()
+        hard_stop_active = self._hard_stop_active()
         allow_reverse_recovery_motion = (
             self._reverse_recovery_active
             and (not self.behavior_stop)
@@ -4841,7 +4886,7 @@ class DWAControl:
 
     def run(self):
         rospy.loginfo(
-            "DWA node started | pose=%s global=%s local=%s path_mode=%s global_only=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_rate=%.1fHz near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
+            "DWA node started | pose=%s global=%s local=%s path_mode=%s global_only=%s behavior=%s cmd=%s estop_topic=%s drivable=%s risk=%s local_avoidance=%s emergency_enabled=%s emergency_stop=%.2fm hard_stop=%.2fm motion_hard=%.2fm overlay_stop=%s locked_only=%s overlay_topic=%s near_raw=%s raw_fallback=%s near_topic=%s near_frame=%s near_rate=%.1fHz near_roi=x[%.2f,%.2f] y=+/-%0.2f z[%.2f,%.2f] min_pts=%d reverse_recovery=%s hold=%.2fs dist=%.2fm speed=%.2fmps rear=%.2fm/%.2fm/%d self_filter=%s self_mask=%.2fx%.2fm footprint=%.2fm x %.2fm cmd_publish=%.1fHz path_tracking_only=%s crawl=%.2f/%.2f heading_filter=%.2f cmd_smooth=%s lin=%.2f/%.2f ang=%.0f/%.0fdeg",
             self.pose_topic,
             self.global_path_topic,
             self.local_path_topic,
@@ -4856,6 +4901,7 @@ class DWAControl:
             "on" if self.enable_emergency_stop else "off",
             self.emergency_stop_distance,
             self.avoidance_hard_stop_distance,
+            self.emergency_motion_hard_clearance_m,
             "on" if self.use_global_obstacle_overlay_boxes_for_stop else "off",
             "on" if self.global_obstacle_overlay_stop_locked_only else "off",
             self.global_obstacle_overlay_boxes_topic if self.global_obstacle_overlay_boxes_topic else "-",

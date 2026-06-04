@@ -135,8 +135,10 @@ class WaveTopicBridge(object):
     def emergency_stop_callback(self, msg):
         self.emergency_stop_active = bool(msg.data)
         self.emergency_stop_last_stamp = rospy.Time.now()
-        if not self.emergency_stop_active:
-            self.latest_cmd_from_emergency = False
+        # A new emergency-stop sample invalidates any previously preserved
+        # angular command. Angular may only pass again from a fresh /cmd_vel
+        # published after this stop state was observed.
+        self.latest_cmd_from_emergency = False
         if self.emergency_stop_active:
             rospy.logwarn_throttle(
                 self.log_period_s,
