@@ -14,11 +14,13 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   # msgs
   std_msgs
+  std_srvs
   sensor_msgs
   geometry_msgs
   nav_msgs
   message_generation
   visualization_msgs
+  interactive_markers
 )
 
 find_package(OpenMP REQUIRED)
@@ -53,12 +55,14 @@ catkin_package(
 
   CATKIN_DEPENDS
   std_msgs
+  std_srvs
   nav_msgs
   geometry_msgs
   sensor_msgs
   message_runtime
   message_generation
   visualization_msgs
+  interactive_markers
 )
 
 # include directories
@@ -117,6 +121,7 @@ catkin_install_python(PROGRAMS
   scripts/semantic_bev_2d_editor.py
   scripts/tune_sidewalk_fusion_projection.py
   scripts/lio_sam_map_sync.py
+  scripts/map_extension_supervisor.py
   scripts/trajectory_osm_exporter.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

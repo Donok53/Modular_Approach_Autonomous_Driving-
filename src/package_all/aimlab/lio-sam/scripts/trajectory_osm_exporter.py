@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import rospy
 from nav_msgs.msg import Path
 from std_msgs.msg import Empty
+from std_srvs.srv import Trigger, TriggerResponse
 
 
 class TrajectoryOsmExporter:
@@ -55,6 +56,7 @@ class TrajectoryOsmExporter:
 
         self.sub_path = rospy.Subscriber(self.path_topic, Path, self.path_callback, queue_size=2)
         self.sub_save = rospy.Subscriber(self.manual_save_topic, Empty, self.manual_save_callback, queue_size=2)
+        self.srv_save = rospy.Service("~save_now", Trigger, self.handle_save_now)
         self.pub_reload = None
         if self.publish_reload:
             self.pub_reload = rospy.Publisher(self.reload_topic, Empty, queue_size=1, latch=False)
@@ -420,6 +422,14 @@ class TrajectoryOsmExporter:
             self.write_files("manual")
         except Exception as e:
             rospy.logwarn("trajectory_osm_exporter manual save failed: %s", str(e))
+
+    def handle_save_now(self, _req):
+        try:
+            ok = self.write_files("manual-service")
+            return TriggerResponse(bool(ok), "trajectory saved" if ok else "not enough trajectory points")
+        except Exception as e:
+            rospy.logwarn("trajectory_osm_exporter manual save service failed: %s", str(e))
+            return TriggerResponse(False, str(e))
 
     def on_timer(self, _event):
         with self._lock:

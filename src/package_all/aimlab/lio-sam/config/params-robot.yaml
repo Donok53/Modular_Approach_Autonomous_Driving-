@@ -11,6 +11,7 @@ lio_sam:
   baselinkFrame: "base_link"
   odometryFrame: "odom"
   mapFrame: "map"
+  publishTF: true
 
   # GPS Settings
   useImuHeadingInitialization: true           # if using GPS data, set to "true"

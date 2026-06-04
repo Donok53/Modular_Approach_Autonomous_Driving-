@@ -6,6 +6,9 @@
     <arg name="map_profile_suffix" default="$(eval '_outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('_real' if str(arg('real_mode')).lower() == 'true' else ''))"/>
     <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
     <arg name="environment" default="outdoor"/>
+    <arg name="enable_rviz" default="true"/>
+    <arg name="enable_robot_state_publisher" default="true"/>
+    <arg name="publish_tf" default="true"/>
     <arg name="enable_map_sync" default="true"/>
     <arg name="extend_existing_map" default="false"/>
     <arg name="map_sync_source_dir" default="$(env HOME)/Downloads/test"/>
@@ -45,6 +48,7 @@
     
     <!-- Parameters -->
     <rosparam file="$(arg base_config_file)" command="load" />
+    <param name="lio_sam/publishTF" value="$(arg publish_tf)"/>
     <group unless="$(eval str(arg('environment')).lower() == 'outdoor')">
       <rosparam file="$(find lio_sam)/config/params-env-indoor.yaml" command="load" />
     </group>
@@ -103,12 +107,16 @@
     </include>
 
     <!--- Robot State TF -->
-    <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
+    <group if="$(arg enable_robot_state_publisher)">
+      <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
+    </group>
 
     <!--- Run Navsat -->
     <!-- <include file="$(find lio_sam)/launch/include/module_navsat.launch" /> -->
 
     <!--- Run Rviz-->
-    <include file="$(find lio_sam)/launch/include/module_rviz.launch" />
+    <group if="$(arg enable_rviz)">
+      <include file="$(find lio_sam)/launch/include/module_rviz.launch" />
+    </group>
 
 </launch>

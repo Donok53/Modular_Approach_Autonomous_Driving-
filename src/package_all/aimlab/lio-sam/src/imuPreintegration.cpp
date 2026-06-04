@@ -89,7 +89,8 @@ public:
         // static tf
         static tf::TransformBroadcaster tfMap2Odom;
         static tf::Transform map_to_odom = tf::Transform(tf::createQuaternionFromRPY(0, 0, 0), tf::Vector3(0, 0, 0));
-        tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));
+        if (publishTF)
+            tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));
 
         std::lock_guard<std::mutex> lock(mtx);
 
@@ -127,7 +128,8 @@ public:
         if(lidarFrame != baselinkFrame)
             tCur = tCur * lidar2Baselink;
         tf::StampedTransform odom_2_baselink = tf::StampedTransform(tCur, odomMsg->header.stamp, odometryFrame, baselinkFrame);
-        tfOdom2BaseLink.sendTransform(odom_2_baselink);
+        if (publishTF)
+            tfOdom2BaseLink.sendTransform(odom_2_baselink);
 
         // publish IMU path
         static nav_msgs::Path imuPath;

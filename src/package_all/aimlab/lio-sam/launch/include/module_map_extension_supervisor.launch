@@ -1,0 +1,69 @@
+<launch>
+  <arg name="enable" default="true"/>
+  <arg name="real_mode" default="false"/>
+  <arg name="environment" default="outdoor"/>
+  <arg name="map_profile_name" default="test"/>
+  <arg name="map_profile_suffix" default=""/>
+  <arg name="source_dir" default="$(env HOME)/Downloads/test"/>
+  <arg name="destination_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
+  <arg name="extension_backup_dir" default="$(arg destination_dir)_extension_backups"/>
+  <arg name="semantic_runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
+  <arg name="trajectory_output_csv" default="$(find astar_map)/map/auto_trajectory_local$(arg map_profile_suffix).csv"/>
+  <arg name="trajectory_output_osm" default="$(find astar_map)/map/auto_trajectory$(arg map_profile_suffix).osm"/>
+  <arg name="localizer_odom_topic" default="/lio_localizer/odometry/optimization"/>
+  <arg name="preview_cloud_topic" default="/map_extension/preview_cloud"/>
+  <arg name="status_marker_topic" default="/map_extension/status_marker"/>
+  <arg name="transformed_path_topic" default="/map_extension/transformed_path"/>
+  <arg name="preview_source_cloud_topic" default="/lio_sam/mapping/cloud_registered_raw"/>
+  <arg name="preview_voxel_leaf_size" default="0.12"/>
+  <arg name="preview_point_stride" default="4"/>
+  <arg name="enable_semantic_sidewalk_pipeline" default="true"/>
+
+  <group if="$(arg enable)">
+    <node pkg="lio_sam" type="map_extension_supervisor.py"
+          name="map_extension_supervisor" output="screen" respawn="false">
+      <param name="mapping_launch_file" value="$(find lio_sam)/launch/run-robot.launch"/>
+      <param name="source_dir" value="$(arg source_dir)"/>
+      <param name="localizer_odom_topic" value="$(arg localizer_odom_topic)"/>
+      <param name="preview_cloud_topic" value="$(arg preview_cloud_topic)"/>
+      <param name="status_marker_topic" value="$(arg status_marker_topic)"/>
+      <param name="transformed_path_topic" value="$(arg transformed_path_topic)"/>
+      <param name="preview_source_cloud_topic" value="$(arg preview_source_cloud_topic)"/>
+      <param name="preview_voxel_leaf_size" value="$(arg preview_voxel_leaf_size)"/>
+      <param name="preview_point_stride" value="$(arg preview_point_stride)"/>
+      <rosparam param="transform_pcd_files">
+        ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"]
+      </rosparam>
+      <rosparam param="mapping_launch_args" subst_value="true">
+        [
+          "real_mode:=$(arg real_mode)",
+          "environment:=$(arg environment)",
+          "map_profile_name:=$(arg map_profile_name)",
+          "enable_rviz:=false",
+          "enable_robot_state_publisher:=false",
+          "publish_tf:=false",
+          "enable_map_sync:=true",
+          "extend_existing_map:=true",
+          "map_sync_source_dir:=$(arg source_dir)",
+          "map_sync_destination_dir:=$(arg destination_dir)",
+          "map_extension_backup_dir:=$(arg extension_backup_dir)",
+          "map_extension_keep_existing_ref:=true",
+          "semantic_runtime_drivable_state_file:=$(arg semantic_runtime_drivable_state_file)",
+          "enable_semantic_sidewalk_pipeline:=$(arg enable_semantic_sidewalk_pipeline)",
+          "auto_finalize_after_bag:=false",
+          "auto_shutdown_after_bag_complete:=false",
+          "detach_full_sync_on_shutdown:=false",
+          "enable_trajectory_export:=true",
+          "trajectory_export_path_topic:=$(arg transformed_path_topic)",
+          "trajectory_export_path_mode:=local",
+          "trajectory_export_output_csv:=$(arg trajectory_output_csv)",
+          "trajectory_export_output_osm:=$(arg trajectory_output_osm)",
+          "trajectory_export_auto_write:=false",
+          "trajectory_export_save_on_shutdown:=false",
+          "trajectory_export_extend_existing:=true",
+          "trajectory_export_publish_reload:=false"
+        ]
+      </rosparam>
+    </node>
+  </group>
+</launch>

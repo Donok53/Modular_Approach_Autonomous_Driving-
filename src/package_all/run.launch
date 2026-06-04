@@ -6,6 +6,10 @@
   <arg name="outdoor_use_saved_map_assets" default="true"/>
   <arg name="extend_existing_map" default="false"/>
   <arg name="use_lio_sam" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'false')"/>
+  <arg name="enable_map_extension_supervisor" default="$(eval 'false' if arg('use_lio_sam') == 'true' else 'true')"/>
+  <arg name="map_extension_source_dir" default="$(env HOME)/Downloads/test"/>
+  <arg name="map_extension_preview_cloud_topic" default="/map_extension/preview_cloud"/>
+  <arg name="map_extension_status_marker_topic" default="/map_extension/status_marker"/>
   <arg name="map_profile_name" default="$(eval 'outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('real' if str(arg('real_mode')).lower() == 'true' else 'test'))"/>
   <arg name="map_profile_suffix" default="$(eval '_outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('_real' if str(arg('real_mode')).lower() == 'true' else ''))"/>
   <arg name="localizer_map_relative_path" default="$(eval '/map/outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test'))"/>
@@ -826,6 +830,24 @@
       <arg name="initial_pose_yaw_deg" value="$(arg localizer_initial_pose_yaw_deg)"/>
     </include>
   </group>
+
+  <include file="$(find lio_sam)/launch/include/module_map_extension_supervisor.launch">
+    <arg name="enable" value="$(arg enable_map_extension_supervisor)"/>
+    <arg name="real_mode" value="$(arg real_mode)"/>
+    <arg name="environment" value="$(arg localization_environment)"/>
+    <arg name="map_profile_name" value="$(arg map_profile_name)"/>
+    <arg name="map_profile_suffix" value="$(arg map_profile_suffix)"/>
+    <arg name="source_dir" value="$(arg map_extension_source_dir)"/>
+    <arg name="destination_dir" value="$(arg localizer_map_bundle_dir)"/>
+    <arg name="extension_backup_dir" value="$(arg localizer_map_bundle_dir)_extension_backups"/>
+    <arg name="semantic_runtime_drivable_state_file" value="$(arg runtime_drivable_state_file)"/>
+    <arg name="trajectory_output_csv" value="$(find astar_map)/map/auto_trajectory_local$(arg map_profile_suffix).csv"/>
+    <arg name="trajectory_output_osm" value="$(arg auto_osm_file)"/>
+    <arg name="localizer_odom_topic" value="/lio_localizer/odometry/optimization"/>
+    <arg name="preview_cloud_topic" value="$(arg map_extension_preview_cloud_topic)"/>
+    <arg name="status_marker_topic" value="$(arg map_extension_status_marker_topic)"/>
+    <arg name="enable_semantic_sidewalk_pipeline" value="true"/>
+  </include>
 
   <node if="$(arg enable_monitoring_asset_bundle)" pkg="lio_sam" type="lio_sam_map_sync.py"
         name="monitoring_asset_bundle" output="screen" respawn="false">

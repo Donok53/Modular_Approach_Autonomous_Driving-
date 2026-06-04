@@ -16,6 +16,7 @@ import time
 import rospy
 
 from lio_sam.srv import save_map, save_mapRequest
+from std_srvs.srv import Trigger, TriggerResponse
 
 
 class LioSamMapSync:
@@ -125,6 +126,12 @@ class LioSamMapSync:
             str(self.extend_existing_map),
             len(self.extra_files),
             str(self.export_drivable_area_pcd),
+        )
+
+        self._manual_sync_completed = False
+        self.srv_sync_now = rospy.Service("~sync_now", Trigger, self.handle_sync_now)
+        self.srv_save_and_sync_now = rospy.Service(
+            "~save_and_sync_now", Trigger, self.handle_save_and_sync_now
         )
 
         if self.enabled and self.copy_on_start:
@@ -1129,17 +1136,17 @@ class LioSamMapSync:
 
     def sync_once(self, reason, fresh_after_ns=None, semantic_async=False):
         if not self.enabled:
-            return
+            return False
         if not os.path.isdir(self.source_dir):
             rospy.logwarn("lio_sam_map_sync skipped (%s): source does not exist: %s", reason, self.source_dir)
-            return
+            return False
         if fresh_after_ns is not None and self._file_signature(fresh_after_ns=fresh_after_ns) is None:
             rospy.logwarn(
                 "lio_sam_map_sync skipped (%s): source files are not newer than shutdown trigger (src=%s)",
                 reason,
                 self.source_dir,
             )
-            return
+            return False
         os.makedirs(self.destination_dir, exist_ok=True)
         extension_backups = self._backup_extension_inputs(reason)
 
@@ -1189,6 +1196,32 @@ class LioSamMapSync:
             self.source_dir,
             self.destination_dir,
         )
+        return True
+
+    def handle_sync_now(self, _req):
+        try:
+            if not self._wait_until_stable(fresh_after_ns=None):
+                return TriggerResponse(False, "source map files did not become stable")
+            ok = self.sync_once("manual", fresh_after_ns=None, semantic_async=False)
+            self._manual_sync_completed = bool(ok)
+            return TriggerResponse(bool(ok), "manual sync complete" if ok else "manual sync skipped")
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync manual sync failed: %s", str(e))
+            return TriggerResponse(False, str(e))
+
+    def handle_save_and_sync_now(self, _req):
+        try:
+            trigger_ns = time.time_ns()
+            if not self._call_save_map_service():
+                return TriggerResponse(False, "save_map service failed")
+            if not self._wait_until_stable(fresh_after_ns=trigger_ns):
+                return TriggerResponse(False, "saved map files did not become stable")
+            ok = self.sync_once("manual-save", fresh_after_ns=trigger_ns, semantic_async=False)
+            self._manual_sync_completed = bool(ok)
+            return TriggerResponse(bool(ok), "save and sync complete" if ok else "save and sync skipped")
+        except Exception as e:
+            rospy.logwarn("lio_sam_map_sync manual save+sync failed: %s", str(e))
+            return TriggerResponse(False, str(e))
 
     def on_shutdown(self):
         if not self.enabled:
@@ -1201,6 +1234,9 @@ class LioSamMapSync:
                     pass
             if self._bag_completion_sync_completed:
                 rospy.loginfo("lio_sam_map_sync: bag-complete sync already finished, skipping shutdown sync")
+                return
+            if self._manual_sync_completed:
+                rospy.loginfo("lio_sam_map_sync: manual sync already finished, skipping shutdown sync")
                 return
             shutdown_trigger_ns = time.time_ns()
             if self.detach_full_sync_on_shutdown:
