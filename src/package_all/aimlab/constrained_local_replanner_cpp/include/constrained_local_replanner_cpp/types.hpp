@@ -54,9 +54,13 @@ struct PlannerParams {
   double rejoin_min_distance_m{1.4};
   double avoidance_keep_until_endpoint_distance_m{0.30};
   double pointcloud_cluster_resolution_m{0.20};
+  double return_to_global_trigger_distance_m{0.65};
+  double return_to_global_min_tail_m{0.80};
+  double return_to_global_goal_tolerance_m{0.35};
 
   int max_expand{4500};
   int branch_max_rejoin_candidates{12};
+  int return_to_global_max_candidates{24};
   double branch_time_budget_s{0.45};
   bool grid_unknown_is_occupied{true};
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 #include <geometry_msgs/PoseStamped.h>
 #include <pcl/point_cloud.h>
@@ -24,6 +25,12 @@
 namespace clr {
 
 namespace {
+
+bool cellIsBlockedAt(const std::vector<uint8_t>& blocked, int width, int height,
+                     int gx, int gy);
+
+std::vector<WorldXY> samplePath(const std::vector<GridCell>& grid_path,
+                                const OccupancyView& g, double step_m);
 
 // Truncate the global path to roughly `len_m` meters ahead of `start_idx`.
 std::vector<WorldXY> truncateWorld(const std::vector<WorldXY>& world,
@@ -48,6 +55,100 @@ std::size_t nearestIndex(const std::vector<WorldXY>& world, double rx, double ry
     if (d < bd) { bd = d; best = i; }
   }
   return best;
+}
+
+void appendDistinct(std::vector<WorldXY>& out, WorldXY p, double eps_m = 0.03) {
+  if (!out.empty() && std::hypot(out.back().x - p.x, out.back().y - p.y) <= eps_m) {
+    return;
+  }
+  out.push_back(p);
+}
+
+void appendGlobalTail(std::vector<WorldXY>& out,
+                      const std::vector<WorldXY>& global,
+                      std::size_t start_idx,
+                      double max_total_len_m) {
+  if (global.empty() || out.empty()) return;
+  double total = polylineLengthM(out);
+  for (std::size_t i = start_idx; i < global.size(); ++i) {
+    const WorldXY next = global[i];
+    const double seg = std::hypot(next.x - out.back().x, next.y - out.back().y);
+    appendDistinct(out, next);
+    total += seg;
+    if (total >= max_total_len_m) break;
+  }
+}
+
+struct ReturnPath {
+  bool found{false};
+  std::size_t rejoin_idx{0};
+  std::vector<GridCell> grid_path;
+  std::vector<WorldXY> world_path;
+};
+
+ReturnPath buildReturnToGlobalPath(const std::vector<WorldXY>& global,
+                                   const std::vector<uint8_t>& blocked,
+                                   const OccupancyView& g,
+                                   GridCell start,
+                                   double rx,
+                                   double ry,
+                                   const PlannerParams& params,
+                                   int max_expand,
+                                   double time_budget_s) {
+  ReturnPath result;
+  if (global.empty()) return result;
+  struct RankedCandidate {
+    GridCell cell;
+    std::size_t idx;
+    double score;
+  };
+  std::vector<RankedCandidate> ranked;
+  ranked.reserve(global.size());
+  for (std::size_t i = 0; i < global.size(); ++i) {
+    const GridCell cell = g.world_to_cell(global[i].x, global[i].y);
+    if (!g.in_bounds(cell.x, cell.y)) continue;
+    if (cellIsBlockedAt(blocked, g.width, g.height, cell.x, cell.y)) continue;
+    const double d = std::hypot(global[i].x - rx, global[i].y - ry);
+    ranked.push_back(RankedCandidate{cell, i, d});
+  }
+  if (ranked.empty()) return result;
+  std::sort(ranked.begin(), ranked.end(),
+            [](const RankedCandidate& a, const RankedCandidate& b) {
+              return a.score < b.score;
+            });
+
+  std::vector<GridCell> candidates;
+  std::vector<RankedCandidate> used;
+  const int limit = std::max(1, params.return_to_global_max_candidates);
+  for (const auto& c : ranked) {
+    const bool duplicate =
+        std::any_of(candidates.begin(), candidates.end(),
+                    [&c](const GridCell& existing) { return existing == c.cell; });
+    if (duplicate) continue;
+    candidates.push_back(c.cell);
+    used.push_back(c);
+    if (static_cast<int>(candidates.size()) >= limit) break;
+  }
+
+  auto path = aStarBranch(blocked, g.width, g.height, start, candidates,
+                          max_expand, time_budget_s);
+  if (path.size() < 2) return result;
+
+  const GridCell end = path.back();
+  auto match = std::find_if(used.begin(), used.end(),
+                            [&end](const RankedCandidate& c) {
+                              return c.cell == end;
+                            });
+  if (match == used.end()) return result;
+
+  result.found = true;
+  result.rejoin_idx = match->idx;
+  result.grid_path = std::move(path);
+  result.world_path = samplePath(result.grid_path, g, 0.20);
+  appendGlobalTail(result.world_path, global, result.rejoin_idx + 1,
+                   params.lookahead_m);
+  result.grid_path = worldPointsToGridPath(result.world_path, g);
+  return result;
 }
 
 bool cellIsBlockedAt(const std::vector<uint8_t>& blocked, int width, int height,
@@ -144,6 +245,18 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("branch_time_budget_s", branch_time_budget_s_, branch_time_budget_s_);
   pnh_.param("branch_max_rejoin_candidates", branch_max_rejoin_candidates_,
              branch_max_rejoin_candidates_);
+  pnh_.param("return_to_global_trigger_distance_m",
+             params_.return_to_global_trigger_distance_m,
+             params_.return_to_global_trigger_distance_m);
+  pnh_.param("return_to_global_min_tail_m",
+             params_.return_to_global_min_tail_m,
+             params_.return_to_global_min_tail_m);
+  pnh_.param("return_to_global_goal_tolerance_m",
+             params_.return_to_global_goal_tolerance_m,
+             params_.return_to_global_goal_tolerance_m);
+  pnh_.param("return_to_global_max_candidates",
+             params_.return_to_global_max_candidates,
+             params_.return_to_global_max_candidates);
 
   AvoidanceStateMachine::Config smc;
   pnh_.param("trigger_confirm_cycles", smc.trigger_confirm_cycles,
@@ -310,14 +423,46 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
 
   // Truncate the global path to the lookahead window from the robot.
   const std::size_t near_idx = nearestIndex(global_world, rx, ry);
-  const auto nominal_world = truncateWorld(global_world, near_idx, params_.lookahead_m);
+  double near_dist = std::numeric_limits<double>::infinity();
+  if (!global_world.empty()) {
+    near_dist = std::hypot(global_world[near_idx].x - rx,
+                           global_world[near_idx].y - ry);
+  }
+  const double goal_dist = std::hypot(global_world.back().x - rx,
+                                      global_world.back().y - ry);
+  std::vector<WorldXY> nominal_world =
+      truncateWorld(global_world, near_idx, params_.lookahead_m);
+  double nominal_tail_m = polylineLengthM(nominal_world);
+  bool return_to_global = false;
+  const bool short_tail =
+      nominal_tail_m < params_.return_to_global_min_tail_m &&
+      goal_dist > params_.return_to_global_goal_tolerance_m;
+  const bool off_global_path =
+      near_dist > params_.return_to_global_trigger_distance_m;
+  if (short_tail || off_global_path) {
+    ReturnPath return_path = buildReturnToGlobalPath(
+        global_world, blocked, g, start, rx, ry, params_,
+        branch_max_expand_, branch_time_budget_s_);
+    if (return_path.found && return_path.world_path.size() >= 2) {
+      nominal_world = std::move(return_path.world_path);
+      nominal_tail_m = polylineLengthM(nominal_world);
+      return_to_global = true;
+      ROS_INFO_THROTTLE(
+          1.0,
+          "cpp planner | returning to global path rejoin_idx=%zu near_idx=%zu "
+          "near_dist=%.2f goal_dist=%.2f tail=%.2f",
+          return_path.rejoin_idx, near_idx, near_dist, goal_dist, nominal_tail_m);
+    }
+  }
   const auto nominal_cells = worldPointsToGridPath(nominal_world, g);
   if (nominal_cells.size() < 2) {
     const double tick_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - t_tick_start).count();
     ROS_INFO_THROTTLE(1.0,
-        "cpp planner | skipped=at_goal_or_short_nominal near_idx=%zu nominal_cells=%zu tick=%.1fms",
-        near_idx, nominal_cells.size(), tick_ms);
+        "cpp planner | skipped=at_goal_or_short_nominal near_idx=%zu "
+        "nominal_cells=%zu near_dist=%.2f goal_dist=%.2f tail=%.2f tick=%.1fms",
+        near_idx, nominal_cells.size(), near_dist, goal_dist, nominal_tail_m,
+        tick_ms);
     return;
   }
 
@@ -581,10 +726,12 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
           .count();
   ROS_INFO_THROTTLE(1.0,
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
-      "endpoint=%.2f locked_static=%d clusters=%zu obs_pts=%zu tick=%.1fms",
+      "endpoint=%.2f locked_static=%d return_global=%d near_dist=%.2f "
+      "tail=%.2f clusters=%zu obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
+      static_cast<int>(return_to_global), near_dist, nominal_tail_m,
       clusters.size(), obstacle_pts.size(), tick_ms);
 }
 
