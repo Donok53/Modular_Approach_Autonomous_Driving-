@@ -13,6 +13,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QString>
+#include <QTimer>
 
 namespace lio_sam_rviz_plugins
 {
@@ -45,7 +46,7 @@ public:
   {
     setStatus(QString("%1 requested").arg(name_));
     callServiceAsync(service_name_, name_.toStdString());
-    returnToDefaultTool();
+    scheduleReturnToDefaultTool();
   }
 
   void deactivate() override
@@ -106,6 +107,13 @@ private:
     }).detach();
   }
 
+  void scheduleReturnToDefaultTool()
+  {
+    returnToDefaultTool();
+    QTimer::singleShot(0, this, [this]() { returnToDefaultTool(); });
+    QTimer::singleShot(80, this, [this]() { returnToDefaultTool(); });
+  }
+
   void returnToDefaultTool()
   {
     if (context_ == nullptr)
@@ -118,6 +126,18 @@ private:
       return;
     }
     rviz::Tool* default_tool = tool_manager->getDefaultTool();
+    if (default_tool == nullptr || default_tool == this)
+    {
+      for (int i = 0; i < tool_manager->numTools(); ++i)
+      {
+        rviz::Tool* candidate = tool_manager->getTool(i);
+        if (candidate != nullptr && candidate != this)
+        {
+          default_tool = candidate;
+          break;
+        }
+      }
+    }
     if (default_tool != nullptr && default_tool != this)
     {
       tool_manager->setCurrentTool(default_tool);

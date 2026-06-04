@@ -510,6 +510,18 @@ class MapExtensionSupervisor:
             last_cloud.header.stamp = rospy.Time.now()
             self.pub_preview.publish(last_cloud)
 
+    def _clear_preview_outputs(self):
+        with self._lock:
+            self._preview_points.clear()
+            self._last_preview_cloud = None
+        header = Header()
+        header.stamp = rospy.Time.now()
+        header.frame_id = self.fixed_frame
+        self.pub_preview.publish(pc2.create_cloud(header, self._cloud_fields(), []))
+        path = Path()
+        path.header = header
+        self.pub_path.publish(path)
+
     def _localized_ready(self):
         with self._lock:
             odom = self._last_localizer_odom
@@ -643,13 +655,12 @@ class MapExtensionSupervisor:
             self._publish_status("waiting_localization", message)
             return TriggerResponse(False, message)
         try:
+            self._clear_preview_outputs()
             with self._lock:
                 self._start_localizer_matrix = self._pose_matrix_from_odom(self._last_localizer_odom)
                 self._start_localizer_quat = self._pose_quat_from_odom(self._last_localizer_odom)
                 self._session_to_map = None
                 self._session_quat = None
-                self._preview_points.clear()
-                self._last_preview_cloud = None
                 self._running = True
             self._clear_source_dir()
             self._publish_status("starting", "starting mapping extension")
@@ -701,6 +712,7 @@ class MapExtensionSupervisor:
                 raise RuntimeError("map sync failed: %s" % sync_resp.message)
 
             self.pub_reload.publish(Empty())
+            self._clear_preview_outputs()
             self._shutdown_mapping_launch()
             self._publish_status("idle", "extension saved and merged")
             return TriggerResponse(True, "map extension saved and merged")
@@ -712,11 +724,11 @@ class MapExtensionSupervisor:
     def handle_cancel(self, _req):
         with self._lock:
             was_running = self._running
-            self._preview_points.clear()
-            self._last_preview_cloud = None
+        self._clear_preview_outputs()
         if not was_running:
             self._publish_status("idle", "cancel ignored; extension was not running")
             return TriggerResponse(True, "extension was not running")
+        self._publish_status("cancelling", "stopping mapping extension")
         self._disable_child_shutdown_sync()
         self._shutdown_mapping_launch()
         self._publish_status("idle", "extension cancelled")
