@@ -49,7 +49,7 @@
   <arg name="keep_until_endpoint_distance_m" default="0.30"/>
   <arg name="locked_static_hit_radius_m" default="0.40"/>
   <arg name="locked_static_persistence_hits" default="3"/>
-  <arg name="locked_static_hold_radius_m" default="3.0"/>
+  <arg name="locked_static_hold_radius_m" default="1.2"/>
   <arg name="locked_static_ttl_s" default="0.80"/>
   <arg name="hold_escape_timeout_s" default="0.0"/>
   <arg name="hold_without_candidate" default="true"/>

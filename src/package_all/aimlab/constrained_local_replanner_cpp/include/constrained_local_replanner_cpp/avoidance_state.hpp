@@ -35,7 +35,7 @@ class AvoidanceStateMachine {
     double keep_until_endpoint_distance_m{0.30};
     double locked_static_hit_radius_m{0.40};
     int locked_static_persistence_hits{3};
-    double locked_static_hold_radius_m{3.0};
+    double locked_static_hold_radius_m{1.2};
     // Keep locked static memory only long enough to bridge short perception
     // dropouts. Set <= 0 to disable locked static memory entirely.
     double locked_static_ttl_s{0.8};

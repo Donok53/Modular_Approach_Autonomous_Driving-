@@ -386,6 +386,7 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              smc.locked_static_persistence_hits);
   pnh_.param("locked_static_hold_radius_m", smc.locked_static_hold_radius_m,
              smc.locked_static_hold_radius_m);
+  locked_static_hold_radius_m_ = smc.locked_static_hold_radius_m;
   pnh_.param("locked_static_ttl_s", smc.locked_static_ttl_s,
              smc.locked_static_ttl_s);
   pnh_.param("hold_escape_timeout_s", smc.hold_escape_timeout_s,
@@ -626,6 +627,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       const bool ahead =
           lx >= -0.05 && lx <= params_.avoidance_trigger_ahead_m + 1.0;
       if (ahead && path_dist <= path_gate_m) {
+        sm_->recordStaticHit(cl.centroid, now_sec);
         const double score = std::max(0.0, lx) + 3.0 * path_dist + 0.01 * dxy;
         if (score < best_path_score) {
           best_path_score = score;
@@ -636,7 +638,6 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
           blocker_path_relevant = true;
         }
       }
-      sm_->recordStaticHit(cl.centroid, now_sec);
     }
     sm_->pruneStaleStatic(now_sec);
     if (!blocker_path_relevant) {
@@ -704,7 +705,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   }
 
   const bool locked_static_nearby =
-      sm_->lockedStaticNearby(WorldXY{rx, ry}, /*radius_m*/ 3.0);
+      sm_->lockedStaticNearby(WorldXY{rx, ry}, locked_static_hold_radius_m_);
   const PathMode mode = sm_->update(
       nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
       endpoint_dist, cached_drivable, locked_static_nearby,
