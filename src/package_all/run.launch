@@ -10,6 +10,8 @@
   <arg name="map_extension_source_dir" default="$(env HOME)/Downloads/test"/>
   <arg name="map_extension_preview_cloud_topic" default="/map_extension/preview_cloud"/>
   <arg name="map_extension_status_marker_topic" default="/map_extension/status_marker"/>
+  <arg name="map_extension_save_resolution" default="0.12"/>
+  <arg name="map_extension_voxel_leaf_size" default="0.12"/>
   <arg name="map_profile_name" default="$(eval 'outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('real' if str(arg('real_mode')).lower() == 'true' else 'test'))"/>
   <arg name="map_profile_suffix" default="$(eval '_outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('_real' if str(arg('real_mode')).lower() == 'true' else ''))"/>
   <arg name="localizer_map_relative_path" default="$(eval '/map/outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test'))"/>
@@ -840,6 +842,8 @@
     <arg name="source_dir" value="$(arg map_extension_source_dir)"/>
     <arg name="destination_dir" value="$(arg localizer_map_bundle_dir)"/>
     <arg name="extension_backup_dir" value="$(arg localizer_map_bundle_dir)_extension_backups"/>
+    <arg name="extension_voxel_leaf_size" value="$(arg map_extension_voxel_leaf_size)"/>
+    <arg name="save_map_resolution" value="$(arg map_extension_save_resolution)"/>
     <arg name="semantic_runtime_drivable_state_file" value="$(arg runtime_drivable_state_file)"/>
     <arg name="trajectory_output_csv" value="$(find astar_map)/map/auto_trajectory_local$(arg map_profile_suffix).csv"/>
     <arg name="trajectory_output_osm" value="$(arg auto_osm_file)"/>

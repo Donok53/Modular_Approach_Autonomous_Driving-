@@ -7,6 +7,10 @@
   <arg name="source_dir" default="$(env HOME)/Downloads/test"/>
   <arg name="destination_dir" default="$(find lio_localizer)/map/$(arg map_profile_name)"/>
   <arg name="extension_backup_dir" default="$(arg destination_dir)_extension_backups"/>
+  <arg name="extension_voxel_leaf_size" default="0.12"/>
+  <arg name="extension_rviz_node_name" default="map_extension_rviz"/>
+  <arg name="extension_rviz_config_file" default="$(find lio_sam)/launch/include/config/rviz.rviz"/>
+  <arg name="save_map_resolution" default="0.12"/>
   <arg name="semantic_runtime_drivable_state_file" default="$(env HOME)/.ros/lio_sam_drivable_area_state$(arg map_profile_suffix).json"/>
   <arg name="trajectory_output_csv" default="$(find astar_map)/map/auto_trajectory_local$(arg map_profile_suffix).csv"/>
   <arg name="trajectory_output_osm" default="$(find astar_map)/map/auto_trajectory$(arg map_profile_suffix).osm"/>
@@ -39,6 +43,7 @@
       <param name="require_stationary_start" value="$(arg require_stationary_start)"/>
       <param name="start_max_linear_speed_mps" value="$(arg start_max_linear_speed_mps)"/>
       <param name="start_max_angular_speed_rps" value="$(arg start_max_angular_speed_rps)"/>
+      <param name="save_map_resolution" value="$(arg save_map_resolution)"/>
       <rosparam param="transform_pcd_files">
         ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"]
       </rosparam>
@@ -47,7 +52,9 @@
           "real_mode:=$(arg real_mode)",
           "environment:=$(arg environment)",
           "map_profile_name:=$(arg map_profile_name)",
-          "enable_rviz:=false",
+          "enable_rviz:=true",
+          "rviz_node_name:=$(arg extension_rviz_node_name)",
+          "rviz_config_file:=$(arg extension_rviz_config_file)",
           "enable_robot_state_publisher:=false",
           "publish_tf:=false",
           "enable_map_sync:=true",
@@ -55,6 +62,7 @@
           "map_sync_source_dir:=$(arg source_dir)",
           "map_sync_destination_dir:=$(arg destination_dir)",
           "map_extension_backup_dir:=$(arg extension_backup_dir)",
+          "map_extension_voxel_leaf_size:=$(arg extension_voxel_leaf_size)",
           "map_extension_keep_existing_ref:=true",
           "semantic_runtime_drivable_state_file:=$(arg semantic_runtime_drivable_state_file)",
           "enable_semantic_sidewalk_pipeline:=$(arg enable_semantic_sidewalk_pipeline)",

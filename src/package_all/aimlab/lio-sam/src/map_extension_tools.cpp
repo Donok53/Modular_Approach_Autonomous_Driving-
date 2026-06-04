@@ -2,9 +2,7 @@
 
 #include <pluginlib/class_list_macros.h>
 #include <ros/ros.h>
-#include <rviz/display.h>
 #include <rviz/display_context.h>
-#include <rviz/display_group.h>
 #include <rviz/tool.h>
 #include <rviz/tool_manager.h>
 #include <std_srvs/Trigger.h>
@@ -16,8 +14,6 @@
 #include <QPixmap>
 #include <QString>
 
-#include <initializer_list>
-
 namespace lio_sam_rviz_plugins
 {
 
@@ -28,14 +24,12 @@ public:
                           const QString& description,
                           const std::string& service_name,
                           const QColor& color,
-                          const QString& icon_text,
-                          const int display_mode)
+                          const QString& icon_text)
     : name_(name)
     , description_(description)
     , service_name_(service_name)
     , color_(color)
     , icon_text_(icon_text)
-    , display_mode_(display_mode)
   {
     shortcut_key_ = 0;
   }
@@ -50,7 +44,6 @@ public:
   void activate() override
   {
     setStatus(QString("%1 requested").arg(name_));
-    applyDisplayMode(display_mode_);
     callServiceAsync(service_name_, name_.toStdString());
     returnToDefaultTool();
   }
@@ -113,83 +106,6 @@ private:
     }).detach();
   }
 
-  static bool nameInList(const QString& name, std::initializer_list<const char*> names)
-  {
-    for (const char* candidate : names)
-    {
-      if (name == QString::fromUtf8(candidate))
-      {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  void setDisplaysRecursive(rviz::DisplayGroup* group, const bool extension_mode)
-  {
-    if (group == nullptr)
-    {
-      return;
-    }
-
-    for (int i = 0; i < group->numDisplays(); ++i)
-    {
-      rviz::Display* display = group->getDisplayAt(i);
-      if (display == nullptr)
-      {
-        continue;
-      }
-
-      const QString name = display->getName();
-      if (extension_mode)
-      {
-        if (nameInList(name, { "Global Map", "Corner Map", "Surface Map", "Map Extension Preview",
-                               "Map (global)", "Map (local)" }))
-        {
-          display->setEnabled(true);
-        }
-        if (nameInList(name, { "Global Map 2D", "Global Map 2D Edit Plane",
-                               "Drivable Area", "Drivable Risk", "Drivable Grid" }))
-        {
-          display->setEnabled(false);
-        }
-      }
-      else
-      {
-        if (nameInList(name, { "Global Map", "Corner Map", "Surface Map", "Map Extension Preview" }))
-        {
-          display->setEnabled(false);
-        }
-        if (nameInList(name, { "Global Map 2D", "Global Map 2D Edit Plane",
-                               "Drivable Area", "Drivable Risk", "Drivable Grid" }))
-        {
-          display->setEnabled(true);
-        }
-      }
-
-      rviz::DisplayGroup* child_group = dynamic_cast<rviz::DisplayGroup*>(display);
-      if (child_group != nullptr)
-      {
-        setDisplaysRecursive(child_group, extension_mode);
-      }
-    }
-  }
-
-  void applyDisplayMode(const int mode)
-  {
-    if (mode == 0 || context_ == nullptr)
-    {
-      return;
-    }
-    rviz::DisplayGroup* root = context_->getRootDisplayGroup();
-    if (root == nullptr)
-    {
-      return;
-    }
-    setDisplaysRecursive(root, mode > 0);
-    root->queueRender();
-  }
-
   void returnToDefaultTool()
   {
     if (context_ == nullptr)
@@ -213,7 +129,6 @@ private:
   std::string service_name_;
   QColor color_;
   QString icon_text_;
-  int display_mode_;
 };
 
 class MapExtensionStartTool : public MapExtensionTriggerTool
@@ -224,8 +139,7 @@ public:
                               "Start RViz-controlled map extension after localization is ready.",
                               "/map_extension/start",
                               QColor(20, 160, 80),
-                              "START",
-                              1)
+                              "START")
   {
   }
 };
@@ -238,8 +152,7 @@ public:
                               "Save and merge the active map extension.",
                               "/map_extension/finish",
                               QColor(30, 95, 210),
-                              "SAVE",
-                              -1)
+                              "SAVE")
   {
   }
 };
@@ -252,8 +165,7 @@ public:
                               "Cancel the active map extension without merging it.",
                               "/map_extension/cancel",
                               QColor(210, 45, 45),
-                              "STOP",
-                              -1)
+                              "STOP")
   {
   }
 };

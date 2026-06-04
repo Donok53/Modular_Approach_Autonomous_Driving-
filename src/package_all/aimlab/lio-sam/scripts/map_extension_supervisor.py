@@ -88,6 +88,7 @@ class MapExtensionSupervisor:
         )
         self.service_timeout_s = max(0.5, float(rospy.get_param("~service_timeout_s", 30.0)))
         self.require_trajectory_save = bool(rospy.get_param("~require_trajectory_save", False))
+        self.save_map_resolution = max(0.0, float(rospy.get_param("~save_map_resolution", 0.12)))
         self.preview_voxel_leaf_size = max(
             0.01, float(rospy.get_param("~preview_voxel_leaf_size", 0.12))
         )
@@ -592,8 +593,12 @@ class MapExtensionSupervisor:
         rospy.wait_for_service(self.save_map_service_name, timeout=self.service_timeout_s)
         proxy = rospy.ServiceProxy(self.save_map_service_name, save_map)
         req = save_mapRequest()
-        req.resolution = 0.0
+        req.resolution = self.save_map_resolution
         req.destination = ""
+        rospy.loginfo(
+            "map_extension_supervisor: calling save_map resolution=%.3f destination=default",
+            req.resolution,
+        )
         return proxy(req)
 
     def _transform_source_pcds(self):

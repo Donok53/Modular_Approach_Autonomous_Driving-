@@ -714,8 +714,16 @@ public:
         }
 
         // save global point cloud map
-        *globalMapCloud += *globalCornerCloud;
-        *globalMapCloud += *globalSurfCloud;
+        if(req.resolution != 0)
+        {
+            *globalMapCloud += *globalCornerCloudDS;
+            *globalMapCloud += *globalSurfCloudDS;
+        }
+        else
+        {
+            *globalMapCloud += *globalCornerCloud;
+            *globalMapCloud += *globalSurfCloud;
+        }
 
         int ret = pcl::io::savePCDFileBinary(saveMapDirectory + "/GlobalMap.pcd", *globalMapCloud);
         res.success = ret == 0;

@@ -315,6 +315,34 @@ Visualization Manager:
       Name: Feature Cloud
     - Class: rviz/Group
       Displays:
+        - Alpha: 0.40000000596046448
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz/PointCloud2
+          Color: 120; 120; 120
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Min Color: 0; 0; 0
+          Name: Existing 3D Map
+          Position Transformer: XYZ
+          Queue Size: 10
+          Selectable: false
+          Size (Pixels): 2
+          Size (m): 0.05000000074505806
+          Style: Flat Squares
+          Topic: /lio_localizer/localization/global_map
+          Unreliable: false
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
         - Alpha: 0.30000001192092896
           Autocompute Intensity Bounds: false
           Autocompute Value Bounds:

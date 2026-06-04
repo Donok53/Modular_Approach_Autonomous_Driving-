@@ -7,6 +7,8 @@
     <arg name="base_config_file" default="$(find lio_sam)/config/params-robot.yaml"/>
     <arg name="environment" default="outdoor"/>
     <arg name="enable_rviz" default="true"/>
+    <arg name="rviz_node_name" default="$(arg project)_rviz"/>
+    <arg name="rviz_config_file" default="$(find lio_sam)/launch/include/config/rviz.rviz"/>
     <arg name="enable_robot_state_publisher" default="true"/>
     <arg name="publish_tf" default="true"/>
     <arg name="enable_map_sync" default="true"/>
@@ -118,7 +120,11 @@
 
     <!--- Run Rviz-->
     <group if="$(arg enable_rviz)">
-      <include file="$(find lio_sam)/launch/include/module_rviz.launch" />
+      <include file="$(find lio_sam)/launch/include/module_rviz.launch">
+        <arg name="project" value="$(arg project)"/>
+        <arg name="rviz_node_name" value="$(arg rviz_node_name)"/>
+        <arg name="rviz_config_file" value="$(arg rviz_config_file)"/>
+      </include>
     </group>
 
 </launch>
