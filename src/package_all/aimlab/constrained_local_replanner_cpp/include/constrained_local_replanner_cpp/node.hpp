@@ -65,6 +65,7 @@ class ReplannerNode {
   tf2_ros::Buffer tf_buffer_;
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
   std::string target_frame_{"map"};
+  std::string base_frame_{"base_link"};
   double tf_wait_s_{0.05};
 
   std::mutex state_mu_;
@@ -104,6 +105,19 @@ class ReplannerNode {
   double cloud_world_z_min_{0.03};
   double cloud_voxel_m_{0.10};
   double loop_period_s_{0.10};
+  bool self_filter_enabled_{true};
+  double self_filter_front_m_{0.54};
+  double self_filter_rear_m_{0.46};
+  double self_filter_half_width_m_{0.44};
+  double self_filter_log_period_s_{1.0};
+  double last_self_filter_log_sec_{0.0};
+  int global_progress_backtrack_points_{20};
+  bool have_global_progress_{false};
+  std::size_t last_global_near_idx_{0};
+  bool have_global_signature_{false};
+  std::size_t last_global_path_size_{0};
+  WorldXY last_global_start_{};
+  WorldXY last_global_goal_{};
   int branch_max_expand_{4500};
   double branch_time_budget_s_{0.45};
   int branch_max_rejoin_candidates_{12};

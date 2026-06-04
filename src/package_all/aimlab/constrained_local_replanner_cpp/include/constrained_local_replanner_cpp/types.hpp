@@ -61,6 +61,8 @@ struct PlannerParams {
   double return_to_global_goal_tolerance_m{0.35};
   double candidate_start_clearance_m{0.35};
   double obstacle_drivable_filter_radius_m{0.0};
+  double relaxed_obstacle_block_margin_m{0.04};
+  double full_inflation_corridor_m{0.37};
 
   int max_expand{4500};
   int branch_max_rejoin_candidates{12};
@@ -68,6 +70,7 @@ struct PlannerParams {
   double branch_time_budget_s{0.45};
   bool grid_unknown_is_occupied{true};
   bool obstacle_drivable_filter_enabled{true};
+  bool adaptive_obstacle_inflation_enabled{true};
 
   RobotFootprint footprint{};
 };

@@ -526,6 +526,15 @@
   <arg name="hold_escape_timeout_s" default="0.0"/>
   <arg name="cpp_replanner_cloud_z_min_m" default="0.04"/>
   <arg name="cpp_replanner_cloud_world_z_min_m" default="0.03"/>
+  <arg name="cpp_replanner_self_filter_enabled" default="$(arg enable_planning_self_filter)"/>
+  <arg name="cpp_replanner_self_filter_front_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')) + 0.16)"/>
+  <arg name="cpp_replanner_self_filter_rear_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')) + 0.08)"/>
+  <arg name="cpp_replanner_self_filter_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.08)"/>
+  <arg name="cpp_replanner_self_filter_log_period_s" default="1.0"/>
+  <arg name="cpp_replanner_global_progress_backtrack_points" default="20"/>
+  <arg name="cpp_replanner_adaptive_obstacle_inflation_enabled" default="true"/>
+  <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="0.04"/>
+  <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.08)"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="0.46"/>
   <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
@@ -1994,6 +2003,12 @@
       <arg name="cloud_topic" value="$(arg planning_obstacle_pointcloud_topic)"/>
       <arg name="cloud_z_min_m" value="$(arg cpp_replanner_cloud_z_min_m)"/>
       <arg name="cloud_world_z_min_m" value="$(arg cpp_replanner_cloud_world_z_min_m)"/>
+      <arg name="base_frame" value="$(arg robot_base_frame)"/>
+      <arg name="self_filter_enabled" value="$(arg cpp_replanner_self_filter_enabled)"/>
+      <arg name="self_filter_front_m" value="$(arg cpp_replanner_self_filter_front_m)"/>
+      <arg name="self_filter_rear_m" value="$(arg cpp_replanner_self_filter_rear_m)"/>
+      <arg name="self_filter_half_width_m" value="$(arg cpp_replanner_self_filter_half_width_m)"/>
+      <arg name="self_filter_log_period_s" value="$(arg cpp_replanner_self_filter_log_period_s)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="odom_topic" value="lio_localizer/odometry/optimization"/>
       <arg name="global_path_topic" value="/astar/path"/>
@@ -2017,6 +2032,10 @@
       <arg name="candidate_start_clearance_m" value="$(arg candidate_start_clearance_m)"/>
       <arg name="obstacle_drivable_filter_enabled" value="$(arg obstacle_drivable_filter_enabled)"/>
       <arg name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
+      <arg name="global_progress_backtrack_points" value="$(arg cpp_replanner_global_progress_backtrack_points)"/>
+      <arg name="adaptive_obstacle_inflation_enabled" value="$(arg cpp_replanner_adaptive_obstacle_inflation_enabled)"/>
+      <arg name="relaxed_obstacle_block_margin_m" value="$(arg cpp_replanner_relaxed_obstacle_block_margin_m)"/>
+      <arg name="full_inflation_corridor_m" value="$(arg cpp_replanner_full_inflation_corridor_m)"/>
       <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
       <arg name="keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="locked_static_ttl_s" value="$(arg locked_static_ttl_s)"/>

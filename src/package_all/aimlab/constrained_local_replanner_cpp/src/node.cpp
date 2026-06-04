@@ -65,6 +65,73 @@ std::size_t nearestIndex(const std::vector<WorldXY>& world, double rx, double ry
   return best;
 }
 
+WorldXY pathTangentAt(const std::vector<WorldXY>& world, std::size_t idx) {
+  if (world.size() < 2) return WorldXY{1.0, 0.0};
+  const std::size_t a = (idx == 0) ? 0 : idx - 1;
+  const std::size_t b = std::min(world.size() - 1, idx + 1);
+  double tx = world[b].x - world[a].x;
+  double ty = world[b].y - world[a].y;
+  const double n = std::hypot(tx, ty);
+  if (n <= 1e-9) return WorldXY{1.0, 0.0};
+  return WorldXY{tx / n, ty / n};
+}
+
+std::size_t nearestIndexHeadingAware(const std::vector<WorldXY>& world,
+                                     double rx,
+                                     double ry,
+                                     double yaw,
+                                     std::size_t min_idx) {
+  if (world.empty()) return 0;
+  min_idx = std::min(min_idx, world.size() - 1);
+  const std::size_t pure_near = nearestIndex(world, rx, ry);
+  const double pure_dist = std::hypot(world[pure_near].x - rx,
+                                      world[pure_near].y - ry);
+  const double hx = std::cos(yaw);
+  const double hy = std::sin(yaw);
+  const double candidate_radius = std::max(1.5, pure_dist + 1.0);
+  std::size_t best = pure_near;
+  double best_score = std::numeric_limits<double>::infinity();
+  bool found_heading_candidate = false;
+
+  for (std::size_t i = min_idx; i < world.size(); ++i) {
+    const double dx = world[i].x - rx;
+    const double dy = world[i].y - ry;
+    const double dist = std::hypot(dx, dy);
+    if (dist > candidate_radius) continue;
+    const WorldXY t = pathTangentAt(world, i);
+    const double heading_dot = hx * t.x + hy * t.y;
+    const double local_x = hx * dx + hy * dy;
+    if (heading_dot < 0.05 && dist > 0.35) continue;
+    const double heading_penalty = 0.75 * (1.0 - std::max(-1.0, std::min(1.0, heading_dot)));
+    const double behind_penalty = (local_x < -0.25) ? 0.75 : 0.0;
+    const double progress_penalty = (i + 2 < min_idx) ? 5.0 : 0.0;
+    const double score = dist + heading_penalty + behind_penalty + progress_penalty;
+    if (score < best_score) {
+      best_score = score;
+      best = i;
+      found_heading_candidate = true;
+    }
+  }
+
+  if (found_heading_candidate) return best;
+  return std::max(min_idx, pure_near);
+}
+
+bool globalSignatureChanged(const std::vector<WorldXY>& world,
+                            bool have_signature,
+                            std::size_t last_size,
+                            WorldXY last_start,
+                            WorldXY last_goal) {
+  if (world.empty()) return true;
+  if (!have_signature) return true;
+  if (world.size() != last_size) return true;
+  const double start_delta = std::hypot(world.front().x - last_start.x,
+                                        world.front().y - last_start.y);
+  const double goal_delta = std::hypot(world.back().x - last_goal.x,
+                                       world.back().y - last_goal.y);
+  return start_delta > 0.30 || goal_delta > 0.30;
+}
+
 void appendDistinct(std::vector<WorldXY>& out, WorldXY p, double eps_m = 0.03) {
   if (!out.empty() && std::hypot(out.back().x - p.x, out.back().y - p.y) <= eps_m) {
     return;
@@ -122,6 +189,53 @@ double clusterPathDistance(const Cluster& cl, const std::vector<WorldXY>& path) 
     best = std::min(best, pointAabbDistance(p, cl.min_xy, cl.max_xy));
   }
   return best;
+}
+
+void overlayOnePoint(const OccupancyView& g,
+                     std::vector<uint8_t>& blocked,
+                     WorldXY p,
+                     double inflate_m) {
+  if (g.width <= 0 || g.height <= 0 || blocked.empty()) return;
+  const int radius_cells = std::max(
+      0, static_cast<int>(std::ceil(inflate_m / std::max(1e-6, g.resolution_m))));
+  const int r2 = radius_cells * radius_cells;
+  const GridCell c = g.world_to_cell(p.x, p.y);
+  for (int dy = -radius_cells; dy <= radius_cells; ++dy) {
+    for (int dx = -radius_cells; dx <= radius_cells; ++dx) {
+      if (dx * dx + dy * dy > r2) continue;
+      const int gx = c.x + dx;
+      const int gy = c.y + dy;
+      if (!g.in_bounds(gx, gy)) continue;
+      blocked[static_cast<std::size_t>(gy) * static_cast<std::size_t>(g.width) +
+              static_cast<std::size_t>(gx)] = 1;
+    }
+  }
+}
+
+void overlayPointsPathAdaptive(const OccupancyView& g,
+                               std::vector<uint8_t>& blocked,
+                               const std::vector<WorldXY>& points,
+                               const std::vector<WorldXY>& nominal_path,
+                               const PlannerParams& params) {
+  const double full_inflate =
+      params.obstacle_block_margin_m + params.footprint.half_width_m;
+  const double relaxed_margin =
+      std::max(0.0, std::min(params.obstacle_block_margin_m,
+                             params.relaxed_obstacle_block_margin_m));
+  const double relaxed_inflate = relaxed_margin + params.footprint.half_width_m;
+  const double full_corridor = std::max(
+      params.footprint.half_width_m,
+      params.full_inflation_corridor_m);
+  if (!params.adaptive_obstacle_inflation_enabled || nominal_path.size() < 2 ||
+      relaxed_inflate >= full_inflate - 1e-6) {
+    overlayPoints(g, blocked, points, full_inflate);
+    return;
+  }
+  for (const auto& p : points) {
+    const double path_dist = pointPolylineDistance(p, nominal_path);
+    const double inflate = (path_dist <= full_corridor) ? full_inflate : relaxed_inflate;
+    overlayOnePoint(g, blocked, p, inflate);
+  }
 }
 
 struct ReturnPath {
@@ -297,6 +411,7 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("odom_topic", odom_topic, odom_topic);
   pnh_.param("global_path_topic", global_path_topic, global_path_topic);
   pnh_.param("primary_mode", primary_mode_, primary_mode_);
+  pnh_.param("base_frame", base_frame_, base_frame_);
   if (primary_mode_) {
     output_local_path_topic_            = "/planning/local_path";
     output_path_mode_topic_             = "/planning/path_mode";
@@ -327,6 +442,13 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("cloud_z_max_m", cloud_z_max_, cloud_z_max_);
   pnh_.param("cloud_world_z_min_m", cloud_world_z_min_, cloud_world_z_min_);
   pnh_.param("cloud_voxel_m", cloud_voxel_m_, cloud_voxel_m_);
+  pnh_.param("self_filter_enabled", self_filter_enabled_, self_filter_enabled_);
+  pnh_.param("self_filter_front_m", self_filter_front_m_, self_filter_front_m_);
+  pnh_.param("self_filter_rear_m", self_filter_rear_m_, self_filter_rear_m_);
+  pnh_.param("self_filter_half_width_m", self_filter_half_width_m_, self_filter_half_width_m_);
+  pnh_.param("self_filter_log_period_s", self_filter_log_period_s_, self_filter_log_period_s_);
+  pnh_.param("global_progress_backtrack_points", global_progress_backtrack_points_,
+             global_progress_backtrack_points_);
 
   pnh_.param("lookahead_m", params_.lookahead_m, params_.lookahead_m);
   pnh_.param("avoidance_trigger_ahead_m", params_.avoidance_trigger_ahead_m,
@@ -372,6 +494,15 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("obstacle_drivable_filter_radius_m",
              params_.obstacle_drivable_filter_radius_m,
              params_.obstacle_drivable_filter_radius_m);
+  pnh_.param("adaptive_obstacle_inflation_enabled",
+             params_.adaptive_obstacle_inflation_enabled,
+             params_.adaptive_obstacle_inflation_enabled);
+  pnh_.param("relaxed_obstacle_block_margin_m",
+             params_.relaxed_obstacle_block_margin_m,
+             params_.relaxed_obstacle_block_margin_m);
+  pnh_.param("full_inflation_corridor_m",
+             params_.full_inflation_corridor_m,
+             params_.full_inflation_corridor_m);
 
   AvoidanceStateMachine::Config smc;
   pnh_.param("trigger_confirm_cycles", smc.trigger_confirm_cycles,
@@ -442,6 +573,28 @@ void ReplannerNode::cloudCB(const sensor_msgs::PointCloud2::ConstPtr& msg) {
     }
   }
 
+  geometry_msgs::TransformStamped base_tf;
+  bool base_tf_ok = false;
+  if (self_filter_enabled_ && !base_frame_.empty()) {
+    try {
+      base_tf = tf_buffer_.lookupTransform(base_frame_, msg->header.frame_id,
+                                           msg->header.stamp,
+                                           ros::Duration(tf_wait_s_));
+      base_tf_ok = true;
+    } catch (const tf2::TransformException&) {
+      try {
+        base_tf = tf_buffer_.lookupTransform(base_frame_, msg->header.frame_id,
+                                             ros::Time(0));
+        base_tf_ok = true;
+      } catch (const tf2::TransformException& ex2) {
+        ROS_WARN_THROTTLE(
+            1.0,
+            "cpp planner: self-filter TF %s -> %s unavailable; keeping cloud unmasked: %s",
+            msg->header.frame_id.c_str(), base_frame_.c_str(), ex2.what());
+      }
+    }
+  }
+
   // Build a 2D rotation/translation from the transform — we drop z later.
   const double tx = tf.transform.translation.x;
   const double ty = tf.transform.translation.y;
@@ -449,13 +602,36 @@ void ReplannerNode::cloudCB(const sensor_msgs::PointCloud2::ConstPtr& msg) {
   tf2::Quaternion q(tf.transform.rotation.x, tf.transform.rotation.y,
                     tf.transform.rotation.z, tf.transform.rotation.w);
   tf2::Matrix3x3 R(q);
+  double btx = 0.0;
+  double bty = 0.0;
+  tf2::Matrix3x3 BR;
+  BR.setIdentity();
+  if (base_tf_ok) {
+    btx = base_tf.transform.translation.x;
+    bty = base_tf.transform.translation.y;
+    tf2::Quaternion bq(base_tf.transform.rotation.x, base_tf.transform.rotation.y,
+                       base_tf.transform.rotation.z, base_tf.transform.rotation.w);
+    BR = tf2::Matrix3x3(bq);
+  }
 
   pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
   pcl::fromROSMsg(*msg, pcl_cloud);
   std::vector<WorldXY> pts;
   pts.reserve(pcl_cloud.size() / 4);
+  std::size_t finite_count = 0;
+  std::size_t self_removed = 0;
   for (const auto& p : pcl_cloud.points) {
     if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) continue;
+    ++finite_count;
+    if (self_filter_enabled_ && base_tf_ok) {
+      const double bx = BR[0][0] * p.x + BR[0][1] * p.y + BR[0][2] * p.z + btx;
+      const double by = BR[1][0] * p.x + BR[1][1] * p.y + BR[1][2] * p.z + bty;
+      if (bx >= -self_filter_rear_m_ && bx <= self_filter_front_m_ &&
+          std::abs(by) <= self_filter_half_width_m_) {
+        ++self_removed;
+        continue;
+      }
+    }
     // z gating is in the incoming cloud frame; apply before transform so the
     // bounds stay independent from occasional TF timing jitter.
     if (p.z < cloud_z_min_ || p.z > cloud_z_max_) continue;
@@ -467,6 +643,16 @@ void ReplannerNode::cloudCB(const sensor_msgs::PointCloud2::ConstPtr& msg) {
     pts.push_back(WorldXY{wx, wy});
   }
   auto down = voxelDownsample2D(pts, cloud_voxel_m_);
+  const double now_sec = ros::Time::now().toSec();
+  if (self_filter_log_period_s_ > 0.0 &&
+      (now_sec - last_self_filter_log_sec_) >= self_filter_log_period_s_) {
+    last_self_filter_log_sec_ = now_sec;
+    ROS_INFO("cpp planner cloud self-filter | frame=%s base=%s enabled=%d tf=%d finite=%zu self_removed=%zu kept=%zu down=%zu mask=x[-%.2f,%.2f] y+/-%.2f",
+             msg->header.frame_id.c_str(), base_frame_.c_str(),
+             static_cast<int>(self_filter_enabled_), static_cast<int>(base_tf_ok),
+             finite_count, self_removed, pts.size(), down.size(),
+             self_filter_rear_m_, self_filter_front_m_, self_filter_half_width_m_);
+  }
   std::lock_guard<std::mutex> lk(state_mu_);
   latest_obstacle_points_ = std::move(down);
   latest_obstacle_stamp_ = msg->header.stamp;
@@ -516,8 +702,6 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   auto blocked = baseBlockedMask(g, params_.grid_unknown_is_occupied);
   const std::size_t raw_obstacle_count = obstacle_pts.size();
   obstacle_pts = filterObstaclePointsOnDrivable(g, obstacle_pts, params_);
-  overlayPoints(g, blocked, obstacle_pts,
-                params_.obstacle_block_margin_m + params_.footprint.half_width_m);
 
   std::vector<WorldXY> global_world;
   global_world.reserve(global->poses.size());
@@ -536,15 +720,32 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     double roll, pitch;
     tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
   }
-  const GridCell start = g.world_to_cell(rx, ry);
-  const bool start_blocked =
-      cellIsBlockedAt(blocked, g.width, g.height, start.x, start.y);
-  auto candidate_blocked = blocked;
-  clearBlockedCircle(g, candidate_blocked, start,
-                     params_.candidate_start_clearance_m);
 
-  // Truncate the global path to the lookahead window from the robot.
-  const std::size_t near_idx = nearestIndex(global_world, rx, ry);
+  if (globalSignatureChanged(global_world, have_global_signature_,
+                             last_global_path_size_, last_global_start_,
+                             last_global_goal_)) {
+    have_global_progress_ = false;
+    have_global_signature_ = true;
+    last_global_path_size_ = global_world.size();
+    last_global_start_ = global_world.front();
+    last_global_goal_ = global_world.back();
+  }
+
+  // Truncate the global path to the lookahead window from the robot. The nearest
+  // anchor is progress/heading aware so recovery after avoidance does not snap to
+  // a nearby but wrong segment of a folded global path.
+  const std::size_t remembered_idx =
+      have_global_progress_
+          ? std::min(last_global_near_idx_, global_world.size() - 1)
+          : 0;
+  const std::size_t backtrack = static_cast<std::size_t>(
+      std::max(0, global_progress_backtrack_points_));
+  const std::size_t search_min_idx =
+      (remembered_idx > backtrack) ? remembered_idx - backtrack : 0;
+  const std::size_t near_idx =
+      nearestIndexHeadingAware(global_world, rx, ry, yaw, search_min_idx);
+  last_global_near_idx_ = near_idx;
+  have_global_progress_ = true;
   double near_dist = std::numeric_limits<double>::infinity();
   if (!global_world.empty()) {
     near_dist = std::hypot(global_world[near_idx].x - rx,
@@ -554,6 +755,16 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
                                       global_world.back().y - ry);
   std::vector<WorldXY> nominal_world =
       truncateWorld(global_world, near_idx, params_.lookahead_m);
+
+  overlayPointsPathAdaptive(g, blocked, obstacle_pts, nominal_world, params_);
+
+  const GridCell start = g.world_to_cell(rx, ry);
+  const bool start_blocked =
+      cellIsBlockedAt(blocked, g.width, g.height, start.x, start.y);
+  auto candidate_blocked = blocked;
+  clearBlockedCircle(g, candidate_blocked, start,
+                     params_.candidate_start_clearance_m);
+
   double nominal_tail_m = polylineLengthM(nominal_world);
   bool return_to_global = false;
   const bool short_tail =

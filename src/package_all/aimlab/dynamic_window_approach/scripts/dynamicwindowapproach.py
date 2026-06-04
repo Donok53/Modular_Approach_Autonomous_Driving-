@@ -544,6 +544,12 @@ class DWAControl:
         self._near_field_raw_stop_last_count = 0
         self._near_field_raw_stop_last_cells = 0
         self._near_field_raw_stop_last_min_x = float("inf")
+        self._near_field_raw_stop_last_max_x = float("-inf")
+        self._near_field_raw_stop_last_min_y = float("inf")
+        self._near_field_raw_stop_last_max_y = float("-inf")
+        self._near_field_raw_stop_last_min_z = float("inf")
+        self._near_field_raw_stop_last_max_z = float("-inf")
+        self._near_field_raw_stop_last_self_removed = 0
         self._near_field_raw_stop_last_log = rospy.Time(0)
         self._near_field_raw_stop_tf_warn_sec = 0.0
         self._near_field_raw_stop_last_frame = ""
@@ -1879,11 +1885,25 @@ class DWAControl:
             if math.isfinite(self._near_field_raw_stop_last_min_x)
             else float("inf")
         )
-        text.text = "NEAR STOP: {}\npts={} cells={} clr={:.2f}m\nframe={} tf={}".format(
+        def marker_value(value):
+            return value if math.isfinite(value) else -1.0
+
+        text.text = (
+            "NEAR STOP: {}\npts={} cells={} self_rm={} clr={:.2f}m\n"
+            "x[{:.2f},{:.2f}] y[{:.2f},{:.2f}] z[{:.2f},{:.2f}]\n"
+            "frame={} tf={}"
+        ).format(
             "STOP" if self._near_field_raw_stop_blocked else "clear",
             self._near_field_raw_stop_last_count,
             self._near_field_raw_stop_last_cells,
+            self._near_field_raw_stop_last_self_removed,
             front_clearance if math.isfinite(front_clearance) else -1.0,
+            marker_value(self._near_field_raw_stop_last_min_x),
+            marker_value(self._near_field_raw_stop_last_max_x),
+            marker_value(self._near_field_raw_stop_last_min_y),
+            marker_value(self._near_field_raw_stop_last_max_y),
+            marker_value(self._near_field_raw_stop_last_min_z),
+            marker_value(self._near_field_raw_stop_last_max_z),
             self._near_field_raw_stop_last_frame or "-",
             "{}|{}".format(self._near_field_raw_stop_tf_status, self._near_field_raw_stop_last_reason),
         )
@@ -1914,6 +1934,12 @@ class DWAControl:
                 self._near_field_raw_stop_last_count = 0
                 self._near_field_raw_stop_last_cells = 0
                 self._near_field_raw_stop_last_min_x = float("inf")
+                self._near_field_raw_stop_last_max_x = float("-inf")
+                self._near_field_raw_stop_last_min_y = float("inf")
+                self._near_field_raw_stop_last_max_y = float("-inf")
+                self._near_field_raw_stop_last_min_z = float("inf")
+                self._near_field_raw_stop_last_max_z = float("-inf")
+                self._near_field_raw_stop_last_self_removed = 0
                 self._near_field_raw_stop_last_process_ms = (
                     time.monotonic() - process_start
                 ) * 1000.0
@@ -1923,6 +1949,12 @@ class DWAControl:
 
             hit_points = []
             min_x = float("inf")
+            hit_max_x = float("-inf")
+            hit_min_y = float("inf")
+            hit_max_y = float("-inf")
+            hit_min_z = float("inf")
+            hit_max_z = float("-inf")
+            self_removed_near = 0
             footprint_front = self.robot_half_length_m + self.footprint_padding_m
             stop_detected = False
             close_override_detected = False
@@ -1945,6 +1977,15 @@ class DWAControl:
                     x, y, z = self._transform_point_xyz(
                         transform_mat, float(x), float(y), float(z)
                     )
+                    in_roi_bounds = (
+                        self.near_field_raw_stop_min_x_m
+                        <= x
+                        <= self.near_field_raw_stop_max_x_m
+                        and abs(y) <= self.near_field_raw_stop_half_width_m
+                        and self.near_field_raw_stop_min_z_m
+                        <= z
+                        <= self.near_field_raw_stop_max_z_m
+                    )
                     if (
                         self.enable_self_filter
                         and self._point_in_local_rect(
@@ -1954,20 +1995,10 @@ class DWAControl:
                             self.self_filter_radius_y,
                         )
                     ):
+                        if in_roi_bounds:
+                            self_removed_near += 1
                         continue
-                    if not (
-                        self.near_field_raw_stop_min_x_m
-                        <= x
-                        <= self.near_field_raw_stop_max_x_m
-                    ):
-                        continue
-                    if abs(y) > self.near_field_raw_stop_half_width_m:
-                        continue
-                    if not (
-                        self.near_field_raw_stop_min_z_m
-                        <= z
-                        <= self.near_field_raw_stop_max_z_m
-                    ):
+                    if not in_roi_bounds:
                         continue
                     hit_points.append((x, y, z))
                     occupied_cells.add(
@@ -1993,6 +2024,16 @@ class DWAControl:
                         )
                     if x < min_x:
                         min_x = x
+                    if x > hit_max_x:
+                        hit_max_x = x
+                    if y < hit_min_y:
+                        hit_min_y = y
+                    if y > hit_max_y:
+                        hit_max_y = y
+                    if z < hit_min_z:
+                        hit_min_z = z
+                    if z > hit_max_z:
+                        hit_max_z = z
                 hit_count = len(hit_points)
                 cell_count = len(occupied_cells)
                 close_xy_points = [(float(x), float(y)) for x, y, _ in hit_points]
@@ -2014,11 +2055,19 @@ class DWAControl:
                 finite_mask = np.isfinite(points).all(axis=1)
                 points = points[finite_mask]
                 points = self._transform_points_xyz(transform_mat, points)
+                roi_candidate_mask = (
+                    (points[:, 0] >= self.near_field_raw_stop_min_x_m)
+                    & (points[:, 0] <= self.near_field_raw_stop_max_x_m)
+                    & (np.abs(points[:, 1]) <= self.near_field_raw_stop_half_width_m)
+                    & (points[:, 2] >= self.near_field_raw_stop_min_z_m)
+                    & (points[:, 2] <= self.near_field_raw_stop_max_z_m)
+                )
                 if self.enable_self_filter and points.size > 0:
                     self_mask = (
                         (np.abs(points[:, 0]) <= self.self_filter_radius_x)
                         & (np.abs(points[:, 1]) <= self.self_filter_radius_y)
                     )
+                    self_removed_near = int(np.count_nonzero(roi_candidate_mask & self_mask))
                     points = points[~self_mask]
                 roi_mask = (
                     (points[:, 0] >= self.near_field_raw_stop_min_x_m)
@@ -2031,6 +2080,11 @@ class DWAControl:
                 hit_count = int(hit_points_arr.shape[0])
                 if hit_count > 0:
                     min_x = float(np.min(hit_points_arr[:, 0]))
+                    hit_max_x = float(np.max(hit_points_arr[:, 0]))
+                    hit_min_y = float(np.min(hit_points_arr[:, 1]))
+                    hit_max_y = float(np.max(hit_points_arr[:, 1]))
+                    hit_min_z = float(np.min(hit_points_arr[:, 2]))
+                    hit_max_z = float(np.max(hit_points_arr[:, 2]))
                     cells = np.floor(
                         hit_points_arr[:, :2] / self.near_field_raw_stop_cell_size_m
                     ).astype(np.int32)
@@ -2134,6 +2188,12 @@ class DWAControl:
             self._near_field_raw_stop_last_count = hit_count
             self._near_field_raw_stop_last_cells = cell_count
             self._near_field_raw_stop_last_min_x = min_x
+            self._near_field_raw_stop_last_max_x = hit_max_x
+            self._near_field_raw_stop_last_min_y = hit_min_y
+            self._near_field_raw_stop_last_max_y = hit_max_y
+            self._near_field_raw_stop_last_min_z = hit_min_z
+            self._near_field_raw_stop_last_max_z = hit_max_z
+            self._near_field_raw_stop_last_self_removed = self_removed_near
             self._near_field_raw_stop_last_process_ms = (
                 time.monotonic() - process_start
             ) * 1000.0
@@ -2147,13 +2207,20 @@ class DWAControl:
                 ).to_sec() >= self.near_field_raw_stop_log_period_s:
                     self._near_field_raw_stop_last_log = now
                     rospy.loginfo(
-                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d min_x=%.2f clearance=%.2f stop_dist=%.2f close_override=%.2f process=%.1fms roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
+                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d self_rm=%d min_x=%.2f clearance=%.2f hit_x=[%.2f..%.2f] hit_y=[%.2f..%.2f] hit_z=[%.2f..%.2f] stop_dist=%.2f close_override=%.2f process=%.1fms roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
                         "STOP" if self._near_field_raw_stop_blocked else "clear",
                         self._near_field_raw_stop_last_reason,
                         hit_count,
                         cell_count,
+                        self_removed_near,
                         min_x if math.isfinite(min_x) else float("inf"),
                         min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
+                        min_x if math.isfinite(min_x) else float("inf"),
+                        hit_max_x if math.isfinite(hit_max_x) else float("inf"),
+                        hit_min_y if math.isfinite(hit_min_y) else float("inf"),
+                        hit_max_y if math.isfinite(hit_max_y) else float("inf"),
+                        hit_min_z if math.isfinite(hit_min_z) else float("inf"),
+                        hit_max_z if math.isfinite(hit_max_z) else float("inf"),
                         self.emergency_stop_distance,
                         self.near_field_raw_stop_close_override_distance_m,
                         self._near_field_raw_stop_last_process_ms,

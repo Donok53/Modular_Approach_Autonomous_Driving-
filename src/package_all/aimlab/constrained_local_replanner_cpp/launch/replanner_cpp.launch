@@ -21,6 +21,12 @@
   <arg name="cloud_z_max_m" default="1.30"/>
   <arg name="cloud_world_z_min_m" default="0.03"/>
   <arg name="cloud_voxel_m" default="0.10"/>
+  <arg name="base_frame" default="base_link"/>
+  <arg name="self_filter_enabled" default="true"/>
+  <arg name="self_filter_front_m" default="0.54"/>
+  <arg name="self_filter_rear_m" default="0.46"/>
+  <arg name="self_filter_half_width_m" default="0.44"/>
+  <arg name="self_filter_log_period_s" default="1.0"/>
 
   <arg name="lookahead_m" default="8.5"/>
   <arg name="avoidance_trigger_ahead_m" default="8.5"/>
@@ -43,6 +49,10 @@
   <arg name="candidate_start_clearance_m" default="0.35"/>
   <arg name="obstacle_drivable_filter_enabled" default="true"/>
   <arg name="obstacle_drivable_filter_radius_m" default="0.0"/>
+  <arg name="global_progress_backtrack_points" default="20"/>
+  <arg name="adaptive_obstacle_inflation_enabled" default="true"/>
+  <arg name="relaxed_obstacle_block_margin_m" default="0.04"/>
+  <arg name="full_inflation_corridor_m" default="0.37"/>
 
   <arg name="trigger_confirm_cycles" default="2"/>
   <arg name="clear_detour_hold_s" default="3.5"/>
@@ -68,6 +78,12 @@
     <param name="cloud_z_max_m" value="$(arg cloud_z_max_m)"/>
     <param name="cloud_world_z_min_m" value="$(arg cloud_world_z_min_m)"/>
     <param name="cloud_voxel_m" value="$(arg cloud_voxel_m)"/>
+    <param name="base_frame" value="$(arg base_frame)"/>
+    <param name="self_filter_enabled" value="$(arg self_filter_enabled)"/>
+    <param name="self_filter_front_m" value="$(arg self_filter_front_m)"/>
+    <param name="self_filter_rear_m" value="$(arg self_filter_rear_m)"/>
+    <param name="self_filter_half_width_m" value="$(arg self_filter_half_width_m)"/>
+    <param name="self_filter_log_period_s" value="$(arg self_filter_log_period_s)"/>
     <param name="lookahead_m" value="$(arg lookahead_m)"/>
     <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
     <param name="obstacle_block_margin_m" value="$(arg obstacle_block_margin_m)"/>
@@ -88,6 +104,10 @@
     <param name="candidate_start_clearance_m" value="$(arg candidate_start_clearance_m)"/>
     <param name="obstacle_drivable_filter_enabled" value="$(arg obstacle_drivable_filter_enabled)"/>
     <param name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
+    <param name="global_progress_backtrack_points" value="$(arg global_progress_backtrack_points)"/>
+    <param name="adaptive_obstacle_inflation_enabled" value="$(arg adaptive_obstacle_inflation_enabled)"/>
+    <param name="relaxed_obstacle_block_margin_m" value="$(arg relaxed_obstacle_block_margin_m)"/>
+    <param name="full_inflation_corridor_m" value="$(arg full_inflation_corridor_m)"/>
     <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>
     <param name="clear_detour_hold_s" value="$(arg clear_detour_hold_s)"/>
     <param name="keep_until_endpoint_distance_m" value="$(arg keep_until_endpoint_distance_m)"/>
