@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import copy
-
 import rospy
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String
@@ -29,7 +27,9 @@ class MapExtensionOdomMux:
         )
         self.extension_timeout_s = max(0.05, float(rospy.get_param("~extension_timeout_s", 0.60)))
         self.primary_timeout_s = max(0.05, float(rospy.get_param("~primary_timeout_s", 1.50)))
-        self.publish_hz = max(1.0, float(rospy.get_param("~publish_hz", 30.0)))
+        self.watchdog_hz = max(
+            1.0, float(rospy.get_param("~watchdog_hz", rospy.get_param("~publish_hz", 30.0)))
+        )
         self.log_period_s = max(0.2, float(rospy.get_param("~log_period_s", 1.0)))
 
         self.primary_odom = None
@@ -59,7 +59,7 @@ class MapExtensionOdomMux:
             self.extension_twist_topic, Odometry, self._extension_twist_cb, queue_size=10, tcp_nodelay=True
         )
         self.sub_status = rospy.Subscriber(self.status_topic, String, self._status_cb, queue_size=5)
-        self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_hz), self._timer_cb)
+        self.timer = rospy.Timer(rospy.Duration(1.0 / self.watchdog_hz), self._timer_cb)
 
         rospy.loginfo(
             "map_extension_odom_mux started | primary=%s twist=%s extension=%s ext_twist=%s out=%s out_twist=%s",
@@ -82,23 +82,32 @@ class MapExtensionOdomMux:
         return str(text).split("|", 1)[0].strip().lower()
 
     def _primary_odom_cb(self, msg):
+        now = rospy.Time.now()
         self.primary_odom = msg
-        self.primary_odom_rx = rospy.Time.now()
+        self.primary_odom_rx = now
+        self._publish_if_current("primary", msg, now, publish_fallback_twist=True)
 
     def _primary_twist_cb(self, msg):
+        now = rospy.Time.now()
         self.primary_twist = msg
-        self.primary_twist_rx = rospy.Time.now()
+        self.primary_twist_rx = now
+        self._publish_twist_if_current("primary", msg, now)
 
     def _extension_odom_cb(self, msg):
+        now = rospy.Time.now()
         self.extension_odom = msg
-        self.extension_odom_rx = rospy.Time.now()
+        self.extension_odom_rx = now
+        self._publish_if_current("extension", msg, now, publish_fallback_twist=True)
 
     def _extension_twist_cb(self, msg):
+        now = rospy.Time.now()
         self.extension_twist = msg
-        self.extension_twist_rx = rospy.Time.now()
+        self.extension_twist_rx = now
+        self._publish_twist_if_current("extension", msg, now)
 
     def _status_cb(self, msg):
         self.extension_state = self._state_from_status(msg.data)
+        self._publish_current_once(rospy.Time.now())
 
     def _extension_requested(self):
         return self.extension_state in ("running", "saving", "syncing")
@@ -129,6 +138,48 @@ class MapExtensionOdomMux:
             return self.primary_twist
         return pose_msg
 
+    @staticmethod
+    def _source_family(source):
+        if source.startswith("extension"):
+            return "extension"
+        return source
+
+    def _log_source_if_changed(self, source, age, now):
+        if source == self.last_source:
+            return
+        rospy.loginfo(
+            "map_extension_odom_mux: source=%s state=%s age=%.2fs primary_age=%.2fs ext_age=%.2fs",
+            source,
+            self.extension_state,
+            age,
+            self._age(self.primary_odom_rx, now),
+            self._age(self.extension_odom_rx, now),
+        )
+        self.last_source = source
+
+    def _publish_if_current(self, source_family, msg, now, publish_fallback_twist=False):
+        source, pose_msg, age = self._select_source(now)
+        if pose_msg is None or self._source_family(source) != source_family:
+            return
+        self.pub_odom.publish(msg)
+        if publish_fallback_twist and self._select_twist(source, pose_msg, now) is pose_msg:
+            self.pub_twist.publish(msg)
+        self._log_source_if_changed(source, age, now)
+
+    def _publish_twist_if_current(self, source_family, msg, now):
+        source, pose_msg, _age = self._select_source(now)
+        if pose_msg is None or self._source_family(source) != source_family:
+            return
+        self.pub_twist.publish(msg)
+
+    def _publish_current_once(self, now):
+        source, pose_msg, age = self._select_source(now)
+        if pose_msg is None:
+            return
+        self.pub_odom.publish(pose_msg)
+        self.pub_twist.publish(self._select_twist(source, pose_msg, now))
+        self._log_source_if_changed(source, age, now)
+
     def _timer_cb(self, _event):
         now = rospy.Time.now()
         source, pose_msg, age = self._select_source(now)
@@ -142,20 +193,7 @@ class MapExtensionOdomMux:
             )
             return
 
-        twist_msg = self._select_twist(source, pose_msg, now)
-        self.pub_odom.publish(copy.deepcopy(pose_msg))
-        self.pub_twist.publish(copy.deepcopy(twist_msg))
-
-        if source != self.last_source:
-            rospy.loginfo(
-                "map_extension_odom_mux: source=%s state=%s age=%.2fs primary_age=%.2fs ext_age=%.2fs",
-                source,
-                self.extension_state,
-                age,
-                self._age(self.primary_odom_rx, now),
-                self._age(self.extension_odom_rx, now),
-            )
-            self.last_source = source
+        self._log_source_if_changed(source, age, now)
 
 
 def main():
