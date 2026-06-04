@@ -61,15 +61,19 @@
   <arg name="grid_unknown_is_occupied" default="true"/>
   <arg name="enable_cloud_tracker" default="false"/>
   <arg name="enable_dynamic_risk_manager" default="false"/>
-  <arg name="enable_local_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <!-- Outdoor default: C++ replanner owns /planning/local_path,
-       /planning/path_mode, /planning/avoidance_path,
+  <arg name="enable_local_replanner" default="true"/>
+  <!-- C++ replanner owns the local-planning outputs by default for both indoor
+       and outdoor runs:
+       /planning/local_path, /planning/path_mode, /planning/avoidance_path,
        /planning/recognized_obstacles, /planning/blocking_obstacles,
        /planning/global_obstacle_overlay, /planning/path_history,
        /planning/travel_history(_path), /planning/local_replanner_debug_text.
+       Map/profile selection above is still controlled by localization_environment
+       / real_mode, so indoor launches keep the indoor map path while using the
+       low-latency C++ replanner.
        Fall back with use_cpp_replanner:=false. -->
-  <arg name="use_cpp_replanner" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('localization_environment')).lower() == 'outdoor' or str(arg('enable_local_replanner')).lower() == 'true' else 'true')"/>
+  <arg name="use_cpp_replanner" default="true"/>
+  <arg name="follow_global_path_only" default="$(eval 'false' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('enable_local_replanner')).lower() == 'true' else 'true')"/>
   <arg name="use_dynamic_risk_grid" default="false"/>
   <arg name="tracked_objects_topic" default="/perception/tracked_objects"/>
   <arg name="enable_tracked_objects_marker_viz" default="false"/>
@@ -503,8 +507,8 @@
   <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="avoidance_fast_reuse_window_s" default="$(eval '0.70' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="max_expand" default="$(eval '4500' if str(arg('localization_environment')).lower() == 'outdoor' else '25000')"/>
-  <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '12' if str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
-  <arg name="avoidance_branch_time_budget_s" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
+  <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '12' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
+  <arg name="avoidance_branch_time_budget_s" default="$(eval '0.45' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
   <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.4' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
   <arg name="short_curved_avoidance_smooth_passes" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
