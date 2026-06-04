@@ -113,7 +113,8 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       if (offset_m > params.sidestep_max_offset_m + 1e-6) continue;
       const double target_y = static_cast<double>(side) * offset_m;
 
-      const double entry_x = std::max(start_x + 0.15, obs_lx - 0.20);
+      const double entry_lead = std::max(0.20, params.sidestep_entry_lead_m);
+      const double entry_x = std::max(start_x + 0.15, obs_lx - entry_lead);
       const double pass_x = std::max(entry_x + 0.35,
                                      obs_lx + params.sidestep_forward_margin_m);
       // Rejoin curve: after passing the obstacle the path must come back to
