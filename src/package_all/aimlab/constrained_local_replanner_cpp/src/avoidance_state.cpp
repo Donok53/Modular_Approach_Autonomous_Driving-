@@ -1,5 +1,6 @@
 #include "constrained_local_replanner_cpp/avoidance_state.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace clr {
@@ -96,7 +97,11 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
   return mode_;
 }
 
-void AvoidanceStateMachine::recordStaticHit(WorldXY centroid) {
+void AvoidanceStateMachine::recordStaticHit(WorldXY centroid, double now_sec) {
+  if (cfg_.locked_static_ttl_s <= 0.0) {
+    locked_.clear();
+    return;
+  }
   const double r2 = cfg_.locked_static_hit_radius_m *
                     cfg_.locked_static_hit_radius_m;
   for (auto& entry : locked_) {
@@ -108,13 +113,30 @@ void AvoidanceStateMachine::recordStaticHit(WorldXY centroid) {
       const double n = static_cast<double>(entry.hits);
       entry.centroid.x = entry.centroid.x + (centroid.x - entry.centroid.x) / n;
       entry.centroid.y = entry.centroid.y + (centroid.y - entry.centroid.y) / n;
+      entry.last_seen_sec = now_sec;
       if (!entry.locked && entry.hits >= cfg_.locked_static_persistence_hits) {
         entry.locked = true;
       }
       return;
     }
   }
-  locked_.push_back(LockedStatic{centroid, 1, false});
+  locked_.push_back(LockedStatic{centroid, 1, false, now_sec});
+}
+
+void AvoidanceStateMachine::pruneStaleStatic(double now_sec) {
+  if (locked_.empty()) return;
+  if (cfg_.locked_static_ttl_s <= 0.0) {
+    locked_.clear();
+    return;
+  }
+  const double ttl = cfg_.locked_static_ttl_s;
+  locked_.erase(
+      std::remove_if(locked_.begin(), locked_.end(),
+                     [now_sec, ttl](const LockedStatic& entry) {
+                       return entry.last_seen_sec <= 0.0 ||
+                              (now_sec - entry.last_seen_sec) > ttl;
+                     }),
+      locked_.end());
 }
 
 bool AvoidanceStateMachine::lockedStaticNearby(WorldXY robot,

@@ -512,6 +512,7 @@
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
   <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.4' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
   <arg name="short_curved_avoidance_smooth_passes" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
+  <arg name="locked_static_ttl_s" default="0.80"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="0.40"/>
   <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
@@ -1984,6 +1985,7 @@
       <arg name="branch_max_rejoin_candidates" value="$(arg avoidance_branch_max_rejoin_candidates)"/>
       <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
       <arg name="keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
+      <arg name="locked_static_ttl_s" value="$(arg locked_static_ttl_s)"/>
     </include>
   </group>
 

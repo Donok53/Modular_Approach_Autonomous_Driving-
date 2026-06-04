@@ -20,6 +20,7 @@ struct LockedStatic {
   WorldXY centroid;
   int hits{0};
   bool locked{false};
+  double last_seen_sec{0.0};
 };
 
 // Lightweight state machine that owns the avoidance lifecycle:
@@ -35,6 +36,9 @@ class AvoidanceStateMachine {
     double locked_static_hit_radius_m{0.40};
     int locked_static_persistence_hits{3};
     double locked_static_hold_radius_m{3.0};
+    // Keep locked static memory only long enough to bridge short perception
+    // dropouts. Set <= 0 to disable locked static memory entirely.
+    double locked_static_ttl_s{0.8};
     // If HOLD persists this long with no candidate, fall through to
     // FOLLOW_LOCAL so the robot stops being stuck. DWA's near_field
     // safety stop still catches genuine collision threats.
@@ -63,8 +67,11 @@ class AvoidanceStateMachine {
   // Push a candidate blocker centroid. After
   // cfg.locked_static_persistence_hits sightings within
   // cfg.locked_static_hit_radius_m it becomes "locked" and is preserved
-  // across perception dropouts.
-  void recordStaticHit(WorldXY centroid);
+  // briefly across perception dropouts.
+  void recordStaticHit(WorldXY centroid, double now_sec);
+
+  // Drop stale locked-static entries. Called once per planner tick.
+  void pruneStaleStatic(double now_sec);
 
   // True if any confirmed (locked) static is within `radius_m` of the robot.
   bool lockedStaticNearby(WorldXY robot, double radius_m) const;

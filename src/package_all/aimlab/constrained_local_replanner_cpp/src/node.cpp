@@ -158,6 +158,8 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              smc.locked_static_persistence_hits);
   pnh_.param("locked_static_hold_radius_m", smc.locked_static_hold_radius_m,
              smc.locked_static_hold_radius_m);
+  pnh_.param("locked_static_ttl_s", smc.locked_static_ttl_s,
+             smc.locked_static_ttl_s);
   pnh_.param("hold_escape_timeout_s", smc.hold_escape_timeout_s,
              smc.hold_escape_timeout_s);
   sm_ = std::make_unique<AvoidanceStateMachine>(smc);
@@ -257,6 +259,7 @@ void ReplannerNode::globalPathCB(const nav_msgs::Path::ConstPtr& msg) {
 
 void ReplannerNode::timerCB(const ros::TimerEvent&) {
   const auto t_tick_start = std::chrono::steady_clock::now();
+  const double now_sec = ros::Time::now().toSec();
   nav_msgs::OccupancyGrid::ConstPtr grid;
   nav_msgs::Odometry::ConstPtr odom;
   nav_msgs::Path::ConstPtr global;
@@ -329,8 +332,9 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     for (const auto& cl : clusters) {
       const double dxy = std::hypot(cl.centroid.x - rx, cl.centroid.y - ry);
       if (dxy < best) { best = dxy; blocker_world = cl.centroid; }
-      sm_->recordStaticHit(cl.centroid);
+      sm_->recordStaticHit(cl.centroid, now_sec);
     }
+    sm_->pruneStaleStatic(now_sec);
   }
 
   // Try sidestep first, then branch search as a fallback.
@@ -392,7 +396,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   const PathMode mode = sm_->update(
       nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
       endpoint_dist, cached_drivable, locked_static_nearby,
-      ros::Time::now().toSec());
+      now_sec);
 
   // Choose what to publish based on the resolved mode.
   nav_msgs::Path out;
