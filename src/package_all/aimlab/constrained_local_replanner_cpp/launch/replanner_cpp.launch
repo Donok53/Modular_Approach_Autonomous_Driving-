@@ -41,6 +41,8 @@
   <arg name="return_to_global_goal_tolerance_m" default="0.35"/>
   <arg name="return_to_global_max_candidates" default="24"/>
   <arg name="candidate_start_clearance_m" default="0.35"/>
+  <arg name="obstacle_drivable_filter_enabled" default="true"/>
+  <arg name="obstacle_drivable_filter_radius_m" default="0.0"/>
 
   <arg name="trigger_confirm_cycles" default="2"/>
   <arg name="clear_detour_hold_s" default="3.5"/>
@@ -84,6 +86,8 @@
     <param name="return_to_global_goal_tolerance_m" value="$(arg return_to_global_goal_tolerance_m)"/>
     <param name="return_to_global_max_candidates" value="$(arg return_to_global_max_candidates)"/>
     <param name="candidate_start_clearance_m" value="$(arg candidate_start_clearance_m)"/>
+    <param name="obstacle_drivable_filter_enabled" value="$(arg obstacle_drivable_filter_enabled)"/>
+    <param name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
     <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>
     <param name="clear_detour_hold_s" value="$(arg clear_detour_hold_s)"/>
     <param name="keep_until_endpoint_distance_m" value="$(arg keep_until_endpoint_distance_m)"/>

@@ -48,6 +48,7 @@ nav_msgs::OccupancyGrid buildOverlayGrid(const OccupancyView& g,
 std_msgs::String buildDebugText(PathMode mode, bool nominal_blocked,
                                 bool candidate, bool cached_drivable,
                                 double endpoint_distance_m,
-                                std::size_t clusters, std::size_t obstacle_pts);
+                                std::size_t clusters, std::size_t obstacle_pts,
+                                std::size_t raw_obstacle_pts);
 
 }  // namespace clr

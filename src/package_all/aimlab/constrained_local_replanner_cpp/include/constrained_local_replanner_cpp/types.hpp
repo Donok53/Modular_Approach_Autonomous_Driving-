@@ -60,12 +60,14 @@ struct PlannerParams {
   double return_to_global_min_tail_m{0.80};
   double return_to_global_goal_tolerance_m{0.35};
   double candidate_start_clearance_m{0.35};
+  double obstacle_drivable_filter_radius_m{0.0};
 
   int max_expand{4500};
   int branch_max_rejoin_candidates{12};
   int return_to_global_max_candidates{24};
   double branch_time_budget_s{0.45};
   bool grid_unknown_is_occupied{true};
+  bool obstacle_drivable_filter_enabled{true};
 
   RobotFootprint footprint{};
 };

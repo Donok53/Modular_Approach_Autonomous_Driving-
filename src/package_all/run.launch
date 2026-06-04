@@ -519,6 +519,8 @@
   <arg name="return_to_global_goal_tolerance_m" default="0.35"/>
   <arg name="return_to_global_max_candidates" default="24"/>
   <arg name="candidate_start_clearance_m" default="0.35"/>
+  <arg name="obstacle_drivable_filter_enabled" default="true"/>
+  <arg name="obstacle_drivable_filter_radius_m" default="0.0"/>
   <arg name="locked_static_ttl_s" default="0.80"/>
   <arg name="hold_without_candidate" default="true"/>
   <arg name="hold_escape_timeout_s" default="0.0"/>
@@ -2013,6 +2015,8 @@
       <arg name="return_to_global_goal_tolerance_m" value="$(arg return_to_global_goal_tolerance_m)"/>
       <arg name="return_to_global_max_candidates" value="$(arg return_to_global_max_candidates)"/>
       <arg name="candidate_start_clearance_m" value="$(arg candidate_start_clearance_m)"/>
+      <arg name="obstacle_drivable_filter_enabled" value="$(arg obstacle_drivable_filter_enabled)"/>
+      <arg name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
       <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
       <arg name="keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="locked_static_ttl_s" value="$(arg locked_static_ttl_s)"/>

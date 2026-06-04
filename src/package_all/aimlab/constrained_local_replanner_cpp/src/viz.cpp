@@ -161,7 +161,8 @@ std_msgs::String buildDebugText(PathMode mode, bool nominal_blocked,
                                 bool candidate, bool cached_drivable,
                                 double endpoint_distance_m,
                                 std::size_t clusters,
-                                std::size_t obstacle_pts) {
+                                std::size_t obstacle_pts,
+                                std::size_t raw_obstacle_pts) {
   std_msgs::String s;
   std::ostringstream os;
   os << "cpp_planner mode=" << pathModeToString(mode)
@@ -170,7 +171,8 @@ std_msgs::String buildDebugText(PathMode mode, bool nominal_blocked,
      << " cached_drivable=" << (cached_drivable ? "yes" : "no")
      << " endpoint=" << endpoint_distance_m
      << " clusters=" << clusters
-     << " obs_pts=" << obstacle_pts;
+     << " obs_pts=" << obstacle_pts
+     << " raw_obs_pts=" << raw_obstacle_pts;
   s.data = os.str();
   return s;
 }

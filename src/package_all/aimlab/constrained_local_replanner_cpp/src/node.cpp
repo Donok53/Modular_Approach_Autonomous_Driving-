@@ -35,6 +35,11 @@ std::vector<WorldXY> samplePath(const std::vector<GridCell>& grid_path,
 void clearBlockedCircle(const OccupancyView& g, std::vector<uint8_t>& blocked,
                         GridCell center, double radius_m);
 
+std::vector<WorldXY> filterObstaclePointsOnDrivable(
+    const OccupancyView& g,
+    const std::vector<WorldXY>& points,
+    const PlannerParams& params);
+
 // Truncate the global path to roughly `len_m` meters ahead of `start_idx`.
 std::vector<WorldXY> truncateWorld(const std::vector<WorldXY>& world,
                                    std::size_t start_idx, double len_m) {
@@ -218,6 +223,42 @@ void clearBlockedCircle(const OccupancyView& g, std::vector<uint8_t>& blocked,
   }
 }
 
+std::vector<WorldXY> filterObstaclePointsOnDrivable(
+    const OccupancyView& g,
+    const std::vector<WorldXY>& points,
+    const PlannerParams& params) {
+  if (!params.obstacle_drivable_filter_enabled ||
+      g.width <= 0 || g.height <= 0 || points.empty()) {
+    return points;
+  }
+
+  std::vector<WorldXY> out;
+  out.reserve(points.size());
+  const int radius_cells = std::max(
+      0, static_cast<int>(std::ceil(
+             params.obstacle_drivable_filter_radius_m /
+             std::max(1e-6, g.resolution_m))));
+  const int r2 = radius_cells * radius_cells;
+  for (const auto& p : points) {
+    const GridCell c = g.world_to_cell(p.x, p.y);
+    bool on_drivable = false;
+    for (int dy = -radius_cells; dy <= radius_cells && !on_drivable; ++dy) {
+      for (int dx = -radius_cells; dx <= radius_cells; ++dx) {
+        if (dx * dx + dy * dy > r2) continue;
+        const int gx = c.x + dx;
+        const int gy = c.y + dy;
+        if (!g.in_bounds(gx, gy)) continue;
+        if (cellIsDrivableFree(g, gx, gy, params.grid_unknown_is_occupied)) {
+          on_drivable = true;
+          break;
+        }
+      }
+    }
+    if (on_drivable) out.push_back(p);
+  }
+  return out;
+}
+
 // Down-sample a grid path to ~`step_m` spacing so the emitted local path is
 // not unnecessarily dense (the DWA controller does its own resampling but a
 // 5 cm grid path explodes RViz markers).
@@ -325,6 +366,12 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("candidate_start_clearance_m",
              params_.candidate_start_clearance_m,
              params_.candidate_start_clearance_m);
+  pnh_.param("obstacle_drivable_filter_enabled",
+             params_.obstacle_drivable_filter_enabled,
+             params_.obstacle_drivable_filter_enabled);
+  pnh_.param("obstacle_drivable_filter_radius_m",
+             params_.obstacle_drivable_filter_radius_m,
+             params_.obstacle_drivable_filter_radius_m);
 
   AvoidanceStateMachine::Config smc;
   pnh_.param("trigger_confirm_cycles", smc.trigger_confirm_cycles,
@@ -466,6 +513,8 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
 
   const OccupancyView g = fromOccupancyGrid(*grid);
   auto blocked = baseBlockedMask(g, params_.grid_unknown_is_occupied);
+  const std::size_t raw_obstacle_count = obstacle_pts.size();
+  obstacle_pts = filterObstaclePointsOnDrivable(g, obstacle_pts, params_);
   overlayPoints(g, blocked, obstacle_pts,
                 params_.obstacle_block_margin_m + params_.footprint.half_width_m);
 
@@ -834,7 +883,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
 
   pub_debug_text_.publish(buildDebugText(
       mode, nominal_blocked, candidate.found, cached_drivable, endpoint_dist,
-      clusters.size(), obstacle_pts.size()));
+      clusters.size(), obstacle_pts.size(), raw_obstacle_count));
 
   const double tick_ms =
       std::chrono::duration<double, std::milli>(
@@ -844,14 +893,14 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
       "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d near_dist=%.2f "
       "tail=%.2f blocker_path=%d blocker_lx=%.2f blocker_ly=%.2f blocker_path_dist=%.2f "
-      "clusters=%zu obs_pts=%zu tick=%.1fms",
+      "clusters=%zu obs_pts=%zu raw_obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
       static_cast<int>(start_blocked), static_cast<int>(return_to_global),
       near_dist, nominal_tail_m, static_cast<int>(blocker_path_relevant),
       blocker_lx, blocker_ly, blocker_path_dist,
-      clusters.size(), obstacle_pts.size(), tick_ms);
+      clusters.size(), obstacle_pts.size(), raw_obstacle_count, tick_ms);
 }
 
 }  // namespace clr
