@@ -3887,13 +3887,8 @@ class DWAControl:
             )
             + self.emergency_bypass_clearance_margin_m
         )
-        if self.front_obstacle_clearance <= min_bypass_clearance:
-            self._emergency_bypass_debug = {
-                "reject": "clearance_band",
-                "clearance": self.front_obstacle_clearance,
-                "min_bypass": min_bypass_clearance,
-            }
-            return False
+        clearance_band_blocked = self.front_obstacle_clearance <= min_bypass_clearance
+        near_stop_reason = str(getattr(self, "_near_field_raw_stop_last_reason", "") or "")
         if remaining_dist <= max(self.goal_thresh_m, self.emergency_bypass_goal_window_m):
             self._emergency_bypass_debug = {"reject": "near_goal"}
             return False
@@ -3905,6 +3900,16 @@ class DWAControl:
             self._emergency_bypass_debug = {"reject": "clearance_floor",
                                             "clearance": self.front_obstacle_clearance}
             return False
+        # During an active C++ detour, the near-field standard stop can see the
+        # side edges of a passable gap and report a narrow clearance band before
+        # the robot has fully entered the passage. Treat that band as a soft
+        # guard only when the detour geometry below clearly bends through the
+        # gap. Close-override and raw-contact stops remain hard stops.
+        soft_clearance_band = (
+            active_avoidance
+            and clearance_band_blocked
+            and near_stop_reason != "close_override"
+        )
         # Stale-path guard: refuse bypass when we're riding an old fast-reuse
         # avoidance path (observed age 2-3 s in the field). The bypass logic
         # below evaluates the cached path shape; if the path itself is stale
@@ -3955,6 +3960,8 @@ class DWAControl:
             "preview_yaw_err_deg": math.degrees(preview_yaw_err),
             "target_local_x": target_local_x,
             "target_local_y": target_local_y,
+            "clearance": self.front_obstacle_clearance,
+            "min_bypass": min_bypass_clearance,
         }
 
         if preview_local_x <= 0.05:
@@ -3977,7 +3984,14 @@ class DWAControl:
         if not bypass_ok:
             self._emergency_bypass_debug["reject"] = "no_lateral_detour"
             self._emergency_bypass_debug["preview_yaw_err_deg"] = math.degrees(preview_yaw_err)
-        return bypass_ok
+            return False
+        if clearance_band_blocked and not soft_clearance_band:
+            self._emergency_bypass_debug["reject"] = "clearance_band"
+            return False
+        if soft_clearance_band:
+            self._emergency_bypass_debug["clearance_band_soft_allowed"] = True
+            self._emergency_bypass_debug["near_stop_reason"] = near_stop_reason
+        return True
 
     def _near_goal_completion_allowed(self, dist_to_goal, arc_rem, lat_err):
         if self.enable_emergency_stop and self.emergency_blocked:
