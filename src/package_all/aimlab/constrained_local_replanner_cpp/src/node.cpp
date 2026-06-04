@@ -32,6 +32,9 @@ bool cellIsBlockedAt(const std::vector<uint8_t>& blocked, int width, int height,
 std::vector<WorldXY> samplePath(const std::vector<GridCell>& grid_path,
                                 const OccupancyView& g, double step_m);
 
+void clearBlockedCircle(const OccupancyView& g, std::vector<uint8_t>& blocked,
+                        GridCell center, double radius_m);
+
 // Truncate the global path to roughly `len_m` meters ahead of `start_idx`.
 std::vector<WorldXY> truncateWorld(const std::vector<WorldXY>& world,
                                    std::size_t start_idx, double len_m) {
@@ -158,6 +161,24 @@ bool cellIsBlockedAt(const std::vector<uint8_t>& blocked, int width, int height,
                  static_cast<std::size_t>(gx)] != 0;
 }
 
+void clearBlockedCircle(const OccupancyView& g, std::vector<uint8_t>& blocked,
+                        GridCell center, double radius_m) {
+  if (radius_m <= 0.0 || blocked.empty()) return;
+  const int radius_cells = std::max(
+      0, static_cast<int>(std::ceil(radius_m / std::max(1e-6, g.resolution_m))));
+  const int r2 = radius_cells * radius_cells;
+  for (int dy = -radius_cells; dy <= radius_cells; ++dy) {
+    for (int dx = -radius_cells; dx <= radius_cells; ++dx) {
+      if (dx * dx + dy * dy > r2) continue;
+      const int gx = center.x + dx;
+      const int gy = center.y + dy;
+      if (!g.in_bounds(gx, gy)) continue;
+      blocked[static_cast<std::size_t>(gy) * static_cast<std::size_t>(g.width) +
+              static_cast<std::size_t>(gx)] = 0;
+    }
+  }
+}
+
 // Down-sample a grid path to ~`step_m` spacing so the emitted local path is
 // not unnecessarily dense (the DWA controller does its own resampling but a
 // 5 cm grid path explodes RViz markers).
@@ -257,6 +278,9 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("return_to_global_max_candidates",
              params_.return_to_global_max_candidates,
              params_.return_to_global_max_candidates);
+  pnh_.param("candidate_start_clearance_m",
+             params_.candidate_start_clearance_m,
+             params_.candidate_start_clearance_m);
 
   AvoidanceStateMachine::Config smc;
   pnh_.param("trigger_confirm_cycles", smc.trigger_confirm_cycles,
@@ -420,6 +444,11 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
   }
   const GridCell start = g.world_to_cell(rx, ry);
+  const bool start_blocked =
+      cellIsBlockedAt(blocked, g.width, g.height, start.x, start.y);
+  auto candidate_blocked = blocked;
+  clearBlockedCircle(g, candidate_blocked, start,
+                     params_.candidate_start_clearance_m);
 
   // Truncate the global path to the lookahead window from the robot.
   const std::size_t near_idx = nearestIndex(global_world, rx, ry);
@@ -441,7 +470,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       near_dist > params_.return_to_global_trigger_distance_m;
   if (short_tail || off_global_path) {
     ReturnPath return_path = buildReturnToGlobalPath(
-        global_world, blocked, g, start, rx, ry, params_,
+        global_world, candidate_blocked, g, start, rx, ry, params_,
         branch_max_expand_, branch_time_budget_s_);
     if (return_path.found && return_path.world_path.size() >= 2) {
       nominal_world = std::move(return_path.world_path);
@@ -489,7 +518,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   std::vector<GridCell> candidate_cells;
   std::vector<WorldXY>  candidate_world;
   if (nominal_blocked) {
-    candidate = buildSidestepAvoidance(nominal_cells, blocked, g, start,
+    candidate = buildSidestepAvoidance(nominal_cells, candidate_blocked, g, start,
                                        blocker_world, params_, yaw, 0);
     if (candidate.found) {
       candidate_cells = candidate.grid_path;
@@ -506,14 +535,14 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
             static_cast<double>(nominal_cells[i].x - nominal_cells[i - 1].x),
             static_cast<double>(nominal_cells[i].y - nominal_cells[i - 1].y)) * res;
         if (traveled < params_.rejoin_min_distance_m) continue;
-        if (cellIsBlockedAt(blocked, g.width, g.height,
+        if (cellIsBlockedAt(candidate_blocked, g.width, g.height,
                             nominal_cells[i].x, nominal_cells[i].y)) continue;
         rejoin_candidates.push_back(nominal_cells[i]);
         if (static_cast<int>(rejoin_candidates.size()) >=
             branch_max_rejoin_candidates_) break;
       }
       if (!rejoin_candidates.empty()) {
-        candidate_cells = aStarBranch(blocked, g.width, g.height, start,
+        candidate_cells = aStarBranch(candidate_blocked, g.width, g.height, start,
                                       rejoin_candidates, branch_max_expand_,
                                       branch_time_budget_s_);
         if (candidate_cells.size() >= 2) {
@@ -530,7 +559,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   double endpoint_dist = std::numeric_limits<double>::infinity();
   if (last_avoid_active_ && !last_avoid_grid_path_.empty()) {
     for (const auto& c : last_avoid_grid_path_) {
-      if (cellIsBlockedAt(blocked, g.width, g.height, c.x, c.y)) {
+      if (cellIsBlockedAt(candidate_blocked, g.width, g.height, c.x, c.y)) {
         cached_drivable = false;
         break;
       }
@@ -726,12 +755,13 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
           .count();
   ROS_INFO_THROTTLE(1.0,
       "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
-      "endpoint=%.2f locked_static=%d return_global=%d near_dist=%.2f "
+      "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d near_dist=%.2f "
       "tail=%.2f clusters=%zu obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
-      static_cast<int>(return_to_global), near_dist, nominal_tail_m,
+      static_cast<int>(start_blocked), static_cast<int>(return_to_global),
+      near_dist, nominal_tail_m,
       clusters.size(), obstacle_pts.size(), tick_ms);
 }
 

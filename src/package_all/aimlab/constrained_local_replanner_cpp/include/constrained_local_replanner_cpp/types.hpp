@@ -57,6 +57,7 @@ struct PlannerParams {
   double return_to_global_trigger_distance_m{0.65};
   double return_to_global_min_tail_m{0.80};
   double return_to_global_goal_tolerance_m{0.35};
+  double candidate_start_clearance_m{0.35};
 
   int max_expand{4500};
   int branch_max_rejoin_candidates{12};
