@@ -50,6 +50,7 @@ struct PlannerParams {
   double sidestep_min_offset_m{0.52};
   double sidestep_max_offset_m{1.15};
   double sidestep_preview_m{2.0};
+  double sidestep_clearance_extra_m{0.10};
   double sidestep_forward_margin_m{0.55};
   double rejoin_min_distance_m{1.4};
   double avoidance_keep_until_endpoint_distance_m{0.30};

@@ -27,6 +27,7 @@
   <arg name="sidestep_min_offset_m" default="0.52"/>
   <arg name="sidestep_max_offset_m" default="1.15"/>
   <arg name="sidestep_preview_m" default="2.0"/>
+  <arg name="sidestep_clearance_extra_m" default="0.10"/>
   <arg name="rejoin_min_distance_m" default="1.4"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
 
@@ -68,6 +69,7 @@
     <param name="sidestep_min_offset_m" value="$(arg sidestep_min_offset_m)"/>
     <param name="sidestep_max_offset_m" value="$(arg sidestep_max_offset_m)"/>
     <param name="sidestep_preview_m" value="$(arg sidestep_preview_m)"/>
+    <param name="sidestep_clearance_extra_m" value="$(arg sidestep_clearance_extra_m)"/>
     <param name="rejoin_min_distance_m" value="$(arg rejoin_min_distance_m)"/>
     <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
     <param name="branch_max_expand" value="$(arg branch_max_expand)"/>

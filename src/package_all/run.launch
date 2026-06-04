@@ -485,7 +485,7 @@
   <arg name="pointcloud_min_cluster_points" default="2"/>
   <arg name="pointcloud_visibility_hold_s" default="0.25"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="0.10"/>
+  <arg name="obstacle_block_margin_m" default="0.16"/>
   <arg name="avoidance_trigger_margin_m" default="0.12"/>
   <arg name="avoidance_trigger_ahead_m" default="$(eval '8.5' if str(arg('localization_environment')).lower() == 'outdoor' else max(7.0, min(float(arg('local_replan_lookahead_m')), 8.0)))"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
@@ -520,9 +520,10 @@
   <arg name="locked_static_ttl_s" default="0.80"/>
   <arg name="hold_without_candidate" default="false"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
-  <arg name="sidestep_avoidance_min_offset_m" default="0.40"/>
+  <arg name="sidestep_avoidance_min_offset_m" default="0.52"/>
   <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
   <arg name="sidestep_avoidance_preview_m" default="2.0"/>
+  <arg name="sidestep_avoidance_clearance_extra_m" default="0.10"/>
   <arg name="sidestep_avoidance_forward_margin_m" default="0.55"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
   <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
@@ -1984,6 +1985,7 @@
       <arg name="sidestep_min_offset_m" value="$(arg sidestep_avoidance_min_offset_m)"/>
       <arg name="sidestep_max_offset_m" value="$(arg sidestep_avoidance_max_offset_m)"/>
       <arg name="sidestep_preview_m" value="$(arg sidestep_avoidance_preview_m)"/>
+      <arg name="sidestep_clearance_extra_m" value="$(arg sidestep_avoidance_clearance_extra_m)"/>
       <arg name="rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
       <arg name="branch_max_expand" value="$(arg max_expand)"/>

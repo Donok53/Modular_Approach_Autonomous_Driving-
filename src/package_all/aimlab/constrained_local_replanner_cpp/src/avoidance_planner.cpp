@@ -89,12 +89,13 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       std::max(params.sidestep_preview_m,
                obs_lx + params.sidestep_forward_margin_m + params.footprint.half_length_m * 2.0);
   // Lateral clearance the path centerline needs from the obstacle centroid.
-  // The overlay already inflates obstacles by (half_width + block_margin),
-  // so we only add a small safety nudge here — the previous +0.08 m made the
-  // sidestep wider than necessary without buying real safety.
+  // The overlay already inflates obstacles by (half_width + block_margin).
+  // Add a configurable extra nudge so the generated detour does not skim the
+  // obstacle when DWA tracks the path with small pose/point-cloud error.
   const double clearance_y =
       params.footprint.half_width_m + params.footprint.padding_m +
-      params.obstacle_block_margin_m + 0.02;
+      params.obstacle_block_margin_m +
+      std::max(0.0, params.sidestep_clearance_extra_m);
 
   double best_score = std::numeric_limits<double>::infinity();
   for (const int side : side_order) {

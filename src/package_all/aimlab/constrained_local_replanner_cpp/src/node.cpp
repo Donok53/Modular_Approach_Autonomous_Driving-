@@ -258,6 +258,8 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              params_.sidestep_max_offset_m);
   pnh_.param("sidestep_preview_m", params_.sidestep_preview_m,
              params_.sidestep_preview_m);
+  pnh_.param("sidestep_clearance_extra_m", params_.sidestep_clearance_extra_m,
+             params_.sidestep_clearance_extra_m);
   pnh_.param("rejoin_min_distance_m", params_.rejoin_min_distance_m,
              params_.rejoin_min_distance_m);
   pnh_.param("grid_unknown_is_occupied", params_.grid_unknown_is_occupied,
