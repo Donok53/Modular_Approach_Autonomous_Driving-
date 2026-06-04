@@ -95,6 +95,7 @@ ReturnPath buildReturnToGlobalPath(const std::vector<WorldXY>& global,
                                    GridCell start,
                                    double rx,
                                    double ry,
+                                   std::size_t min_rejoin_idx,
                                    const PlannerParams& params,
                                    int max_expand,
                                    double time_budget_s) {
@@ -107,7 +108,8 @@ ReturnPath buildReturnToGlobalPath(const std::vector<WorldXY>& global,
   };
   std::vector<RankedCandidate> ranked;
   ranked.reserve(global.size());
-  for (std::size_t i = 0; i < global.size(); ++i) {
+  min_rejoin_idx = std::min(min_rejoin_idx, global.size() - 1);
+  for (std::size_t i = min_rejoin_idx; i < global.size(); ++i) {
     const GridCell cell = g.world_to_cell(global[i].x, global[i].y);
     if (!g.in_bounds(cell.x, cell.y)) continue;
     if (cellIsBlockedAt(blocked, g.width, g.height, cell.x, cell.y)) continue;
@@ -474,7 +476,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       near_dist > params_.return_to_global_trigger_distance_m;
   if (short_tail || off_global_path) {
     ReturnPath return_path = buildReturnToGlobalPath(
-        global_world, candidate_blocked, g, start, rx, ry, params_,
+        global_world, candidate_blocked, g, start, rx, ry, near_idx, params_,
         branch_max_expand_, branch_time_budget_s_);
     if (return_path.found && return_path.world_path.size() >= 2) {
       nominal_world = std::move(return_path.world_path);

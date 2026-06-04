@@ -434,6 +434,15 @@ class DWAControl:
                 )
             ),
         )
+        self.post_stop_rotation_start_clearance_m = max(
+            self.post_stop_rotation_min_clearance_m,
+            float(
+                rospy.get_param(
+                    "~post_stop_rotation_start_clearance_m",
+                    self.post_stop_rotation_min_clearance_m + 0.03,
+                )
+            ),
+        )
         self.post_stop_rotation_preview_idx = max(
             1,
             int(rospy.get_param("~post_stop_rotation_preview_idx", 3)),
@@ -538,6 +547,7 @@ class DWAControl:
         self._last_emergency_source = "none"
         self._emergency_bypass_active = False
         self._emergency_bypass_debug = {}
+        self._post_stop_rotation_clearance_latched = False
         self.obstacle_local_points = np.empty((0, 2), dtype=np.float32)
         self._footprint_sample_cache = {}
 
@@ -1206,15 +1216,23 @@ class DWAControl:
         # can realign the robot. Do not use this for genuine close-contact
         # stops; emergency stop must mean a full Twist zero in that case.
         if not self.post_stop_rotation_enabled:
+            self._post_stop_rotation_clearance_latched = False
             return None
         if not self._avoidance_mode_active():
+            self._post_stop_rotation_clearance_latched = False
             return None
         if self.behavior_stop:
+            self._post_stop_rotation_clearance_latched = False
             return None
         if self._raw_immediate_contact_blocked:
+            self._post_stop_rotation_clearance_latched = False
             return None
         if math.isfinite(self.front_obstacle_clearance):
-            if self.front_obstacle_clearance < self.post_stop_rotation_min_clearance_m:
+            if self._post_stop_rotation_clearance_latched:
+                if self.front_obstacle_clearance < self.post_stop_rotation_min_clearance_m:
+                    self._post_stop_rotation_clearance_latched = False
+                    return None
+            elif self.front_obstacle_clearance < self.post_stop_rotation_start_clearance_m:
                 return None
         reject = None
         if isinstance(self._emergency_bypass_debug, dict):
@@ -1230,8 +1248,10 @@ class DWAControl:
             "no_lateral_detour",
         }
         if reject not in allowed:
+            self._post_stop_rotation_clearance_latched = False
             return None
         if not self.path_pts or len(self.path_pts) < 2:
+            self._post_stop_rotation_clearance_latched = False
             return None
         try:
             pose_x = float(self.current_pose.pose.pose.position.x)
@@ -1240,28 +1260,34 @@ class DWAControl:
                 self.current_pose.pose.pose.orientation
             )
         except Exception:
+            self._post_stop_rotation_clearance_latched = False
             return None
         idx = min(self.post_stop_rotation_preview_idx, len(self.path_pts) - 1)
         tx, ty = self.path_pts[idx]
         dx = float(tx) - pose_x
         dy = float(ty) - pose_y
         if math.hypot(dx, dy) < 0.05:
+            self._post_stop_rotation_clearance_latched = False
             return None
         target_heading = math.atan2(dy, dx)
         yaw_err = angdiff(target_heading, yaw)
         if abs(yaw_err) < math.radians(self.post_stop_rotation_min_yaw_err_deg):
+            self._post_stop_rotation_clearance_latched = False
             return None
         rate = min(self.post_stop_rotation_max_rate_rps,
                    max(0.10, abs(yaw_err) * 0.8))
         out = Twist()
         out.angular.z = rate if yaw_err > 0.0 else -rate
+        self._post_stop_rotation_clearance_latched = True
         rospy.loginfo_throttle(
             0.5,
-            "post_stop_rotation: yaw_err=%.1fdeg rate=%.2frad/s reject=%s clearance=%.2f",
+            "post_stop_rotation: yaw_err=%.1fdeg rate=%.2frad/s reject=%s clearance=%.2f enter=%.2f exit=%.2f",
             math.degrees(yaw_err),
             out.angular.z,
             reject,
             self.front_obstacle_clearance if math.isfinite(self.front_obstacle_clearance) else float("inf"),
+            self.post_stop_rotation_start_clearance_m,
+            self.post_stop_rotation_min_clearance_m,
         )
         return out
 
@@ -1464,6 +1490,7 @@ class DWAControl:
         elif self.emergency_blocked and self._blk_off >= self.block_off_count:
             self.emergency_blocked = False
             state_changed = True
+            self._post_stop_rotation_clearance_latched = False
             rospy.loginfo("Emergency STOP cleared")
         if state_changed:
             self._publish_emergency_stop_state()

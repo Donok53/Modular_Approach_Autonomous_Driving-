@@ -566,6 +566,7 @@
     <arg name="emergency_bypass_max_path_age_s" default="0.70"/>
     <arg name="emergency_bypass_max_lateral_dev_m" default="0.10"/>
     <arg name="post_stop_rotation_min_clearance_m" default="$(arg emergency_bypass_clearance_floor_m)"/>
+    <arg name="post_stop_rotation_start_clearance_m" default="$(eval float(arg('emergency_bypass_clearance_floor_m')) + 0.03)"/>
     <arg name="obstacle_ignore_traj_steps" default="3"/>
     <arg name="debug_stop_logging" default="true"/>
     <arg name="debug_dwa_stats" default="true"/>
@@ -1167,6 +1168,7 @@
         <param name="emergency_bypass_max_path_age_s" value="$(arg emergency_bypass_max_path_age_s)"/>
         <param name="emergency_bypass_max_lateral_dev_m" value="$(arg emergency_bypass_max_lateral_dev_m)"/>
         <param name="post_stop_rotation_min_clearance_m" value="$(arg post_stop_rotation_min_clearance_m)"/>
+        <param name="post_stop_rotation_start_clearance_m" value="$(arg post_stop_rotation_start_clearance_m)"/>
         <param name="obstacle_ignore_traj_steps" value="$(arg obstacle_ignore_traj_steps)"/>
         <param name="debug_stop_logging" value="$(arg debug_stop_logging)"/>
         <param name="debug_dwa_stats" value="$(arg debug_dwa_stats)"/>
