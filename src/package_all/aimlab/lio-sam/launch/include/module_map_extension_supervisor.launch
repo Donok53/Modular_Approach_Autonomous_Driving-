@@ -17,6 +17,8 @@
   <arg name="localizer_odom_topic" default="/lio_localizer/odometry/optimization"/>
   <arg name="preview_cloud_topic" default="/map_extension/preview_cloud"/>
   <arg name="status_marker_topic" default="/map_extension/status_marker"/>
+  <arg name="transformed_odom_topic" default="/map_extension/transformed_odom"/>
+  <arg name="transformed_incremental_odom_topic" default="/map_extension/transformed_odom_incremental"/>
   <arg name="transformed_path_topic" default="/map_extension/transformed_path"/>
   <arg name="preview_source_cloud_topic" default="/lio_sam/mapping/cloud_registered_raw"/>
   <arg name="preview_voxel_leaf_size" default="0.12"/>
@@ -35,6 +37,8 @@
       <param name="localizer_odom_topic" value="$(arg localizer_odom_topic)"/>
       <param name="preview_cloud_topic" value="$(arg preview_cloud_topic)"/>
       <param name="status_marker_topic" value="$(arg status_marker_topic)"/>
+      <param name="transformed_odom_topic" value="$(arg transformed_odom_topic)"/>
+      <param name="transformed_incremental_odom_topic" value="$(arg transformed_incremental_odom_topic)"/>
       <param name="transformed_path_topic" value="$(arg transformed_path_topic)"/>
       <param name="preview_source_cloud_topic" value="$(arg preview_source_cloud_topic)"/>
       <param name="preview_voxel_leaf_size" value="$(arg preview_voxel_leaf_size)"/>

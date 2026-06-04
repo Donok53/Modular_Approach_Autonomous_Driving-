@@ -32,11 +32,17 @@
   <arg name="localizer_initial_pose_roll_deg" default="0.0"/>
   <arg name="localizer_initial_pose_pitch_deg" default="0.0"/>
   <arg name="localizer_initial_pose_yaw_deg" default="160.6"/>
-  <arg name="pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
+  <arg name="localization_pose_topic" default="$(eval '/lio_sam/mapping/odometry' if arg('use_lio_sam') == 'true' else 'lio_localizer/odometry/optimization')"/>
+  <arg name="localization_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
+  <arg name="map_extension_transformed_odom_topic" default="/map_extension/transformed_odom"/>
+  <arg name="map_extension_transformed_incremental_odom_topic" default="/map_extension/transformed_odom_incremental"/>
+  <arg name="map_extension_active_odom_topic" default="/map_extension/active_odom"/>
+  <arg name="map_extension_active_incremental_odom_topic" default="/map_extension/active_odom_incremental"/>
+  <arg name="pose_topic" default="$(arg map_extension_active_odom_topic)"/>
   <arg name="planning_pose_topic" default="/lio_localizer/odometry/planning"/>
   <arg name="controller_pose_topic" default="$(arg planning_pose_topic)"/>
   <arg name="enable_pose_filter" default="true"/>
-  <arg name="pose_filter_twist_topic" default="$(eval '/lio_sam/mapping/odometry_incremental' if arg('use_lio_sam') == 'true' else '/lio_localizer/odometry/lidar_incremental')"/>
+  <arg name="pose_filter_twist_topic" default="$(arg map_extension_active_incremental_odom_topic)"/>
   <arg name="pose_filter_twist_linear_frame" default="world"/>
   <arg name="pose_filter_twist_timeout_s" default="0.30"/>
   <arg name="pose_filter_use_incremental_pose_prediction" default="true"/>
@@ -833,6 +839,17 @@
     </include>
   </group>
 
+  <node pkg="lio_sam" type="map_extension_odom_mux.py"
+        name="map_extension_odom_mux" output="screen" respawn="false">
+    <param name="primary_odom_topic" value="$(arg localization_pose_topic)"/>
+    <param name="primary_twist_topic" value="$(arg localization_twist_topic)"/>
+    <param name="extension_odom_topic" value="$(arg map_extension_transformed_odom_topic)"/>
+    <param name="extension_twist_topic" value="$(arg map_extension_transformed_incremental_odom_topic)"/>
+    <param name="output_odom_topic" value="$(arg map_extension_active_odom_topic)"/>
+    <param name="output_twist_topic" value="$(arg map_extension_active_incremental_odom_topic)"/>
+    <param name="status_topic" value="/map_extension/status"/>
+  </node>
+
   <include file="$(find lio_sam)/launch/include/module_map_extension_supervisor.launch">
     <arg name="enable" value="$(arg enable_map_extension_supervisor)"/>
     <arg name="real_mode" value="$(arg real_mode)"/>
@@ -850,6 +867,8 @@
     <arg name="localizer_odom_topic" value="/lio_localizer/odometry/optimization"/>
     <arg name="preview_cloud_topic" value="$(arg map_extension_preview_cloud_topic)"/>
     <arg name="status_marker_topic" value="$(arg map_extension_status_marker_topic)"/>
+    <arg name="transformed_odom_topic" value="$(arg map_extension_transformed_odom_topic)"/>
+    <arg name="transformed_incremental_odom_topic" value="$(arg map_extension_transformed_incremental_odom_topic)"/>
     <arg name="enable_semantic_sidewalk_pipeline" value="false"/>
   </include>
 
@@ -2040,7 +2059,7 @@
       <arg name="self_filter_half_width_m" value="$(arg cpp_replanner_self_filter_half_width_m)"/>
       <arg name="self_filter_log_period_s" value="$(arg cpp_replanner_self_filter_log_period_s)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
-      <arg name="odom_topic" value="lio_localizer/odometry/optimization"/>
+      <arg name="odom_topic" value="$(arg pose_topic)"/>
       <arg name="global_path_topic" value="/astar/path"/>
       <arg name="lookahead_m" value="$(arg avoidance_trigger_ahead_m)"/>
       <arg name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>

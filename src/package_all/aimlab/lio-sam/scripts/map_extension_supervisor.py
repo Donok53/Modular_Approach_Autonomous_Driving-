@@ -9,6 +9,7 @@ import struct
 import subprocess
 import threading
 import time
+import copy
 from collections import deque
 
 import rospy
@@ -37,11 +38,20 @@ class MapExtensionSupervisor:
             "~localizer_odom_topic", "/lio_localizer/odometry/optimization"
         )
         self.mapping_odom_topic = rospy.get_param("~mapping_odom_topic", "/lio_sam/mapping/odometry")
+        self.mapping_incremental_odom_topic = rospy.get_param(
+            "~mapping_incremental_odom_topic", "/lio_sam/mapping/odometry_incremental"
+        )
         self.mapping_path_topic = rospy.get_param("~mapping_path_topic", "/lio_sam/mapping/path")
         self.preview_source_cloud_topic = rospy.get_param(
             "~preview_source_cloud_topic", "/lio_sam/mapping/cloud_registered_raw"
         )
         self.preview_cloud_topic = rospy.get_param("~preview_cloud_topic", "/map_extension/preview_cloud")
+        self.transformed_odom_topic = rospy.get_param(
+            "~transformed_odom_topic", "/map_extension/transformed_odom"
+        )
+        self.transformed_incremental_odom_topic = rospy.get_param(
+            "~transformed_incremental_odom_topic", "/map_extension/transformed_odom_incremental"
+        )
         self.transformed_path_topic = rospy.get_param(
             "~transformed_path_topic", "/map_extension/transformed_path"
         )
@@ -118,6 +128,12 @@ class MapExtensionSupervisor:
         self._last_preview_cloud = None
 
         self.pub_preview = rospy.Publisher(self.preview_cloud_topic, PointCloud2, queue_size=1, latch=True)
+        self.pub_transformed_odom = rospy.Publisher(
+            self.transformed_odom_topic, Odometry, queue_size=10
+        )
+        self.pub_transformed_incremental_odom = rospy.Publisher(
+            self.transformed_incremental_odom_topic, Odometry, queue_size=10
+        )
         self.pub_path = rospy.Publisher(self.transformed_path_topic, Path, queue_size=1, latch=True)
         self.pub_status = rospy.Publisher(self.status_topic, String, queue_size=1, latch=True)
         self.pub_status_marker = rospy.Publisher(
@@ -130,6 +146,12 @@ class MapExtensionSupervisor:
         )
         self.sub_mapping_odom = rospy.Subscriber(
             self.mapping_odom_topic, Odometry, self._on_mapping_odom, queue_size=10
+        )
+        self.sub_mapping_incremental_odom = rospy.Subscriber(
+            self.mapping_incremental_odom_topic,
+            Odometry,
+            self._on_mapping_incremental_odom,
+            queue_size=10,
         )
         self.sub_mapping_path = rospy.Subscriber(
             self.mapping_path_topic, Path, self._on_mapping_path, queue_size=2
@@ -263,6 +285,14 @@ class MapExtensionSupervisor:
             matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * z + matrix[0][3],
             matrix[1][0] * x + matrix[1][1] * y + matrix[1][2] * z + matrix[1][3],
             matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] * z + matrix[2][3],
+        )
+
+    @staticmethod
+    def _rotate_xyz(matrix, x, y, z):
+        return (
+            matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * z,
+            matrix[1][0] * x + matrix[1][1] * y + matrix[1][2] * z,
+            matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] * z,
         )
 
     @staticmethod
@@ -436,12 +466,12 @@ class MapExtensionSupervisor:
             return start_matrix, start_quat, "start_fallback", float("inf")
         return None, None, "missing", float("inf")
 
-    def _on_mapping_odom(self, msg):
+    def _ensure_session_transform(self, msg):
         with self._lock:
             if not self._running or self._session_to_map is not None:
-                return
+                return self._session_to_map is not None
             if self._start_localizer_matrix is None:
-                return
+                return False
         localizer_matrix, localizer_quat, pose_source, pose_dt = self._select_localizer_pose_for_mapping(
             msg.header.stamp
         )
@@ -449,10 +479,10 @@ class MapExtensionSupervisor:
             rospy.logwarn_throttle(
                 1.0, "map_extension_supervisor: waiting for localizer pose to align extension session"
             )
-            return
+            return False
         with self._lock:
             if not self._running or self._session_to_map is not None:
-                return
+                return self._session_to_map is not None
             session_start = self._pose_matrix_from_odom(msg)
             self._session_to_map = self._matrix_multiply(
                 localizer_matrix, self._matrix_inverse_rigid(session_start)
@@ -466,6 +496,63 @@ class MapExtensionSupervisor:
                 pose_source,
                 pose_dt,
             )
+            return True
+
+    def _transformed_odom_msg(self, msg):
+        with self._lock:
+            if not self._running or self._session_to_map is None:
+                return None
+            matrix = self._copy_matrix(self._session_to_map)
+            q_session = tuple(self._session_quat)
+
+        out = Odometry()
+        out.header = Header()
+        out.header.stamp = msg.header.stamp if msg.header.stamp != rospy.Time(0) else rospy.Time.now()
+        out.header.frame_id = self.fixed_frame
+        out.child_frame_id = msg.child_frame_id if msg.child_frame_id else "base_link"
+        out.pose = copy.deepcopy(msg.pose)
+        out.twist = copy.deepcopy(msg.twist)
+
+        p = msg.pose.pose.position
+        tx, ty, tz = self._transform_xyz(matrix, float(p.x), float(p.y), float(p.z))
+        out.pose.pose.position.x = tx
+        out.pose.pose.position.y = ty
+        out.pose.pose.position.z = tz
+        q_in = (
+            float(msg.pose.pose.orientation.x),
+            float(msg.pose.pose.orientation.y),
+            float(msg.pose.pose.orientation.z),
+            float(msg.pose.pose.orientation.w),
+        )
+        q_out = self._quat_multiply(q_session, q_in)
+        out.pose.pose.orientation.x = q_out[0]
+        out.pose.pose.orientation.y = q_out[1]
+        out.pose.pose.orientation.z = q_out[2]
+        out.pose.pose.orientation.w = q_out[3]
+
+        lin = msg.twist.twist.linear
+        rx, ry, rz = self._rotate_xyz(matrix, float(lin.x), float(lin.y), float(lin.z))
+        out.twist.twist.linear.x = rx
+        out.twist.twist.linear.y = ry
+        out.twist.twist.linear.z = rz
+        ang = msg.twist.twist.angular
+        arx, ary, arz = self._rotate_xyz(matrix, float(ang.x), float(ang.y), float(ang.z))
+        out.twist.twist.angular.x = arx
+        out.twist.twist.angular.y = ary
+        out.twist.twist.angular.z = arz
+        return out
+
+    def _on_mapping_odom(self, msg):
+        if not self._ensure_session_transform(msg):
+            return
+        out = self._transformed_odom_msg(msg)
+        if out is not None:
+            self.pub_transformed_odom.publish(out)
+
+    def _on_mapping_incremental_odom(self, msg):
+        out = self._transformed_odom_msg(msg)
+        if out is not None:
+            self.pub_transformed_incremental_odom.publish(out)
 
     def _on_mapping_path(self, msg):
         with self._lock:
