@@ -972,6 +972,27 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
         goal_dist, near_dist);
   }
 
+  // Safety release: if the robot has drifted far from the global corridor and
+  // the nominal lookahead is clear, drop the cached detour and let the
+  // return-to-global path (already chosen as nominal_world above) take over.
+  // Without this the planner kept publishing a stale sidestep tail while the
+  // robot floated off the drivable grid edge.
+  const double off_global_release_dist_m =
+      params_.return_to_global_trigger_distance_m + 0.40;
+  if (!final_direct_goal && !nominal_blocked &&
+      mode == PathMode::FOLLOW_AVOIDANCE &&
+      near_dist > off_global_release_dist_m) {
+    sm_->forceFollowLocal();
+    mode = PathMode::FOLLOW_LOCAL;
+    last_avoid_active_ = false;
+    last_avoid_grid_path_.clear();
+    last_avoid_world_path_.clear();
+    ROS_INFO_THROTTLE(
+        1.0,
+        "cpp planner | off-global release cached avoidance near_dist=%.2f thr=%.2f",
+        near_dist, off_global_release_dist_m);
+  }
+
   // Choose what to publish based on the resolved mode.
   nav_msgs::Path out;
   out.header.stamp = ros::Time::now();
@@ -1079,7 +1100,8 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       /*sphere_scale_m*/ 0.18, /*lifetime_s*/ 0.8));
   pub_blocking_obstacles_.publish(buildBlockingObstacleMarkers(
       blocker_world, /*active*/ nominal_blocked, frame, now_stamp,
-      /*radius_m*/ params_.obstacle_block_margin_m + 0.20,
+      /*radius_m*/ params_.obstacle_block_margin_m +
+          params_.footprint.half_width_m,
       /*lifetime_s*/ 0.8));
 
   // /planning/global_obstacle_overlay republishes the blocked mask so the

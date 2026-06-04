@@ -502,8 +502,8 @@
   <arg name="avoidance_trigger_confirm_cycles" default="1"/>
   <arg name="avoidance_trigger_confirm_max_gap_s" default="2.5"/>
   <arg name="blocked_clear_hold_s" default="$(eval '0.45' if str(arg('localization_environment')).lower() == 'outdoor' else '0.80')"/>
-  <arg name="avoidance_keep_until_endpoint_distance_m" default="0.30"/>
-  <arg name="avoidance_clear_detour_hold_s" default="$(eval '3.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.00')"/>
+  <arg name="avoidance_keep_until_endpoint_distance_m" default="0.80"/>
+  <arg name="avoidance_clear_detour_hold_s" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else '0.00')"/>
   <arg name="avoidance_reuse_on_failure_s" default="3.0"/>
   <arg name="avoidance_reuse_max_deviation_m" default="0.40"/>
   <arg name="avoidance_fast_reuse_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
@@ -522,7 +522,8 @@
   <arg name="candidate_start_clearance_m" default="0.35"/>
   <arg name="obstacle_drivable_filter_enabled" default="true"/>
   <arg name="obstacle_drivable_filter_radius_m" default="0.0"/>
-  <arg name="locked_static_ttl_s" default="0.80"/>
+  <arg name="locked_static_ttl_s" default="0.50"/>
+  <arg name="locked_static_hold_radius_m" default="0.60"/>
   <arg name="hold_without_candidate" default="true"/>
   <arg name="hold_escape_timeout_s" default="0.0"/>
   <arg name="cpp_replanner_cloud_z_min_m" default="0.04"/>
@@ -537,11 +538,11 @@
   <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="0.04"/>
   <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.08)"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
-  <arg name="sidestep_avoidance_min_offset_m" default="0.46"/>
-  <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
+  <arg name="sidestep_avoidance_min_offset_m" default="0.34"/>
+  <arg name="sidestep_avoidance_max_offset_m" default="1.00"/>
   <arg name="sidestep_avoidance_preview_m" default="2.0"/>
-  <arg name="sidestep_avoidance_clearance_extra_m" default="0.04"/>
-  <arg name="sidestep_avoidance_entry_lead_m" default="0.55"/>
+  <arg name="sidestep_avoidance_clearance_extra_m" default="0.03"/>
+  <arg name="sidestep_avoidance_entry_lead_m" default="0.45"/>
   <arg name="sidestep_avoidance_forward_margin_m" default="0.55"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
   <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
@@ -2041,6 +2042,7 @@
       <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
       <arg name="keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="locked_static_ttl_s" value="$(arg locked_static_ttl_s)"/>
+      <arg name="locked_static_hold_radius_m" value="$(arg locked_static_hold_radius_m)"/>
       <arg name="hold_escape_timeout_s" value="$(arg hold_escape_timeout_s)"/>
       <arg name="hold_without_candidate" value="$(arg hold_without_candidate)"/>
     </include>

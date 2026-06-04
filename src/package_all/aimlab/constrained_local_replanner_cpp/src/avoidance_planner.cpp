@@ -85,16 +85,13 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
   }
 
   const double start_x = std::max(0.0, obs_lx - 1.20);
-  const double preview_x =
-      std::max(params.sidestep_preview_m,
-               obs_lx + params.sidestep_forward_margin_m + params.footprint.half_length_m * 2.0);
   // Lateral clearance the path centerline needs from the obstacle centroid.
-  // The overlay already inflates obstacles by (half_width + block_margin).
-  // Add a configurable extra nudge so the generated detour does not skim the
-  // obstacle when DWA tracks the path with small pose/point-cloud error.
+  // The overlay already inflates obstacles by (half_width + block_margin) so
+  // the collision check below already enforces that buffer. Adding
+  // block_margin again here double-counted the inflation and produced the
+  // "way too wide" detour. Keep only the footprint + a small tracking nudge.
   const double clearance_y =
       params.footprint.half_width_m + params.footprint.padding_m +
-      params.obstacle_block_margin_m +
       std::max(0.0, params.sidestep_clearance_extra_m);
 
   double best_score = std::numeric_limits<double>::infinity();
@@ -122,7 +119,11 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       // wide" for the entire preview window and the robot looks like it is
       // taking a huge detour.
       const double rejoin_x = pass_x + params.rejoin_min_distance_m;
-      const double end_x = std::max(preview_x, rejoin_x + 0.30);
+      // Keep the cached path short past the rejoin point. A long preview tail
+      // makes the cached endpoint sit ~2 m ahead of the robot even after the
+      // robot is already back on the nominal corridor, which prevented the
+      // FOLLOW_AVOIDANCE release guard from firing.
+      const double end_x = rejoin_x + 0.30;
       const double mid_x = start_x + 0.5 * std::max(0.20, entry_x - start_x);
 
       const std::vector<std::pair<double, double>> waypts_local{

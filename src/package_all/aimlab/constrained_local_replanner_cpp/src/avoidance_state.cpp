@@ -73,7 +73,14 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
           (now_sec - last_clear_seen_sec_) >= cfg_.clear_detour_hold_s;
       const bool past_endpoint =
           endpoint_distance_m <= cfg_.keep_until_endpoint_distance_m;
-      if (clear_long_enough && past_endpoint && !locked_static_nearby) {
+      // Release on either signal once the locked-static gate is satisfied.
+      // The previous AND of (clear_long_enough && past_endpoint) trapped the
+      // robot in FOLLOW_AVOIDANCE: sidestep paths end ~2 m ahead so the
+      // endpoint guard almost never fires until well after the robot has
+      // already rejoined the nominal corridor. That manifested as the robot
+      // "drifting" off the global path for several seconds.
+      if (!nominal_blocked && !locked_static_nearby &&
+          (clear_long_enough || past_endpoint)) {
         mode_ = PathMode::FOLLOW_LOCAL;
         confirm_count_ = 0;
       }
