@@ -10,6 +10,10 @@
   <arg name="stable_checks" default="3"/>
   <arg name="delete_extra" default="true"/>
   <arg name="copy_on_start" default="false"/>
+  <arg name="extend_existing_map" default="false"/>
+  <arg name="extension_backup_dir" default="$(arg destination_dir)_extension_backups"/>
+  <arg name="extension_voxel_leaf_size" default="0.08"/>
+  <arg name="extension_keep_existing_ref" default="true"/>
   <arg name="export_global_map_2d_pcd" default="true"/>
   <arg name="global_map_input_file" default="GlobalMap.pcd"/>
   <arg name="global_map_2d_output" default="GlobalMap2D.pcd"/>
@@ -50,6 +54,16 @@
       <param name="stable_checks" value="$(arg stable_checks)"/>
       <param name="delete_extra" value="$(arg delete_extra)"/>
       <param name="copy_on_start" value="$(arg copy_on_start)"/>
+      <param name="extend_existing_map" value="$(arg extend_existing_map)"/>
+      <param name="extension_backup_dir" value="$(arg extension_backup_dir)"/>
+      <param name="extension_voxel_leaf_size" value="$(arg extension_voxel_leaf_size)"/>
+      <param name="extension_keep_existing_ref" value="$(arg extension_keep_existing_ref)"/>
+      <rosparam param="extension_merge_pcd_files">
+        ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"]
+      </rosparam>
+      <rosparam param="extension_preserve_files">
+        ["map_reference_coordinate.csv"]
+      </rosparam>
       <param name="export_global_map_2d_pcd" value="$(arg export_global_map_2d_pcd)"/>
       <param name="global_map_input_file" value="$(arg global_map_input_file)"/>
       <param name="global_map_2d_output" value="$(arg global_map_2d_output)"/>

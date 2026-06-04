@@ -33,6 +33,10 @@ class TrajectoryOsmExporter:
         self.replay_min_resets = max(2, int(rospy.get_param("~replay_min_resets", 8)))
         self.auto_write = bool(rospy.get_param("~auto_write", True))
         self.save_on_shutdown = bool(rospy.get_param("~save_on_shutdown", True))
+        self.extend_existing = bool(rospy.get_param("~extend_existing", False))
+        self.extension_connect_max_distance_m = max(
+            0.0, float(rospy.get_param("~extension_connect_max_distance_m", 2.0))
+        )
         self.manual_save_topic = rospy.get_param("~manual_save_topic", "/lio_sam/trajectory_export/save")
         self.publish_reload = bool(rospy.get_param("~publish_reload", False))
         self.reload_topic = rospy.get_param("~reload_topic", "/astar/reload_map")
@@ -61,11 +65,12 @@ class TrajectoryOsmExporter:
         rospy.on_shutdown(self.on_shutdown)
 
         rospy.loginfo(
-            "trajectory_osm_exporter started | mode=%s topic=%s -> csv=%s, osm=%s",
+            "trajectory_osm_exporter started | mode=%s topic=%s -> csv=%s, osm=%s extend=%s",
             self.path_mode,
             self.path_topic,
             self.output_csv,
             self.output_osm,
+            str(self.extend_existing),
         )
 
     @staticmethod
@@ -217,10 +222,26 @@ class TrajectoryOsmExporter:
             os.makedirs(d, exist_ok=True)
         tmp = out + ".tmp"
 
-        root = ET.Element("osm", attrib={"version": "0.6", "generator": "trajectory_osm_exporter.py"})
+        root, next_id, existing_nodes = self._load_extension_root(out)
         node_ids = []
-        for i, point in enumerate(points):
-            nid = str(-(i + 1))
+        point_start = 0
+        if self.extend_existing and existing_nodes and points:
+            nearest_id, nearest_dist = self._nearest_existing_node(existing_nodes, points[0])
+            if (
+                nearest_id is not None
+                and nearest_dist <= self.extension_connect_max_distance_m
+            ):
+                node_ids.append(str(nearest_id))
+                point_start = 1
+                rospy.loginfo(
+                    "trajectory_osm_exporter: connecting extension to existing node %s dist=%.2fm",
+                    str(nearest_id),
+                    nearest_dist,
+                )
+
+        for point in points[point_start:]:
+            nid = str(next_id)
+            next_id -= 1
             node_ids.append(nid)
             if self.path_mode == "local":
                 x, y, z = point
@@ -253,12 +274,21 @@ class TrajectoryOsmExporter:
                     },
                 )
 
-        way = ET.SubElement(root, "way", attrib={"id": "-1", "action": "modify", "visible": "true"})
+        way = ET.SubElement(root, "way", attrib={"id": str(next_id), "action": "modify", "visible": "true"})
         for nid in node_ids:
             ET.SubElement(way, "nd", attrib={"ref": nid})
         ET.SubElement(way, "tag", attrib={"k": "highway", "v": "service"})
-        ET.SubElement(way, "tag", attrib={"k": "name", "v": "auto_generated"})
+        ET.SubElement(
+            way,
+            "tag",
+            attrib={
+                "k": "name",
+                "v": "auto_generated_extension" if self.extend_existing else "auto_generated",
+            },
+        )
         ET.SubElement(way, "tag", attrib={"k": "coord_mode", "v": self.path_mode})
+        if self.extend_existing:
+            ET.SubElement(way, "tag", attrib={"k": "extension", "v": "true"})
 
         xml = ET.tostring(root, encoding="utf-8")
         with open(tmp, "wb") as f:
@@ -266,6 +296,98 @@ class TrajectoryOsmExporter:
             f.write(xml)
             f.write(b"\n")
         os.replace(tmp, out)
+
+    def _load_extension_root(self, path):
+        if not self.extend_existing or not os.path.isfile(path):
+            return (
+                ET.Element(
+                    "osm",
+                    attrib={"version": "0.6", "generator": "trajectory_osm_exporter.py"},
+                ),
+                -1,
+                [],
+            )
+        try:
+            root = ET.parse(path).getroot()
+        except Exception as e:
+            rospy.logwarn(
+                "trajectory_osm_exporter: failed to parse existing OSM for extension, replacing file: %s",
+                str(e),
+            )
+            return (
+                ET.Element(
+                    "osm",
+                    attrib={"version": "0.6", "generator": "trajectory_osm_exporter.py"},
+                ),
+                -1,
+                [],
+            )
+
+        min_id = 0
+        existing_nodes = []
+        for el in list(root.findall(".//node")) + list(root.findall(".//way")):
+            try:
+                min_id = min(min_id, int(el.attrib.get("id", "0")))
+            except Exception:
+                pass
+        for node_el in root.findall(".//node"):
+            try:
+                node_id = int(node_el.attrib["id"])
+                xy = self._existing_node_xy(node_el)
+                if xy is not None:
+                    existing_nodes.append((node_id, xy[0], xy[1]))
+            except Exception:
+                continue
+        return root, min_id - 1, existing_nodes
+
+    def _existing_node_xy(self, node_el):
+        if self.path_mode == "local":
+            local_x = self._node_tag_float(node_el, "local_x")
+            local_y = self._node_tag_float(node_el, "local_y")
+            if local_x is not None and local_y is not None:
+                return local_x, local_y
+            lat = float(node_el.attrib.get("lat", "nan"))
+            lon = float(node_el.attrib.get("lon", "nan"))
+            if math.isfinite(lat) and math.isfinite(lon):
+                return lon * 111320.0, lat * 111320.0
+            return None
+        lat = float(node_el.attrib.get("lat", "nan"))
+        lon = float(node_el.attrib.get("lon", "nan"))
+        if math.isfinite(lat) and math.isfinite(lon):
+            return lat, lon
+        return None
+
+    @staticmethod
+    def _node_tag_float(node_el, key):
+        tag = node_el.find('tag[@k="%s"]' % key)
+        if tag is None:
+            return None
+        try:
+            value = float(tag.attrib.get("v", "nan"))
+            return value if math.isfinite(value) else None
+        except Exception:
+            return None
+
+    def _nearest_existing_node(self, existing_nodes, point):
+        if not existing_nodes:
+            return None, float("inf")
+        best_id = None
+        best_dist = float("inf")
+        if self.path_mode == "local":
+            px, py = float(point[0]), float(point[1])
+            for node_id, x, y in existing_nodes:
+                dist = math.hypot(px - x, py - y)
+                if dist < best_dist:
+                    best_id = node_id
+                    best_dist = dist
+        else:
+            plat, plon = float(point[0]), float(point[1])
+            for node_id, lat, lon in existing_nodes:
+                dist = self._ll_dist_m(plat, plon, lat, lon)
+                if dist < best_dist:
+                    best_id = node_id
+                    best_dist = dist
+        return best_id, best_dist
 
     def write_files(self, reason):
         with self._lock:

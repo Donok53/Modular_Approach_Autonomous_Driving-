@@ -4,6 +4,7 @@
   <arg name="real_mode" default="false"/>
   <arg name="localization_environment" default="outdoor"/>
   <arg name="outdoor_use_saved_map_assets" default="true"/>
+  <arg name="extend_existing_map" default="false"/>
   <arg name="use_lio_sam" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' and str(arg('outdoor_use_saved_map_assets')).lower() != 'true' else 'false')"/>
   <arg name="map_profile_name" default="$(eval 'outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('real' if str(arg('real_mode')).lower() == 'true' else 'test'))"/>
   <arg name="map_profile_suffix" default="$(eval '_outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('_real' if str(arg('real_mode')).lower() == 'true' else ''))"/>
@@ -799,6 +800,7 @@
     <include file="$(find lio_sam)/launch/run-robot.launch">
       <arg name="real_mode" value="$(arg real_mode)"/>
       <arg name="environment" value="$(arg localization_environment)"/>
+      <arg name="extend_existing_map" value="$(arg extend_existing_map)"/>
     </include>
   </group>
   <group unless="$(arg use_lio_sam)">

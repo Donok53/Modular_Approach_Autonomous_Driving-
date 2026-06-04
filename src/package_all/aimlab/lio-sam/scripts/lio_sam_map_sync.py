@@ -39,6 +39,26 @@ class LioSamMapSync:
         self.freshness_slack_s = max(0.0, float(rospy.get_param("~freshness_slack_s", 1.0)))
         self.delete_extra = bool(rospy.get_param("~delete_extra", True))
         self.copy_on_start = bool(rospy.get_param("~copy_on_start", False))
+        self.extend_existing_map = bool(rospy.get_param("~extend_existing_map", False))
+        default_backup_dir = self.destination_dir.rstrip(os.sep) + "_extension_backups"
+        self.extension_backup_dir = os.path.expanduser(
+            rospy.get_param("~extension_backup_dir", default_backup_dir)
+        )
+        self.extension_merge_pcd_files = self._param_list(
+            rospy.get_param(
+                "~extension_merge_pcd_files",
+                ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"],
+            )
+        )
+        self.extension_voxel_leaf_size = max(
+            0.0, float(rospy.get_param("~extension_voxel_leaf_size", 0.08))
+        )
+        self.extension_keep_existing_ref = bool(
+            rospy.get_param("~extension_keep_existing_ref", True)
+        )
+        self.extension_preserve_files = self._param_list(
+            rospy.get_param("~extension_preserve_files", ["map_reference_coordinate.csv"])
+        )
         self.required_files = rospy.get_param(
             "~required_files",
             ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd", "map_reference_coordinate.csv"],
@@ -98,10 +118,11 @@ class LioSamMapSync:
         self.semantic_log_file = rospy.get_param("~semantic_log_file", "semantic_sidewalk_generation.log")
 
         rospy.loginfo(
-            "lio_sam_map_sync started | enable=%s src=%s dst=%s extra=%d export_drivable_pcd=%s",
+            "lio_sam_map_sync started | enable=%s src=%s dst=%s extend=%s extra=%d export_drivable_pcd=%s",
             str(self.enabled),
             self.source_dir,
             self.destination_dir,
+            str(self.extend_existing_map),
             len(self.extra_files),
             str(self.export_drivable_area_pcd),
         )
@@ -165,6 +186,15 @@ class LioSamMapSync:
             return False
         rospy.logwarn("lio_sam_map_sync: timeout waiting map files to stabilize, trying best-effort copy")
         return True
+
+    @staticmethod
+    def _param_list(value):
+        if value is None:
+            return []
+        if isinstance(value, (list, tuple)):
+            return [str(v).strip() for v in value if str(v).strip()]
+        text = str(value).replace(",", " ")
+        return [part.strip() for part in text.split() if part.strip()]
 
     @staticmethod
     def _copy_tree(src, dst):
@@ -296,6 +326,112 @@ class LioSamMapSync:
             if prev is None or intensity > prev[3]:
                 kept[key] = (x, y, z, intensity)
         return list(kept.values())
+
+    @staticmethod
+    def _downsample_xyz_points(points, leaf_size):
+        if leaf_size <= 0.0:
+            return list(points)
+        kept = {}
+        inv = 1.0 / leaf_size
+        for x, y, z, intensity in points:
+            key = (
+                int(math.floor(x * inv)),
+                int(math.floor(y * inv)),
+                int(math.floor(z * inv)),
+            )
+            prev = kept.get(key)
+            if prev is None or intensity > prev[3]:
+                kept[key] = (x, y, z, intensity)
+        return list(kept.values())
+
+    def _backup_extension_inputs(self, reason):
+        if not self.extend_existing_map:
+            return {}
+        if not os.path.isdir(self.destination_dir):
+            rospy.loginfo(
+                "lio_sam_map_sync extension requested (%s) but destination does not exist yet: %s",
+                reason,
+                self.destination_dir,
+            )
+            return {}
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        backup_root = os.path.join(
+            self.extension_backup_dir,
+            "%s_%s" % (stamp, str(reason).replace("/", "_")),
+        )
+        rel_files = sorted(set(self.extension_merge_pcd_files + self.extension_preserve_files))
+        backups = {}
+        for rel in rel_files:
+            src = os.path.join(self.destination_dir, rel)
+            if not os.path.isfile(src):
+                continue
+            dst = os.path.join(backup_root, rel)
+            os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+            shutil.copy2(src, dst)
+            backups[rel] = dst
+        if backups:
+            rospy.loginfo(
+                "lio_sam_map_sync extension backup (%s): files=%d dir=%s",
+                reason,
+                len(backups),
+                backup_root,
+            )
+        return backups
+
+    def _merge_extension_map_assets(self, backup_files):
+        generated = []
+        if not self.extend_existing_map or not backup_files:
+            return generated
+        for rel in self.extension_merge_pcd_files:
+            old_path = backup_files.get(rel)
+            new_path = os.path.join(self.destination_dir, rel)
+            if not old_path or not os.path.isfile(old_path) or not os.path.isfile(new_path):
+                continue
+            try:
+                old_points = self._read_pcd_points(old_path)
+                new_points = self._read_pcd_points(new_path)
+                merged = old_points + new_points
+                before_count = len(merged)
+                merged = self._downsample_xyz_points(merged, self.extension_voxel_leaf_size)
+                self._write_pcd(new_path, merged, True)
+                generated.append(rel)
+                rospy.loginfo(
+                    "lio_sam_map_sync extension merged %s: old=%d new=%d merged=%d -> %d leaf=%.3f",
+                    rel,
+                    len(old_points),
+                    len(new_points),
+                    before_count,
+                    len(merged),
+                    self.extension_voxel_leaf_size,
+                )
+            except Exception as e:
+                rospy.logwarn(
+                    "lio_sam_map_sync: failed to extend %s, keeping new session file: %s",
+                    rel,
+                    str(e),
+                )
+        return generated
+
+    def _restore_extension_preserved_files(self, backup_files):
+        restored = []
+        if not self.extend_existing_map or not backup_files:
+            return restored
+        for rel in self.extension_preserve_files:
+            if rel == "map_reference_coordinate.csv" and not self.extension_keep_existing_ref:
+                continue
+            old_path = backup_files.get(rel)
+            dst_path = os.path.join(self.destination_dir, rel)
+            if not old_path or not os.path.isfile(old_path):
+                continue
+            os.makedirs(os.path.dirname(dst_path) or ".", exist_ok=True)
+            shutil.copy2(old_path, dst_path)
+            restored.append(rel)
+        if restored:
+            rospy.loginfo(
+                "lio_sam_map_sync extension restored preserved files: %s",
+                ", ".join(restored),
+            )
+        return restored
 
     @staticmethod
     def _pcd_type_to_struct(type_code, size):
@@ -818,6 +954,12 @@ class LioSamMapSync:
             "stable_checks": self.stable_checks,
             "freshness_slack_s": self.freshness_slack_s,
             "delete_extra": self.delete_extra,
+            "extend_existing_map": self.extend_existing_map,
+            "extension_backup_dir": self.extension_backup_dir,
+            "extension_merge_pcd_files": list(self.extension_merge_pcd_files),
+            "extension_voxel_leaf_size": self.extension_voxel_leaf_size,
+            "extension_keep_existing_ref": self.extension_keep_existing_ref,
+            "extension_preserve_files": list(self.extension_preserve_files),
             "required_files": list(self.required_files),
             "extra_files": list(self.extra_files),
             "write_manifest": self.write_manifest,
@@ -999,6 +1141,7 @@ class LioSamMapSync:
             )
             return
         os.makedirs(self.destination_dir, exist_ok=True)
+        extension_backups = self._backup_extension_inputs(reason)
 
         copied = self._copy_tree(self.source_dir, self.destination_dir)
         removed = 0
@@ -1006,6 +1149,8 @@ class LioSamMapSync:
             removed = self._delete_extras(self.source_dir, self.destination_dir)
         copied += self._copy_extra_files()
         generated = []
+        generated.extend(self._merge_extension_map_assets(extension_backups))
+        generated.extend(self._restore_extension_preserved_files(extension_backups))
         generated.extend(self._export_global_map_2d())
         if semantic_async:
             self._launch_semantic_sidewalk_bundle_background()
@@ -1018,6 +1163,10 @@ class LioSamMapSync:
         astar_ref_synced = False
         if self.sync_astar_ref:
             src_ref_path = os.path.join(self.source_dir, self.source_ref_file)
+            if self.extend_existing_map and self.extension_keep_existing_ref:
+                preserved_ref_path = os.path.join(self.destination_dir, self.source_ref_file)
+                if os.path.isfile(preserved_ref_path):
+                    src_ref_path = preserved_ref_path
             dst_ref_path = self.astar_ref_destination_file
             if os.path.isfile(src_ref_path):
                 os.makedirs(os.path.dirname(dst_ref_path) or ".", exist_ok=True)

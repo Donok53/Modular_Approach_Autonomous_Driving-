@@ -6,6 +6,8 @@
   <arg name="output_osm" default="$(find astar_map)/map/auto_trajectory.osm"/>
   <arg name="auto_write" default="false"/>
   <arg name="save_on_shutdown" default="true"/>
+  <arg name="extend_existing" default="false"/>
+  <arg name="extension_connect_max_distance_m" default="2.0"/>
   <arg name="publish_reload" default="false"/>
   <arg name="reload_on_auto_write" default="false"/>
   <arg name="reload_topic" default="/astar/reload_map"/>
@@ -21,6 +23,8 @@
       <param name="output_osm" value="$(arg output_osm)"/>
       <param name="auto_write" value="$(arg auto_write)"/>
       <param name="save_on_shutdown" value="$(arg save_on_shutdown)"/>
+      <param name="extend_existing" value="$(arg extend_existing)"/>
+      <param name="extension_connect_max_distance_m" value="$(arg extension_connect_max_distance_m)"/>
       <param name="publish_reload" value="$(arg publish_reload)"/>
       <param name="reload_on_auto_write" value="$(arg reload_on_auto_write)"/>
       <param name="reload_topic" value="$(arg reload_topic)"/>
