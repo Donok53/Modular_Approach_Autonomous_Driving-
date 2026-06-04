@@ -80,7 +80,7 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
       break;
     }
     case PathMode::HOLD: {
-      if (!cfg_.hold_without_candidate && !avoidance_candidate_available) {
+      if (!nominal_blocked) {
         mode_ = PathMode::FOLLOW_LOCAL;
         confirm_count_ = 0;
         hold_entry_sec_ = 0.0;
@@ -89,17 +89,16 @@ PathMode AvoidanceStateMachine::update(bool nominal_blocked,
         avoidance_entry_sec_ = now_sec;
         last_clear_seen_sec_ = 0.0;
         hold_entry_sec_ = 0.0;
-      } else if (!nominal_blocked) {
+      } else if (!cfg_.hold_without_candidate) {
         mode_ = PathMode::FOLLOW_LOCAL;
         confirm_count_ = 0;
         hold_entry_sec_ = 0.0;
       } else if (hold_entry_sec_ > 0.0 &&
                  cfg_.hold_escape_timeout_s > 0.0 &&
                  (now_sec - hold_entry_sec_) > cfg_.hold_escape_timeout_s) {
-        // Stuck-escape: HOLD with no candidate for too long is worse than
-        // returning to nominal — the DWA near-field safety stop will catch
-        // a genuine close obstacle. Without this the robot froze in place
-        // for 14-22 s in the field.
+        // Optional manual escape hatch for conservative maps. The default is
+        // disabled so a currently blocked nominal path never becomes a forward
+        // drive command just because no candidate was found.
         mode_ = PathMode::FOLLOW_LOCAL;
         confirm_count_ = 0;
         hold_entry_sec_ = 0.0;
