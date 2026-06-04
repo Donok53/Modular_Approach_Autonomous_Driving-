@@ -245,6 +245,7 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("loop_period_s", loop_period_s_, loop_period_s_);
   pnh_.param("cloud_z_min_m", cloud_z_min_, cloud_z_min_);
   pnh_.param("cloud_z_max_m", cloud_z_max_, cloud_z_max_);
+  pnh_.param("cloud_world_z_min_m", cloud_world_z_min_, cloud_world_z_min_);
   pnh_.param("cloud_voxel_m", cloud_voxel_m_, cloud_voxel_m_);
 
   pnh_.param("lookahead_m", params_.lookahead_m, params_.lookahead_m);
@@ -368,15 +369,14 @@ void ReplannerNode::cloudCB(const sensor_msgs::PointCloud2::ConstPtr& msg) {
   pts.reserve(pcl_cloud.size() / 4);
   for (const auto& p : pcl_cloud.points) {
     if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) continue;
-    // z gating is in sensor frame (height above sensor); apply before
-    // transform so the gating bounds match Python's behaviour.
+    // z gating is in the incoming cloud frame; apply before transform so the
+    // bounds stay independent from occasional TF timing jitter.
     if (p.z < cloud_z_min_ || p.z > cloud_z_max_) continue;
     const double wx = R[0][0] * p.x + R[0][1] * p.y + R[0][2] * p.z + tx;
     const double wy = R[1][0] * p.x + R[1][1] * p.y + R[1][2] * p.z + ty;
-    // Also drop ground-plane returns after transform: anything below ~5 cm
-    // above the world floor is likely ground.
+    // Also drop ground-plane returns after transform.
     const double wz = R[2][0] * p.x + R[2][1] * p.y + R[2][2] * p.z + tz;
-    if (wz < 0.05) continue;
+    if (wz < cloud_world_z_min_) continue;
     pts.push_back(WorldXY{wx, wy});
   }
   auto down = voxelDownsample2D(pts, cloud_voxel_m_);

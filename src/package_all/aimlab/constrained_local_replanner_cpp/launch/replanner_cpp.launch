@@ -17,8 +17,9 @@
   <arg name="path_mode_topic"  default="$(eval '/planning/path_mode'  if arg('primary_mode') else '/planning/path_mode_cpp')"/>
 
   <arg name="loop_period_s" default="0.10"/>
-  <arg name="cloud_z_min_m" default="0.10"/>
+  <arg name="cloud_z_min_m" default="0.04"/>
   <arg name="cloud_z_max_m" default="1.30"/>
+  <arg name="cloud_world_z_min_m" default="0.03"/>
   <arg name="cloud_voxel_m" default="0.10"/>
 
   <arg name="lookahead_m" default="8.5"/>
@@ -63,6 +64,7 @@
     <param name="loop_period_s" value="$(arg loop_period_s)"/>
     <param name="cloud_z_min_m" value="$(arg cloud_z_min_m)"/>
     <param name="cloud_z_max_m" value="$(arg cloud_z_max_m)"/>
+    <param name="cloud_world_z_min_m" value="$(arg cloud_world_z_min_m)"/>
     <param name="cloud_voxel_m" value="$(arg cloud_voxel_m)"/>
     <param name="lookahead_m" value="$(arg lookahead_m)"/>
     <param name="avoidance_trigger_ahead_m" value="$(arg avoidance_trigger_ahead_m)"/>

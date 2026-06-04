@@ -194,7 +194,7 @@
   <arg name="linefit_slope_residual_min_points_per_cell" default="2"/>
   <arg name="linefit_slope_residual_remove_sparse_cells" default="true"/>
   <arg name="linefit_slope_residual_keep_front_close_m" default="0.35"/>
-  <arg name="planning_use_filtered_non_ground_cloud" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="planning_use_filtered_non_ground_cloud" default="true"/>
   <arg name="planning_obstacle_pointcloud_topic" default="$(eval arg('pointcloud_topic') if str(arg('enable_linefit_ground_filter_for_planning')).lower() != 'true' else (arg('linefit_non_ground_cloud_topic') if str(arg('planning_use_filtered_non_ground_cloud')).lower() == 'true' else arg('linefit_selector_non_ground_cloud_topic')))"/>
   <arg name="robot_base_frame" default="base_link"/>
   <arg name="publish_os_sensor_static_tf" default="true"/>
@@ -519,6 +519,8 @@
   <arg name="candidate_start_clearance_m" default="0.35"/>
   <arg name="locked_static_ttl_s" default="0.80"/>
   <arg name="hold_without_candidate" default="false"/>
+  <arg name="cpp_replanner_cloud_z_min_m" default="0.04"/>
+  <arg name="cpp_replanner_cloud_world_z_min_m" default="0.03"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="0.46"/>
   <arg name="sidestep_avoidance_max_offset_m" default="1.15"/>
@@ -1976,7 +1978,9 @@
   <group if="$(arg use_cpp_replanner)">
     <include file="$(find constrained_local_replanner_cpp)/launch/replanner_cpp.launch">
       <arg name="primary_mode" value="true"/>
-      <arg name="cloud_topic" value="$(arg pointcloud_topic)"/>
+      <arg name="cloud_topic" value="$(arg planning_obstacle_pointcloud_topic)"/>
+      <arg name="cloud_z_min_m" value="$(arg cpp_replanner_cloud_z_min_m)"/>
+      <arg name="cloud_world_z_min_m" value="$(arg cpp_replanner_cloud_world_z_min_m)"/>
       <arg name="drivable_grid_topic" value="$(arg drivable_grid_topic)"/>
       <arg name="odom_topic" value="lio_localizer/odometry/optimization"/>
       <arg name="global_path_topic" value="/astar/path"/>

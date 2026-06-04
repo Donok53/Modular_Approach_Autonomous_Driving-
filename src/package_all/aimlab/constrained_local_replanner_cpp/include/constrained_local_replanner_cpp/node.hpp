@@ -99,8 +99,9 @@ class ReplannerNode {
   // ExplainabilityEvent only on transitions, matching Python's behaviour.
   PathMode last_published_mode_{PathMode::FOLLOW_LOCAL};
   bool first_mode_publish_{true};
-  double cloud_z_min_{0.10};
+  double cloud_z_min_{0.04};
   double cloud_z_max_{1.30};
+  double cloud_world_z_min_{0.03};
   double cloud_voxel_m_{0.10};
   double loop_period_s_{0.10};
   int branch_max_expand_{4500};
