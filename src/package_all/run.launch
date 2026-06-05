@@ -556,18 +556,19 @@
   <arg name="cpp_replanner_self_filter_rear_m" default="$(eval 0.5 * float(arg('robot_length_m')) + float(arg('footprint_padding_m')) + 0.08)"/>
   <arg name="cpp_replanner_self_filter_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.08)"/>
   <arg name="cpp_replanner_self_filter_log_period_s" default="1.0"/>
+  <arg name="cpp_replanner_footprint_padding_m" default="$(eval arg('footprint_padding_m') if str(arg('indoor_precision_driving')).lower() != 'true' else '0.00')"/>
   <arg name="cpp_replanner_global_progress_backtrack_points" default="20"/>
   <arg name="cpp_replanner_adaptive_obstacle_inflation_enabled" default="true"/>
   <arg name="cpp_replanner_blocker_path_gate_extra_m" default="$(eval '0.30' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.03')"/>
   <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="$(eval '0.04' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.00')"/>
   <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + (0.08 if str(arg('indoor_precision_driving')).lower() != 'true' else 0.00))"/>
-  <arg name="cpp_replanner_side_wall_release_lateral_m" default="$(eval '0.0' if str(arg('indoor_precision_driving')).lower() != 'true' else 0.5 * float(arg('robot_width_m')) + 0.05)"/>
+  <arg name="cpp_replanner_side_wall_release_lateral_m" default="$(eval '0.0' if str(arg('indoor_precision_driving')).lower() != 'true' else 0.5 * float(arg('robot_width_m')) + 0.02)"/>
   <arg name="cpp_replanner_side_wall_release_forward_m" default="$(eval '0.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '2.40')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.32')"/>
   <arg name="sidestep_avoidance_max_offset_m" default="$(eval '1.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.82')"/>
   <arg name="sidestep_avoidance_preview_m" default="$(eval '2.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.85')"/>
-  <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.04')"/>
+  <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.02')"/>
   <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.22')"/>
   <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.78')"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
@@ -2096,7 +2097,7 @@
       <arg name="base_frame" value="$(arg robot_base_frame)"/>
       <arg name="robot_width_m" value="$(arg robot_width_m)"/>
       <arg name="robot_length_m" value="$(arg robot_length_m)"/>
-      <arg name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
+      <arg name="footprint_padding_m" value="$(arg cpp_replanner_footprint_padding_m)"/>
       <arg name="self_filter_enabled" value="$(arg cpp_replanner_self_filter_enabled)"/>
       <arg name="self_filter_front_m" value="$(arg cpp_replanner_self_filter_front_m)"/>
       <arg name="self_filter_rear_m" value="$(arg cpp_replanner_self_filter_rear_m)"/>
