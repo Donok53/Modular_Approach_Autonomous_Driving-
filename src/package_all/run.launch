@@ -535,7 +535,7 @@
   <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '12' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="avoidance_branch_time_budget_s" default="$(eval '0.45' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.4' if str(arg('localization_environment')).lower() == 'outdoor' else '1.55')"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.4' if str(arg('localization_environment')).lower() == 'outdoor' else '1.75')"/>
   <arg name="short_curved_avoidance_smooth_passes" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
   <arg name="return_to_global_trigger_distance_m" default="$(eval '0.65' if str(arg('localization_environment')).lower() == 'outdoor' else '0.50')"/>
   <arg name="return_to_global_min_tail_m" default="0.80"/>
@@ -562,12 +562,12 @@
   <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="$(eval '0.04' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.02')"/>
   <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + (0.08 if str(arg('indoor_precision_driving')).lower() != 'true' else 0.02))"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
-  <arg name="sidestep_avoidance_min_offset_m" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.30')"/>
-  <arg name="sidestep_avoidance_max_offset_m" default="$(eval '1.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.75')"/>
-  <arg name="sidestep_avoidance_preview_m" default="$(eval '2.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.65')"/>
-  <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.03')"/>
-  <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.26')"/>
-  <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.64')"/>
+  <arg name="sidestep_avoidance_min_offset_m" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.32')"/>
+  <arg name="sidestep_avoidance_max_offset_m" default="$(eval '1.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.82')"/>
+  <arg name="sidestep_avoidance_preview_m" default="$(eval '2.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.85')"/>
+  <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.04')"/>
+  <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.22')"/>
+  <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.78')"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
   <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
   <arg name="avoidance_local_collapse_straights" default="true"/>
@@ -784,6 +784,14 @@
   <arg name="near_field_raw_stop_close_override_half_width_m" default="0.12"/>
   <arg name="near_field_raw_stop_close_override_min_points" default="3"/>
   <arg name="near_field_raw_stop_close_override_min_cells" default="2"/>
+  <arg name="near_field_raw_stop_side_contact_enabled" default="$(eval 'true' if str(arg('indoor_precision_driving')).lower() == 'true' else 'false')"/>
+  <arg name="near_field_raw_stop_side_contact_min_x_m" default="-0.05"/>
+  <arg name="near_field_raw_stop_side_contact_max_x_m" default="0.75"/>
+  <arg name="near_field_raw_stop_side_contact_min_lateral_m" default="$(eval 0.5 * float(arg('robot_width_m')) + max(0.0, float(arg('footprint_padding_m')) - 0.02))"/>
+  <arg name="near_field_raw_stop_side_contact_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="near_field_raw_stop_side_contact_clearance_m" default="$(arg avoidance_hard_stop_distance)"/>
+  <arg name="near_field_raw_stop_side_contact_min_points" default="2"/>
+  <arg name="near_field_raw_stop_side_contact_min_cells" default="1"/>
   <arg name="near_field_raw_stop_downsample" default="1"/>
   <arg name="near_field_raw_stop_max_update_hz" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="near_field_raw_stop_on_count" default="2"/>
@@ -1633,6 +1641,14 @@
       <arg name="near_field_raw_stop_close_override_half_width_m" value="$(arg near_field_raw_stop_close_override_half_width_m)"/>
       <arg name="near_field_raw_stop_close_override_min_points" value="$(arg near_field_raw_stop_close_override_min_points)"/>
       <arg name="near_field_raw_stop_close_override_min_cells" value="$(arg near_field_raw_stop_close_override_min_cells)"/>
+      <arg name="near_field_raw_stop_side_contact_enabled" value="$(arg near_field_raw_stop_side_contact_enabled)"/>
+      <arg name="near_field_raw_stop_side_contact_min_x_m" value="$(arg near_field_raw_stop_side_contact_min_x_m)"/>
+      <arg name="near_field_raw_stop_side_contact_max_x_m" value="$(arg near_field_raw_stop_side_contact_max_x_m)"/>
+      <arg name="near_field_raw_stop_side_contact_min_lateral_m" value="$(arg near_field_raw_stop_side_contact_min_lateral_m)"/>
+      <arg name="near_field_raw_stop_side_contact_half_width_m" value="$(arg near_field_raw_stop_side_contact_half_width_m)"/>
+      <arg name="near_field_raw_stop_side_contact_clearance_m" value="$(arg near_field_raw_stop_side_contact_clearance_m)"/>
+      <arg name="near_field_raw_stop_side_contact_min_points" value="$(arg near_field_raw_stop_side_contact_min_points)"/>
+      <arg name="near_field_raw_stop_side_contact_min_cells" value="$(arg near_field_raw_stop_side_contact_min_cells)"/>
       <arg name="near_field_raw_stop_downsample" value="$(arg near_field_raw_stop_downsample)"/>
       <arg name="near_field_raw_stop_max_update_hz" value="$(arg near_field_raw_stop_max_update_hz)"/>
       <arg name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>
