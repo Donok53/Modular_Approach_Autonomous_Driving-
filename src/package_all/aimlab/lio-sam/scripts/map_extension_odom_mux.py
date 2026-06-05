@@ -110,7 +110,7 @@ class MapExtensionOdomMux:
         self._publish_current_once(rospy.Time.now())
 
     def _extension_requested(self):
-        return self.extension_state in ("running", "saving", "syncing")
+        return self.extension_state in ("running", "saving", "syncing", "relocalizing")
 
     def _select_source(self, now):
         ext_age = self._age(self.extension_odom_rx, now)

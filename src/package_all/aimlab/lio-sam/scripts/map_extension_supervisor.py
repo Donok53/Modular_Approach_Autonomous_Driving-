@@ -14,7 +14,7 @@ from collections import deque
 
 import rospy
 import sensor_msgs.point_cloud2 as pc2
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, PoseWithCovarianceStamped
 from lio_sam.srv import save_map, save_mapRequest
 from nav_msgs.msg import Odometry, Path
 from sensor_msgs.msg import PointCloud2, PointField
@@ -74,6 +74,10 @@ class MapExtensionSupervisor:
         self.trajectory_save_service_name = rospy.get_param(
             "~trajectory_save_service", "/trajectory_osm_exporter/save_now"
         )
+        self.initial_pose_topic = rospy.get_param("~initial_pose_topic", "/initialpose")
+        self.localizer_map_node_name = rospy.get_param(
+            "~localizer_map_node_name", "/lio_localizer_mapLocalization"
+        )
 
         self.mapping_launch_file = os.path.expanduser(rospy.get_param("~mapping_launch_file", ""))
         self.mapping_launch_args = self._param_list(rospy.get_param("~mapping_launch_args", []))
@@ -111,6 +115,24 @@ class MapExtensionSupervisor:
         self.localization_time_sync_max_dt_s = max(
             0.0, float(rospy.get_param("~localization_time_sync_max_dt_s", 0.35))
         )
+        self.relocalize_localizer_on_finish = bool(
+            rospy.get_param("~relocalize_localizer_on_finish", True)
+        )
+        self.restart_localizer_on_finish = bool(
+            rospy.get_param("~restart_localizer_on_finish", True)
+        )
+        self.localizer_relocalize_timeout_s = max(
+            0.5, float(rospy.get_param("~localizer_relocalize_timeout_s", 10.0))
+        )
+        self.localizer_reseed_publish_hz = max(
+            1.0, float(rospy.get_param("~localizer_reseed_publish_hz", 5.0))
+        )
+        self.localizer_reseed_position_tolerance_m = max(
+            0.05, float(rospy.get_param("~localizer_reseed_position_tolerance_m", 0.75))
+        )
+        self.localizer_reseed_yaw_tolerance_deg = max(
+            1.0, float(rospy.get_param("~localizer_reseed_yaw_tolerance_deg", 35.0))
+        )
 
         self._lock = threading.RLock()
         self._launch_parent = None
@@ -124,6 +146,7 @@ class MapExtensionSupervisor:
         self._start_localizer_quat = (0.0, 0.0, 0.0, 1.0)
         self._session_to_map = None
         self._session_quat = None
+        self._last_transformed_odom = None
         self._preview_points = {}
         self._last_preview_cloud = None
 
@@ -140,6 +163,9 @@ class MapExtensionSupervisor:
             self.status_marker_topic, Marker, queue_size=1, latch=True
         )
         self.pub_reload = rospy.Publisher(self.reload_topic, Empty, queue_size=1)
+        self.pub_initial_pose = rospy.Publisher(
+            self.initial_pose_topic, PoseWithCovarianceStamped, queue_size=1
+        )
 
         self.sub_localizer = rospy.Subscriber(
             self.localizer_odom_topic, Odometry, self._on_localizer_odom, queue_size=10
@@ -278,6 +304,36 @@ class MapExtensionSupervisor:
             (float(p.x), float(p.y), float(p.z)),
             (float(q.x), float(q.y), float(q.z), float(q.w)),
         )
+
+    @staticmethod
+    def _yaw_from_quat(q):
+        x, y, z, w = q
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    @classmethod
+    def _yaw_from_odom(cls, msg):
+        return cls._yaw_from_quat(cls._pose_quat_from_odom(msg))
+
+    @staticmethod
+    def _angle_diff(a, b):
+        d = a - b
+        while d > math.pi:
+            d -= 2.0 * math.pi
+        while d < -math.pi:
+            d += 2.0 * math.pi
+        return d
+
+    @classmethod
+    def _pose_delta_xy_yaw(cls, a, b):
+        ap = a.pose.pose.position
+        bp = b.pose.pose.position
+        dx = float(ap.x) - float(bp.x)
+        dy = float(ap.y) - float(bp.y)
+        dist = math.hypot(dx, dy)
+        yaw_err = abs(cls._angle_diff(cls._yaw_from_odom(a), cls._yaw_from_odom(b)))
+        return dist, yaw_err
 
     @staticmethod
     def _transform_xyz(matrix, x, y, z):
@@ -547,6 +603,8 @@ class MapExtensionSupervisor:
             return
         out = self._transformed_odom_msg(msg)
         if out is not None:
+            with self._lock:
+                self._last_transformed_odom = out
             self.pub_transformed_odom.publish(out)
 
     def _on_mapping_incremental_odom(self, msg):
@@ -772,6 +830,85 @@ class MapExtensionSupervisor:
             )
         return transformed
 
+    def _initial_pose_msg_from_odom(self, odom):
+        msg = PoseWithCovarianceStamped()
+        msg.header.stamp = rospy.Time.now()
+        msg.header.frame_id = self.fixed_frame
+        msg.pose.pose.position = odom.pose.pose.position
+        msg.pose.pose.orientation = odom.pose.pose.orientation
+        msg.pose.covariance[0] = 0.25
+        msg.pose.covariance[7] = 0.25
+        msg.pose.covariance[35] = (10.0 * math.pi / 180.0) ** 2
+        return msg
+
+    def _restart_localizer_map_node(self):
+        if not self.restart_localizer_on_finish:
+            return
+        try:
+            subprocess.run(
+                ["rosnode", "kill", self.localizer_map_node_name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5.0,
+                check=False,
+            )
+            rospy.loginfo(
+                "map_extension_supervisor: requested localizer map node restart | node=%s",
+                self.localizer_map_node_name,
+            )
+        except Exception as e:
+            rospy.logwarn(
+                "map_extension_supervisor: localizer map node restart request failed: %s",
+                str(e),
+            )
+
+    def _relocalize_localizer_from_extension(self):
+        if not self.relocalize_localizer_on_finish:
+            return True, "localizer relocalization disabled"
+        with self._lock:
+            target = self._last_transformed_odom
+        if target is None:
+            return False, "no transformed SLAM pose available for localizer relocalization"
+
+        self._publish_status("relocalizing", "restarting localizer on merged map")
+        self._restart_localizer_map_node()
+
+        start_time = rospy.Time.now()
+        deadline = time.time() + self.localizer_relocalize_timeout_s
+        period = 1.0 / self.localizer_reseed_publish_hz
+        yaw_tol = self.localizer_reseed_yaw_tolerance_deg * math.pi / 180.0
+        pos_tol = self.localizer_reseed_position_tolerance_m
+        last_publish = 0.0
+        last_dist = float("inf")
+        last_yaw = float("inf")
+
+        while not rospy.is_shutdown() and time.time() < deadline:
+            now_wall = time.time()
+            if now_wall - last_publish >= period:
+                self.pub_initial_pose.publish(self._initial_pose_msg_from_odom(target))
+                last_publish = now_wall
+
+            with self._lock:
+                localizer = self._last_localizer_odom
+                localizer_rx = self._last_localizer_time
+            if localizer is not None and localizer_rx >= start_time:
+                last_dist, last_yaw = self._pose_delta_xy_yaw(localizer, target)
+                if last_dist <= pos_tol and last_yaw <= yaw_tol:
+                    rospy.loginfo(
+                        "map_extension_supervisor: localizer relocalized | dist=%.2fm yaw=%.1fdeg",
+                        last_dist,
+                        last_yaw * 180.0 / math.pi,
+                    )
+                    return True, "localizer relocalized"
+
+            rospy.sleep(0.05)
+
+        return (
+            False,
+            "localizer relocalization timeout | dist=%.2fm yaw=%.1fdeg"
+            % (last_dist, last_yaw * 180.0 / math.pi),
+        )
+
     def _clear_source_dir(self):
         if not self.clear_source_dir_on_start:
             return
@@ -794,6 +931,7 @@ class MapExtensionSupervisor:
                 self._start_localizer_quat = self._pose_quat_from_odom(self._last_localizer_odom)
                 self._session_to_map = None
                 self._session_quat = None
+                self._last_transformed_odom = None
                 self._running = True
             self._clear_source_dir()
             self._publish_status("starting", "starting mapping extension")
@@ -845,6 +983,12 @@ class MapExtensionSupervisor:
                 raise RuntimeError("map sync failed: %s" % sync_resp.message)
 
             self.pub_reload.publish(Empty())
+            relocalized, relocalize_msg = self._relocalize_localizer_from_extension()
+            if not relocalized:
+                self._publish_status("relocalizing", relocalize_msg)
+                rospy.logwarn("map_extension_supervisor: %s", relocalize_msg)
+                return TriggerResponse(False, "map saved and merged, but " + relocalize_msg)
+
             self._clear_preview_outputs()
             self._shutdown_mapping_launch()
             self._publish_status("idle", "extension saved and merged")
@@ -958,7 +1102,7 @@ class MapExtensionSupervisor:
         marker.pose.position = Point(x, y, z + 0.45)
         marker.scale.z = 0.22
         marker.color.a = 1.0
-        if state in ("running", "syncing", "saving"):
+        if state in ("running", "syncing", "saving", "relocalizing"):
             marker.color.r, marker.color.g, marker.color.b = 0.1, 0.9, 0.4
         elif state == "error":
             marker.color.r, marker.color.g, marker.color.b = 1.0, 0.15, 0.1

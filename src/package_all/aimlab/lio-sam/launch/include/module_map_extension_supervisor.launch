@@ -15,6 +15,8 @@
   <arg name="trajectory_output_csv" default="$(find astar_map)/map/auto_trajectory_local$(arg map_profile_suffix).csv"/>
   <arg name="trajectory_output_osm" default="$(find astar_map)/map/auto_trajectory$(arg map_profile_suffix).osm"/>
   <arg name="localizer_odom_topic" default="/lio_localizer/odometry/optimization"/>
+  <arg name="initial_pose_topic" default="/initialpose"/>
+  <arg name="localizer_map_node_name" default="/lio_localizer_mapLocalization"/>
   <arg name="preview_cloud_topic" default="/map_extension/preview_cloud"/>
   <arg name="status_marker_topic" default="/map_extension/status_marker"/>
   <arg name="transformed_odom_topic" default="/map_extension/transformed_odom"/>
@@ -27,6 +29,9 @@
   <arg name="require_stationary_start" default="true"/>
   <arg name="start_max_linear_speed_mps" default="0.12"/>
   <arg name="start_max_angular_speed_rps" default="0.20"/>
+  <arg name="relocalize_localizer_on_finish" default="true"/>
+  <arg name="restart_localizer_on_finish" default="true"/>
+  <arg name="localizer_relocalize_timeout_s" default="10.0"/>
   <arg name="enable_semantic_sidewalk_pipeline" default="false"/>
 
   <group if="$(arg enable)">
@@ -35,6 +40,8 @@
       <param name="mapping_launch_file" value="$(find lio_sam)/launch/run-robot.launch"/>
       <param name="source_dir" value="$(arg source_dir)"/>
       <param name="localizer_odom_topic" value="$(arg localizer_odom_topic)"/>
+      <param name="initial_pose_topic" value="$(arg initial_pose_topic)"/>
+      <param name="localizer_map_node_name" value="$(arg localizer_map_node_name)"/>
       <param name="preview_cloud_topic" value="$(arg preview_cloud_topic)"/>
       <param name="status_marker_topic" value="$(arg status_marker_topic)"/>
       <param name="transformed_odom_topic" value="$(arg transformed_odom_topic)"/>
@@ -47,6 +54,9 @@
       <param name="require_stationary_start" value="$(arg require_stationary_start)"/>
       <param name="start_max_linear_speed_mps" value="$(arg start_max_linear_speed_mps)"/>
       <param name="start_max_angular_speed_rps" value="$(arg start_max_angular_speed_rps)"/>
+      <param name="relocalize_localizer_on_finish" value="$(arg relocalize_localizer_on_finish)"/>
+      <param name="restart_localizer_on_finish" value="$(arg restart_localizer_on_finish)"/>
+      <param name="localizer_relocalize_timeout_s" value="$(arg localizer_relocalize_timeout_s)"/>
       <param name="save_map_resolution" value="$(arg save_map_resolution)"/>
       <rosparam param="transform_pcd_files">
         ["GlobalMap.pcd", "CornerMap.pcd", "SurfMap.pcd"]

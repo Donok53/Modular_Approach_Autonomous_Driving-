@@ -12,6 +12,9 @@
   <arg name="map_extension_status_marker_topic" default="/map_extension/status_marker"/>
   <arg name="map_extension_save_resolution" default="0.12"/>
   <arg name="map_extension_voxel_leaf_size" default="0.12"/>
+  <arg name="map_extension_relocalize_localizer_on_finish" default="true"/>
+  <arg name="map_extension_restart_localizer_on_finish" default="true"/>
+  <arg name="map_extension_localizer_relocalize_timeout_s" default="10.0"/>
   <arg name="map_profile_name" default="$(eval 'outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('real' if str(arg('real_mode')).lower() == 'true' else 'test'))"/>
   <arg name="map_profile_suffix" default="$(eval '_outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('_real' if str(arg('real_mode')).lower() == 'true' else ''))"/>
   <arg name="localizer_map_relative_path" default="$(eval '/map/outdoor' if str(arg('real_mode')).lower() == 'outdoor' else ('/map/real' if str(arg('real_mode')).lower() == 'true' else '/map/test'))"/>
@@ -869,6 +872,9 @@
     <arg name="status_marker_topic" value="$(arg map_extension_status_marker_topic)"/>
     <arg name="transformed_odom_topic" value="$(arg map_extension_transformed_odom_topic)"/>
     <arg name="transformed_incremental_odom_topic" value="$(arg map_extension_transformed_incremental_odom_topic)"/>
+    <arg name="relocalize_localizer_on_finish" value="$(arg map_extension_relocalize_localizer_on_finish)"/>
+    <arg name="restart_localizer_on_finish" value="$(arg map_extension_restart_localizer_on_finish)"/>
+    <arg name="localizer_relocalize_timeout_s" value="$(arg map_extension_localizer_relocalize_timeout_s)"/>
     <arg name="enable_semantic_sidewalk_pipeline" value="false"/>
   </include>
 
