@@ -55,6 +55,7 @@
   <arg name="obstacle_drivable_filter_radius_m" default="0.0"/>
   <arg name="global_progress_backtrack_points" default="20"/>
   <arg name="adaptive_obstacle_inflation_enabled" default="true"/>
+  <arg name="blocker_path_gate_extra_m" default="0.30"/>
   <arg name="relaxed_obstacle_block_margin_m" default="0.04"/>
   <arg name="full_inflation_corridor_m" default="0.37"/>
 
@@ -114,6 +115,7 @@
     <param name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
     <param name="global_progress_backtrack_points" value="$(arg global_progress_backtrack_points)"/>
     <param name="adaptive_obstacle_inflation_enabled" value="$(arg adaptive_obstacle_inflation_enabled)"/>
+    <param name="blocker_path_gate_extra_m" value="$(arg blocker_path_gate_extra_m)"/>
     <param name="relaxed_obstacle_block_margin_m" value="$(arg relaxed_obstacle_block_margin_m)"/>
     <param name="full_inflation_corridor_m" value="$(arg full_inflation_corridor_m)"/>
     <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>

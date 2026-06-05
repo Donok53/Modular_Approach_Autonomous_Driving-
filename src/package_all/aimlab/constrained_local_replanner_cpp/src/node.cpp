@@ -532,6 +532,11 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("adaptive_obstacle_inflation_enabled",
              params_.adaptive_obstacle_inflation_enabled,
              params_.adaptive_obstacle_inflation_enabled);
+  pnh_.param("blocker_path_gate_extra_m",
+             params_.blocker_path_gate_extra_m,
+             params_.blocker_path_gate_extra_m);
+  params_.blocker_path_gate_extra_m =
+      std::max(0.0, params_.blocker_path_gate_extra_m);
   pnh_.param("relaxed_obstacle_block_margin_m",
              params_.relaxed_obstacle_block_margin_m,
              params_.relaxed_obstacle_block_margin_m);
@@ -863,7 +868,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     const double s = std::sin(yaw);
     const double path_gate_m =
         params_.footprint.half_width_m + params_.footprint.padding_m +
-        params_.obstacle_block_margin_m + 0.30;
+        params_.obstacle_block_margin_m + params_.blocker_path_gate_extra_m;
     for (const auto& cl : clusters) {
       const double dxy = std::hypot(cl.centroid.x - rx, cl.centroid.y - ry);
       if (dxy < nearest_dxy) {

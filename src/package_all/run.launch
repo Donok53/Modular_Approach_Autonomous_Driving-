@@ -461,9 +461,9 @@
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
   <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
-  <arg name="path_tracking_drivable_footprint_scale" default="$(eval '0.0' if str(arg('localization_environment')).lower() == 'outdoor' else '1.0')"/>
-  <arg name="path_tracking_drivable_check_horizon_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else ('0.75' if str(arg('indoor_precision_driving')).lower() == 'true' else '0.0'))"/>
-  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' or str(arg('indoor_precision_driving')).lower() == 'true' else 'false')"/>
+  <arg name="path_tracking_drivable_footprint_scale" default="$(eval '0.0' if str(arg('localization_environment')).lower() == 'outdoor' else ('0.70' if str(arg('indoor_precision_driving')).lower() == 'true' else '1.0'))"/>
+  <arg name="path_tracking_drivable_check_horizon_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else ('0.45' if str(arg('indoor_precision_driving')).lower() == 'true' else '0.0'))"/>
+  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
   <arg name="goal_completion_stuck_distance_m" default="1.60"/>
   <arg name="goal_completion_stuck_arc_m" default="1.20"/>
   <arg name="goal_completion_stuck_hold_s" default="0.35"/>
@@ -552,6 +552,7 @@
   <arg name="cpp_replanner_self_filter_log_period_s" default="1.0"/>
   <arg name="cpp_replanner_global_progress_backtrack_points" default="20"/>
   <arg name="cpp_replanner_adaptive_obstacle_inflation_enabled" default="true"/>
+  <arg name="cpp_replanner_blocker_path_gate_extra_m" default="$(eval '0.30' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.08')"/>
   <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="$(eval '0.04' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.02')"/>
   <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + (0.08 if str(arg('indoor_precision_driving')).lower() != 'true' else 0.02))"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
@@ -2094,6 +2095,7 @@
       <arg name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
       <arg name="global_progress_backtrack_points" value="$(arg cpp_replanner_global_progress_backtrack_points)"/>
       <arg name="adaptive_obstacle_inflation_enabled" value="$(arg cpp_replanner_adaptive_obstacle_inflation_enabled)"/>
+      <arg name="blocker_path_gate_extra_m" value="$(arg cpp_replanner_blocker_path_gate_extra_m)"/>
       <arg name="relaxed_obstacle_block_margin_m" value="$(arg cpp_replanner_relaxed_obstacle_block_margin_m)"/>
       <arg name="full_inflation_corridor_m" value="$(arg cpp_replanner_full_inflation_corridor_m)"/>
       <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
