@@ -44,6 +44,110 @@ inline WorldXY localToWorld(double lx, double ly, double rx, double ry, double y
   return WorldXY{rx + c * lx - s * ly, ry + s * lx + c * ly};
 }
 
+inline WorldXY worldToLocal(WorldXY p, double rx, double ry, double yaw) {
+  const double c = std::cos(yaw);
+  const double s = std::sin(yaw);
+  const double dx = p.x - rx;
+  const double dy = p.y - ry;
+  return WorldXY{c * dx + s * dy, -s * dx + c * dy};
+}
+
+std::vector<WorldXY> nominalPathWorld(const std::vector<GridCell>& nominal_path,
+                                      const OccupancyView& g) {
+  std::vector<WorldXY> out;
+  out.reserve(nominal_path.size());
+  for (const auto& cell : nominal_path) {
+    out.push_back(g.cell_to_world(cell.x, cell.y));
+  }
+  return out;
+}
+
+std::vector<WorldXY> nominalPathLocal(const std::vector<WorldXY>& nominal_world,
+                                      double rx,
+                                      double ry,
+                                      double yaw) {
+  std::vector<WorldXY> out;
+  out.reserve(nominal_world.size());
+  for (const auto& p : nominal_world) {
+    out.push_back(worldToLocal(p, rx, ry, yaw));
+  }
+  return out;
+}
+
+double nominalYAtX(const std::vector<WorldXY>& nominal_local, double lx) {
+  if (nominal_local.empty()) return 0.0;
+  double best_score = std::numeric_limits<double>::infinity();
+  double best_y = nominal_local.front().y;
+
+  for (std::size_t i = 1; i < nominal_local.size(); ++i) {
+    const WorldXY a = nominal_local[i - 1];
+    const WorldXY b = nominal_local[i];
+    const double vx = b.x - a.x;
+    const double vy = b.y - a.y;
+    const double denom = vx * vx + vy * vy;
+    double t = 0.0;
+    if (denom > 1e-9) {
+      t = std::max(0.0, std::min(1.0, ((lx - a.x) * vx) / denom));
+    }
+    const double px = a.x + t * vx;
+    const double py = a.y + t * vy;
+    const double score = std::abs(px - lx) + 0.05 * std::abs(t - 0.5);
+    if (score < best_score) {
+      best_score = score;
+      best_y = py;
+    }
+  }
+  return best_y;
+}
+
+double nominalSideHint(const std::vector<WorldXY>& nominal_local,
+                       double from_x,
+                       double to_x) {
+  double weighted_sum = 0.0;
+  double total_weight = 0.0;
+  for (const auto& p : nominal_local) {
+    if (p.x < from_x || p.x > to_x) continue;
+    const double w = std::max(0.05, p.x - from_x + 0.05);
+    weighted_sum += w * p.y;
+    total_weight += w;
+  }
+  if (total_weight <= 1e-6) return nominalYAtX(nominal_local, to_x);
+  return weighted_sum / total_weight;
+}
+
+double pointSegmentDistance(WorldXY p, WorldXY a, WorldXY b) {
+  const double vx = b.x - a.x;
+  const double vy = b.y - a.y;
+  const double wx = p.x - a.x;
+  const double wy = p.y - a.y;
+  const double denom = vx * vx + vy * vy;
+  if (denom <= 1e-9) return std::hypot(p.x - a.x, p.y - a.y);
+  const double t = std::max(0.0, std::min(1.0, (wx * vx + wy * vy) / denom));
+  const double px = a.x + t * vx;
+  const double py = a.y + t * vy;
+  return std::hypot(p.x - px, p.y - py);
+}
+
+double pointPolylineDistance(WorldXY p, const std::vector<WorldXY>& path) {
+  if (path.empty()) return std::numeric_limits<double>::infinity();
+  if (path.size() == 1) return std::hypot(p.x - path.front().x, p.y - path.front().y);
+  double best = std::numeric_limits<double>::infinity();
+  for (std::size_t i = 1; i < path.size(); ++i) {
+    best = std::min(best, pointSegmentDistance(p, path[i - 1], path[i]));
+  }
+  return best;
+}
+
+double meanPolylineDistance(const std::vector<WorldXY>& pts,
+                            const std::vector<WorldXY>& reference) {
+  if (pts.empty() || reference.empty()) return 0.0;
+  double sum = 0.0;
+  for (const auto& p : pts) {
+    sum += pointPolylineDistance(p, reference);
+  }
+  return sum / static_cast<double>(pts.size());
+}
+
 }  // namespace
 
 AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path,
@@ -66,6 +170,9 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
   const double s = std::sin(robot_yaw);
   const double obs_lx = c * dx + s * dy;
   const double obs_ly = -s * dx + c * dy;
+  const std::vector<WorldXY> nominal_world = nominalPathWorld(nominal_path, g);
+  const std::vector<WorldXY> nominal_local =
+      nominalPathLocal(nominal_world, robot_w.x, robot_w.y, robot_yaw);
 
   if (obs_lx < 0.10) {
     // Obstacle is behind / next to the robot — sidestep is not appropriate.
@@ -78,10 +185,18 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
     side_order = {{-1, +1}};
   } else if (preferred_direction > 0) {
     side_order = {{+1, -1}};
-  } else if (obs_ly > 0.0) {
-    side_order = {{-1, +1}};  // obstacle on left -> sidestep right
   } else {
-    side_order = {{+1, -1}};
+    const double future_y = nominalSideHint(
+        nominal_local, std::max(0.0, obs_lx - 0.20),
+        obs_lx + std::max(0.60, params.rejoin_min_distance_m));
+    if (std::abs(future_y) >= 0.12) {
+      const int nominal_side = (future_y > 0.0) ? +1 : -1;
+      side_order = {{nominal_side, -nominal_side}};
+    } else if (obs_ly > 0.0) {
+      side_order = {{-1, +1}};  // obstacle on left -> sidestep right
+    } else {
+      side_order = {{+1, -1}};
+    }
   }
 
   const double start_x = std::max(0.0, obs_lx - 1.20);
@@ -108,7 +223,7 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
     for (const double raw_off : offsets) {
       double offset_m = std::max(params.sidestep_min_offset_m, raw_off);
       if (offset_m > params.sidestep_max_offset_m + 1e-6) continue;
-      const double target_y = static_cast<double>(side) * offset_m;
+      double target_y = static_cast<double>(side) * offset_m;
 
       const double entry_lead = std::max(0.20, params.sidestep_entry_lead_m);
       const double entry_x = std::max(start_x + 0.15, obs_lx - entry_lead);
@@ -125,16 +240,31 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       // FOLLOW_AVOIDANCE release guard from firing.
       const double end_x = rejoin_x + 0.30;
       const double mid_x = start_x + 0.5 * std::max(0.20, entry_x - start_x);
+      const double start_y = nominalYAtX(nominal_local, start_x);
+      const double mid_y = nominalYAtX(nominal_local, mid_x);
+      const double entry_y = nominalYAtX(nominal_local, entry_x);
+      const double pass_base_y = nominalYAtX(nominal_local, pass_x);
+      const double rejoin_y = nominalYAtX(nominal_local, rejoin_x);
+      const double end_y = nominalYAtX(nominal_local, end_x);
+      if (static_cast<double>(side) * pass_base_y >
+          static_cast<double>(side) * target_y) {
+        target_y = pass_base_y;
+      }
+      const double entry_target_y = entry_y + 0.35 * (target_y - entry_y);
+      const double pass_mid_base_y =
+          nominalYAtX(nominal_local, 0.5 * (entry_x + pass_x));
+      const double pass_mid_y = pass_mid_base_y + 0.80 * (target_y - pass_mid_base_y);
+      const double rejoin_mid_y = target_y + 0.60 * (rejoin_y - target_y);
 
       const std::vector<std::pair<double, double>> waypts_local{
-          {start_x, 0.0},
-          {mid_x, 0.0},
-          {entry_x, 0.35 * target_y},
-          {0.5 * (entry_x + pass_x), 0.80 * target_y},
+          {start_x, start_y},
+          {mid_x, mid_y},
+          {entry_x, entry_target_y},
+          {0.5 * (entry_x + pass_x), pass_mid_y},
           {pass_x, target_y},
-          {0.5 * (pass_x + rejoin_x), 0.60 * target_y},
-          {rejoin_x, 0.0},
-          {end_x, 0.0},
+          {0.5 * (pass_x + rejoin_x), rejoin_mid_y},
+          {rejoin_x, rejoin_y},
+          {end_x, end_y},
       };
       std::vector<WorldXY> ctrl;
       ctrl.reserve(waypts_local.size());
@@ -175,7 +305,12 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       }
 
       const double penalty_side = (side == side_order[0]) ? 0.0 : 1.0;
-      const double score = penalty_side * 10.0 + offset_m + 0.05 * max_heading_delta;
+      const double mean_nominal_dist = meanPolylineDistance(sampled, nominal_world);
+      const double end_nominal_dist = pointPolylineDistance(sampled.back(), nominal_world);
+      const double score = penalty_side * 10.0 + offset_m +
+                           1.40 * mean_nominal_dist +
+                           2.20 * end_nominal_dist +
+                           0.05 * max_heading_delta;
       if (score < best_score) {
         best_score = score;
         result.waypoints = std::move(sampled);

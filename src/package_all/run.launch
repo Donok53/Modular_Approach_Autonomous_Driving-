@@ -415,13 +415,13 @@
   <arg name="local_tracking_turn_preview_threshold_deg" default="14.0"/>
   <arg name="local_tracking_turn_preview_approach_m" default="0.65"/>
   <arg name="local_tracking_turn_preview_min_step_m" default="0.25"/>
-  <arg name="local_tracking_preview_m" default="$(eval '0.85' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.65')"/>
+  <arg name="local_tracking_preview_m" default="$(eval '0.85' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.50')"/>
   <arg name="local_tracking_segment_step_scale" default="0.80"/>
-  <arg name="local_tracking_segment_min_step_m" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.30')"/>
-  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.40')"/>
-  <arg name="local_tracking_tangent_window_m" default="$(eval '0.60' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.45')"/>
-  <arg name="local_tracking_obstacle_speed_cap_mps" default="$(eval '0.75' if str(arg('localization_environment')).lower() == 'outdoor' else '0.38')"/>
-  <arg name="local_tracking_yaw_speed_cap_mps" default="$(eval '0.57' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.34')"/>
+  <arg name="local_tracking_segment_min_step_m" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.24')"/>
+  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.32')"/>
+  <arg name="local_tracking_tangent_window_m" default="$(eval '0.60' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.36')"/>
+  <arg name="local_tracking_obstacle_speed_cap_mps" default="$(eval '0.75' if str(arg('localization_environment')).lower() == 'outdoor' else '0.26')"/>
+  <arg name="local_tracking_yaw_speed_cap_mps" default="$(eval '0.57' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.26')"/>
   <arg name="local_tracking_yaw_speed_cap_start_deg" default="7.0"/>
   <arg name="local_tracking_yaw_speed_cap_full_deg" default="16.0"/>
   <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '38.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '32.0')"/>
@@ -436,11 +436,11 @@
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="60.0"/>
   <arg name="path_tracking_stop_yaw_deg" default="95.0"/>
-  <arg name="path_tracking_cte_gain" default="$(eval '0.46' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.55')"/>
+  <arg name="path_tracking_cte_gain" default="$(eval '0.46' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.62')"/>
   <arg name="path_tracking_cte_soft_mps" default="0.55"/>
   <arg name="path_tracking_cte_deadband_m" default="$(eval '0.07' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.04')"/>
   <arg name="path_tracking_cte_filter_gain" default="0.30"/>
-  <arg name="path_tracking_cte_yaw_cap_deg" default="$(eval '25.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '22.0')"/>
+  <arg name="path_tracking_cte_yaw_cap_deg" default="$(eval '25.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '26.0')"/>
   <arg name="path_tracking_heading_filter_gain" default="0.35"/>
   <arg name="local_tracking_heading_filter_gain" default="0.68"/>
   <arg name="local_tracking_heading_filter_reset_deg" default="40.0"/>
@@ -448,8 +448,8 @@
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
   <arg name="path_tracking_target_step_m" default="0.32"/>
   <arg name="path_tracking_tangent_window_m" default="0.75"/>
-  <arg name="path_tracking_crawl_speed" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.30')"/>
-  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.24')"/>
+  <arg name="path_tracking_crawl_speed" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.24')"/>
+  <arg name="path_tracking_large_yaw_crawl_speed" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.18')"/>
   <arg name="path_tracking_goal_align_speed_cap_mps" default="0.18"/>
   <arg name="final_approach_window_m" default="0.80"/>
   <arg name="final_speed_k" default="0.95"/>
@@ -533,9 +533,9 @@
   <arg name="avoidance_branch_max_rejoin_candidates" default="$(eval '12' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('localization_environment')).lower() == 'outdoor' else '0')"/>
   <arg name="avoidance_branch_time_budget_s" default="$(eval '0.45' if str(arg('use_cpp_replanner')).lower() == 'true' or str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="avoidance_branch_backtrack_cells" default="$(eval '6' if str(arg('localization_environment')).lower() == 'outdoor' else '10')"/>
-  <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.4' if str(arg('localization_environment')).lower() == 'outdoor' else '1.4')"/>
+  <arg name="avoidance_rejoin_min_distance_m" default="$(eval '1.4' if str(arg('localization_environment')).lower() == 'outdoor' else '1.55')"/>
   <arg name="short_curved_avoidance_smooth_passes" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
-  <arg name="return_to_global_trigger_distance_m" default="0.65"/>
+  <arg name="return_to_global_trigger_distance_m" default="$(eval '0.65' if str(arg('localization_environment')).lower() == 'outdoor' else '0.50')"/>
   <arg name="return_to_global_min_tail_m" default="0.80"/>
   <arg name="return_to_global_goal_tolerance_m" default="0.35"/>
   <arg name="final_goal_direct_distance_m" default="2.0"/>
@@ -562,10 +562,10 @@
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.30')"/>
   <arg name="sidestep_avoidance_max_offset_m" default="$(eval '1.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.75')"/>
-  <arg name="sidestep_avoidance_preview_m" default="$(eval '2.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.45')"/>
-  <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.02')"/>
-  <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.35')"/>
-  <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.38')"/>
+  <arg name="sidestep_avoidance_preview_m" default="$(eval '2.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.65')"/>
+  <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.03')"/>
+  <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.48')"/>
+  <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.48')"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
   <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
   <arg name="avoidance_local_collapse_straights" default="true"/>
@@ -2092,6 +2092,7 @@
       <arg name="sidestep_preview_m" value="$(arg sidestep_avoidance_preview_m)"/>
       <arg name="sidestep_clearance_extra_m" value="$(arg sidestep_avoidance_clearance_extra_m)"/>
       <arg name="sidestep_entry_lead_m" value="$(arg sidestep_avoidance_entry_lead_m)"/>
+      <arg name="sidestep_forward_margin_m" value="$(arg sidestep_avoidance_forward_margin_m)"/>
       <arg name="rejoin_min_distance_m" value="$(arg avoidance_rejoin_min_distance_m)"/>
       <arg name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
       <arg name="branch_max_expand" value="$(arg max_expand)"/>
