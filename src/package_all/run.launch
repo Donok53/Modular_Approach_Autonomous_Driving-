@@ -162,8 +162,8 @@
   <arg name="wave_baud_rate" default="19200"/>
   <arg name="wave_linear_scale" default="1.0"/>
   <arg name="wave_angular_scale" default="1.0"/>
-  <arg name="wave_emergency_preserve_angular" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
-  <arg name="wave_emergency_angular_limit_rps" default="$(eval '0.35' if str(arg('localization_environment')).lower() == 'outdoor' else '0.25')"/>
+  <arg name="wave_emergency_preserve_angular" default="true"/>
+  <arg name="wave_emergency_angular_limit_rps" default="0.35"/>
   <arg name="local_planner_mode" default="custom"/>
   <arg name="enable_linefit_ground_filter_for_planning" default="true"/>
   <arg name="enable_linefit_self_filter" default="true"/>
@@ -749,9 +749,9 @@
   <arg name="debug_dynamic_risk_logging" default="true"/>
   <arg name="debug_dynamic_risk_log_period_s" default="1.0"/>
   <arg name="enable_emergency_stop" default="true"/>
-  <arg name="emergency_stop_distance" default="$(eval '0.55' if str(arg('localization_environment')).lower() == 'outdoor' else '0.30')"/>
+  <arg name="emergency_stop_distance" default="0.55"/>
   <arg name="emergency_bin_size_m" default="0.10"/>
-  <arg name="emergency_min_close_points" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '3')"/>
+  <arg name="emergency_min_close_points" default="2"/>
   <arg name="emergency_immediate_contact_min_points" default="1"/>
   <arg name="emergency_passable_width_m" default="$(eval max(float(arg('robot_width_m')) + 0.02, float(arg('robot_width_m')) + 2.0 * float(arg('footprint_padding_m')) - 0.10))"/>
   <arg name="block_on_count" default="2"/>
@@ -766,30 +766,32 @@
   <arg name="near_field_raw_stop_tf_fallback_latest" default="true"/>
   <arg name="near_field_raw_stop_allow_raw_frame_on_tf_failure" default="true"/>
   <arg name="near_field_raw_stop_min_x_m" default="0.35"/>
-  <arg name="near_field_raw_stop_max_x_m" default="$(eval '0.75' if str(arg('localization_environment')).lower() == 'outdoor' else '0.62')"/>
-  <!-- Indoor fine driving treats near-field stop as a final collision guard:
-       shorter, narrower, and less sticky so door-frame edges remain planner
-       inputs instead of hard stops. Outdoor keeps the wider guard. -->
-  <arg name="near_field_raw_stop_half_width_m" default="$(eval '0.18' if str(arg('localization_environment')).lower() == 'outdoor' else '0.14')"/>
+  <arg name="near_field_raw_stop_max_x_m" default="0.75"/>
+  <!-- Narrowed from 0.28 to 0.18 m so the safety stop only catches
+       obstacles in front of the robot's centre column. Anything beside
+       the robot during a sidestep is filtered out (the planner already
+       knows about it). 0.18 m is ~60% of the robot half-width, leaving
+       a guard band but not the full footprint. -->
+  <arg name="near_field_raw_stop_half_width_m" default="0.18"/>
   <arg name="near_field_raw_stop_min_z_m" default="0.08"/>
   <arg name="near_field_raw_stop_max_z_m" default="0.70"/>
-  <arg name="near_field_raw_stop_min_points" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '4')"/>
+  <arg name="near_field_raw_stop_min_points" default="2"/>
   <arg name="near_field_raw_stop_cell_size_m" default="0.12"/>
-  <arg name="near_field_raw_stop_min_cells" default="$(eval '1' if str(arg('localization_environment')).lower() == 'outdoor' else '2')"/>
-  <arg name="near_field_raw_stop_close_override_distance_m" default="$(eval arg('avoidance_hard_stop_distance') if str(arg('localization_environment')).lower() == 'outdoor' else '0.20')"/>
-  <arg name="near_field_raw_stop_close_override_half_width_m" default="$(eval '0.12' if str(arg('localization_environment')).lower() == 'outdoor' else '0.10')"/>
+  <arg name="near_field_raw_stop_min_cells" default="1"/>
+  <arg name="near_field_raw_stop_close_override_distance_m" default="$(arg avoidance_hard_stop_distance)"/>
+  <arg name="near_field_raw_stop_close_override_half_width_m" default="0.12"/>
   <arg name="near_field_raw_stop_close_override_min_points" default="3"/>
-  <arg name="near_field_raw_stop_close_override_min_cells" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '1')"/>
+  <arg name="near_field_raw_stop_close_override_min_cells" default="2"/>
   <arg name="near_field_raw_stop_downsample" default="1"/>
   <arg name="near_field_raw_stop_max_update_hz" default="$(eval '8.0' if str(arg('localization_environment')).lower() == 'outdoor' else '0.0')"/>
   <arg name="near_field_raw_stop_on_count" default="2"/>
-  <arg name="near_field_raw_stop_off_count" default="$(eval '2' if str(arg('localization_environment')).lower() == 'outdoor' else '1')"/>
-  <arg name="near_field_raw_stop_timeout_s" default="$(eval '0.60' if str(arg('localization_environment')).lower() == 'outdoor' else '0.35')"/>
-  <arg name="near_field_raw_stop_hold_s" default="$(eval '0.50' if str(arg('localization_environment')).lower() == 'outdoor' else '0.20')"/>
+  <arg name="near_field_raw_stop_off_count" default="2"/>
+  <arg name="near_field_raw_stop_timeout_s" default="0.60"/>
+  <arg name="near_field_raw_stop_hold_s" default="0.50"/>
   <arg name="near_field_raw_stop_marker_topic" default="/planning/near_field_stop_marker"/>
   <arg name="near_field_raw_stop_hit_cloud_topic" default="/planning/near_field_stop_hits"/>
   <arg name="near_field_raw_stop_log_period_s" default="0.5"/>
-  <arg name="emergency_bypass_enabled" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="emergency_bypass_enabled" default="true"/>
   <arg name="emergency_bypass_preview_m" default="1.60"/>
   <arg name="emergency_bypass_target_lateral_m" default="0.06"/>
   <arg name="emergency_bypass_bearing_deg" default="4.5"/>
