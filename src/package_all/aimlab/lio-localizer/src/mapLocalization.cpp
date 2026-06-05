@@ -7,6 +7,8 @@
 #include <pcl/registration/gicp.h>
 #include <Eigen/Dense>
 
+#include <cctype>
+
 #include "nanoflann.hpp"
 #include "lidarFactor.hpp"
 
@@ -157,6 +159,13 @@ public:
         sub_initial_pose_ = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>("initialpose", 10, &MapLocalization::initial_pose_handler, this, ros::TransportHints().tcpNoDelay());
         sub_cloud_ = nh.subscribe<lio_localizer::cloud_info>("lio_localizer/feature/cloud_info", 1, &MapLocalization::cloud_info_handler, this, ros::TransportHints().tcpNoDelay());
         sub_gnss_ = nh.subscribe<sensor_msgs::NavSatFix>(gpsTopic, 200, &MapLocalization::gnss_handler, this, ros::TransportHints().tcpNoDelay());
+        nh.param<bool>("lio_localizer/suppress_tf_during_map_extension", suppress_tf_during_map_extension_, true);
+        nh.param<std::string>("lio_localizer/map_extension_status_topic", map_extension_status_topic_, "/map_extension/status");
+        if (suppress_tf_during_map_extension_) {
+            sub_map_extension_status_ = nh.subscribe<std_msgs::String>(
+                map_extension_status_topic_, 5, &MapLocalization::map_extension_status_handler, this, ros::TransportHints().tcpNoDelay()
+            );
+        }
 
         // Register Publisher
         pub_initialized_pose_ = nh.advertise<nav_msgs::Odometry> ("lio_localizer/odometry/initialization", 1);
@@ -645,6 +654,10 @@ public:
     }
 
     void publish_transform(Eigen::Affine3d pose, ros::Time ros_time, std::string parent_frame, std::string child_frame) {
+        if (suppress_tf_during_map_extension_ && map_extension_active_) {
+            ROS_INFO_THROTTLE(2.0, "mapLocalization: suppress map->base_link TF during map extension");
+            return;
+        }
         static tf::TransformBroadcaster br;
         // tf 를 broad cast할 행렬
         tf::Transform transform;
@@ -652,6 +665,31 @@ public:
 
         // map - base_link의 tf를 broadcast
         br.sendTransform(tf::StampedTransform(transform, ros_time, parent_frame, child_frame));
+    }
+
+    void map_extension_status_handler(const std_msgs::String::ConstPtr &msg_ptr) {
+        std::string state = msg_ptr->data;
+        std::size_t sep = state.find('|');
+        if (sep != std::string::npos) {
+            state = state.substr(0, sep);
+        }
+        state.erase(
+            std::remove_if(state.begin(), state.end(), [](unsigned char c) { return std::isspace(c); }),
+            state.end()
+        );
+        bool active = (
+            state == "starting" ||
+            state == "running" ||
+            state == "saving" ||
+            state == "syncing" ||
+            state == "relocalizing" ||
+            state == "cancelling"
+        );
+        if (active != map_extension_active_) {
+            map_extension_active_ = active;
+            ROS_INFO("mapLocalization: map extension TF suppression %s (state=%s)",
+                     map_extension_active_ ? "on" : "off", state.c_str());
+        }
     }
 
     // Handler
@@ -906,6 +944,7 @@ public:
     ros::Subscriber sub_initial_pose_;
     ros::Subscriber sub_cloud_;
     ros::Subscriber sub_gnss_;
+    ros::Subscriber sub_map_extension_status_;
 
     ros::Publisher pub_initialized_pose_;
     ros::Publisher pub_optimized_pose_;
@@ -938,6 +977,9 @@ public:
     Eigen::Affine3d prev_pose_from_opt_ = Eigen::Affine3d::Identity();
     Eigen::Affine3d prev_pose_from_imu_ = Eigen::Affine3d::Identity();
     nav_msgs::Path optimized_pose_path_;
+    bool suppress_tf_during_map_extension_ = true;
+    bool map_extension_active_ = false;
+    std::string map_extension_status_topic_ = "/map_extension/status";
 
     // Gnss
     float f_ref_lat_ = 0;

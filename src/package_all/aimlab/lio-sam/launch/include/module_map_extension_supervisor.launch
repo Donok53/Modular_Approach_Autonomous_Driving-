@@ -29,6 +29,8 @@
   <arg name="require_stationary_start" default="true"/>
   <arg name="start_max_linear_speed_mps" default="0.12"/>
   <arg name="start_max_angular_speed_rps" default="0.20"/>
+  <arg name="publish_extension_tf" default="true"/>
+  <arg name="extension_tf_child_frame" default="base_link"/>
   <arg name="relocalize_localizer_on_finish" default="true"/>
   <arg name="restart_localizer_on_finish" default="true"/>
   <arg name="localizer_relocalize_timeout_s" default="10.0"/>
@@ -54,6 +56,8 @@
       <param name="require_stationary_start" value="$(arg require_stationary_start)"/>
       <param name="start_max_linear_speed_mps" value="$(arg start_max_linear_speed_mps)"/>
       <param name="start_max_angular_speed_rps" value="$(arg start_max_angular_speed_rps)"/>
+      <param name="publish_extension_tf" value="$(arg publish_extension_tf)"/>
+      <param name="extension_tf_child_frame" value="$(arg extension_tf_child_frame)"/>
       <param name="relocalize_localizer_on_finish" value="$(arg relocalize_localizer_on_finish)"/>
       <param name="restart_localizer_on_finish" value="$(arg restart_localizer_on_finish)"/>
       <param name="localizer_relocalize_timeout_s" value="$(arg localizer_relocalize_timeout_s)"/>

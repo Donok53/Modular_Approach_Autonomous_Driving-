@@ -14,6 +14,7 @@ from collections import deque
 
 import rospy
 import sensor_msgs.point_cloud2 as pc2
+import tf
 from geometry_msgs.msg import Point, PoseWithCovarianceStamped
 from lio_sam.srv import save_map, save_mapRequest
 from nav_msgs.msg import Odometry, Path
@@ -133,6 +134,10 @@ class MapExtensionSupervisor:
         self.localizer_reseed_yaw_tolerance_deg = max(
             1.0, float(rospy.get_param("~localizer_reseed_yaw_tolerance_deg", 35.0))
         )
+        self.publish_extension_tf = bool(rospy.get_param("~publish_extension_tf", True))
+        self.extension_tf_child_frame = str(
+            rospy.get_param("~extension_tf_child_frame", "base_link")
+        ).strip()
 
         self._lock = threading.RLock()
         self._launch_parent = None
@@ -166,6 +171,7 @@ class MapExtensionSupervisor:
         self.pub_initial_pose = rospy.Publisher(
             self.initial_pose_topic, PoseWithCovarianceStamped, queue_size=1
         )
+        self.tf_broadcaster = tf.TransformBroadcaster()
 
         self.sub_localizer = rospy.Subscriber(
             self.localizer_odom_topic, Odometry, self._on_localizer_odom, queue_size=10
@@ -606,11 +612,27 @@ class MapExtensionSupervisor:
             with self._lock:
                 self._last_transformed_odom = out
             self.pub_transformed_odom.publish(out)
+            self._publish_extension_tf(out)
 
     def _on_mapping_incremental_odom(self, msg):
         out = self._transformed_odom_msg(msg)
         if out is not None:
             self.pub_transformed_incremental_odom.publish(out)
+
+    def _publish_extension_tf(self, odom):
+        if not self.publish_extension_tf:
+            return
+        child = self.extension_tf_child_frame or odom.child_frame_id or "base_link"
+        p = odom.pose.pose.position
+        q = odom.pose.pose.orientation
+        stamp = odom.header.stamp if odom.header.stamp != rospy.Time(0) else rospy.Time.now()
+        self.tf_broadcaster.sendTransform(
+            (p.x, p.y, p.z),
+            (q.x, q.y, q.z, q.w),
+            stamp,
+            child,
+            self.fixed_frame,
+        )
 
     def _on_mapping_path(self, msg):
         with self._lock:
