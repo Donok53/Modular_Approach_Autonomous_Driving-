@@ -509,8 +509,8 @@
   <arg name="pointcloud_min_cluster_points" default="2"/>
   <arg name="pointcloud_visibility_hold_s" default="0.25"/>
   <arg name="use_pointcloud_avoidance_trigger" default="true"/>
-  <arg name="obstacle_block_margin_m" default="$(eval '0.12' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.08')"/>
-  <arg name="avoidance_trigger_margin_m" default="$(eval '0.12' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.08')"/>
+  <arg name="obstacle_block_margin_m" default="$(eval '0.12' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.04')"/>
+  <arg name="avoidance_trigger_margin_m" default="$(eval '0.12' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.04')"/>
   <arg name="avoidance_trigger_ahead_m" default="$(eval '8.5' if str(arg('localization_environment')).lower() == 'outdoor' else max(7.0, min(float(arg('local_replan_lookahead_m')), 8.0)))"/>
   <arg name="forward_path_obstacle_filter_enabled" default="true"/>
   <arg name="forward_path_obstacle_rear_tolerance_m" default="0.05"/>
@@ -558,9 +558,11 @@
   <arg name="cpp_replanner_self_filter_log_period_s" default="1.0"/>
   <arg name="cpp_replanner_global_progress_backtrack_points" default="20"/>
   <arg name="cpp_replanner_adaptive_obstacle_inflation_enabled" default="true"/>
-  <arg name="cpp_replanner_blocker_path_gate_extra_m" default="$(eval '0.30' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.08')"/>
-  <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="$(eval '0.04' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.02')"/>
-  <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + (0.08 if str(arg('indoor_precision_driving')).lower() != 'true' else 0.02))"/>
+  <arg name="cpp_replanner_blocker_path_gate_extra_m" default="$(eval '0.30' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.03')"/>
+  <arg name="cpp_replanner_relaxed_obstacle_block_margin_m" default="$(eval '0.04' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.00')"/>
+  <arg name="cpp_replanner_full_inflation_corridor_m" default="$(eval 0.5 * float(arg('robot_width_m')) + (0.08 if str(arg('indoor_precision_driving')).lower() != 'true' else 0.00))"/>
+  <arg name="cpp_replanner_side_wall_release_lateral_m" default="$(eval '0.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.60')"/>
+  <arg name="cpp_replanner_side_wall_release_forward_m" default="$(eval '0.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.60')"/>
   <arg name="sidestep_avoidance_enabled" default="true"/>
   <arg name="sidestep_avoidance_min_offset_m" default="$(eval '0.34' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.32')"/>
   <arg name="sidestep_avoidance_max_offset_m" default="$(eval '1.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.82')"/>
@@ -2130,6 +2132,8 @@
       <arg name="blocker_path_gate_extra_m" value="$(arg cpp_replanner_blocker_path_gate_extra_m)"/>
       <arg name="relaxed_obstacle_block_margin_m" value="$(arg cpp_replanner_relaxed_obstacle_block_margin_m)"/>
       <arg name="full_inflation_corridor_m" value="$(arg cpp_replanner_full_inflation_corridor_m)"/>
+      <arg name="side_wall_release_lateral_m" value="$(arg cpp_replanner_side_wall_release_lateral_m)"/>
+      <arg name="side_wall_release_forward_m" value="$(arg cpp_replanner_side_wall_release_forward_m)"/>
       <arg name="clear_detour_hold_s" value="$(arg avoidance_clear_detour_hold_s)"/>
       <arg name="keep_until_endpoint_distance_m" value="$(arg avoidance_keep_until_endpoint_distance_m)"/>
       <arg name="stabilize_cached_avoidance_enabled" value="$(arg stabilize_cached_avoidance_enabled)"/>

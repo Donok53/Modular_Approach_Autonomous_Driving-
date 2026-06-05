@@ -65,6 +65,8 @@ struct PlannerParams {
   double blocker_path_gate_extra_m{0.30};
   double relaxed_obstacle_block_margin_m{0.04};
   double full_inflation_corridor_m{0.37};
+  double side_wall_release_lateral_m{0.0};
+  double side_wall_release_forward_m{2.0};
 
   int max_expand{4500};
   int branch_max_rejoin_candidates{12};

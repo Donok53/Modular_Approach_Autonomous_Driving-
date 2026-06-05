@@ -545,6 +545,16 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("full_inflation_corridor_m",
              params_.full_inflation_corridor_m,
              params_.full_inflation_corridor_m);
+  pnh_.param("side_wall_release_lateral_m",
+             params_.side_wall_release_lateral_m,
+             params_.side_wall_release_lateral_m);
+  params_.side_wall_release_lateral_m =
+      std::max(0.0, params_.side_wall_release_lateral_m);
+  pnh_.param("side_wall_release_forward_m",
+             params_.side_wall_release_forward_m,
+             params_.side_wall_release_forward_m);
+  params_.side_wall_release_forward_m =
+      std::max(0.0, params_.side_wall_release_forward_m);
 
   AvoidanceStateMachine::Config smc;
   pnh_.param("trigger_confirm_cycles", smc.trigger_confirm_cycles,
@@ -974,10 +984,27 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     endpoint_dist = gridPathEndpointDistanceToXY(last_avoid_grid_path_, g, rx, ry);
   }
 
+  bool effective_nominal_blocked = nominal_blocked;
+  if (effective_nominal_blocked && !candidate.found &&
+      params_.side_wall_release_lateral_m > 0.0 &&
+      std::abs(blocker_ly) >= params_.side_wall_release_lateral_m &&
+      blocker_lx >= -0.05 &&
+      blocker_lx <= params_.side_wall_release_forward_m &&
+      !start_blocked) {
+    effective_nominal_blocked = false;
+    ROS_INFO_THROTTLE(
+        0.5,
+        "cpp planner | releasing side-wall hold blocker_lx=%.2f blocker_ly=%.2f "
+        "path_dist=%.2f lat_thr=%.2f fwd_thr=%.2f",
+        blocker_lx, blocker_ly, blocker_path_dist,
+        params_.side_wall_release_lateral_m,
+        params_.side_wall_release_forward_m);
+  }
+
   const bool locked_static_nearby =
       sm_->lockedStaticNearby(WorldXY{rx, ry}, locked_static_hold_radius_m_);
   PathMode mode = sm_->update(
-      nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
+      effective_nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
       endpoint_dist, cached_drivable, locked_static_nearby,
       now_sec);
   if (final_direct_goal && !nominal_blocked && mode == PathMode::FOLLOW_AVOIDANCE) {
@@ -1200,12 +1227,14 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
           std::chrono::steady_clock::now() - t_tick_start)
           .count();
   ROS_INFO_THROTTLE(1.0,
-      "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
+      "cpp planner | mode=%s nominal_blocked=%d effective_blocked=%d "
+      "candidate=%d cached_drivable=%d "
       "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d final_goal=%d "
       "near_dist=%.2f goal_dist=%.2f tail=%.2f blocker_path=%d "
       "blocker_lx=%.2f blocker_ly=%.2f blocker_path_dist=%.2f "
       "clusters=%zu obs_pts=%zu raw_obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
+      static_cast<int>(effective_nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
       static_cast<int>(start_blocked), static_cast<int>(return_to_global),

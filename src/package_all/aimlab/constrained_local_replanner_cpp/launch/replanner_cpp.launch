@@ -59,6 +59,8 @@
   <arg name="blocker_path_gate_extra_m" default="0.30"/>
   <arg name="relaxed_obstacle_block_margin_m" default="0.04"/>
   <arg name="full_inflation_corridor_m" default="0.37"/>
+  <arg name="side_wall_release_lateral_m" default="0.0"/>
+  <arg name="side_wall_release_forward_m" default="2.0"/>
 
   <arg name="trigger_confirm_cycles" default="2"/>
   <arg name="clear_detour_hold_s" default="1.20"/>
@@ -121,6 +123,8 @@
     <param name="blocker_path_gate_extra_m" value="$(arg blocker_path_gate_extra_m)"/>
     <param name="relaxed_obstacle_block_margin_m" value="$(arg relaxed_obstacle_block_margin_m)"/>
     <param name="full_inflation_corridor_m" value="$(arg full_inflation_corridor_m)"/>
+    <param name="side_wall_release_lateral_m" value="$(arg side_wall_release_lateral_m)"/>
+    <param name="side_wall_release_forward_m" value="$(arg side_wall_release_forward_m)"/>
     <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>
     <param name="clear_detour_hold_s" value="$(arg clear_detour_hold_s)"/>
     <param name="keep_until_endpoint_distance_m" value="$(arg keep_until_endpoint_distance_m)"/>
