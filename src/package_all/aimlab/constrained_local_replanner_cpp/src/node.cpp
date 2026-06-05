@@ -1152,7 +1152,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       sm_->lockedList(), clusters, frame, now_stamp,
       /*sphere_scale_m*/ 0.18, /*lifetime_s*/ 0.8));
   pub_blocking_obstacles_.publish(buildBlockingObstacleMarkers(
-      blocker_world, /*active*/ nominal_blocked, frame, now_stamp,
+      blocker_world, /*active*/ effective_nominal_blocked, frame, now_stamp,
       /*radius_m*/ params_.obstacle_block_margin_m +
           params_.footprint.half_width_m,
       /*lifetime_s*/ 0.8));
