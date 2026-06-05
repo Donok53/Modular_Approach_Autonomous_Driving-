@@ -37,6 +37,9 @@
   <arg name="global_path_clearance_m" default="0.02"/>
   <arg name="global_path_clearance_model" default="circumscribed"/>
   <arg name="global_path_drivable_area_is_center_safe" default="false"/>
+  <arg name="global_path_centering_enabled" default="false"/>
+  <arg name="global_path_centering_radius_m" default="0.42"/>
+  <arg name="global_path_centering_weight" default="1.0"/>
   <arg name="global_path_goal_tail_clearance_radius_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="enable_graph_fallback" default="false"/>
@@ -113,6 +116,9 @@
     <param name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
     <param name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
     <param name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
+    <param name="global_path_centering_enabled" value="$(arg global_path_centering_enabled)"/>
+    <param name="global_path_centering_radius_m" value="$(arg global_path_centering_radius_m)"/>
+    <param name="global_path_centering_weight" value="$(arg global_path_centering_weight)"/>
     <param name="global_path_goal_tail_clearance_radius_m" value="$(arg global_path_goal_tail_clearance_radius_m)"/>
     <param name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
     <param name="enable_graph_fallback" value="$(arg enable_graph_fallback)"/>

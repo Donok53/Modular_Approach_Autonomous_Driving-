@@ -356,7 +356,11 @@
   <arg name="global_path_clearance_m" default="$(eval max(0.0, float(arg('minimum_passage_clearance_radius_m')) - (0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')))))"/>
   <arg name="global_path_clearance_model" default="width"/>
   <arg name="global_path_drivable_area_is_center_safe" default="true"/>
+  <arg name="global_path_centering_enabled" default="$(eval 'false' if str(arg('indoor_precision_driving')).lower() != 'true' else 'true')"/>
+  <arg name="global_path_centering_radius_m" default="$(eval '0.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.42')"/>
+  <arg name="global_path_centering_weight" default="$(eval '0.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.2')"/>
   <arg name="global_path_goal_tail_clearance_radius_m" default="$(arg minimum_passage_clearance_radius_m)"/>
+  <arg name="global_path_simplify_epsilon_m" default="$(eval '0.20' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.08')"/>
   <arg name="drivable_grid_graph_fallback_max_goal_gap_m" default="1.0"/>
   <arg name="global_path_enable_graph_fallback" default="false"/>
   <arg name="drivable_grid_goal_extension_max_gap_m" default="0.60"/>
@@ -1024,6 +1028,9 @@
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
+        <arg name="global_path_centering_enabled" value="$(arg global_path_centering_enabled)"/>
+        <arg name="global_path_centering_radius_m" value="$(arg global_path_centering_radius_m)"/>
+        <arg name="global_path_centering_weight" value="$(arg global_path_centering_weight)"/>
         <arg name="global_path_goal_tail_clearance_radius_m" value="$(arg global_path_goal_tail_clearance_radius_m)"/>
         <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
         <arg name="enable_graph_fallback" value="$(arg global_path_enable_graph_fallback)"/>
@@ -1059,6 +1066,7 @@
         <arg name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
         <arg name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
         <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
+        <arg name="path_simplify_epsilon_m" value="$(arg global_path_simplify_epsilon_m)"/>
       </include>
     </group>
     <group unless="$(arg use_auto_osm)">
@@ -1089,6 +1097,9 @@
         <arg name="global_path_clearance_m" value="$(arg global_path_clearance_m)"/>
         <arg name="global_path_clearance_model" value="$(arg global_path_clearance_model)"/>
         <arg name="global_path_drivable_area_is_center_safe" value="$(arg global_path_drivable_area_is_center_safe)"/>
+        <arg name="global_path_centering_enabled" value="$(arg global_path_centering_enabled)"/>
+        <arg name="global_path_centering_radius_m" value="$(arg global_path_centering_radius_m)"/>
+        <arg name="global_path_centering_weight" value="$(arg global_path_centering_weight)"/>
         <arg name="global_path_goal_tail_clearance_radius_m" value="$(arg global_path_goal_tail_clearance_radius_m)"/>
         <arg name="drivable_grid_graph_fallback_max_goal_gap_m" value="$(arg drivable_grid_graph_fallback_max_goal_gap_m)"/>
         <arg name="enable_graph_fallback" value="$(arg global_path_enable_graph_fallback)"/>
@@ -1124,6 +1135,7 @@
         <arg name="candidate_route_switch_passable_clearance_m" value="$(arg candidate_route_switch_passable_clearance_m)"/>
         <arg name="candidate_route_switch_passable_length_margin_m" value="$(arg candidate_route_switch_passable_length_margin_m)"/>
         <arg name="candidate_route_replan_match_distance_m" value="$(arg candidate_route_replan_match_distance_m)"/>
+        <arg name="path_simplify_epsilon_m" value="$(arg global_path_simplify_epsilon_m)"/>
       </include>
     </group>
   </group>
