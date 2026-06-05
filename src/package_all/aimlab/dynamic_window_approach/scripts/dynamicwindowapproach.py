@@ -688,6 +688,9 @@ class DWAControl:
         self.local_tracking_turn_preview_limit_enabled = bool(
             rospy.get_param("~local_tracking_turn_preview_limit_enabled", False)
         )
+        self.local_tracking_turn_preview_segment_limit_enabled = bool(
+            rospy.get_param("~local_tracking_turn_preview_segment_limit_enabled", False)
+        )
         self.local_tracking_turn_preview_threshold_rad = math.radians(
             max(
                 1.0,
@@ -3948,7 +3951,10 @@ class DWAControl:
             segment_end_s = self.cum_len[target_seg_idx + 1]
             segment_step_scale = 0.65 if self.active_path_source == "global" else 0.95
             segment_target_step_cap = max(0.05, self.path_tracking_target_step_m)
-            if self.active_path_source == "local":
+            if (
+                self.active_path_source == "local"
+                and self.local_tracking_turn_preview_segment_limit_enabled
+            ):
                 segment_step_scale = min(
                     segment_step_scale,
                     self.local_tracking_segment_step_scale,

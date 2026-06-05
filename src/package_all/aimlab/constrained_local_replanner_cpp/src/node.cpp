@@ -554,6 +554,9 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("keep_until_endpoint_distance_m", smc.keep_until_endpoint_distance_m,
              smc.keep_until_endpoint_distance_m);
   keep_until_endpoint_distance_m_ = smc.keep_until_endpoint_distance_m;
+  pnh_.param("stabilize_cached_avoidance_enabled",
+             stabilize_cached_avoidance_enabled_,
+             stabilize_cached_avoidance_enabled_);
   pnh_.param("locked_static_hit_radius_m", smc.locked_static_hit_radius_m,
              smc.locked_static_hit_radius_m);
   pnh_.param("locked_static_persistence_hits", smc.locked_static_persistence_hits,
@@ -1028,6 +1031,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
   switch (mode) {
     case PathMode::FOLLOW_AVOIDANCE: {
       const bool keep_cached_avoidance =
+          stabilize_cached_avoidance_enabled_ &&
           last_avoid_active_ && cached_drivable &&
           endpoint_dist > keep_until_endpoint_distance_m_;
       if (keep_cached_avoidance) {

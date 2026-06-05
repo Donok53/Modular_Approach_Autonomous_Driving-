@@ -63,6 +63,7 @@
   <arg name="trigger_confirm_cycles" default="2"/>
   <arg name="clear_detour_hold_s" default="1.20"/>
   <arg name="keep_until_endpoint_distance_m" default="0.80"/>
+  <arg name="stabilize_cached_avoidance_enabled" default="false"/>
   <arg name="locked_static_hit_radius_m" default="0.40"/>
   <arg name="locked_static_persistence_hits" default="3"/>
   <arg name="locked_static_hold_radius_m" default="0.60"/>
@@ -123,6 +124,7 @@
     <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>
     <param name="clear_detour_hold_s" value="$(arg clear_detour_hold_s)"/>
     <param name="keep_until_endpoint_distance_m" value="$(arg keep_until_endpoint_distance_m)"/>
+    <param name="stabilize_cached_avoidance_enabled" value="$(arg stabilize_cached_avoidance_enabled)"/>
     <param name="locked_static_hit_radius_m" value="$(arg locked_static_hit_radius_m)"/>
     <param name="locked_static_persistence_hits" value="$(arg locked_static_persistence_hits)"/>
     <param name="locked_static_hold_radius_m" value="$(arg locked_static_hold_radius_m)"/>

@@ -198,6 +198,7 @@
     <arg name="local_tracking_smoothing_enabled" default="true"/>
     <arg name="local_tracking_clear_uses_segment" default="true"/>
     <arg name="local_tracking_turn_preview_limit_enabled" default="true"/>
+    <arg name="local_tracking_turn_preview_segment_limit_enabled" default="false"/>
     <arg name="local_tracking_turn_preview_threshold_deg" default="14.0"/>
     <arg name="local_tracking_turn_preview_approach_m" default="0.65"/>
     <arg name="local_tracking_turn_preview_min_step_m" default="0.25"/>
@@ -1025,6 +1026,7 @@
         <param name="local_tracking_smoothing_enabled" value="$(arg local_tracking_smoothing_enabled)"/>
         <param name="local_tracking_clear_uses_segment" value="$(arg local_tracking_clear_uses_segment)"/>
         <param name="local_tracking_turn_preview_limit_enabled" value="$(arg local_tracking_turn_preview_limit_enabled)"/>
+        <param name="local_tracking_turn_preview_segment_limit_enabled" value="$(arg local_tracking_turn_preview_segment_limit_enabled)"/>
         <param name="local_tracking_turn_preview_threshold_deg" value="$(arg local_tracking_turn_preview_threshold_deg)"/>
         <param name="local_tracking_turn_preview_approach_m" value="$(arg local_tracking_turn_preview_approach_m)"/>
         <param name="local_tracking_turn_preview_min_step_m" value="$(arg local_tracking_turn_preview_min_step_m)"/>
