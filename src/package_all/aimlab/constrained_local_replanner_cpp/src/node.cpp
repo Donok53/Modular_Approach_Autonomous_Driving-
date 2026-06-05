@@ -465,6 +465,15 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("cloud_z_max_m", cloud_z_max_, cloud_z_max_);
   pnh_.param("cloud_world_z_min_m", cloud_world_z_min_, cloud_world_z_min_);
   pnh_.param("cloud_voxel_m", cloud_voxel_m_, cloud_voxel_m_);
+  double robot_width_m = params_.footprint.half_width_m * 2.0;
+  double robot_length_m = params_.footprint.half_length_m * 2.0;
+  pnh_.param("robot_width_m", robot_width_m, robot_width_m);
+  pnh_.param("robot_length_m", robot_length_m, robot_length_m);
+  pnh_.param("footprint_padding_m", params_.footprint.padding_m,
+             params_.footprint.padding_m);
+  params_.footprint.half_width_m = 0.5 * std::max(0.05, robot_width_m);
+  params_.footprint.half_length_m = 0.5 * std::max(0.05, robot_length_m);
+  params_.footprint.padding_m = std::max(0.0, params_.footprint.padding_m);
   pnh_.param("self_filter_enabled", self_filter_enabled_, self_filter_enabled_);
   pnh_.param("self_filter_front_m", self_filter_front_m_, self_filter_front_m_);
   pnh_.param("self_filter_rear_m", self_filter_rear_m_, self_filter_rear_m_);
