@@ -22,9 +22,6 @@
   <arg name="cloud_world_z_min_m" default="0.03"/>
   <arg name="cloud_voxel_m" default="0.10"/>
   <arg name="base_frame" default="base_link"/>
-  <arg name="robot_width_m" default="0.58"/>
-  <arg name="robot_length_m" default="0.612"/>
-  <arg name="footprint_padding_m" default="0.0"/>
   <arg name="self_filter_enabled" default="true"/>
   <arg name="self_filter_front_m" default="0.54"/>
   <arg name="self_filter_rear_m" default="0.46"/>
@@ -39,7 +36,6 @@
   <arg name="sidestep_preview_m" default="2.0"/>
   <arg name="sidestep_clearance_extra_m" default="0.03"/>
   <arg name="sidestep_entry_lead_m" default="0.45"/>
-  <arg name="sidestep_forward_margin_m" default="0.55"/>
   <arg name="rejoin_min_distance_m" default="1.4"/>
   <arg name="grid_unknown_is_occupied" default="true"/>
 
@@ -56,16 +52,12 @@
   <arg name="obstacle_drivable_filter_radius_m" default="0.0"/>
   <arg name="global_progress_backtrack_points" default="20"/>
   <arg name="adaptive_obstacle_inflation_enabled" default="true"/>
-  <arg name="blocker_path_gate_extra_m" default="0.30"/>
   <arg name="relaxed_obstacle_block_margin_m" default="0.04"/>
   <arg name="full_inflation_corridor_m" default="0.37"/>
-  <arg name="side_wall_release_lateral_m" default="0.0"/>
-  <arg name="side_wall_release_forward_m" default="2.0"/>
 
   <arg name="trigger_confirm_cycles" default="2"/>
   <arg name="clear_detour_hold_s" default="1.20"/>
   <arg name="keep_until_endpoint_distance_m" default="0.80"/>
-  <arg name="stabilize_cached_avoidance_enabled" default="false"/>
   <arg name="locked_static_hit_radius_m" default="0.40"/>
   <arg name="locked_static_persistence_hits" default="3"/>
   <arg name="locked_static_hold_radius_m" default="0.60"/>
@@ -88,9 +80,6 @@
     <param name="cloud_world_z_min_m" value="$(arg cloud_world_z_min_m)"/>
     <param name="cloud_voxel_m" value="$(arg cloud_voxel_m)"/>
     <param name="base_frame" value="$(arg base_frame)"/>
-    <param name="robot_width_m" value="$(arg robot_width_m)"/>
-    <param name="robot_length_m" value="$(arg robot_length_m)"/>
-    <param name="footprint_padding_m" value="$(arg footprint_padding_m)"/>
     <param name="self_filter_enabled" value="$(arg self_filter_enabled)"/>
     <param name="self_filter_front_m" value="$(arg self_filter_front_m)"/>
     <param name="self_filter_rear_m" value="$(arg self_filter_rear_m)"/>
@@ -104,7 +93,6 @@
     <param name="sidestep_preview_m" value="$(arg sidestep_preview_m)"/>
     <param name="sidestep_clearance_extra_m" value="$(arg sidestep_clearance_extra_m)"/>
     <param name="sidestep_entry_lead_m" value="$(arg sidestep_entry_lead_m)"/>
-    <param name="sidestep_forward_margin_m" value="$(arg sidestep_forward_margin_m)"/>
     <param name="rejoin_min_distance_m" value="$(arg rejoin_min_distance_m)"/>
     <param name="grid_unknown_is_occupied" value="$(arg grid_unknown_is_occupied)"/>
     <param name="branch_max_expand" value="$(arg branch_max_expand)"/>
@@ -120,15 +108,11 @@
     <param name="obstacle_drivable_filter_radius_m" value="$(arg obstacle_drivable_filter_radius_m)"/>
     <param name="global_progress_backtrack_points" value="$(arg global_progress_backtrack_points)"/>
     <param name="adaptive_obstacle_inflation_enabled" value="$(arg adaptive_obstacle_inflation_enabled)"/>
-    <param name="blocker_path_gate_extra_m" value="$(arg blocker_path_gate_extra_m)"/>
     <param name="relaxed_obstacle_block_margin_m" value="$(arg relaxed_obstacle_block_margin_m)"/>
     <param name="full_inflation_corridor_m" value="$(arg full_inflation_corridor_m)"/>
-    <param name="side_wall_release_lateral_m" value="$(arg side_wall_release_lateral_m)"/>
-    <param name="side_wall_release_forward_m" value="$(arg side_wall_release_forward_m)"/>
     <param name="trigger_confirm_cycles" value="$(arg trigger_confirm_cycles)"/>
     <param name="clear_detour_hold_s" value="$(arg clear_detour_hold_s)"/>
     <param name="keep_until_endpoint_distance_m" value="$(arg keep_until_endpoint_distance_m)"/>
-    <param name="stabilize_cached_avoidance_enabled" value="$(arg stabilize_cached_avoidance_enabled)"/>
     <param name="locked_static_hit_radius_m" value="$(arg locked_static_hit_radius_m)"/>
     <param name="locked_static_persistence_hits" value="$(arg locked_static_persistence_hits)"/>
     <param name="locked_static_hold_radius_m" value="$(arg locked_static_hold_radius_m)"/>

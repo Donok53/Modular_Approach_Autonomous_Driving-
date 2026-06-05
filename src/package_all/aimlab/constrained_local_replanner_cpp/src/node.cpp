@@ -465,15 +465,6 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("cloud_z_max_m", cloud_z_max_, cloud_z_max_);
   pnh_.param("cloud_world_z_min_m", cloud_world_z_min_, cloud_world_z_min_);
   pnh_.param("cloud_voxel_m", cloud_voxel_m_, cloud_voxel_m_);
-  double robot_width_m = params_.footprint.half_width_m * 2.0;
-  double robot_length_m = params_.footprint.half_length_m * 2.0;
-  pnh_.param("robot_width_m", robot_width_m, robot_width_m);
-  pnh_.param("robot_length_m", robot_length_m, robot_length_m);
-  pnh_.param("footprint_padding_m", params_.footprint.padding_m,
-             params_.footprint.padding_m);
-  params_.footprint.half_width_m = 0.5 * std::max(0.05, robot_width_m);
-  params_.footprint.half_length_m = 0.5 * std::max(0.05, robot_length_m);
-  params_.footprint.padding_m = std::max(0.0, params_.footprint.padding_m);
   pnh_.param("self_filter_enabled", self_filter_enabled_, self_filter_enabled_);
   pnh_.param("self_filter_front_m", self_filter_front_m_, self_filter_front_m_);
   pnh_.param("self_filter_rear_m", self_filter_rear_m_, self_filter_rear_m_);
@@ -497,8 +488,6 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              params_.sidestep_clearance_extra_m);
   pnh_.param("sidestep_entry_lead_m", params_.sidestep_entry_lead_m,
              params_.sidestep_entry_lead_m);
-  pnh_.param("sidestep_forward_margin_m", params_.sidestep_forward_margin_m,
-             params_.sidestep_forward_margin_m);
   pnh_.param("rejoin_min_distance_m", params_.rejoin_min_distance_m,
              params_.rejoin_min_distance_m);
   pnh_.param("grid_unknown_is_occupied", params_.grid_unknown_is_occupied,
@@ -534,27 +523,12 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
   pnh_.param("adaptive_obstacle_inflation_enabled",
              params_.adaptive_obstacle_inflation_enabled,
              params_.adaptive_obstacle_inflation_enabled);
-  pnh_.param("blocker_path_gate_extra_m",
-             params_.blocker_path_gate_extra_m,
-             params_.blocker_path_gate_extra_m);
-  params_.blocker_path_gate_extra_m =
-      std::max(0.0, params_.blocker_path_gate_extra_m);
   pnh_.param("relaxed_obstacle_block_margin_m",
              params_.relaxed_obstacle_block_margin_m,
              params_.relaxed_obstacle_block_margin_m);
   pnh_.param("full_inflation_corridor_m",
              params_.full_inflation_corridor_m,
              params_.full_inflation_corridor_m);
-  pnh_.param("side_wall_release_lateral_m",
-             params_.side_wall_release_lateral_m,
-             params_.side_wall_release_lateral_m);
-  params_.side_wall_release_lateral_m =
-      std::max(0.0, params_.side_wall_release_lateral_m);
-  pnh_.param("side_wall_release_forward_m",
-             params_.side_wall_release_forward_m,
-             params_.side_wall_release_forward_m);
-  params_.side_wall_release_forward_m =
-      std::max(0.0, params_.side_wall_release_forward_m);
 
   AvoidanceStateMachine::Config smc;
   pnh_.param("trigger_confirm_cycles", smc.trigger_confirm_cycles,
@@ -563,10 +537,6 @@ ReplannerNode::ReplannerNode(ros::NodeHandle nh, ros::NodeHandle pnh)
              smc.clear_detour_hold_s);
   pnh_.param("keep_until_endpoint_distance_m", smc.keep_until_endpoint_distance_m,
              smc.keep_until_endpoint_distance_m);
-  keep_until_endpoint_distance_m_ = smc.keep_until_endpoint_distance_m;
-  pnh_.param("stabilize_cached_avoidance_enabled",
-             stabilize_cached_avoidance_enabled_,
-             stabilize_cached_avoidance_enabled_);
   pnh_.param("locked_static_hit_radius_m", smc.locked_static_hit_radius_m,
              smc.locked_static_hit_radius_m);
   pnh_.param("locked_static_persistence_hits", smc.locked_static_persistence_hits,
@@ -884,7 +854,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     const double s = std::sin(yaw);
     const double path_gate_m =
         params_.footprint.half_width_m + params_.footprint.padding_m +
-        params_.obstacle_block_margin_m + params_.blocker_path_gate_extra_m;
+        params_.obstacle_block_margin_m + 0.30;
     for (const auto& cl : clusters) {
       const double dxy = std::hypot(cl.centroid.x - rx, cl.centroid.y - ry);
       if (dxy < nearest_dxy) {
@@ -984,27 +954,10 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
     endpoint_dist = gridPathEndpointDistanceToXY(last_avoid_grid_path_, g, rx, ry);
   }
 
-  bool effective_nominal_blocked = nominal_blocked;
-  if (effective_nominal_blocked && !candidate.found &&
-      params_.side_wall_release_lateral_m > 0.0 &&
-      std::abs(blocker_ly) >= params_.side_wall_release_lateral_m &&
-      blocker_lx >= -0.05 &&
-      blocker_lx <= params_.side_wall_release_forward_m &&
-      !start_blocked) {
-    effective_nominal_blocked = false;
-    ROS_INFO_THROTTLE(
-        0.5,
-        "cpp planner | releasing side-wall hold blocker_lx=%.2f blocker_ly=%.2f "
-        "path_dist=%.2f lat_thr=%.2f fwd_thr=%.2f",
-        blocker_lx, blocker_ly, blocker_path_dist,
-        params_.side_wall_release_lateral_m,
-        params_.side_wall_release_forward_m);
-  }
-
   const bool locked_static_nearby =
       sm_->lockedStaticNearby(WorldXY{rx, ry}, locked_static_hold_radius_m_);
   PathMode mode = sm_->update(
-      effective_nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
+      nominal_blocked, /*avoidance_candidate_available=*/candidate.found,
       endpoint_dist, cached_drivable, locked_static_nearby,
       now_sec);
   if (final_direct_goal && !nominal_blocked && mode == PathMode::FOLLOW_AVOIDANCE) {
@@ -1057,13 +1010,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
 
   switch (mode) {
     case PathMode::FOLLOW_AVOIDANCE: {
-      const bool keep_cached_avoidance =
-          stabilize_cached_avoidance_enabled_ &&
-          last_avoid_active_ && cached_drivable &&
-          endpoint_dist > keep_until_endpoint_distance_m_;
-      if (keep_cached_avoidance) {
-        emit_world_path(last_avoid_world_path_);
-      } else if (candidate.found) {
+      if (candidate.found) {
         emit_world_path(candidate_world);
         last_avoid_grid_path_ = candidate_cells;
         last_avoid_world_path_ = candidate_world;
@@ -1152,7 +1099,7 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
       sm_->lockedList(), clusters, frame, now_stamp,
       /*sphere_scale_m*/ 0.18, /*lifetime_s*/ 0.8));
   pub_blocking_obstacles_.publish(buildBlockingObstacleMarkers(
-      blocker_world, /*active*/ effective_nominal_blocked, frame, now_stamp,
+      blocker_world, /*active*/ nominal_blocked, frame, now_stamp,
       /*radius_m*/ params_.obstacle_block_margin_m +
           params_.footprint.half_width_m,
       /*lifetime_s*/ 0.8));
@@ -1227,14 +1174,12 @@ void ReplannerNode::timerCB(const ros::TimerEvent&) {
           std::chrono::steady_clock::now() - t_tick_start)
           .count();
   ROS_INFO_THROTTLE(1.0,
-      "cpp planner | mode=%s nominal_blocked=%d effective_blocked=%d "
-      "candidate=%d cached_drivable=%d "
+      "cpp planner | mode=%s nominal_blocked=%d candidate=%d cached_drivable=%d "
       "endpoint=%.2f locked_static=%d start_blocked=%d return_global=%d final_goal=%d "
       "near_dist=%.2f goal_dist=%.2f tail=%.2f blocker_path=%d "
       "blocker_lx=%.2f blocker_ly=%.2f blocker_path_dist=%.2f "
       "clusters=%zu obs_pts=%zu raw_obs_pts=%zu tick=%.1fms",
       mode_msg.data.c_str(), static_cast<int>(nominal_blocked),
-      static_cast<int>(effective_nominal_blocked),
       static_cast<int>(candidate.found), static_cast<int>(cached_drivable),
       endpoint_dist, static_cast<int>(locked_static_nearby),
       static_cast<int>(start_blocked), static_cast<int>(return_to_global),

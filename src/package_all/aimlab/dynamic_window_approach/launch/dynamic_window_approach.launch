@@ -198,7 +198,6 @@
     <arg name="local_tracking_smoothing_enabled" default="true"/>
     <arg name="local_tracking_clear_uses_segment" default="true"/>
     <arg name="local_tracking_turn_preview_limit_enabled" default="true"/>
-    <arg name="local_tracking_turn_preview_segment_limit_enabled" default="false"/>
     <arg name="local_tracking_turn_preview_threshold_deg" default="14.0"/>
     <arg name="local_tracking_turn_preview_approach_m" default="0.65"/>
     <arg name="local_tracking_turn_preview_min_step_m" default="0.25"/>
@@ -545,14 +544,6 @@
     <arg name="near_field_raw_stop_close_override_half_width_m" default="0.12"/>
     <arg name="near_field_raw_stop_close_override_min_points" default="3"/>
     <arg name="near_field_raw_stop_close_override_min_cells" default="2"/>
-    <arg name="near_field_raw_stop_side_contact_enabled" default="false"/>
-    <arg name="near_field_raw_stop_side_contact_min_x_m" default="-0.05"/>
-    <arg name="near_field_raw_stop_side_contact_max_x_m" default="0.75"/>
-    <arg name="near_field_raw_stop_side_contact_min_lateral_m" default="0.32"/>
-    <arg name="near_field_raw_stop_side_contact_half_width_m" default="0.36"/>
-    <arg name="near_field_raw_stop_side_contact_clearance_m" default="$(arg avoidance_hard_stop_distance)"/>
-    <arg name="near_field_raw_stop_side_contact_min_points" default="2"/>
-    <arg name="near_field_raw_stop_side_contact_min_cells" default="1"/>
     <arg name="near_field_raw_stop_downsample" default="1"/>
     <arg name="near_field_raw_stop_max_update_hz" default="0.0"/>
     <arg name="near_field_raw_stop_on_count" default="2"/>
@@ -1034,7 +1025,6 @@
         <param name="local_tracking_smoothing_enabled" value="$(arg local_tracking_smoothing_enabled)"/>
         <param name="local_tracking_clear_uses_segment" value="$(arg local_tracking_clear_uses_segment)"/>
         <param name="local_tracking_turn_preview_limit_enabled" value="$(arg local_tracking_turn_preview_limit_enabled)"/>
-        <param name="local_tracking_turn_preview_segment_limit_enabled" value="$(arg local_tracking_turn_preview_segment_limit_enabled)"/>
         <param name="local_tracking_turn_preview_threshold_deg" value="$(arg local_tracking_turn_preview_threshold_deg)"/>
         <param name="local_tracking_turn_preview_approach_m" value="$(arg local_tracking_turn_preview_approach_m)"/>
         <param name="local_tracking_turn_preview_min_step_m" value="$(arg local_tracking_turn_preview_min_step_m)"/>
@@ -1157,14 +1147,6 @@
         <param name="near_field_raw_stop_close_override_half_width_m" value="$(arg near_field_raw_stop_close_override_half_width_m)"/>
         <param name="near_field_raw_stop_close_override_min_points" value="$(arg near_field_raw_stop_close_override_min_points)"/>
         <param name="near_field_raw_stop_close_override_min_cells" value="$(arg near_field_raw_stop_close_override_min_cells)"/>
-        <param name="near_field_raw_stop_side_contact_enabled" value="$(arg near_field_raw_stop_side_contact_enabled)"/>
-        <param name="near_field_raw_stop_side_contact_min_x_m" value="$(arg near_field_raw_stop_side_contact_min_x_m)"/>
-        <param name="near_field_raw_stop_side_contact_max_x_m" value="$(arg near_field_raw_stop_side_contact_max_x_m)"/>
-        <param name="near_field_raw_stop_side_contact_min_lateral_m" value="$(arg near_field_raw_stop_side_contact_min_lateral_m)"/>
-        <param name="near_field_raw_stop_side_contact_half_width_m" value="$(arg near_field_raw_stop_side_contact_half_width_m)"/>
-        <param name="near_field_raw_stop_side_contact_clearance_m" value="$(arg near_field_raw_stop_side_contact_clearance_m)"/>
-        <param name="near_field_raw_stop_side_contact_min_points" value="$(arg near_field_raw_stop_side_contact_min_points)"/>
-        <param name="near_field_raw_stop_side_contact_min_cells" value="$(arg near_field_raw_stop_side_contact_min_cells)"/>
         <param name="near_field_raw_stop_downsample" value="$(arg near_field_raw_stop_downsample)"/>
         <param name="near_field_raw_stop_max_update_hz" value="$(arg near_field_raw_stop_max_update_hz)"/>
         <param name="near_field_raw_stop_on_count" value="$(arg near_field_raw_stop_on_count)"/>

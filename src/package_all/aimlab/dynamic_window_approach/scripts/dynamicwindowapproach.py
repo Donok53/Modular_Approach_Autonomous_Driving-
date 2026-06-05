@@ -324,59 +324,6 @@ class DWAControl:
         self.near_field_raw_stop_close_override_min_cells = max(
             1, int(rospy.get_param("~near_field_raw_stop_close_override_min_cells", 2))
         )
-        self.near_field_raw_stop_side_contact_enabled = bool(
-            rospy.get_param("~near_field_raw_stop_side_contact_enabled", False)
-        )
-        side_default_min_x = -0.05
-        side_default_max_x = max(
-            self.near_field_raw_stop_max_x_m,
-            self.robot_half_length_m + self.footprint_padding_m + 0.25,
-        )
-        self.near_field_raw_stop_side_contact_min_x_m = float(
-            rospy.get_param("~near_field_raw_stop_side_contact_min_x_m", side_default_min_x)
-        )
-        self.near_field_raw_stop_side_contact_max_x_m = max(
-            self.near_field_raw_stop_side_contact_min_x_m + 0.05,
-            float(
-                rospy.get_param(
-                    "~near_field_raw_stop_side_contact_max_x_m",
-                    side_default_max_x,
-                )
-            ),
-        )
-        self.near_field_raw_stop_side_contact_min_lateral_m = max(
-            0.0,
-            float(
-                rospy.get_param(
-                    "~near_field_raw_stop_side_contact_min_lateral_m",
-                    self.robot_half_width_m + max(0.0, self.footprint_padding_m - 0.02),
-                )
-            ),
-        )
-        self.near_field_raw_stop_side_contact_half_width_m = max(
-            self.near_field_raw_stop_side_contact_min_lateral_m + 0.01,
-            float(
-                rospy.get_param(
-                    "~near_field_raw_stop_side_contact_half_width_m",
-                    self.robot_half_width_m + self.footprint_padding_m + 0.02,
-                )
-            ),
-        )
-        self.near_field_raw_stop_side_contact_clearance_m = max(
-            0.0,
-            float(
-                rospy.get_param(
-                    "~near_field_raw_stop_side_contact_clearance_m",
-                    self.avoidance_hard_stop_distance,
-                )
-            ),
-        )
-        self.near_field_raw_stop_side_contact_min_points = max(
-            1, int(rospy.get_param("~near_field_raw_stop_side_contact_min_points", 2))
-        )
-        self.near_field_raw_stop_side_contact_min_cells = max(
-            1, int(rospy.get_param("~near_field_raw_stop_side_contact_min_cells", 1))
-        )
         self.near_field_raw_stop_downsample = max(
             1, int(rospy.get_param("~near_field_raw_stop_downsample", 1))
         )
@@ -603,9 +550,6 @@ class DWAControl:
         self._near_field_raw_stop_last_min_z = float("inf")
         self._near_field_raw_stop_last_max_z = float("-inf")
         self._near_field_raw_stop_last_self_removed = 0
-        self._near_field_raw_stop_last_side_count = 0
-        self._near_field_raw_stop_last_side_cells = 0
-        self._near_field_raw_stop_hard_contact_blocked = False
         self._near_field_raw_stop_last_log = rospy.Time(0)
         self._near_field_raw_stop_tf_warn_sec = 0.0
         self._near_field_raw_stop_last_frame = ""
@@ -743,9 +687,6 @@ class DWAControl:
         )
         self.local_tracking_turn_preview_limit_enabled = bool(
             rospy.get_param("~local_tracking_turn_preview_limit_enabled", False)
-        )
-        self.local_tracking_turn_preview_segment_limit_enabled = bool(
-            rospy.get_param("~local_tracking_turn_preview_segment_limit_enabled", False)
         )
         self.local_tracking_turn_preview_threshold_rad = math.radians(
             max(
@@ -1382,8 +1323,6 @@ class DWAControl:
             return True, "behavior_stop"
         if not (self.enable_emergency_stop and self.emergency_blocked):
             return False, "not_emergency"
-        if self._near_field_raw_stop_hard_contact_blocked:
-            return True, "near_field_hard_contact"
         if self._raw_immediate_contact_blocked:
             return True, "raw_immediate_contact"
         if math.isfinite(self.front_obstacle_clearance):
@@ -1517,8 +1456,6 @@ class DWAControl:
             or (self._near_field_raw_stop_blocked and near_raw_fresh)
             or near_raw_tf_failsafe
         )
-        if not near_raw_blocked:
-            self._near_field_raw_stop_hard_contact_blocked = False
 
         raw_fallback_blocked = self.enable_raw_cloud_fallback_stop and (
             self._raw_immediate_contact_blocked
@@ -1534,13 +1471,10 @@ class DWAControl:
             if self.overlay_box_blocked:
                 source_parts.append("overlay_boxes")
             if near_raw_blocked:
-                if (near_raw_tf_failsafe and not (near_raw_hold_active
-                                                   or self._near_field_raw_stop_blocked)):
-                    source_parts.append("near_raw_tf_failsafe")
-                elif self._near_field_raw_stop_hard_contact_blocked:
-                    source_parts.append("near_raw_hard_contact")
-                else:
-                    source_parts.append("near_raw")
+                source_parts.append("near_raw_tf_failsafe" if near_raw_tf_failsafe
+                                    and not (near_raw_hold_active
+                                             or self._near_field_raw_stop_blocked)
+                                    else "near_raw")
             if self._raw_immediate_contact_blocked:
                 source_parts.append("raw_intrusion")
             elif raw_fallback_blocked:
@@ -1553,13 +1487,10 @@ class DWAControl:
             )
             source_parts = []
             if near_raw_blocked:
-                if (near_raw_tf_failsafe and not (near_raw_hold_active
-                                                   or self._near_field_raw_stop_blocked)):
-                    source_parts.append("near_raw_tf_failsafe")
-                elif self._near_field_raw_stop_hard_contact_blocked:
-                    source_parts.append("near_raw_hard_contact")
-                else:
-                    source_parts.append("near_raw")
+                source_parts.append("near_raw_tf_failsafe" if near_raw_tf_failsafe
+                                    and not (near_raw_hold_active
+                                             or self._near_field_raw_stop_blocked)
+                                    else "near_raw")
             if self._raw_immediate_contact_blocked:
                 source_parts.append("raw_intrusion")
             elif self._raw_emergency_band_blocked:
@@ -2009,9 +1940,6 @@ class DWAControl:
                 self._near_field_raw_stop_last_min_z = float("inf")
                 self._near_field_raw_stop_last_max_z = float("-inf")
                 self._near_field_raw_stop_last_self_removed = 0
-                self._near_field_raw_stop_last_side_count = 0
-                self._near_field_raw_stop_last_side_cells = 0
-                self._near_field_raw_stop_hard_contact_blocked = False
                 self._near_field_raw_stop_last_process_ms = (
                     time.monotonic() - process_start
                 ) * 1000.0
@@ -2030,17 +1958,6 @@ class DWAControl:
             footprint_front = self.robot_half_length_m + self.footprint_padding_m
             stop_detected = False
             close_override_detected = False
-            side_contact_points = []
-            side_contact_cells = set()
-            side_contact_count = 0
-            side_contact_cell_count = 0
-            side_contact_min_x = float("inf")
-            side_contact_max_x = float("-inf")
-            side_contact_min_y = float("inf")
-            side_contact_max_y = float("-inf")
-            side_contact_min_z = float("inf")
-            side_contact_max_z = float("-inf")
-            side_contact_detected = False
             points = self._pointcloud_xyz_numpy(
                 msg, downsample=self.near_field_raw_stop_downsample
             )
@@ -2060,32 +1977,6 @@ class DWAControl:
                     x, y, z = self._transform_point_xyz(
                         transform_mat, float(x), float(y), float(z)
                     )
-                    if self.near_field_raw_stop_side_contact_enabled:
-                        abs_y = abs(y)
-                        if (
-                            self.near_field_raw_stop_side_contact_min_x_m
-                            <= x
-                            <= self.near_field_raw_stop_side_contact_max_x_m
-                            and self.near_field_raw_stop_side_contact_min_lateral_m
-                            <= abs_y
-                            <= self.near_field_raw_stop_side_contact_half_width_m
-                            and self.near_field_raw_stop_min_z_m
-                            <= z
-                            <= self.near_field_raw_stop_max_z_m
-                        ):
-                            side_contact_points.append((x, y, z))
-                            side_contact_cells.add(
-                                (
-                                    int(math.floor(x / self.near_field_raw_stop_cell_size_m)),
-                                    int(math.floor(y / self.near_field_raw_stop_cell_size_m)),
-                                )
-                            )
-                            side_contact_min_x = min(side_contact_min_x, x)
-                            side_contact_max_x = max(side_contact_max_x, x)
-                            side_contact_min_y = min(side_contact_min_y, y)
-                            side_contact_max_y = max(side_contact_max_y, y)
-                            side_contact_min_z = min(side_contact_min_z, z)
-                            side_contact_max_z = max(side_contact_max_z, z)
                     in_roi_bounds = (
                         self.near_field_raw_stop_min_x_m
                         <= x
@@ -2160,38 +2051,10 @@ class DWAControl:
                     ),
                     default=float("inf"),
                 )
-                side_contact_count = len(side_contact_points)
-                side_contact_cell_count = len(side_contact_cells)
             else:
                 finite_mask = np.isfinite(points).all(axis=1)
                 points = points[finite_mask]
                 points = self._transform_points_xyz(transform_mat, points)
-                if self.near_field_raw_stop_side_contact_enabled and points.size > 0:
-                    abs_y_all = np.abs(points[:, 1])
-                    side_mask = (
-                        (points[:, 0] >= self.near_field_raw_stop_side_contact_min_x_m)
-                        & (points[:, 0] <= self.near_field_raw_stop_side_contact_max_x_m)
-                        & (abs_y_all >= self.near_field_raw_stop_side_contact_min_lateral_m)
-                        & (abs_y_all <= self.near_field_raw_stop_side_contact_half_width_m)
-                        & (points[:, 2] >= self.near_field_raw_stop_min_z_m)
-                        & (points[:, 2] <= self.near_field_raw_stop_max_z_m)
-                    )
-                    side_arr = points[side_mask]
-                    side_contact_count = int(side_arr.shape[0])
-                    if side_contact_count > 0:
-                        side_contact_min_x = float(np.min(side_arr[:, 0]))
-                        side_contact_max_x = float(np.max(side_arr[:, 0]))
-                        side_contact_min_y = float(np.min(side_arr[:, 1]))
-                        side_contact_max_y = float(np.max(side_arr[:, 1]))
-                        side_contact_min_z = float(np.min(side_arr[:, 2]))
-                        side_contact_max_z = float(np.max(side_arr[:, 2]))
-                        side_cells = np.floor(
-                            side_arr[:, :2] / self.near_field_raw_stop_cell_size_m
-                        ).astype(np.int32)
-                        side_contact_cell_count = int(
-                            np.unique(side_cells, axis=0).shape[0]
-                        )
-                        side_contact_points = self._points_to_publish_xyz(side_arr)
                 roi_candidate_mask = (
                     (points[:, 0] >= self.near_field_raw_stop_min_x_m)
                     & (points[:, 0] <= self.near_field_raw_stop_max_x_m)
@@ -2255,35 +2118,8 @@ class DWAControl:
                     close_override_cell_count = 0
                     close_override_min_x = float("inf")
 
-            central_front_clearance = (
-                min_x - footprint_front if math.isfinite(min_x) else float("inf")
-            )
-            side_contact_front_clearance = (
-                side_contact_min_x - footprint_front
-                if math.isfinite(side_contact_min_x)
-                else float("inf")
-            )
-            side_contact_detected = (
-                side_contact_count >= self.near_field_raw_stop_side_contact_min_points
-                and side_contact_cell_count >= self.near_field_raw_stop_side_contact_min_cells
-                and side_contact_front_clearance
-                <= self.near_field_raw_stop_side_contact_clearance_m
-            )
-            combined_min_x = min(min_x, side_contact_min_x)
-            combined_max_x = max(hit_max_x, side_contact_max_x)
-            combined_min_y = min(hit_min_y, side_contact_min_y)
-            combined_max_y = max(hit_max_y, side_contact_max_y)
-            combined_min_z = min(hit_min_z, side_contact_min_z)
-            combined_max_z = max(hit_max_z, side_contact_max_z)
-            combined_hit_count = hit_count + side_contact_count
-            combined_cell_count = cell_count + side_contact_cell_count
-            if side_contact_points:
-                hit_points.extend(side_contact_points)
-
             min_front_clearance = (
-                combined_min_x - footprint_front
-                if math.isfinite(combined_min_x)
-                else float("inf")
+                min_x - footprint_front if math.isfinite(min_x) else float("inf")
             )
             close_override_front_clearance = (
                 close_override_min_x - footprint_front
@@ -2311,27 +2147,18 @@ class DWAControl:
             )
             detected = detected or close_override_detected
             stop_detected = (
-                side_contact_detected
-                or (
-                    detected
-                    and central_front_clearance <= self.emergency_stop_distance
-                    and (close_override_detected or passable_gap_blocked)
-                )
+                detected
+                and min_front_clearance <= self.emergency_stop_distance
+                and (close_override_detected or passable_gap_blocked)
             )
             if stop_detected:
-                if side_contact_detected:
-                    self._near_field_raw_stop_last_reason = "side_contact"
-                else:
-                    self._near_field_raw_stop_last_reason = (
-                        "close_override" if close_override_detected else "standard"
-                    )
+                self._near_field_raw_stop_last_reason = (
+                    "close_override" if close_override_detected else "standard"
+                )
             elif detected and math.isfinite(min_front_clearance):
                 self._near_field_raw_stop_last_reason = "passable_gap"
             else:
                 self._near_field_raw_stop_last_reason = "clear"
-            self._near_field_raw_stop_hard_contact_blocked = bool(
-                side_contact_detected or close_override_detected
-            )
             if stop_detected:
                 self._near_field_raw_stop_on += 1
                 self._near_field_raw_stop_off = 0
@@ -2358,17 +2185,15 @@ class DWAControl:
             # can carry sensor/header stamps that drift from ROS time; RViz would
             # still show the STOP marker while the controller considered it stale.
             self._near_field_raw_stop_last_stamp = rospy.Time.now()
-            self._near_field_raw_stop_last_count = combined_hit_count
-            self._near_field_raw_stop_last_cells = combined_cell_count
-            self._near_field_raw_stop_last_min_x = combined_min_x
-            self._near_field_raw_stop_last_max_x = combined_max_x
-            self._near_field_raw_stop_last_min_y = combined_min_y
-            self._near_field_raw_stop_last_max_y = combined_max_y
-            self._near_field_raw_stop_last_min_z = combined_min_z
-            self._near_field_raw_stop_last_max_z = combined_max_z
+            self._near_field_raw_stop_last_count = hit_count
+            self._near_field_raw_stop_last_cells = cell_count
+            self._near_field_raw_stop_last_min_x = min_x
+            self._near_field_raw_stop_last_max_x = hit_max_x
+            self._near_field_raw_stop_last_min_y = hit_min_y
+            self._near_field_raw_stop_last_max_y = hit_max_y
+            self._near_field_raw_stop_last_min_z = hit_min_z
+            self._near_field_raw_stop_last_max_z = hit_max_z
             self._near_field_raw_stop_last_self_removed = self_removed_near
-            self._near_field_raw_stop_last_side_count = side_contact_count
-            self._near_field_raw_stop_last_side_cells = side_contact_cell_count
             self._near_field_raw_stop_last_process_ms = (
                 time.monotonic() - process_start
             ) * 1000.0
@@ -2382,28 +2207,22 @@ class DWAControl:
                 ).to_sec() >= self.near_field_raw_stop_log_period_s:
                     self._near_field_raw_stop_last_log = now
                     rospy.loginfo(
-                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d side=%d/%d self_rm=%d min_x=%.2f clearance=%.2f hit_x=[%.2f..%.2f] hit_y=[%.2f..%.2f] hit_z=[%.2f..%.2f] stop_dist=%.2f close_override=%.2f side_band=[x %.2f..%.2f y %.2f..%.2f] process=%.1fms roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
+                        "near_field_raw_stop: %s reason=%s pts=%d cells=%d self_rm=%d min_x=%.2f clearance=%.2f hit_x=[%.2f..%.2f] hit_y=[%.2f..%.2f] hit_z=[%.2f..%.2f] stop_dist=%.2f close_override=%.2f process=%.1fms roi=[x %.2f..%.2f y +/-%.2f z %.2f..%.2f] topic=%s frame=%s tf=%s",
                         "STOP" if self._near_field_raw_stop_blocked else "clear",
                         self._near_field_raw_stop_last_reason,
-                        combined_hit_count,
-                        combined_cell_count,
-                        side_contact_count,
-                        side_contact_cell_count,
+                        hit_count,
+                        cell_count,
                         self_removed_near,
-                        combined_min_x if math.isfinite(combined_min_x) else float("inf"),
+                        min_x if math.isfinite(min_x) else float("inf"),
                         min_front_clearance if math.isfinite(min_front_clearance) else float("inf"),
-                        combined_min_x if math.isfinite(combined_min_x) else float("inf"),
-                        combined_max_x if math.isfinite(combined_max_x) else float("inf"),
-                        combined_min_y if math.isfinite(combined_min_y) else float("inf"),
-                        combined_max_y if math.isfinite(combined_max_y) else float("inf"),
-                        combined_min_z if math.isfinite(combined_min_z) else float("inf"),
-                        combined_max_z if math.isfinite(combined_max_z) else float("inf"),
+                        min_x if math.isfinite(min_x) else float("inf"),
+                        hit_max_x if math.isfinite(hit_max_x) else float("inf"),
+                        hit_min_y if math.isfinite(hit_min_y) else float("inf"),
+                        hit_max_y if math.isfinite(hit_max_y) else float("inf"),
+                        hit_min_z if math.isfinite(hit_min_z) else float("inf"),
+                        hit_max_z if math.isfinite(hit_max_z) else float("inf"),
                         self.emergency_stop_distance,
                         self.near_field_raw_stop_close_override_distance_m,
-                        self.near_field_raw_stop_side_contact_min_x_m,
-                        self.near_field_raw_stop_side_contact_max_x_m,
-                        self.near_field_raw_stop_side_contact_min_lateral_m,
-                        self.near_field_raw_stop_side_contact_half_width_m,
                         self._near_field_raw_stop_last_process_ms,
                         self.near_field_raw_stop_min_x_m,
                         self.near_field_raw_stop_max_x_m,
@@ -3480,23 +3299,18 @@ class DWAControl:
             return 0.0, (1.0, 0.0)
         return math.atan2(dy, dx), (dx / seg_len, dy / seg_len)
 
-    def _limit_local_clear_preview_for_turn(self, base_s, s_target, search_s=None):
+    def _limit_local_clear_preview_for_turn(self, base_s, s_target):
         if (
             (not self.local_tracking_turn_preview_limit_enabled)
             or self.active_path_source != "local"
+            or self.current_path_mode != "follow_local"
             or len(self.seg_lens) < 2
             or s_target <= base_s + 1e-6
         ):
             return s_target, None
 
-        if search_s is None:
-            search_s = s_target
-        else:
-            search_s = max(float(search_s), s_target)
-        search_s = min(self.s_total, max(base_s, search_s))
-
         start_idx = self._segment_index_at_s(base_s)
-        end_idx = self._segment_index_at_s(search_s)
+        end_idx = self._segment_index_at_s(s_target)
         max_idx = min(end_idx, len(self.seg_lens) - 2)
         for seg_idx in range(start_idx, max_idx + 1):
             heading, _t_hat = self._segment_heading_tangent(seg_idx)
@@ -3518,7 +3332,6 @@ class DWAControl:
                 "turn_idx": seg_idx + 1,
                 "turn_angle_deg": math.degrees(turn_angle),
                 "dist_to_turn_m": dist_to_turn,
-                "search_s": search_s,
             }
 
         return s_target, None
@@ -4129,10 +3942,7 @@ class DWAControl:
             segment_end_s = self.cum_len[target_seg_idx + 1]
             segment_step_scale = 0.65 if self.active_path_source == "global" else 0.95
             segment_target_step_cap = max(0.05, self.path_tracking_target_step_m)
-            if (
-                self.active_path_source == "local"
-                and self.local_tracking_turn_preview_segment_limit_enabled
-            ):
+            if self.active_path_source == "local":
                 segment_step_scale = min(
                     segment_step_scale,
                     self.local_tracking_segment_step_scale,
@@ -4153,24 +3963,6 @@ class DWAControl:
                 self.s_total,
                 min(segment_limit_s, max(base_s, s_proj + segment_target_step)),
             )
-            if self.active_path_source == "local":
-                turn_search_s = min(
-                    self.s_total,
-                    base_s
-                    + max(
-                        segment_target_step,
-                        self.local_tracking_turn_preview_approach_m
-                        + self.local_tracking_target_step_cap_m,
-                    ),
-                )
-                limited_s, turn_limit_debug = self._limit_local_clear_preview_for_turn(
-                    base_s,
-                    s_target,
-                    search_s=turn_search_s,
-                )
-                if turn_limit_debug is not None and limited_s < s_target - 1e-6:
-                    s_target = limited_s
-                    target_policy = "local_segment_turn_approach"
 
         tx, ty, t_hat = self._interp_xy_smoothed_tangent_at_s(s_target)
 
@@ -4218,9 +4010,6 @@ class DWAControl:
         if self.active_path_source == "none":
             self._emergency_bypass_debug = {"reject": "no_source"}
             return False
-        if self._near_field_raw_stop_hard_contact_blocked:
-            self._emergency_bypass_debug = {"reject": "near_field_hard_contact"}
-            return False
         if self._raw_immediate_contact_blocked:
             self._emergency_bypass_debug = {"reject": "raw_immediate_contact"}
             return False
@@ -4264,7 +4053,7 @@ class DWAControl:
         soft_clearance_band = (
             active_avoidance
             and clearance_band_blocked
-            and near_stop_reason not in ("close_override", "side_contact")
+            and near_stop_reason != "close_override"
         )
         # Stale-path guard: refuse bypass when we're riding an old fast-reuse
         # avoidance path (observed age 2-3 s in the field). The bypass logic

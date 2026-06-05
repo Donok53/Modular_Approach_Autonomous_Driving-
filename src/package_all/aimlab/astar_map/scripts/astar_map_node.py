@@ -164,15 +164,6 @@ class AStarPlanner:
         self.global_path_drivable_area_is_center_safe = bool(
             rospy.get_param("~global_path_drivable_area_is_center_safe", False)
         )
-        self.global_path_centering_enabled = bool(
-            rospy.get_param("~global_path_centering_enabled", False)
-        )
-        self.global_path_centering_radius_m = max(
-            0.0, float(rospy.get_param("~global_path_centering_radius_m", 0.42))
-        )
-        self.global_path_centering_weight = max(
-            0.0, float(rospy.get_param("~global_path_centering_weight", 1.0))
-        )
         self.global_path_goal_tail_clearance_radius_m = float(
             rospy.get_param("~global_path_goal_tail_clearance_radius_m", -1.0)
         )
@@ -489,7 +480,7 @@ class AStarPlanner:
                     self.global_obstacle_overlay_clearance_extra_m,
                 )
             rospy.loginfo(
-                "[astar] global grid planner: %s, candidates=%d, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s centering=%s radius=%.2fm weight=%.2f",
+                "[astar] global grid planner: %s, candidates=%d, center_safe_radius=%.3f m, goal_tail_radius=%.3f m, mask_mode=%s",
                 self._global_grid_planner_label(),
                 self.global_path_candidate_count,
                 self._global_path_clearance_radius_m(),
@@ -499,9 +490,6 @@ class AStarPlanner:
                     if self.global_path_drivable_area_is_center_safe
                     else "shrink-by-%s" % self.global_path_clearance_model
                 ),
-                "on" if self.global_path_centering_enabled else "off",
-                self.global_path_centering_radius_m,
-                self.global_path_centering_weight,
             )
             rospy.loginfo(
                 "[astar] candidate route policy: inner_fanout=%.2fm prefer_passable=%s passable_clearance=%.2fm shorter_margin=%.2fm",
@@ -2724,74 +2712,9 @@ class AStarPlanner:
             allow_diagonal=allow_diagonal,
             cell_penalties=cell_penalties,
         )
-        if grid_path and allow_diagonal and not cell_penalties:
+        if grid_path and allow_diagonal:
             grid_path = self._simplify_grid_path(grid_path, blocked)
         return grid_path, planner_name
-
-    def _build_global_centering_penalties(self, blocked, g):
-        if (
-            (not self.global_path_centering_enabled)
-            or self.global_path_centering_radius_m <= 1e-6
-            or self.global_path_centering_weight <= 1e-6
-            or not blocked
-            or not blocked[0]
-        ):
-            return None
-
-        h = len(blocked)
-        w = len(blocked[0])
-        res = max(1e-6, float(g.info.resolution))
-        max_dist_cells = max(1.0, self.global_path_centering_radius_m / res)
-        inf = float("inf")
-        dist = [[inf for _ in range(w)] for _ in range(h)]
-        pq = []
-        free_count = 0
-
-        for gy in range(h):
-            for gx in range(w):
-                if blocked[gy][gx]:
-                    dist[gy][gx] = 0.0
-                    heapq.heappush(pq, (0.0, gx, gy))
-                else:
-                    free_count += 1
-        if free_count <= 0 or not pq:
-            return None
-
-        neighbors = (
-            (-1, 0, 1.0), (1, 0, 1.0), (0, -1, 1.0), (0, 1, 1.0),
-            (-1, -1, math.sqrt(2.0)), (-1, 1, math.sqrt(2.0)),
-            (1, -1, math.sqrt(2.0)), (1, 1, math.sqrt(2.0)),
-        )
-        while pq:
-            d, gx, gy = heapq.heappop(pq)
-            if d > dist[gy][gx] + 1e-9:
-                continue
-            if d >= max_dist_cells:
-                continue
-            for dx, dy, step in neighbors:
-                nx = gx + dx
-                ny = gy + dy
-                if nx < 0 or ny < 0 or nx >= w or ny >= h:
-                    continue
-                nd = d + step
-                if nd >= dist[ny][nx] or nd > max_dist_cells:
-                    continue
-                dist[ny][nx] = nd
-                heapq.heappush(pq, (nd, nx, ny))
-
-        penalties = {}
-        for gy in range(h):
-            for gx in range(w):
-                if blocked[gy][gx]:
-                    continue
-                d = dist[gy][gx]
-                if not math.isfinite(d) or d >= max_dist_cells:
-                    continue
-                ratio = max(0.0, min(1.0, d / max_dist_cells))
-                penalty = self.global_path_centering_weight * (1.0 - ratio) ** 2
-                if penalty > 1e-6:
-                    penalties[(gx, gy)] = penalty
-        return penalties or None
 
     @staticmethod
     def _grid_path_similarity(path_a, path_b):
@@ -2876,7 +2799,6 @@ class AStarPlanner:
         primary_path,
         alt_start_cells=None,
         alt_goal_cells=None,
-        base_cell_penalties=None,
     ):
         if not primary_path:
             return []
@@ -2889,7 +2811,7 @@ class AStarPlanner:
         if self.global_path_candidate_count <= 1:
             return candidate_specs
 
-        penalty_map = dict(base_cell_penalties) if base_cell_penalties else {}
+        penalty_map = {}
         offsets = self._candidate_penalty_offsets(self.drivable_grid)
         self._accumulate_candidate_penalties(penalty_map, primary_path, offsets)
         planner_mode = "astar4" if self.global_path_grid_planner == "astar4" else "astar8"
@@ -3117,7 +3039,7 @@ class AStarPlanner:
         else:
             goal_tail_blocked = blocked
 
-        def _snap_and_plan(blocked_grid, cell_penalties=None):
+        def _snap_and_plan(blocked_grid):
             snapped_start = self._nearest_free_start_grid_cell(g, blocked_grid, start_xy, goal_xy)
             snapped_goal = self._nearest_free_grid_cell(blocked_grid, goal_raw)
             if snapped_start is None or snapped_goal is None:
@@ -3126,14 +3048,10 @@ class AStarPlanner:
                 blocked_grid,
                 snapped_start,
                 snapped_goal,
-                cell_penalties=cell_penalties,
             )
             return snapped_start, snapped_goal, planned_grid_path, planned_planner_name
 
-        centering_penalties = self._build_global_centering_penalties(blocked, g)
-        start_cell, goal_cell, grid_path, planner_name = _snap_and_plan(
-            blocked, cell_penalties=centering_penalties
-        )
+        start_cell, goal_cell, grid_path, planner_name = _snap_and_plan(blocked)
         planning_blocked = blocked
         planning_goal_tail_blocked = goal_tail_blocked
         planning_mode = "clearance"
@@ -3167,7 +3085,6 @@ class AStarPlanner:
                 planning_blocked = raw_blocked
                 planning_goal_tail_blocked = raw_blocked
                 planning_mode = "raw-drivable-fallback"
-                centering_penalties = None
                 if self.debug_log_enable:
                     rospy.logwarn_throttle(
                         1.0,
@@ -3276,7 +3193,6 @@ class AStarPlanner:
             grid_path,
             alt_start_cells=alt_start_cells,
             alt_goal_cells=alt_goal_cells,
-            base_cell_penalties=centering_penalties,
         )
         candidate_world_paths = []
         for idx, candidate_spec in enumerate(candidate_specs):
