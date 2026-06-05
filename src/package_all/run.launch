@@ -436,13 +436,13 @@
   <arg name="cmd_smoothing_zero_snap" default="0.015"/>
   <arg name="path_tracking_slowdown_yaw_deg" default="60.0"/>
   <arg name="path_tracking_stop_yaw_deg" default="95.0"/>
-  <arg name="path_tracking_cte_gain" default="$(eval '0.46' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.62')"/>
+  <arg name="path_tracking_cte_gain" default="$(eval '0.46' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.56')"/>
   <arg name="path_tracking_cte_soft_mps" default="0.55"/>
   <arg name="path_tracking_cte_deadband_m" default="$(eval '0.07' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.04')"/>
   <arg name="path_tracking_cte_filter_gain" default="0.30"/>
-  <arg name="path_tracking_cte_yaw_cap_deg" default="$(eval '25.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '26.0')"/>
+  <arg name="path_tracking_cte_yaw_cap_deg" default="$(eval '25.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '22.0')"/>
   <arg name="path_tracking_heading_filter_gain" default="0.35"/>
-  <arg name="local_tracking_heading_filter_gain" default="0.68"/>
+  <arg name="local_tracking_heading_filter_gain" default="$(eval '0.68' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.52')"/>
   <arg name="local_tracking_heading_filter_reset_deg" default="40.0"/>
   <arg name="path_tracking_goal_bearing_gain" default="0.50"/>
   <arg name="path_tracking_goal_bearing_cap_deg" default="35.0"/>
@@ -564,8 +564,8 @@
   <arg name="sidestep_avoidance_max_offset_m" default="$(eval '1.00' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.75')"/>
   <arg name="sidestep_avoidance_preview_m" default="$(eval '2.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '1.65')"/>
   <arg name="sidestep_avoidance_clearance_extra_m" default="$(eval '0.03' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.03')"/>
-  <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.48')"/>
-  <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.48')"/>
+  <arg name="sidestep_avoidance_entry_lead_m" default="$(eval '0.45' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.26')"/>
+  <arg name="sidestep_avoidance_forward_margin_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.64')"/>
   <arg name="avoidance_same_side_commitment_enabled" default="true"/>
   <arg name="avoidance_memory_only_trigger_enabled" default="false"/>
   <arg name="avoidance_local_collapse_straights" default="true"/>

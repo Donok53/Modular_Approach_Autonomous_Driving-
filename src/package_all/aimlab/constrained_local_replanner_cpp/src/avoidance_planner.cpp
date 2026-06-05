@@ -230,9 +230,9 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       const double pass_x = std::max(entry_x + 0.35,
                                      obs_lx + params.sidestep_forward_margin_m);
       // Rejoin curve: after passing the obstacle the path must come back to
-      // the nominal corridor (y = 0). Without this the candidate "stays
-      // wide" for the entire preview window and the robot looks like it is
-      // taking a huge detour.
+      // the nominal corridor. Keep the early part close to the robot's current
+      // heading; in doorways, following a sharply turning nominal path too
+      // early clips the inner wall before the footprint is through the gap.
       const double rejoin_x = pass_x + params.rejoin_min_distance_m;
       // Keep the cached path short past the rejoin point. A long preview tail
       // makes the cached endpoint sit ~2 m ahead of the robot even after the
@@ -240,25 +240,15 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       // FOLLOW_AVOIDANCE release guard from firing.
       const double end_x = rejoin_x + 0.30;
       const double mid_x = start_x + 0.5 * std::max(0.20, entry_x - start_x);
-      const double start_y = nominalYAtX(nominal_local, start_x);
-      const double mid_y = nominalYAtX(nominal_local, mid_x);
-      const double entry_y = nominalYAtX(nominal_local, entry_x);
-      const double pass_base_y = nominalYAtX(nominal_local, pass_x);
       const double rejoin_y = nominalYAtX(nominal_local, rejoin_x);
       const double end_y = nominalYAtX(nominal_local, end_x);
-      if (static_cast<double>(side) * pass_base_y >
-          static_cast<double>(side) * target_y) {
-        target_y = pass_base_y;
-      }
-      const double entry_target_y = entry_y + 0.35 * (target_y - entry_y);
-      const double pass_mid_base_y =
-          nominalYAtX(nominal_local, 0.5 * (entry_x + pass_x));
-      const double pass_mid_y = pass_mid_base_y + 0.80 * (target_y - pass_mid_base_y);
-      const double rejoin_mid_y = target_y + 0.60 * (rejoin_y - target_y);
+      const double entry_target_y = 0.15 * target_y;
+      const double pass_mid_y = 0.55 * target_y;
+      const double rejoin_mid_y = target_y + 0.45 * (rejoin_y - target_y);
 
       const std::vector<std::pair<double, double>> waypts_local{
-          {start_x, start_y},
-          {mid_x, mid_y},
+          {start_x, 0.0},
+          {mid_x, 0.0},
           {entry_x, entry_target_y},
           {0.5 * (entry_x + pass_x), pass_mid_y},
           {pass_x, target_y},
@@ -310,7 +300,7 @@ AvoidanceResult buildSidestepAvoidance(const std::vector<GridCell>& nominal_path
       const double score = penalty_side * 10.0 + offset_m +
                            1.40 * mean_nominal_dist +
                            2.20 * end_nominal_dist +
-                           0.05 * max_heading_delta;
+                           0.22 * max_heading_delta;
       if (score < best_score) {
         best_score = score;
         result.waypoints = std::move(sampled);
