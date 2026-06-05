@@ -408,20 +408,20 @@
   <arg name="local_tracking_smoothing_enabled" default="true"/>
   <arg name="local_tracking_clear_uses_segment" default="true"/>
   <arg name="local_tracking_turn_preview_limit_enabled" default="true"/>
-  <arg name="local_tracking_turn_preview_threshold_deg" default="14.0"/>
-  <arg name="local_tracking_turn_preview_approach_m" default="0.65"/>
-  <arg name="local_tracking_turn_preview_min_step_m" default="0.25"/>
-  <arg name="local_tracking_preview_m" default="$(eval '0.85' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.65')"/>
+  <arg name="local_tracking_turn_preview_threshold_deg" default="$(eval '14.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '10.0')"/>
+  <arg name="local_tracking_turn_preview_approach_m" default="$(eval '0.65' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.85')"/>
+  <arg name="local_tracking_turn_preview_min_step_m" default="$(eval '0.25' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.18')"/>
+  <arg name="local_tracking_preview_m" default="$(eval '0.85' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.55')"/>
   <arg name="local_tracking_segment_step_scale" default="0.80"/>
-  <arg name="local_tracking_segment_min_step_m" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.30')"/>
-  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.40')"/>
-  <arg name="local_tracking_tangent_window_m" default="$(eval '0.60' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.45')"/>
+  <arg name="local_tracking_segment_min_step_m" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.24')"/>
+  <arg name="local_tracking_target_step_cap_m" default="$(eval '0.55' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.32')"/>
+  <arg name="local_tracking_tangent_window_m" default="$(eval '0.60' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.35')"/>
   <arg name="local_tracking_obstacle_speed_cap_mps" default="$(eval '0.75' if str(arg('localization_environment')).lower() == 'outdoor' else '0.38')"/>
   <arg name="local_tracking_yaw_speed_cap_mps" default="$(eval '0.57' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.34')"/>
   <arg name="local_tracking_yaw_speed_cap_start_deg" default="7.0"/>
   <arg name="local_tracking_yaw_speed_cap_full_deg" default="16.0"/>
-  <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '38.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '32.0')"/>
-  <arg name="path_tracking_in_place_yaw_rate_max_deg" default="$(eval '26.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '22.0')"/>
+  <arg name="path_tracking_yaw_rate_max_deg" default="$(eval '38.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '34.0')"/>
+  <arg name="path_tracking_in_place_yaw_rate_max_deg" default="$(eval '26.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '24.0')"/>
   <arg name="path_tracking_yaw_accel_max_deg" default="$(eval '85.0' if str(arg('real_mode')).lower() == 'true' else '85.0')"/>
   <arg name="path_tracking_kp" default="0.82"/>
   <arg name="cmd_smoothing_enabled" default="true"/>
@@ -451,11 +451,11 @@
   <arg name="final_speed_k" default="0.95"/>
   <arg name="final_speed_min" default="$(eval '0.20' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.12')"/>
   <arg name="path_tracking_stop_distance_m" default="0.35"/>
-  <arg name="local_stop_turn_go_enabled" default="false"/>
-  <arg name="local_stop_turn_speed_cap_mps" default="0.18"/>
-  <arg name="local_stop_turn_align_deg" default="4.0"/>
-  <arg name="local_stop_turn_corner_trigger_deg" default="45.0"/>
-  <arg name="local_stop_turn_corner_arrival_m" default="0.32"/>
+  <arg name="local_stop_turn_go_enabled" default="$(eval 'false' if str(arg('indoor_precision_driving')).lower() != 'true' else 'true')"/>
+  <arg name="local_stop_turn_speed_cap_mps" default="$(eval '0.18' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.14')"/>
+  <arg name="local_stop_turn_align_deg" default="$(eval '4.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '5.0')"/>
+  <arg name="local_stop_turn_corner_trigger_deg" default="$(eval '45.0' if str(arg('indoor_precision_driving')).lower() != 'true' else '28.0')"/>
+  <arg name="local_stop_turn_corner_arrival_m" default="$(eval '0.32' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.50')"/>
   <arg name="path_tracking_goal_yaw_rate_max_deg" default="18.0"/>
   <arg name="local_tracking_stop_turn_only_yaw_deg" default="170.0"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
