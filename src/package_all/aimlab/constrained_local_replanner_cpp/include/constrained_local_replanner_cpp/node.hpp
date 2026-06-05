@@ -122,6 +122,7 @@ class ReplannerNode {
   double branch_time_budget_s_{0.45};
   int branch_max_rejoin_candidates_{12};
   double locked_static_hold_radius_m_{1.2};
+  double keep_until_endpoint_distance_m_{0.80};
 };
 
 }  // namespace clr
