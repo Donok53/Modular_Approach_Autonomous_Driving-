@@ -3299,18 +3299,23 @@ class DWAControl:
             return 0.0, (1.0, 0.0)
         return math.atan2(dy, dx), (dx / seg_len, dy / seg_len)
 
-    def _limit_local_clear_preview_for_turn(self, base_s, s_target):
+    def _limit_local_clear_preview_for_turn(self, base_s, s_target, search_s=None):
         if (
             (not self.local_tracking_turn_preview_limit_enabled)
             or self.active_path_source != "local"
-            or self.current_path_mode != "follow_local"
             or len(self.seg_lens) < 2
             or s_target <= base_s + 1e-6
         ):
             return s_target, None
 
+        if search_s is None:
+            search_s = s_target
+        else:
+            search_s = max(float(search_s), s_target)
+        search_s = min(self.s_total, max(base_s, search_s))
+
         start_idx = self._segment_index_at_s(base_s)
-        end_idx = self._segment_index_at_s(s_target)
+        end_idx = self._segment_index_at_s(search_s)
         max_idx = min(end_idx, len(self.seg_lens) - 2)
         for seg_idx in range(start_idx, max_idx + 1):
             heading, _t_hat = self._segment_heading_tangent(seg_idx)
@@ -3332,6 +3337,7 @@ class DWAControl:
                 "turn_idx": seg_idx + 1,
                 "turn_angle_deg": math.degrees(turn_angle),
                 "dist_to_turn_m": dist_to_turn,
+                "search_s": search_s,
             }
 
         return s_target, None
@@ -3963,6 +3969,24 @@ class DWAControl:
                 self.s_total,
                 min(segment_limit_s, max(base_s, s_proj + segment_target_step)),
             )
+            if self.active_path_source == "local":
+                turn_search_s = min(
+                    self.s_total,
+                    base_s
+                    + max(
+                        segment_target_step,
+                        self.local_tracking_turn_preview_approach_m
+                        + self.local_tracking_target_step_cap_m,
+                    ),
+                )
+                limited_s, turn_limit_debug = self._limit_local_clear_preview_for_turn(
+                    base_s,
+                    s_target,
+                    search_s=turn_search_s,
+                )
+                if turn_limit_debug is not None and limited_s < s_target - 1e-6:
+                    s_target = limited_s
+                    target_policy = "local_segment_turn_approach"
 
         tx, ty, t_hat = self._interp_xy_smoothed_tangent_at_s(s_target)
 

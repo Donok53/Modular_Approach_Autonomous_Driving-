@@ -413,8 +413,8 @@
   <arg name="local_tracking_clear_uses_segment" default="true"/>
   <arg name="local_tracking_turn_preview_limit_enabled" default="true"/>
   <arg name="local_tracking_turn_preview_threshold_deg" default="14.0"/>
-  <arg name="local_tracking_turn_preview_approach_m" default="0.65"/>
-  <arg name="local_tracking_turn_preview_min_step_m" default="0.25"/>
+  <arg name="local_tracking_turn_preview_approach_m" default="$(eval '0.65' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.32')"/>
+  <arg name="local_tracking_turn_preview_min_step_m" default="$(eval '0.25' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.18')"/>
   <arg name="local_tracking_preview_m" default="$(eval '0.85' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.50')"/>
   <arg name="local_tracking_segment_step_scale" default="0.80"/>
   <arg name="local_tracking_segment_min_step_m" default="$(eval '0.42' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.24')"/>
@@ -464,10 +464,10 @@
   <arg name="local_tracking_stop_turn_only_yaw_deg" default="170.0"/>
   <arg name="path_tracking_drivable_ignore_start_distance_m" default="0.25"/>
   <arg name="path_tracking_recovery_ignore_start_distance_m" default="0.45"/>
-  <arg name="path_tracking_drivable_boundary_tolerance_m" default="0.12"/>
+  <arg name="path_tracking_drivable_boundary_tolerance_m" default="$(eval '0.12' if str(arg('indoor_precision_driving')).lower() != 'true' else '0.08')"/>
   <arg name="path_tracking_drivable_footprint_scale" default="$(eval '0.0' if str(arg('localization_environment')).lower() == 'outdoor' else ('0.70' if str(arg('indoor_precision_driving')).lower() == 'true' else '1.0'))"/>
-  <arg name="path_tracking_drivable_check_horizon_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else ('0.45' if str(arg('indoor_precision_driving')).lower() == 'true' else '0.0'))"/>
-  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' else 'false')"/>
+  <arg name="path_tracking_drivable_check_horizon_m" default="$(eval '1.20' if str(arg('localization_environment')).lower() == 'outdoor' else ('0.35' if str(arg('indoor_precision_driving')).lower() == 'true' else '0.0'))"/>
+  <arg name="path_tracking_enforce_drivable_grid" default="$(eval 'true' if str(arg('localization_environment')).lower() == 'outdoor' or str(arg('indoor_precision_driving')).lower() == 'true' else 'false')"/>
   <arg name="goal_completion_stuck_distance_m" default="1.60"/>
   <arg name="goal_completion_stuck_arc_m" default="1.20"/>
   <arg name="goal_completion_stuck_hold_s" default="0.35"/>
