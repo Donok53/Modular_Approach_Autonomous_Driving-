@@ -787,8 +787,8 @@
   <arg name="near_field_raw_stop_side_contact_enabled" default="$(eval 'true' if str(arg('indoor_precision_driving')).lower() == 'true' else 'false')"/>
   <arg name="near_field_raw_stop_side_contact_min_x_m" default="-0.05"/>
   <arg name="near_field_raw_stop_side_contact_max_x_m" default="0.75"/>
-  <arg name="near_field_raw_stop_side_contact_min_lateral_m" default="$(eval 0.5 * float(arg('robot_width_m')) + max(0.0, float(arg('footprint_padding_m')) - 0.02))"/>
-  <arg name="near_field_raw_stop_side_contact_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + float(arg('footprint_padding_m')) + 0.02)"/>
+  <arg name="near_field_raw_stop_side_contact_min_lateral_m" default="$(eval max(0.0, 0.5 * float(arg('robot_width_m')) - 0.02))"/>
+  <arg name="near_field_raw_stop_side_contact_half_width_m" default="$(eval 0.5 * float(arg('robot_width_m')) + 0.01)"/>
   <arg name="near_field_raw_stop_side_contact_clearance_m" default="$(eval '0.12' if str(arg('indoor_precision_driving')).lower() == 'true' else arg('avoidance_hard_stop_distance'))"/>
   <arg name="near_field_raw_stop_side_contact_min_points" default="2"/>
   <arg name="near_field_raw_stop_side_contact_min_cells" default="1"/>
